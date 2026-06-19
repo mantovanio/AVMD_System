@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "received": true,
+  "workflow": "AVMD - Clara Logger",
+  "event_type": "commercial.customer.saved",
+  "entity_type": "cadastros_base",
+  "entity_id": "cad_base_001",
+  "clara_context": {
+    "next_step": "registrar_log",
+    "note": "Primeiro fluxo da Clara no AVMD: receber, registrar e responder 200."
+  }
+}

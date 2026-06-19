@@ -11,8 +11,14 @@ Os modulos do AVMD continuam independentes. Um modulo publica evento em `integra
 No backend:
 
 ```env
-N8N_WEBHOOK_URL=https://seu-n8n/webhook/avmd-events
+N8N_WEBHOOK_URL=https://seu-avmd-backend/api/integrations/events
 ```
+
+Observacao:
+- o link da tela do workflow no N8N nao e o webhook final;
+- o backend do AVMD agora precisa apontar para o endpoint de integracoes do novo AVMD_System;
+- o target esperado para o fluxo de eventos e `POST /api/integrations/events`;
+- depois de trocar a URL, o mesmo adapter `n8nAdapter` passa a usar o novo AVMD_System sem nenhuma outra mudanca.
 
 ## Metodo
 
@@ -66,7 +72,7 @@ Resultado esperado:
 
 ## Primeiro workflow recomendado no N8N
 
-1. Webhook trigger `POST /avmd-events`.
+1. Webhook trigger do AVMD apontando para `POST /api/integrations/events`.
 2. Node Set ou Code para registrar `event_type`, `entity_type`, `entity_id` e `payload`.
 3. Responder HTTP 200 com:
 

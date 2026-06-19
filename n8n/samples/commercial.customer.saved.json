@@ -1,0 +1,24 @@
+{
+  "id": "evt_commercial_customer_saved_001",
+  "domain": "automation",
+  "provider": "n8n",
+  "direction": "outbound",
+  "event_type": "commercial.customer.saved",
+  "status": "processing",
+  "entity_type": "cadastros_base",
+  "entity_id": "cad_base_001",
+  "correlation_id": "comercial-smoke-001",
+  "payload": {
+    "workflow_key": "commercial.customer.saved",
+    "cpf_cnpj": "12345678000199",
+    "nome": "Cliente Exemplo LTDA",
+    "email": "financeiro@clienteexemplo.com.br",
+    "telefone": "11999990000",
+    "origem": "AVMD",
+    "registro_teste": true
+  },
+  "metadata": {
+    "origem": "comercial_aiven",
+    "registro_teste": true
+  }
+}

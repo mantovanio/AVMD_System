@@ -1,0 +1,71 @@
+{
+  "name": "AVMD - Clara Logger",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "avmd-clara",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "AVMD Clara Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const eventType = $json.event_type ?? 'unknown';\nconst entityType = $json.entity_type ?? null;\nconst entityId = $json.entity_id ?? null;\n\nreturn [{\n  json: {\n    ok: true,\n    received: true,\n    workflow: 'AVMD - Clara Logger',\n    event_type: eventType,\n    entity_type: entityType,\n    entity_id: entityId,\n    clara_context: {\n      next_step: 'registrar_log',\n      note: 'Primeiro fluxo da Clara no AVMD: receber, registrar e responder 200.'\n    }\n  }\n}];"
+      },
+      "id": "code-node",
+      "name": "Prepare Clara Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-node",
+      "name": "Ack Clara Event",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "AVMD Clara Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Clara Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Clara Context": {
+      "main": [
+        [
+          {
+            "node": "Ack Clara Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "1"
+}

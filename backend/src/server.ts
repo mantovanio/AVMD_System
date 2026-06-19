@@ -31,6 +31,15 @@ const server = createServer(async (req, res) => {
     const handledCommercial = await handleCommercialRoutes(req, res, commercialRepository, config.corsOrigin)
     if (handledCommercial) return
 
+    const handledIntegration = await handleIntegrationRoutes(
+      req,
+      res,
+      integrationEventRepository,
+      integrationEventProcessor,
+      config.corsOrigin,
+    )
+    if (handledIntegration) return
+
     await handleCheckoutRoutes(req, res, service, config.corsOrigin)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro interno do servidor.'
