@@ -1,0 +1,30 @@
+[Unit]
+Description=AVMD Backend API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/avmd/AVMD_System
+EnvironmentFile=/opt/avmd/AVMD_System/backend/.env.local
+ExecStart=/usr/bin/node /opt/avmd/AVMD_System/backend/dist/server.js
+Restart=always
+RestartSec=5
+
+# Blindagem de recursos para nao afetar Chatwoot/N8N
+CPUQuota=25%
+MemoryMax=350M
+TasksMax=120
+Nice=10
+
+# Segurança basica
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/avmd/AVMD_System
+
+[Install]
+WantedBy=multi-user.target

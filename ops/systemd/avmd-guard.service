@@ -1,0 +1,14 @@
+[Unit]
+Description=AVMD Guard - monitor de carga da VPS
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=CPU_LOAD_THRESHOLD=0.85
+Environment=MEM_USED_THRESHOLD=90
+Environment=CONSECUTIVE_FAILS_LIMIT=3
+ExecStart=/usr/local/bin/vps-avmd-guard.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -23,6 +23,11 @@ const service = new CheckoutService(checkoutRepository)
 
 const server = createServer(async (req, res) => {
   try {
+    if (req.method === 'GET' && req.url === '/healthz') {
+      writeJson(res, 200, { ok: true, service: 'avmd-backend' }, config.corsOrigin)
+      return
+    }
+
     if (req.method === 'OPTIONS') {
       writeJson(res, 204, {}, config.corsOrigin)
       return
