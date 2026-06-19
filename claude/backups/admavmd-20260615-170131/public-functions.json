@@ -1,0 +1,44 @@
+[
+  {
+    "function_name": "calcular_minutos_ultima_mensagem"
+  },
+  {
+    "function_name": "crm_chat_touch_updated_at"
+  },
+  {
+    "function_name": "crm_claim_first_admin"
+  },
+  {
+    "function_name": "crm_handle_new_user"
+  },
+  {
+    "function_name": "crm_has_admin"
+  },
+  {
+    "function_name": "crm_is_admin"
+  },
+  {
+    "function_name": "crm_now_update"
+  },
+  {
+    "function_name": "handle_new_user"
+  },
+  {
+    "function_name": "handle_new_user_profile"
+  },
+  {
+    "function_name": "lgpd_anonimizar_titular"
+  },
+  {
+    "function_name": "set_updated_at"
+  },
+  {
+    "function_name": "set_updated_at_crm_chat_conversations"
+  },
+  {
+    "function_name": "set_updated_at_parceiros"
+  },
+  {
+    "function_name": "verificar_horario_comercial"
+  }
+]

@@ -1,0 +1,2133 @@
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
+import {
+  AlertTriangle,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  CreditCard,
+  ExternalLink,
+  Loader2,
+  Mail,
+  MapPin,
+  Phone,
+  ShieldCheck,
+  Store,
+  UserRound,
+  Wallet,
+  X,
+} from 'lucide-react'
+import { buscarCep } from '@/lib/cep'
+import { buscarCnpj } from '@/lib/cnpj'
+import { cn } from '@/lib/utils'
+import type { LojaMarketplace, TabelaPreco } from '@/types'
+import { loadMarketplaceCheckoutContext, lookupExistingCheckoutCustomer, submitMarketplaceCheckout, type AgendaAgent, type AgendaPoint, type AgendaSlot, type LojaItemRow, type PaymentOption, type PaymentRuntime } from '@/lib/checkout'
+
+type LojaMarketplaceConfig = {
+  modo_exibicao?: 'vitrine' | 'link_direto'
+  item_fixo_id?: string | null
+}
+
+type CheckoutBuyerType = 'pessoa_fisica' | 'pessoa_juridica'
+
+type FormState = {
+  comprador: {
+    tipo: CheckoutBuyerType
+    nome: string
+    nome_fantasia: string
+    responsavel_nome: string
+    cpf_cnpj: string
+    email: string
+    telefone: string
+    cep: string
+    logradouro: string
+    numero: string
+    complemento: string
+    bairro: string
+    cidade: string
+    uf: string
+  }
+  titular: {
+    nome: string
+    cpf: string
+    data_nascimento: string
+    email: string
+    telefone: string
+  }
+  titularMesmoFaturamento: boolean
+  forma_pagamento_id: string
+  observacoes: string
+}
+
+type SectionStatus = {
+  label: string
+  done: boolean
+  icon: typeof Building2
+}
+
+const INITIAL_FORM: FormState = {
+  comprador: {
+    tipo: 'pessoa_juridica',
+    nome: '',
+    nome_fantasia: '',
+    responsavel_nome: '',
+    cpf_cnpj: '',
+    email: '',
+    telefone: '',
+    cep: '',
+    logradouro: '',
+    numero: '',
+    complemento: '',
+    bairro: '',
+    cidade: '',
+    uf: '',
+  },
+  titular: {
+    nome: '',
+    cpf: '',
+    data_nascimento: '',
+    email: '',
+    telefone: '',
+  },
+  titularMesmoFaturamento: true,
+  forma_pagamento_id: '',
+  observacoes: '',
+}
+
+function normalizeLojaConfig(configuracoes: Record<string, unknown> | null | undefined): Required<LojaMarketplaceConfig> {
+  const modo = configuracoes?.modo_exibicao === 'link_direto' ? 'link_direto' : 'vitrine'
+  const itemFixo = typeof configuracoes?.item_fixo_id === 'string' ? configuracoes.item_fixo_id : ''
+  return { modo_exibicao: modo, item_fixo_id: itemFixo }
+}
+
+function labelEmissao(tipo: string | null | undefined): string | null {
+  if (!tipo) return null
+  if (/online|video|vídeo|fast|remot/i.test(tipo)) return 'Fast'
+  return tipo
+}
+
+function formatCurrency(value: number | null | undefined) {
+  return Number(value ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function formatCpfCnpj(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 14)
+  if (digits.length <= 11) {
+    return digits
+      .replace(/^(\d{3})(\d)/, '$1.$2')
+      .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+      .replace(/\.(\d{3})(\d)/, '.$1-$2')
+  }
+  return digits
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2')
+}
+
+function formatPhone(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  if (digits.length <= 10) {
+    return digits
+      .replace(/^(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{4})(\d)/, '$1-$2')
+  }
+  return digits
+    .replace(/^(\d{2})(\d)/, '($1) $2')
+    .replace(/(\d{5})(\d)/, '$1-$2')
+}
+
+function formatCep(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 8)
+  return digits.replace(/^(\d{5})(\d)/, '$1-$2')
+}
+
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, '')
+}
+
+function resolveInitialItemId(items: LojaItemRow[], lojaData: LojaMarketplace | null) {
+  if (!lojaData) return ''
+  const searchParams = new URLSearchParams(window.location.search)
+  const produtoParam = searchParams.get('produto') ?? ''
+  const config = normalizeLojaConfig(lojaData.configuracoes)
+  const idsValidos = new Set(items.map(item => item.id))
+  if (produtoParam && idsValidos.has(produtoParam)) return produtoParam
+  if (config.item_fixo_id && idsValidos.has(config.item_fixo_id)) return config.item_fixo_id
+  return ''
+}
+
+function buildSlotKey(slot: AgendaSlot | null | undefined) {
+  if (!slot) return ''
+  return `${slot.agente_registro_id}|${slot.ponto_atendimento_id}|${slot.inicio}`
+}
+
+function formatDayLabel(value: string) {
+  return new Intl.DateTimeFormat('pt-BR', {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(`${value}T12:00:00`))
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(value))
+}
+
+function formatTimeRange(startIso: string, endIso: string) {
+  const start = new Intl.DateTimeFormat('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(startIso))
+  const end = new Intl.DateTimeFormat('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(endIso))
+  return `${start} às ${end}`
+}
+
+function inferTipoPessoa(doc: string): CheckoutBuyerType {
+  return onlyDigits(doc).length > 11 ? 'pessoa_juridica' : 'pessoa_fisica'
+}
+
+function resolveTitularEfetivo(form: FormState) {
+  const comprador = form.comprador
+  const isPf = comprador.tipo === 'pessoa_fisica'
+  if (!form.titularMesmoFaturamento) return form.titular
+  return {
+    nome: isPf ? comprador.nome : comprador.responsavel_nome,
+    cpf: isPf ? comprador.cpf_cnpj : form.titular.cpf,
+    data_nascimento: form.titular.data_nascimento,
+    email: isPf ? comprador.email : (form.titular.email || comprador.email),
+    telefone: isPf ? comprador.telefone : (form.titular.telefone || comprador.telefone),
+  }
+}
+
+function requiredFieldOrder(form: FormState) {
+  const ids = [
+    'comprador.cpf_cnpj',
+    ...(form.comprador.tipo === 'pessoa_juridica' ? ['comprador.responsavel_nome'] : []),
+    'comprador.nome',
+    'comprador.email',
+    'comprador.telefone',
+    'comprador.cep',
+    'comprador.logradouro',
+    'comprador.numero',
+    'comprador.bairro',
+    'comprador.uf',
+    'comprador.cidade',
+  ]
+
+  if (form.titularMesmoFaturamento) {
+    if (form.comprador.tipo === 'pessoa_juridica') ids.push('titular.cpf')
+  } else {
+    ids.push('titular.nome', 'titular.cpf')
+  }
+
+  ids.push('forma_pagamento_id')
+  return ids
+}
+
+function getValueByFieldId(form: FormState, id: string, titularEfetivo: ReturnType<typeof resolveTitularEfetivo>) {
+  switch (id) {
+    case 'comprador.cpf_cnpj': return form.comprador.cpf_cnpj
+    case 'comprador.responsavel_nome': return form.comprador.responsavel_nome
+    case 'comprador.nome': return form.comprador.nome
+    case 'comprador.email': return form.comprador.email
+    case 'comprador.telefone': return form.comprador.telefone
+    case 'comprador.cep': return form.comprador.cep
+    case 'comprador.logradouro': return form.comprador.logradouro
+    case 'comprador.numero': return form.comprador.numero
+    case 'comprador.bairro': return form.comprador.bairro
+    case 'comprador.uf': return form.comprador.uf
+    case 'comprador.cidade': return form.comprador.cidade
+    case 'titular.nome': return titularEfetivo.nome
+    case 'titular.cpf': return titularEfetivo.cpf
+    case 'forma_pagamento_id': return form.forma_pagamento_id
+    default: return ''
+  }
+}
+
+function validateForm(form: FormState, itemSelecionado: LojaItemRow | null) {
+  const errors: Record<string, string> = {}
+  const titularEfetivo = resolveTitularEfetivo(form)
+  const docDigits = onlyDigits(form.comprador.cpf_cnpj)
+  const titularCpfDigits = onlyDigits(titularEfetivo.cpf)
+  const phoneDigits = onlyDigits(form.comprador.telefone)
+  const cepDigits = onlyDigits(form.comprador.cep)
+
+  if (!itemSelecionado) errors['produto'] = 'Selecione um produto para continuar.'
+  if (![11, 14].includes(docDigits.length)) errors['comprador.cpf_cnpj'] = 'Informe um CPF ou CNPJ válido.'
+  if (form.comprador.tipo === 'pessoa_juridica' && !form.comprador.responsavel_nome.trim()) {
+    errors['comprador.responsavel_nome'] = 'Informe o nome do responsável.'
+  }
+  if (!form.comprador.nome.trim()) errors['comprador.nome'] = form.comprador.tipo === 'pessoa_juridica' ? 'Informe a razão social.' : 'Informe o nome completo.'
+  if (!form.comprador.email.trim()) errors['comprador.email'] = 'Informe o e-mail.'
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.comprador.email.trim())) errors['comprador.email'] = 'Informe um e-mail válido.'
+  if (phoneDigits.length < 10) errors['comprador.telefone'] = 'Informe um telefone com WhatsApp válido.'
+  if (cepDigits.length !== 8) errors['comprador.cep'] = 'Informe um CEP válido.'
+  if (!form.comprador.logradouro.trim()) errors['comprador.logradouro'] = 'Informe o endereço.'
+  if (!form.comprador.numero.trim()) errors['comprador.numero'] = 'Informe o número.'
+  if (!form.comprador.bairro.trim()) errors['comprador.bairro'] = 'Informe o bairro.'
+  if (!form.comprador.uf.trim()) errors['comprador.uf'] = 'Informe o estado.'
+  if (!form.comprador.cidade.trim()) errors['comprador.cidade'] = 'Informe a cidade.'
+
+  if (!form.titularMesmoFaturamento && !titularEfetivo.nome.trim()) {
+    errors['titular.nome'] = 'Informe o nome do titular do certificado.'
+  }
+  if (titularCpfDigits.length !== 11) errors['titular.cpf'] = 'Informe o CPF do titular.'
+  if (!form.forma_pagamento_id) errors['forma_pagamento_id'] = 'Escolha a forma de pagamento.'
+
+  return errors
+}
+
+function statusPagamentoLabel(option: PaymentOption) {
+  const nome = option.nome.toLowerCase()
+  if (nome.includes('pix')) return 'Compensação geralmente mais rápida'
+  if (nome.includes('boleto')) return 'Liberação após compensação bancária'
+  if (nome.includes('cart')) return 'Aprovação conforme operadora'
+  return 'A validação só é liberada após a confirmação'
+}
+
+export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [loja, setLoja] = useState<LojaMarketplace | null>(null)
+  const [tabela, setTabela] = useState<TabelaPreco | null>(null)
+  const [itens, setItens] = useState<LojaItemRow[]>([])
+  const [selectedItemId, setSelectedItemId] = useState('')
+  const [pagamentos, setPagamentos] = useState<PaymentOption[]>([])
+  const [agendaAgents, setAgendaAgents] = useState<AgendaAgent[]>([])
+  const [agendaPoints, setAgendaPoints] = useState<AgendaPoint[]>([])
+  const [paymentRuntime, setPaymentRuntime] = useState<PaymentRuntime>({
+    modo_teste_geral: false,
+    bloquear_integracoes_reais: false,
+    aviso_checkout: 'O atendimento será liberado após a confirmação do pagamento.',
+  })
+  const [slots, setSlots] = useState<AgendaSlot[]>([])
+  const [form, setForm] = useState<FormState>(INITIAL_FORM)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [focusedField, setFocusedField] = useState<string | null>(null)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [checkoutSuccess, setCheckoutSuccess] = useState<string | null>(null)
+  const [isSchedulingOpen, setIsSchedulingOpen] = useState(false)
+  const [selectedSlotKey, setSelectedSlotKey] = useState('')
+  const [draftSlotKey, setDraftSlotKey] = useState('')
+  const [draftAgentId, setDraftAgentId] = useState('')
+  const [draftPointId, setDraftPointId] = useState('')
+  const [selectedDay, setSelectedDay] = useState('')
+  const [draftDay, setDraftDay] = useState('')
+  const [cepLoading, setCepLoading] = useState(false)
+  const [cadastroLoading, setCadastroLoading] = useState(false)
+  const [cnpjLoading, setCnpjLoading] = useState(false)
+  const formStartRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    let active = true
+
+    async function fetchLoja() {
+      setLoading(true)
+      setError(null)
+
+      try {
+        const context = await loadMarketplaceCheckoutContext(slug)
+        if (!active) return
+
+        const produtosAtivos = context.produtos.filter(item => item.certificados ? item.certificados.ativo : true)
+        const initialItemId = resolveInitialItemId(produtosAtivos, context.loja)
+        const firstDay = (context.slots[0]?.inicio ?? '').slice(0, 10)
+
+        setLoja(context.loja)
+        setTabela(context.tabela)
+        setItens(context.produtos)
+        setSelectedItemId(initialItemId)
+        setPagamentos(context.pagamentos)
+        setAgendaAgents(context.agentes)
+        setAgendaPoints(context.pontos)
+        setPaymentRuntime(context.paymentRuntime)
+        setSlots(context.slots)
+        setSelectedDay(firstDay)
+        setDraftDay(firstDay)
+        setLoading(false)
+      } catch (err) {
+        if (!active) return
+        setError(err instanceof Error ? err.message : 'Falha ao carregar o checkout publico.')
+        setLoading(false)
+      }
+    }
+
+    void fetchLoja()
+    return () => { active = false }
+  }, [slug])
+
+  useEffect(() => {
+    if (!isSchedulingOpen) return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previous
+    }
+  }, [isSchedulingOpen])
+
+  const produtosAtivos = useMemo(
+    () => itens.filter(item => item.certificados ? item.certificados.ativo : true),
+    [itens]
+  )
+
+  const lojaConfig = useMemo(
+    () => normalizeLojaConfig(loja?.configuracoes),
+    [loja]
+  )
+
+  const modoLinkDireto = lojaConfig.modo_exibicao === 'link_direto'
+
+  const itemSelecionado = useMemo(
+    () => produtosAtivos.find(item => item.id === selectedItemId) ?? null,
+    [produtosAtivos, selectedItemId]
+  )
+
+  useEffect(() => {
+    if (!loja) return
+    const proximoId = resolveInitialItemId(produtosAtivos, loja)
+    if (proximoId && proximoId !== selectedItemId) {
+      setSelectedItemId(proximoId)
+      return
+    }
+    if (!proximoId && selectedItemId) setSelectedItemId('')
+  }, [loja, produtosAtivos, selectedItemId])
+
+  const titularEfetivo = useMemo(
+    () => resolveTitularEfetivo(form),
+    [form]
+  )
+
+  const agentOptions = useMemo(() => {
+    const fallbackMap = new Map<string, string>()
+    for (const slot of slots) {
+      if (!fallbackMap.has(slot.agente_registro_id)) fallbackMap.set(slot.agente_registro_id, slot.agente_nome)
+    }
+    const merged = agendaAgents.length
+      ? agendaAgents.map(agent => ({ id: agent.id, nome: agent.nome }))
+      : Array.from(fallbackMap.entries()).map(([id, nome]) => ({ id, nome }))
+    return merged.filter(agent => slots.some(slot => slot.agente_registro_id === agent.id))
+  }, [agendaAgents, slots])
+
+  const pointOptionsForDraftAgent = useMemo(() => {
+    if (!draftAgentId) return [] as AgendaPoint[]
+
+    const pointIds = Array.from(new Set(
+      slots
+        .filter(slot => slot.agente_registro_id === draftAgentId)
+        .map(slot => slot.ponto_atendimento_id)
+    ))
+
+    const fallbackMap = new Map<string, string>()
+    for (const slot of slots) {
+      if (slot.agente_registro_id !== draftAgentId) continue
+      if (!fallbackMap.has(slot.ponto_atendimento_id)) fallbackMap.set(slot.ponto_atendimento_id, slot.ponto_nome)
+    }
+
+    const merged = agendaPoints.length
+      ? agendaPoints
+          .filter(point => pointIds.includes(point.id))
+          .map(point => ({ id: point.id, nome: point.nome }))
+      : Array.from(fallbackMap.entries()).map(([id, nome]) => ({ id, nome }))
+
+    return merged
+  }, [agendaPoints, draftAgentId, slots])
+
+  const filteredSlots = useMemo(() => {
+    if (!draftAgentId || !draftPointId) return [] as AgendaSlot[]
+    return slots.filter(slot =>
+      slot.agente_registro_id === draftAgentId
+      && slot.ponto_atendimento_id === draftPointId
+    )
+  }, [draftAgentId, draftPointId, slots])
+
+  const slotsByDay = useMemo(() => {
+    const grouped = new Map<string, AgendaSlot[]>()
+    for (const slot of filteredSlots) {
+      const day = slot.inicio.slice(0, 10)
+      const list = grouped.get(day) ?? []
+      list.push(slot)
+      grouped.set(day, list)
+    }
+    return Array.from(grouped.entries()).map(([day, daySlots]) => ({
+      day,
+      slots: daySlots.sort((a, b) => new Date(a.inicio).getTime() - new Date(b.inicio).getTime()),
+    }))
+  }, [filteredSlots])
+
+  useEffect(() => {
+    if (slotsByDay.length === 0) {
+      setSelectedDay('')
+      setDraftDay('')
+      return
+    }
+    const firstDay = slotsByDay[0]?.day ?? ''
+    if (!selectedDay || !slotsByDay.some(item => item.day === selectedDay)) setSelectedDay(firstDay)
+    if (!draftDay || !slotsByDay.some(item => item.day === draftDay)) setDraftDay(firstDay)
+  }, [draftDay, selectedDay, slotsByDay])
+
+  const selectedSlot = useMemo(
+    () => slots.find(slot => buildSlotKey(slot) === selectedSlotKey) ?? null,
+    [selectedSlotKey, slots]
+  )
+
+  const draftSlots = useMemo(
+    () => slotsByDay.find(item => item.day === draftDay)?.slots ?? [],
+    [draftDay, slotsByDay]
+  )
+
+  const draftSelectedSlot = useMemo(
+    () => slots.find(slot => buildSlotKey(slot) === draftSlotKey) ?? null,
+    [draftSlotKey, slots]
+  )
+
+  useEffect(() => {
+    if (!isSchedulingOpen) return
+    if (draftSlotKey && !filteredSlots.some(slot => buildSlotKey(slot) === draftSlotKey)) {
+      setDraftSlotKey('')
+    }
+  }, [draftSlotKey, filteredSlots, isSchedulingOpen])
+
+  useEffect(() => {
+    if (!isSchedulingOpen) return
+
+    const hasSelectedAgent = draftAgentId && agentOptions.some(agent => agent.id === draftAgentId)
+    if (!hasSelectedAgent) {
+      const nextAgentId = selectedSlot?.agente_registro_id ?? agentOptions[0]?.id ?? ''
+      if (nextAgentId && nextAgentId !== draftAgentId) {
+        setDraftAgentId(nextAgentId)
+      }
+    }
+  }, [agentOptions, draftAgentId, isSchedulingOpen, selectedSlot])
+
+  useEffect(() => {
+    if (!isSchedulingOpen || !draftAgentId) return
+    const pointStillValid = draftPointId && pointOptionsForDraftAgent.some(point => point.id === draftPointId)
+    if (!pointStillValid) {
+      const nextPointId = selectedSlot?.agente_registro_id === draftAgentId
+        ? selectedSlot?.ponto_atendimento_id ?? ''
+        : ''
+      const fallbackPointId = pointOptionsForDraftAgent[0]?.id ?? ''
+      const resolved = pointOptionsForDraftAgent.some(point => point.id === nextPointId) ? nextPointId : fallbackPointId
+      if (resolved !== draftPointId) setDraftPointId(resolved)
+    }
+  }, [draftAgentId, draftPointId, isSchedulingOpen, pointOptionsForDraftAgent, selectedSlot])
+
+  const nextFieldId = useMemo(() => {
+    if (focusedField) return focusedField
+    for (const id of requiredFieldOrder(form)) {
+      if (!String(getValueByFieldId(form, id, titularEfetivo) ?? '').trim()) return id
+    }
+    return null
+  }, [focusedField, form, titularEfetivo])
+
+  const faturamentoDone = useMemo(() => (
+    !requiredFieldOrder(form)
+      .filter(id => id.startsWith('comprador.'))
+      .some(id => !String(getValueByFieldId(form, id, titularEfetivo) ?? '').trim())
+  ), [form, titularEfetivo])
+
+  const titularDone = useMemo(() => {
+    if (form.titularMesmoFaturamento && form.comprador.tipo === 'pessoa_fisica') {
+      return onlyDigits(form.comprador.cpf_cnpj).length === 11 && !!form.comprador.nome.trim()
+    }
+    const required = form.titularMesmoFaturamento
+      ? ['titular.cpf']
+      : ['titular.nome', 'titular.cpf']
+    return !required.some(id => !String(getValueByFieldId(form, id, titularEfetivo) ?? '').trim())
+  }, [form, titularEfetivo])
+
+  const pagamentoDone = !!form.forma_pagamento_id
+  const agendamentoDone = !!selectedSlot
+
+  const sectionStatuses: SectionStatus[] = [
+    { label: '1. Produto', done: !!itemSelecionado, icon: Store },
+    { label: 'Faturamento', done: faturamentoDone, icon: Building2 },
+    { label: 'Titular', done: titularDone, icon: UserRound },
+    { label: 'Pagamento', done: pagamentoDone, icon: CreditCard },
+    { label: 'Agendamento', done: agendamentoDone, icon: CalendarDays },
+  ]
+
+  const canShowFaturamento = !!itemSelecionado
+  const canShowTitular = canShowFaturamento && faturamentoDone
+  const canShowPagamento = canShowTitular && titularDone
+  const canShowAgendamento = canShowPagamento && pagamentoDone
+  const canShowAvisos = canShowPagamento
+
+  function updateComprador<K extends keyof FormState['comprador']>(key: K, value: FormState['comprador'][K]) {
+    setForm(prev => ({
+      ...prev,
+      comprador: {
+        ...prev.comprador,
+        [key]: value,
+      },
+    }))
+    if (fieldErrors[`comprador.${String(key)}`]) {
+      setFieldErrors(prev => {
+        const next = { ...prev }
+        delete next[`comprador.${String(key)}`]
+        return next
+      })
+    }
+  }
+
+  function updateTitular<K extends keyof FormState['titular']>(key: K, value: FormState['titular'][K]) {
+    setForm(prev => ({
+      ...prev,
+      titular: {
+        ...prev.titular,
+        [key]: value,
+      },
+    }))
+    if (fieldErrors[`titular.${String(key)}`]) {
+      setFieldErrors(prev => {
+        const next = { ...prev }
+        delete next[`titular.${String(key)}`]
+        return next
+      })
+    }
+  }
+
+  async function reaproveitarCadastroExistente(documento: string) {
+    const digits = onlyDigits(documento)
+    if (![11, 14].includes(digits.length)) return false
+
+    setCadastroLoading(true)
+    const data = await lookupExistingCheckoutCustomer(digits)
+    setCadastroLoading(false)
+
+    if (!data) return false
+
+    const telefoneFormatado = data.telefone ? formatPhone(data.telefone) : ''
+    const cepFormatado = data.cep ? formatCep(data.cep) : ''
+    const tipoCliente = data.tipo_cliente ?? inferTipoPessoa(digits)
+
+    setForm(prev => ({
+      ...prev,
+      comprador: {
+        ...prev.comprador,
+        tipo: tipoCliente,
+        cpf_cnpj: formatCpfCnpj(data.cpf_cnpj || digits),
+        nome: data.nome || '',
+        nome_fantasia: data.nome_fantasia || '',
+        email: data.email || '',
+        telefone: telefoneFormatado,
+        cep: cepFormatado,
+        logradouro: data.logradouro || '',
+        numero: data.numero || '',
+        complemento: data.complemento || '',
+        bairro: data.bairro || '',
+        cidade: data.cidade || '',
+        uf: (data.uf || '').toUpperCase(),
+      },
+      titular: tipoCliente === 'pessoa_fisica' && prev.titularMesmoFaturamento
+        ? {
+            ...prev.titular,
+            nome: data.nome || prev.titular.nome,
+            cpf: formatCpfCnpj(data.cpf_cnpj || digits),
+            email: data.email || prev.titular.email,
+            telefone: telefoneFormatado || prev.titular.telefone,
+          }
+        : prev.titular,
+    }))
+
+    setFieldErrors(prev => {
+      const next = { ...prev }
+      delete next['comprador.cpf_cnpj']
+      delete next['comprador.nome']
+      delete next['comprador.email']
+      delete next['comprador.telefone']
+      delete next['comprador.cep']
+      delete next['comprador.logradouro']
+      delete next['comprador.numero']
+      delete next['comprador.bairro']
+      delete next['comprador.cidade']
+      if (tipoCliente === 'pessoa_fisica') delete next['titular.cpf']
+      return next
+    })
+
+    return true
+  }
+
+  async function handleCepBlur() {
+    const cep = onlyDigits(form.comprador.cep)
+    if (cep.length !== 8) return
+    setCepLoading(true)
+    const result = await buscarCep(cep)
+    setCepLoading(false)
+    if (!result) return
+    setForm(prev => ({
+      ...prev,
+      comprador: {
+        ...prev.comprador,
+        logradouro: prev.comprador.logradouro || result.logradouro,
+        bairro: prev.comprador.bairro || result.bairro,
+        cidade: prev.comprador.cidade || result.localidade,
+        uf: prev.comprador.uf || result.uf,
+      },
+    }))
+  }
+
+  async function handleCnpjBlur(cnpjValue?: string) {
+    const cnpj = onlyDigits(cnpjValue ?? form.comprador.cpf_cnpj)
+    if (cnpj.length !== 14) return
+
+    setCnpjLoading(true)
+    const result = await buscarCnpj(cnpj)
+    setCnpjLoading(false)
+    if (!result) return
+
+    setForm(prev => ({
+      ...prev,
+      comprador: {
+        ...prev.comprador,
+        nome: prev.comprador.nome || result.razao_social,
+        nome_fantasia: prev.comprador.nome_fantasia || result.nome_fantasia || '',
+        cep: prev.comprador.cep || formatCep(result.cep ?? ''),
+        logradouro: prev.comprador.logradouro || result.logradouro || '',
+        numero: prev.comprador.numero || result.numero || '',
+        complemento: prev.comprador.complemento || result.complemento || '',
+        bairro: prev.comprador.bairro || result.bairro || '',
+        cidade: prev.comprador.cidade || result.municipio || '',
+        uf: prev.comprador.uf || (result.uf ?? '').toUpperCase(),
+      },
+    }))
+  }
+
+  async function handleDocumentoBlur() {
+    const documento = onlyDigits(form.comprador.cpf_cnpj)
+    if (![11, 14].includes(documento.length)) return
+
+    const inferred = inferTipoPessoa(documento)
+    if (inferred !== form.comprador.tipo) {
+      setForm(prev => ({ ...prev, comprador: { ...prev.comprador, tipo: inferred } }))
+    }
+
+    await reaproveitarCadastroExistente(documento)
+
+    if (inferred === 'pessoa_juridica') {
+      await handleCnpjBlur(documento)
+    }
+  }
+
+  function handleSelectProduct(itemId: string) {
+    setSelectedItemId(itemId)
+    requestAnimationFrame(() => {
+      formStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
+  function openSchedulingModal() {
+    setDraftSlotKey(selectedSlotKey)
+    setDraftAgentId(selectedSlot?.agente_registro_id ?? agentOptions[0]?.id ?? '')
+    setDraftPointId(selectedSlot?.ponto_atendimento_id ?? '')
+    setDraftDay(selectedSlot?.inicio.slice(0, 10) ?? selectedDay)
+    setIsSchedulingOpen(true)
+  }
+
+  function confirmScheduling() {
+    setSelectedSlotKey(draftSlotKey)
+    if (draftSelectedSlot) setSelectedDay(draftSelectedSlot.inicio.slice(0, 10))
+    setIsSchedulingOpen(false)
+  }
+
+  function clearScheduling() {
+    setDraftSlotKey('')
+    setSelectedSlotKey('')
+    setDraftAgentId(selectedSlot?.agente_registro_id ?? agentOptions[0]?.id ?? '')
+    setDraftPointId(selectedSlot?.ponto_atendimento_id ?? '')
+    setIsSchedulingOpen(false)
+  }
+
+  async function iniciarCheckout() {
+    const errors = validateForm(form, itemSelecionado)
+    setFieldErrors(errors)
+    setError(null)
+    setCheckoutSuccess(null)
+
+    if (Object.keys(errors).length > 0) {
+      const firstFieldId = Object.keys(errors)[0]
+      if (firstFieldId) {
+        requestAnimationFrame(() => {
+          document.querySelector<HTMLElement>(`[data-field-anchor="${firstFieldId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        })
+      }
+      setError('Revise os campos destacados para concluir a compra.')
+      return
+    }
+
+    if (!itemSelecionado) {
+      setError('Selecione um produto para continuar.')
+      return
+    }
+
+    setCheckoutLoading(true)
+
+    try {
+      const result = await submitMarketplaceCheckout({
+        slug: slug ?? null,
+        item_id: itemSelecionado.id,
+        comprador: {
+          nome: form.comprador.nome,
+          nome_fantasia: form.comprador.nome_fantasia,
+          responsavel_nome: form.comprador.responsavel_nome,
+          cpf_cnpj: onlyDigits(form.comprador.cpf_cnpj),
+          email: form.comprador.email.trim(),
+          telefone: onlyDigits(form.comprador.telefone),
+        },
+        fiscal: {
+          cep: onlyDigits(form.comprador.cep),
+          logradouro: form.comprador.logradouro,
+          numero: form.comprador.numero,
+          complemento: form.comprador.complemento,
+          bairro: form.comprador.bairro,
+          cidade: form.comprador.cidade,
+          uf: form.comprador.uf.toUpperCase(),
+        },
+        titular: {
+          nome: titularEfetivo.nome,
+          cpf: onlyDigits(titularEfetivo.cpf),
+          data_nascimento: form.titular.data_nascimento || null,
+          email: titularEfetivo.email,
+          telefone: onlyDigits(titularEfetivo.telefone),
+        },
+        pagamento: {
+          forma_pagamento_id: form.forma_pagamento_id,
+        },
+        agendamento: selectedSlot ? {
+          agente_registro_id: selectedSlot.agente_registro_id,
+          ponto_atendimento_id: selectedSlot.ponto_atendimento_id,
+          data_agendada: selectedSlot.inicio,
+        } : null,
+        observacoes: form.observacoes.trim() || null,
+      })
+
+      if (!result.ok) {
+        setError(result.error ?? 'Falha ao concluir a compra.')
+        setCheckoutLoading(false)
+        return
+      }
+
+      setCheckoutSuccess(result.message ?? 'Compra concluída com sucesso.')
+      setFieldErrors({})
+      setForm({
+        ...INITIAL_FORM,
+        comprador: {
+          ...INITIAL_FORM.comprador,
+          tipo: form.comprador.tipo,
+        },
+      })
+      setSelectedSlotKey('')
+      setDraftSlotKey('')
+      setSelectedDay(slotsByDay[0]?.day ?? '')
+      setDraftDay(slotsByDay[0]?.day ?? '')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro inesperado ao concluir a compra.')
+    } finally {
+      setCheckoutLoading(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[linear-gradient(180deg,#f6f8fc_0%,#ffffff_42%,#eef4ff_100%)] flex items-center justify-center p-6">
+        <div className="text-center">
+          <Loader2 size={28} className="animate-spin text-[#ea7b18] mx-auto" />
+          <p className="text-sm text-slate-500 mt-3">Carregando o link de compra...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error && !loja) {
+    return (
+      <div className="min-h-screen bg-[linear-gradient(180deg,#f6f8fc_0%,#ffffff_42%,#eef4ff_100%)] flex items-center justify-center p-6">
+        <div className="w-full max-w-lg rounded-[30px] border border-slate-200 bg-white p-8 shadow-sm text-center">
+          <p className="text-lg font-semibold text-slate-800">Link indisponível</p>
+          <p className="text-sm text-slate-500 mt-2">{error}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!loja || !tabela) return null
+
+  return (
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f8fc_0%,#ffffff_42%,#edf3fb_100%)] text-slate-900 pb-28 lg:pb-10">
+      <header className="border-b border-slate-200/80 bg-white/95 backdrop-blur-md sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-14 h-14 rounded-2xl border border-slate-200 bg-white flex items-center justify-center shadow-sm p-2">
+              <img src="/favicon.svg" alt="CertiID" className="w-full h-full object-contain" />
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-[#ea7b18] font-semibold">Checkout por link</p>
+              <h1 className="text-xl font-semibold leading-tight">CertiID</h1>
+              <p className="text-sm text-slate-500 mt-0.5">{loja.nome_loja}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[#fff4ea] px-3 py-2 text-xs font-semibold text-[#ad5207]">
+              <ShieldCheck size={14} />
+              Atendimento online
+            </span>
+            {paymentRuntime.modo_teste_geral && (
+              <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-800">
+                <AlertTriangle size={14} />
+                Ambiente de teste
+              </span>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.55fr)_340px] gap-6 items-start">
+          <div className="space-y-6">
+            <div className="rounded-[24px] border border-slate-200 bg-white px-5 py-4 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] uppercase tracking-[0.24em] text-[#ea7b18] font-semibold">Solicitação online</p>
+                  <h2 className="text-lg font-semibold mt-1 leading-snug text-slate-900">
+                    Solicitação de certificado digital
+                  </h2>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {sectionStatuses.map(section => (
+                    <div key={section.label}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border',
+                        section.done
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                          : 'bg-slate-50 border-slate-200 text-slate-500'
+                      )}>
+                      {section.done
+                        ? <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                        : <section.icon size={12} className="text-[#17346b] shrink-0" />}
+                      {section.label}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <SectionCard
+              title={modoLinkDireto ? 'Produto selecionado para este link' : 'Escolha o certificado ideal'}
+              description={modoLinkDireto
+                ? 'Este link já está direcionado para um produto específico. Revise os detalhes e siga para o preenchimento.'
+                : 'Selecione o certificado e avance no formulário. O resumo da compra acompanha tudo em tempo real.'}
+              icon={Store}
+            >
+              {produtosAtivos.length === 0 ? (
+                <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-6 text-sm text-slate-500">
+                  Esta loja ainda não possui produtos ativos nesta tabela.
+                </div>
+              ) : modoLinkDireto && itemSelecionado ? (
+                <ProductHero item={itemSelecionado} />
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {produtosAtivos.map(item => {
+                    const cert = item.certificados
+                    const active = selectedItemId === item.id
+                    return (
+                      <article
+                        key={item.id}
+                        className={cn(
+                          'rounded-[26px] border bg-white p-5 shadow-sm transition-all duration-200',
+                          active ? 'border-[#ea7b18] ring-2 ring-[#fde4cf] shadow-md' : 'border-slate-200 hover:border-slate-300 hover:-translate-y-0.5'
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-semibold leading-snug">{cert?.tipo ?? 'Produto'}</h3>
+                            {(cert?.descricao_produto ?? cert?.descricao) && (
+                              <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                                {cert?.descricao_produto ?? cert?.descricao}
+                              </p>
+                            )}
+                          </div>
+                          {active && <CheckCircle2 size={18} className="text-[#ea7b18] shrink-0" />}
+                        </div>
+
+                        <ProductTags item={item} />
+
+                        <div className="mt-5 flex items-end justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Valor</p>
+                            <p className="text-2xl font-semibold text-emerald-600 mt-1">{formatCurrency(item.valor)}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectProduct(item.id)}
+                            className={cn(
+                              'inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold min-w-[160px]',
+                              active ? 'bg-slate-900 text-white' : 'bg-[#17346b] text-white hover:bg-[#102654]'
+                            )}
+                          >
+                            {active ? 'Selecionado' : 'Escolher produto'}
+                          </button>
+                        </div>
+
+                        {item.link_safeweb?.trim() && (
+                          <button
+                            type="button"
+                            onClick={() => window.open(item.link_safeweb!, '_blank', 'noopener,noreferrer')}
+                            className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-700"
+                          >
+                            <ExternalLink size={14} />
+                            Abrir link externo deste produto
+                          </button>
+                        )}
+                      </article>
+                    )
+                  })}
+                </div>
+              )}
+            </SectionCard>
+
+            {canShowFaturamento && (
+            <div
+              ref={formStartRef}
+              className="space-y-6"
+            >
+            <SectionCard
+              title="Dados do faturamento"
+              description="Informe aqui os dados de faturamento e da nota fiscal."
+              icon={Building2}
+              highlight={nextFieldId?.startsWith('comprador.')}
+              done={faturamentoDone}
+            >
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <ChoiceCard
+                    label="Pessoa Jurídica"
+                    helper="Use esta opção se a compra for em nome da empresa."
+                    active={form.comprador.tipo === 'pessoa_juridica'}
+                    onClick={() => setForm(prev => ({
+                      ...prev,
+                      comprador: {
+                        ...prev.comprador,
+                        tipo: 'pessoa_juridica',
+                      },
+                    }))}
+                  />
+                  <ChoiceCard
+                    label="Pessoa Física"
+                    helper="Use esta opção se a compra for em seu nome."
+                    active={form.comprador.tipo === 'pessoa_fisica'}
+                    onClick={() => setForm(prev => ({
+                      ...prev,
+                      comprador: {
+                        ...prev.comprador,
+                        tipo: 'pessoa_fisica',
+                      },
+                    }))}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <GuidedField
+                    id="comprador.cpf_cnpj"
+                    label={form.comprador.tipo === 'pessoa_juridica' ? 'CNPJ *' : 'CPF *'}
+                    value={form.comprador.cpf_cnpj}
+                    onChange={value => updateComprador('cpf_cnpj', formatCpfCnpj(value))}
+                    onBlur={handleDocumentoBlur}
+                    helper={form.comprador.tipo === 'pessoa_juridica'
+                      ? 'Se este CNPJ já existir no sistema, os dados anteriores serão reaproveitados antes da consulta pública da Receita.'
+                      : 'Se este CPF já existir no sistema, seus dados anteriores serão carregados automaticamente.'}
+                    error={fieldErrors['comprador.cpf_cnpj']}
+                    focused={focusedField === 'comprador.cpf_cnpj'}
+                    highlight={nextFieldId === 'comprador.cpf_cnpj'}
+                    onFocus={() => setFocusedField('comprador.cpf_cnpj')}
+                    onBlurField={() => setFocusedField(null)}
+                    loading={cadastroLoading || cnpjLoading}
+                    loadingLabel={cadastroLoading ? 'Buscando cadastro' : 'Consultando Receita'}
+                  />
+
+                  {form.comprador.tipo === 'pessoa_juridica' ? (
+                    <GuidedField
+                      id="comprador.responsavel_nome"
+                      label="Nome do responsável *"
+                      value={form.comprador.responsavel_nome}
+                      onChange={value => updateComprador('responsavel_nome', value)}
+                      helper="Informe quem vai acompanhar esta compra e receber nosso contato."
+                      error={fieldErrors['comprador.responsavel_nome']}
+                      focused={focusedField === 'comprador.responsavel_nome'}
+                      highlight={nextFieldId === 'comprador.responsavel_nome'}
+                      onFocus={() => setFocusedField('comprador.responsavel_nome')}
+                      onBlurField={() => setFocusedField(null)}
+                    />
+                  ) : (
+                    <GuidedField
+                      id="comprador.nome"
+                      label="Nome completo *"
+                      value={form.comprador.nome}
+                      onChange={value => updateComprador('nome', value)}
+                      helper="Este nome será usado no faturamento."
+                      error={fieldErrors['comprador.nome']}
+                      focused={focusedField === 'comprador.nome'}
+                      highlight={nextFieldId === 'comprador.nome'}
+                      onFocus={() => setFocusedField('comprador.nome')}
+                      onBlurField={() => setFocusedField(null)}
+                    />
+                  )}
+
+                  {form.comprador.tipo === 'pessoa_juridica' && (
+                    <>
+                      <GuidedField
+                        id="comprador.nome"
+                        label="Razão social *"
+                        value={form.comprador.nome}
+                        onChange={value => updateComprador('nome', value)}
+                        helper="Este nome será usado no faturamento e na nota fiscal."
+                        error={fieldErrors['comprador.nome']}
+                        focused={focusedField === 'comprador.nome'}
+                        highlight={nextFieldId === 'comprador.nome'}
+                        onFocus={() => setFocusedField('comprador.nome')}
+                        onBlurField={() => setFocusedField(null)}
+                      />
+                      <GuidedField
+                        id="comprador.nome_fantasia"
+                        label="Nome fantasia"
+                        value={form.comprador.nome_fantasia}
+                        onChange={value => updateComprador('nome_fantasia', value)}
+                        helper="Se quiser, informe o nome fantasia para facilitar a identificação."
+                        focused={focusedField === 'comprador.nome_fantasia'}
+                        onFocus={() => setFocusedField('comprador.nome_fantasia')}
+                        onBlurField={() => setFocusedField(null)}
+                      />
+                    </>
+                  )}
+
+                  <GuidedField
+                    id="comprador.email"
+                    label="E-mail *"
+                    value={form.comprador.email}
+                    onChange={value => updateComprador('email', value)}
+                    type="email"
+                    helper="Informe seu e-mail para receber confirmação e orientações."
+                    error={fieldErrors['comprador.email']}
+                    focused={focusedField === 'comprador.email'}
+                    highlight={nextFieldId === 'comprador.email'}
+                    icon={Mail}
+                    onFocus={() => setFocusedField('comprador.email')}
+                    onBlurField={() => setFocusedField(null)}
+                  />
+                  <GuidedField
+                    id="comprador.telefone"
+                    label="Telefone com WhatsApp *"
+                    value={form.comprador.telefone}
+                    onChange={value => updateComprador('telefone', formatPhone(value))}
+                    helper="Informe seu WhatsApp para receber contato no momento da validação."
+                    error={fieldErrors['comprador.telefone']}
+                    focused={focusedField === 'comprador.telefone'}
+                    highlight={nextFieldId === 'comprador.telefone'}
+                    icon={Phone}
+                    onFocus={() => setFocusedField('comprador.telefone')}
+                    onBlurField={() => setFocusedField(null)}
+                  />
+                </div>
+
+                <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Endereço do faturamento</p>
+                      <p className="text-xs text-slate-500 mt-1">Ao informar o CEP, parte do endereço pode ser preenchida automaticamente.</p>
+                    </div>
+                    {(cepLoading || cnpjLoading) && (
+                      <div className="inline-flex items-center gap-2 text-xs text-slate-500">
+                        <Loader2 size={14} className="animate-spin" />
+                        {cnpjLoading ? 'Consultando Receita' : 'Buscando CEP'}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mt-4">
+                    <div className="md:col-span-3">
+                      <GuidedField
+                        id="comprador.cep"
+                        label="CEP *"
+                        value={form.comprador.cep}
+                        onChange={value => updateComprador('cep', formatCep(value))}
+                        onBlur={handleCepBlur}
+                        helper="Informe o CEP do faturamento."
+                        error={fieldErrors['comprador.cep']}
+                        focused={focusedField === 'comprador.cep'}
+                        highlight={nextFieldId === 'comprador.cep'}
+                        icon={MapPin}
+                        onFocus={() => setFocusedField('comprador.cep')}
+                        onBlurField={() => setFocusedField(null)}
+                      />
+                    </div>
+                    <div className="md:col-span-7">
+                      <GuidedField
+                        id="comprador.logradouro"
+                        label="Endereço *"
+                        value={form.comprador.logradouro}
+                        onChange={value => updateComprador('logradouro', value)}
+                        error={fieldErrors['comprador.logradouro']}
+                        focused={focusedField === 'comprador.logradouro'}
+                        highlight={nextFieldId === 'comprador.logradouro'}
+                        onFocus={() => setFocusedField('comprador.logradouro')}
+                        onBlurField={() => setFocusedField(null)}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <GuidedField
+                        id="comprador.numero"
+                        label="Número *"
+                        value={form.comprador.numero}
+                        onChange={value => updateComprador('numero', value)}
+                        error={fieldErrors['comprador.numero']}
+                        focused={focusedField === 'comprador.numero'}
+                        highlight={nextFieldId === 'comprador.numero'}
+                        onFocus={() => setFocusedField('comprador.numero')}
+                        onBlurField={() => setFocusedField(null)}
+                      />
+                    </div>
+                    <div className="md:col-span-4">
+                      <GuidedField
+                        id="comprador.complemento"
+                        label="Complemento"
+                        value={form.comprador.complemento}
+                        onChange={value => updateComprador('complemento', value)}
+                        focused={focusedField === 'comprador.complemento'}
+                        onFocus={() => setFocusedField('comprador.complemento')}
+                        onBlurField={() => setFocusedField(null)}
+                      />
+                    </div>
+                    <div className="md:col-span-4">
+                      <GuidedField
+                        id="comprador.bairro"
+                        label="Bairro *"
+                        value={form.comprador.bairro}
+                        onChange={value => updateComprador('bairro', value)}
+                        error={fieldErrors['comprador.bairro']}
+                        focused={focusedField === 'comprador.bairro'}
+                        highlight={nextFieldId === 'comprador.bairro'}
+                        onFocus={() => setFocusedField('comprador.bairro')}
+                        onBlurField={() => setFocusedField(null)}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <GuidedField
+                        id="comprador.uf"
+                        label="UF *"
+                        value={form.comprador.uf}
+                        onChange={value => updateComprador('uf', value.toUpperCase().slice(0, 2))}
+                        error={fieldErrors['comprador.uf']}
+                        focused={focusedField === 'comprador.uf'}
+                        highlight={nextFieldId === 'comprador.uf'}
+                        onFocus={() => setFocusedField('comprador.uf')}
+                        onBlurField={() => setFocusedField(null)}
+                      />
+                    </div>
+                    <div className="md:col-span-6">
+                      <GuidedField
+                        id="comprador.cidade"
+                        label="Cidade *"
+                        value={form.comprador.cidade}
+                        onChange={value => updateComprador('cidade', value)}
+                        error={fieldErrors['comprador.cidade']}
+                        focused={focusedField === 'comprador.cidade'}
+                        highlight={nextFieldId === 'comprador.cidade'}
+                        onFocus={() => setFocusedField('comprador.cidade')}
+                        onBlurField={() => setFocusedField(null)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+
+            {canShowTitular && (
+            <SectionCard
+              title="Dados do titular do certificado"
+              description="Informe aqui quem realmente receberá o certificado, mesmo que outra pessoa ou empresa faça o pagamento."
+              icon={UserRound}
+              highlight={nextFieldId?.startsWith('titular.')}
+              done={titularDone}
+            >
+              <label className="flex items-start gap-3 rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.titularMesmoFaturamento}
+                  onChange={e => setForm(prev => ({ ...prev, titularMesmoFaturamento: e.target.checked }))}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-[#17346b] focus:ring-[#17346b]"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {form.comprador.tipo === 'pessoa_fisica'
+                      ? 'Usar os mesmos dados do faturamento no certificado'
+                      : 'Usar o responsável do faturamento como titular do certificado'}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {form.comprador.tipo === 'pessoa_fisica'
+                      ? 'Use esta opção se você for pagar e também receber o certificado.'
+                      : 'Use esta opção se o responsável informado acima também for o titular do certificado.'}
+                  </p>
+                </div>
+              </label>
+
+              {form.titularMesmoFaturamento ? (
+                <div className="mt-4 rounded-[24px] border border-emerald-200 bg-emerald-50/70 p-4 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-900">Resumo do titular que será usado</p>
+                      <p className="text-xs text-emerald-800/80 mt-1">
+                        Revise os dados abaixo. Se precisar trocar a pessoa titular, desmarque a opção acima.
+                      </p>
+                    </div>
+                    <CheckCircle2 size={18} className="text-emerald-700 shrink-0 mt-0.5" />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-emerald-950">
+                    <InfoMini label="Nome" value={titularEfetivo.nome || 'Preencha acima'} />
+                    <InfoMini label="Contato" value={titularEfetivo.email || form.comprador.email || 'Preencha acima'} />
+                    <InfoMini label="WhatsApp" value={titularEfetivo.telefone || form.comprador.telefone || 'Preencha acima'} />
+                    <InfoMini label={form.comprador.tipo === 'pessoa_fisica' ? 'CPF' : 'CPF do titular'} value={titularEfetivo.cpf || 'Informe abaixo'} />
+                  </div>
+
+                  {form.comprador.tipo === 'pessoa_juridica' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <GuidedField
+                        id="titular.cpf"
+                        label="CPF do titular *"
+                        value={form.titular.cpf}
+                        onChange={value => updateTitular('cpf', formatCpfCnpj(value))}
+                        helper="Mesmo quando a empresa paga, o certificado será emitido para uma pessoa física."
+                        
+                        error={fieldErrors['titular.cpf']}
+                        focused={focusedField === 'titular.cpf'}
+                        highlight={nextFieldId === 'titular.cpf'}
+                        onFocus={() => setFocusedField('titular.cpf')}
+                        onBlurField={() => setFocusedField(null)}
+                      />
+                      <GuidedField
+                        id="titular.data_nascimento"
+                        label="Data de nascimento"
+                        value={form.titular.data_nascimento}
+                        onChange={value => updateTitular('data_nascimento', value)}
+                        type="date"
+                        helper="Se você informar agora, essa etapa fica mais adiantada."
+                        focused={focusedField === 'titular.data_nascimento'}
+                        onFocus={() => setFocusedField('titular.data_nascimento')}
+                        onBlurField={() => setFocusedField(null)}
+                      />
+                    </div>
+                  )}
+
+                  {form.comprador.tipo === 'pessoa_fisica' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <GuidedField
+                        id="titular.data_nascimento"
+                        label="Data de nascimento"
+                        value={form.titular.data_nascimento}
+                        onChange={value => updateTitular('data_nascimento', value)}
+                        type="date"
+                        helper="Se quiser, você já pode informar agora."
+                        focused={focusedField === 'titular.data_nascimento'}
+                        onFocus={() => setFocusedField('titular.data_nascimento')}
+                        onBlurField={() => setFocusedField(null)}
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <GuidedField
+                    id="titular.nome"
+                    label="Nome do titular *"
+                    value={form.titular.nome}
+                    onChange={value => updateTitular('nome', value)}
+                    helper="Informe o nome de quem vai receber o certificado."
+                    error={fieldErrors['titular.nome']}
+                    focused={focusedField === 'titular.nome'}
+                    highlight={nextFieldId === 'titular.nome'}
+                    onFocus={() => setFocusedField('titular.nome')}
+                    onBlurField={() => setFocusedField(null)}
+                  />
+                  <GuidedField
+                    id="titular.cpf"
+                    label="CPF do titular *"
+                    value={form.titular.cpf}
+                    onChange={value => updateTitular('cpf', formatCpfCnpj(value))}
+                    error={fieldErrors['titular.cpf']}
+                    focused={focusedField === 'titular.cpf'}
+                    highlight={nextFieldId === 'titular.cpf'}
+                    onFocus={() => setFocusedField('titular.cpf')}
+                    onBlurField={() => setFocusedField(null)}
+                  />
+                  <GuidedField
+                    id="titular.data_nascimento"
+                    label="Data de nascimento"
+                    value={form.titular.data_nascimento}
+                    onChange={value => updateTitular('data_nascimento', value)}
+                    type="date"
+                    focused={focusedField === 'titular.data_nascimento'}
+                    onFocus={() => setFocusedField('titular.data_nascimento')}
+                    onBlurField={() => setFocusedField(null)}
+                  />
+                  <GuidedField
+                    id="titular.email"
+                    label="E-mail do titular"
+                    value={form.titular.email}
+                    onChange={value => updateTitular('email', value)}
+                    type="email"
+                    helper="Se este e-mail for diferente do faturamento, informe aqui."
+                    focused={focusedField === 'titular.email'}
+                    icon={Mail}
+                    onFocus={() => setFocusedField('titular.email')}
+                    onBlurField={() => setFocusedField(null)}
+                  />
+                  <GuidedField
+                    id="titular.telefone"
+                    label="WhatsApp do titular"
+                    value={form.titular.telefone}
+                    onChange={value => updateTitular('telefone', formatPhone(value))}
+                    helper="Se este WhatsApp for diferente do faturamento, informe aqui."
+                    focused={focusedField === 'titular.telefone'}
+                    icon={Phone}
+                    onFocus={() => setFocusedField('titular.telefone')}
+                    onBlurField={() => setFocusedField(null)}
+                  />
+                </div>
+              )}
+            </SectionCard>
+            )}
+
+            {canShowPagamento && (
+            <SectionCard
+              title="Forma de pagamento"
+              description="Escolha como você vai pagar. O atendimento só será liberado depois da compensação."
+              icon={Wallet}
+              highlight={nextFieldId === 'forma_pagamento_id'}
+              done={pagamentoDone}
+            >
+              <div data-field-anchor="forma_pagamento_id" className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {pagamentos.map(option => {
+                  const active = form.forma_pagamento_id === option.id
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => {
+                        setForm(prev => ({ ...prev, forma_pagamento_id: option.id }))
+                        setFieldErrors(prev => {
+                          const next = { ...prev }
+                          delete next['forma_pagamento_id']
+                          return next
+                        })
+                      }}
+                      className={cn(
+                        'text-left rounded-[24px] border px-4 py-4 transition-all',
+                        active
+                          ? 'border-[#ea7b18] bg-[#fff8f1] ring-2 ring-[#fde4cf]'
+                          : (nextFieldId === 'forma_pagamento_id'
+                            ? 'border-[#17346b] bg-sky-50/70 ring-2 ring-sky-100'
+                            : 'border-slate-200 bg-white hover:border-slate-300')
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{option.nome}</p>
+                          <p className="text-xs text-slate-500 mt-1">{statusPagamentoLabel(option)}</p>
+                        </div>
+                        {active ? <CheckCircle2 size={18} className="text-[#ea7b18]" /> : <CreditCard size={18} className="text-slate-400" />}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+              {fieldErrors['forma_pagamento_id'] && (
+                <p className="mt-3 text-sm text-red-600">{fieldErrors['forma_pagamento_id']}</p>
+              )}
+            </SectionCard>
+            )}
+
+            {canShowAgendamento && (
+            <SectionCard
+              title="Agendamento da validação"
+              description="Você pode agendar agora para adiantar o processo, mas a validação só acontecerá depois da confirmação do pagamento."
+              icon={CalendarDays}
+              highlight={!selectedSlot}
+              done={agendamentoDone}
+            >
+              <div className="rounded-[24px] border border-[#fde4cf] bg-[#fffaf4] p-4 sm:p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-slate-900">
+                      {selectedSlot ? 'Horário já separado para a validação' : 'Agendamento ainda não definido'}
+                    </p>
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      {selectedSlot
+                        ? `${formatDateTime(selectedSlot.inicio)} com ${selectedSlot.agente_nome} em ${selectedSlot.ponto_nome}.`
+                        : 'Você pode seguir sem agendar agora, mas será necessário voltar depois para escolher um horário e ser atendido.'}
+                    </p>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="inline-flex items-center gap-2 rounded-full bg-white border border-[#f7d9bc] px-3 py-1.5 text-slate-700">
+                        <Phone size={13} />
+                        Use e-mail e WhatsApp válidos para contato da equipe
+                      </span>
+                      <span className="inline-flex items-center gap-2 rounded-full bg-white border border-[#f7d9bc] px-3 py-1.5 text-slate-700">
+                        <AlertTriangle size={13} />
+                        Atendimento liberado somente após compensação
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      type="button"
+                      onClick={openSchedulingModal}
+                      className="inline-flex items-center justify-center rounded-2xl px-4 py-3 bg-[#17346b] text-white text-sm font-semibold hover:bg-[#102654]"
+                    >
+                      {selectedSlot ? 'Trocar agendamento' : 'Escolher horário'}
+                    </button>
+                    {selectedSlot && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSlotKey('')}
+                        className="inline-flex items-center justify-center rounded-2xl px-4 py-3 border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-white"
+                      >
+                        Deixar pendente
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+            )}
+
+            {canShowAvisos && (
+            <SectionCard
+              title="Avisos importantes"
+              description="Revise estes avisos antes de concluir a compra."
+              icon={AlertTriangle}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <WarningCard text={paymentRuntime.aviso_checkout} />
+                <WarningCard text="Se você não agendar agora, será necessário voltar depois para escolher um horário antes do atendimento." />
+                <WarningCard text="Informe e-mail e telefone com WhatsApp válidos para a equipe entrar em contato no momento da validação." />
+              </div>
+
+              <div className="mt-4">
+                <GuidedField
+                  id="observacoes"
+                  label="Observações da compra"
+                  value={form.observacoes}
+                  onChange={value => setForm(prev => ({ ...prev, observacoes: value }))}
+                  multiline
+                  helper="Se quiser, use este espaço para deixar algum recado sobre a emissão."
+                  focused={focusedField === 'observacoes'}
+                  onFocus={() => setFocusedField('observacoes')}
+                  onBlurField={() => setFocusedField(null)}
+                />
+              </div>
+            </SectionCard>
+            )}
+            </div>
+            )}
+          </div>
+
+          <aside className="xl:sticky xl:top-24 space-y-4">
+            <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400 font-semibold">Resumo da compra</p>
+              {itemSelecionado ? (
+                <>
+                  <div className="mt-4 rounded-[24px] bg-slate-50 p-4">
+                    <p className="text-lg font-semibold text-slate-900">{itemSelecionado.certificados?.tipo ?? 'Produto'}</p>
+                    {(itemSelecionado.certificados?.descricao_produto ?? itemSelecionado.certificados?.descricao) && (
+                      <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                        {itemSelecionado.certificados?.descricao_produto ?? itemSelecionado.certificados?.descricao}
+                      </p>
+                    )}
+                    <ProductTags item={itemSelecionado} compact />
+                    <p className="text-3xl font-semibold text-emerald-600 mt-4">{formatCurrency(itemSelecionado.valor)}</p>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    <InfoLine label="Faturamento" value={form.comprador.nome || 'Aguardando preenchimento'} />
+                    <InfoLine label="Contato principal" value={form.comprador.telefone || form.comprador.email || 'Aguardando preenchimento'} />
+                    <InfoLine
+                      label="Titular do certificado"
+                      value={titularEfetivo.nome || 'Aguardando definição'}
+                    />
+                    <InfoLine
+                      label="Pagamento"
+                      value={pagamentos.find(item => item.id === form.forma_pagamento_id)?.nome ?? 'Aguardando escolha'}
+                    />
+                    <InfoLine
+                      label="Agendamento"
+                      value={selectedSlot ? formatDateTime(selectedSlot.inicio) : 'Pendente'}
+                      tone={selectedSlot ? 'default' : 'warn'}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="mt-4 rounded-[24px] bg-slate-50 p-4 text-sm text-slate-500">
+                  Selecione um produto para liberar o resumo da compra.
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-[30px] border border-[#fde4cf] bg-[#fffaf4] p-5 shadow-sm">
+              <p className="text-sm font-semibold text-slate-900">Antes de finalizar</p>
+              <ul className="mt-3 space-y-2 text-sm text-slate-600">
+                <li>Confirme seu e-mail e seu WhatsApp para receber nosso contato.</li>
+                <li>Se quem paga for diferente de quem recebe o certificado, revise os dois blocos com atenção.</li>
+                <li>Sua validação só será atendida após a compensação do pagamento.</li>
+              </ul>
+            </div>
+
+            {error && (
+              <div className="rounded-[24px] border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700 shadow-sm">
+                {error}
+              </div>
+            )}
+
+            {checkoutSuccess && (
+              <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-700 shadow-sm">
+                {checkoutSuccess}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => void iniciarCheckout()}
+              disabled={checkoutLoading || !itemSelecionado}
+              className="hidden xl:inline-flex w-full items-center justify-center rounded-[22px] px-5 py-4 bg-[#ea7b18] text-white text-sm font-semibold hover:bg-[#cf6611] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#fde4cf]"
+            >
+              {checkoutLoading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin mr-2" />
+                  Finalizando compra...
+                </>
+              ) : 'Concluir compra'}
+            </button>
+          </aside>
+        </section>
+      </main>
+
+      <div className="xl:hidden fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur-md px-4 py-3">
+        <div className="max-w-7xl mx-auto flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">Valor da compra</p>
+            <p className="text-sm font-semibold text-slate-900 truncate">
+              {itemSelecionado ? `${itemSelecionado.certificados?.tipo ?? 'Produto'} · ${formatCurrency(itemSelecionado.valor)}` : 'Selecione um produto'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void iniciarCheckout()}
+            disabled={checkoutLoading || !itemSelecionado}
+            className="inline-flex items-center justify-center rounded-2xl px-4 py-3 bg-[#ea7b18] text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed min-w-[160px]"
+          >
+            {checkoutLoading ? (
+              <>
+                <Loader2 size={16} className="animate-spin mr-2" />
+                Enviando
+              </>
+            ) : 'Concluir compra'}
+          </button>
+        </div>
+      </div>
+
+      {isSchedulingOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6">
+          <div className="w-full sm:max-w-5xl max-h-[92vh] overflow-hidden rounded-t-[28px] sm:rounded-[30px] bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 px-5 sm:px-6 py-5 border-b border-slate-200">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.22em] text-[#ea7b18] font-semibold">Agendamento da validação</p>
+                <h3 className="text-xl font-semibold mt-1">Escolha seu horário de atendimento</h3>
+                <p className="text-sm text-slate-500 mt-2">
+                  Você pode seguir sem agendar, mas será necessário voltar depois para definir seu atendimento.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSchedulingOpen(false)}
+                className="w-10 h-10 rounded-2xl border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
+                  <div className="border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/80 p-5 space-y-4">
+                    <div className="rounded-[22px] border border-[#fde4cf] bg-[#fffaf4] p-4 text-sm text-slate-700">
+                      <p className="font-semibold text-slate-900">Aviso importante</p>
+                      <p className="mt-2 leading-relaxed">
+                        O atendimento da validação só é realizado após a compensação do pagamento.
+                      </p>
+                    </div>
+
+                    <div className="space-y-4">
+                      <SelectField
+                        label="Atendente"
+                        value={draftAgentId}
+                        onChange={value => {
+                          setDraftAgentId(value)
+                          setDraftPointId('')
+                          setDraftSlotKey('')
+                        }}
+                        options={[
+                          { value: '', label: 'Selecione o atendente' },
+                          ...agentOptions.map(agent => ({ value: agent.id, label: agent.nome })),
+                        ]}
+                      />
+
+                      <SelectField
+                        label="Local / ponto"
+                        value={draftPointId}
+                        onChange={value => {
+                          setDraftPointId(value)
+                          setDraftSlotKey('')
+                        }}
+                        options={[
+                          { value: '', label: draftAgentId ? 'Selecione o local' : 'Escolha primeiro o atendente' },
+                          ...pointOptionsForDraftAgent.map(point => ({ value: point.id, label: point.nome })),
+                        ]}
+                        disabled={!draftAgentId}
+                      />
+                    </div>
+
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Datas disponíveis</p>
+                      <div className="mt-3 flex lg:flex-col gap-2 overflow-auto pb-1">
+                        {slotsByDay.map(({ day }) => (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => setDraftDay(day)}
+                        className={cn(
+                          'rounded-2xl px-4 py-3 text-sm font-semibold text-left whitespace-nowrap',
+                          draftDay === day
+                            ? 'bg-[#17346b] text-white'
+                            : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'
+                        )}
+                      >
+                        {formatDayLabel(day)}
+                      </button>
+                        ))}
+                        {slotsByDay.length === 0 && (
+                          <div className="rounded-2xl bg-white border border-slate-200 px-4 py-3 text-sm text-slate-500">
+                            {draftAgentId && draftPointId
+                              ? 'Sem horários liberados para esta combinação.'
+                              : 'Escolha atendente e local para liberar os horários.'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-5 sm:p-6 overflow-auto max-h-[68vh]">
+                    {!draftAgentId || !draftPointId ? (
+                      <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-6 text-sm text-slate-600">
+                        Escolha primeiro o atendente e o local para liberar os dias e horários disponíveis.
+                      </div>
+                    ) : slotsByDay.length === 0 ? (
+                      <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-6 text-sm text-amber-900">
+                        Nenhum horário está disponível para esta combinação agora. Você ainda pode concluir a compra e deixar o agendamento para depois.
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">Horários de {draftDay ? formatDayLabel(draftDay) : 'seleção atual'}</p>
+                            <p className="text-sm text-slate-500 mt-1">Agora basta escolher o melhor dia e horário. Se preferir, você também pode sair sem reservar agora.</p>
+                          </div>
+                          {draftSelectedSlot && (
+                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                              {formatDateTime(draftSelectedSlot.inicio)}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                          {draftSlots.map(slot => {
+                            const active = draftSlotKey === buildSlotKey(slot)
+                            return (
+                              <button
+                                key={buildSlotKey(slot)}
+                                type="button"
+                                onClick={() => setDraftSlotKey(buildSlotKey(slot))}
+                                className={cn(
+                                  'rounded-[24px] border px-4 py-4 text-left transition-all',
+                                  active
+                                    ? 'border-[#ea7b18] bg-[#fff8f1] ring-2 ring-[#fde4cf]'
+                                    : 'border-slate-200 bg-white hover:border-slate-300'
+                                )}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-lg font-semibold text-slate-900">{formatTimeRange(slot.inicio, slot.fim)}</p>
+                                    <p className="text-xs text-slate-500 mt-2">
+                                      {slot.tipo_atendimento === 'videoconferencia' ? 'Validação por vídeo' : (slot.tipo_atendimento ?? 'Atendimento')}
+                                    </p>
+                                  </div>
+                                  {active && <CheckCircle2 size={18} className="text-[#ea7b18] shrink-0" />}
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
+                                    {slot.vagas_restantes} vaga(s)
+                                  </span>
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 px-5 sm:px-6 py-4 border-t border-slate-200 bg-white">
+              <button
+                type="button"
+                onClick={clearScheduling}
+                className="inline-flex items-center justify-center rounded-2xl px-4 py-3 border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Seguir sem agendar
+              </button>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsSchedulingOpen(false)}
+                  className="inline-flex items-center justify-center rounded-2xl px-4 py-3 border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmScheduling}
+                  className="inline-flex items-center justify-center rounded-2xl px-4 py-3 bg-[#17346b] text-white text-sm font-semibold hover:bg-[#102654]"
+                >
+                  Confirmar horário
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SectionCard({
+  title,
+  description,
+  icon: Icon,
+  children,
+  highlight = false,
+  done = false,
+}: {
+  title: string
+  description: string
+  icon: typeof Building2
+  children: ReactNode
+  highlight?: boolean
+  done?: boolean
+}) {
+  return (
+    <section className={cn(
+      'rounded-[30px] border bg-white p-5 sm:p-6 shadow-sm',
+      highlight ? 'border-[#17346b] ring-2 ring-sky-100' : 'border-slate-200',
+      done && !highlight ? 'shadow-[0_10px_40px_-28px_rgba(22,163,74,0.55)]' : ''
+    )}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className={cn(
+            'w-11 h-11 rounded-2xl flex items-center justify-center shrink-0',
+            highlight ? 'bg-sky-100 text-[#17346b]' : 'bg-slate-100 text-slate-700'
+          )}>
+            <Icon size={18} />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
+            <p className="text-sm text-slate-500 mt-2 leading-relaxed">{description}</p>
+          </div>
+        </div>
+        {done && (
+          <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+            <CheckCircle2 size={14} />
+            Etapa revisada
+          </span>
+        )}
+      </div>
+      <div className="mt-5">{children}</div>
+    </section>
+  )
+}
+
+function GuidedField({
+  id,
+  label,
+  value,
+  onChange,
+  focused = false,
+  highlight = false,
+  error,
+  helper,
+  type = 'text',
+  multiline = false,
+  icon: Icon,
+  loading = false,
+  loadingLabel = 'Carregando',
+  onFocus,
+  onBlurField,
+  onBlur,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (value: string) => void
+  focused?: boolean
+  highlight?: boolean
+  error?: string
+  helper?: string
+  type?: string
+  multiline?: boolean
+  icon?: typeof Mail
+  loading?: boolean
+  loadingLabel?: string
+  onFocus?: () => void
+  onBlurField?: () => void
+  onBlur?: () => void | Promise<void>
+}) {
+  const shared = {
+    value,
+    onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(e.target.value),
+    onFocus,
+    onBlur: () => {
+      onBlurField?.()
+      void onBlur?.()
+    },
+    className: cn(
+      'w-full rounded-[20px] border px-4 py-3.5 text-sm bg-white outline-none',
+      Icon ? 'pl-11' : '',
+      error
+        ? 'border-red-300 ring-2 ring-red-100'
+        : focused
+          ? 'border-[#17346b] ring-2 ring-sky-100 shadow-[0_0_0_4px_rgba(59,130,246,0.06)]'
+          : highlight
+            ? 'border-[#ea7b18] ring-2 ring-[#fde4cf] bg-[#fffdf9]'
+            : 'border-slate-200 focus:border-[#17346b] focus:ring-2 focus:ring-sky-100'
+    ),
+  }
+
+  return (
+    <label data-field-anchor={id} className="relative block group">
+      <div className="flex items-center justify-between gap-3 mb-1.5">
+        <span className="text-sm font-medium text-slate-700">{label}</span>
+        <div className="flex items-center gap-2">
+          {loading && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+              <Loader2 size={12} className="animate-spin" />
+              {loadingLabel}
+            </span>
+          )}
+          {highlight && !error && (
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#ea7b18]">Preencha aqui</span>
+          )}
+        </div>
+      </div>
+      <div className="relative">
+        {Icon && (
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+            <Icon size={16} />
+          </span>
+        )}
+        {multiline ? (
+          <textarea {...shared} rows={4} />
+        ) : (
+          <input {...shared} type={type} />
+        )}
+      </div>
+      {error ? (
+        <p className="mt-1.5 text-sm text-red-600">{error}</p>
+      ) : null}
+      {!error && helper && (
+        <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 hidden max-w-xs rounded-2xl border border-slate-200 bg-slate-900 px-3 py-2 text-xs leading-relaxed text-white shadow-xl group-hover:block group-focus-within:block">
+          {helper}
+        </div>
+      )}
+    </label>
+  )
+}
+
+function ChoiceCard({
+  label,
+  helper,
+  active,
+  onClick,
+}: {
+  label: string
+  helper: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'w-full min-h-[96px] rounded-[24px] border px-4 py-4 text-left transition-all',
+        active
+          ? 'border-[#ea7b18] bg-[#fff8f1] ring-2 ring-[#fde4cf]'
+          : 'border-slate-200 bg-white hover:border-slate-300'
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-900 break-words">{label}</p>
+          <p className="text-xs text-slate-500 mt-1 leading-relaxed break-words">{helper}</p>
+        </div>
+        {active && <CheckCircle2 size={18} className="text-[#ea7b18] shrink-0" />}
+      </div>
+    </button>
+  )
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+  disabled = false,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  options: Array<{ value: string; label: string }>
+  disabled?: boolean
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">{label}</span>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        disabled={disabled}
+        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-[#17346b] focus:ring-2 focus:ring-sky-100 disabled:bg-slate-100 disabled:text-slate-400"
+      >
+        {options.map(option => (
+          <option key={`${label}-${option.value || 'empty'}`} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+function ProductHero({ item }: { item: LojaItemRow }) {
+  return (
+    <article className="rounded-[28px] border border-slate-200 bg-white p-6 sm:p-7 shadow-sm">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="max-w-2xl">
+          <h3 className="text-2xl font-semibold leading-tight text-slate-900">{item.certificados?.tipo ?? 'Produto'}</h3>
+          {(item.certificados?.descricao_produto ?? item.certificados?.descricao) && (
+            <p className="text-sm text-slate-500 mt-3 leading-relaxed">
+              {item.certificados?.descricao_produto ?? item.certificados?.descricao}
+            </p>
+          )}
+          <ProductTags item={item} />
+        </div>
+        <div className="rounded-[24px] bg-slate-50 px-5 py-4 min-w-[220px]">
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Valor final</p>
+          <p className="text-3xl font-semibold text-emerald-600 mt-2">{formatCurrency(item.valor)}</p>
+        </div>
+      </div>
+
+      {item.link_safeweb?.trim() && (
+        <button
+          type="button"
+          onClick={() => window.open(item.link_safeweb!, '_blank', 'noopener,noreferrer')}
+          className="mt-5 inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50"
+        >
+          <ExternalLink size={15} />
+          Abrir link externo deste produto
+        </button>
+      )}
+    </article>
+  )
+}
+
+function ProductTags({ item, compact = false }: { item: LojaItemRow; compact?: boolean }) {
+  const cert = item.certificados
+  const classes = compact
+    ? 'rounded-full px-2.5 py-1 text-[11px] font-medium'
+    : 'rounded-full px-3 py-1 text-xs font-medium'
+
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      {cert?.modelo && (
+        <span className={cn(classes, 'bg-slate-100 text-slate-600')}>{cert.modelo}</span>
+      )}
+      {labelEmissao(cert?.tipo_emissao_padrao) && (
+        <span className={cn(classes, 'bg-sky-50 text-sky-700')}>{labelEmissao(cert?.tipo_emissao_padrao)}</span>
+      )}
+      {cert?.periodo_uso && (
+        <span className={cn(classes, 'bg-violet-50 text-violet-700')}>Uso: {cert.periodo_uso}</span>
+      )}
+      {cert?.validade && (
+        <span className={cn(classes, 'bg-emerald-50 text-emerald-700')}>Validade: {cert.validade}</span>
+      )}
+    </div>
+  )
+}
+
+function InfoLine({
+  label,
+  value,
+  tone = 'default',
+}: {
+  label: string
+  value: string
+  tone?: 'default' | 'warn'
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 text-sm">
+      <span className="text-slate-500">{label}</span>
+      <span className={cn(
+        'font-medium text-right',
+        tone === 'warn' ? 'text-amber-700' : 'text-slate-900'
+      )}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function WarningCard({ text }: { text: string }) {
+  return (
+    <div className="rounded-[22px] border border-[#fde4cf] bg-[#fffaf4] p-4 text-sm text-slate-700 leading-relaxed">
+      {text}
+    </div>
+  )
+}
+
+function InfoMini({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-white/80 border border-emerald-100 px-3 py-3">
+      <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-700/70 font-semibold">{label}</p>
+      <p className="text-sm font-medium text-emerald-950 mt-2 break-words">{value}</p>
+    </div>
+  )
+}
+
+
+
+
+
+
+

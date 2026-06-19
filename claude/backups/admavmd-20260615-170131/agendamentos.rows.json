@@ -1,0 +1,54 @@
+{
+  "rows": [
+    {
+      "id": "72eda9a7-7dbc-4daf-a395-3a6e849907fe",
+      "cliente": "Patrícia Nunes",
+      "telefone": "(11) 99999-0002",
+      "servico": "e-CNPJ A1",
+      "data_hora": "2026-05-11T18:02:42.052153-03:00",
+      "status": "aguardando",
+      "observacoes": null,
+      "created_at": "2026-05-11T16:02:42.052153-03:00"
+    },
+    {
+      "id": "bc37a6f6-8106-4d7f-abb3-82ab84d3ec75",
+      "cliente": "Fernando Costa",
+      "telefone": "(11) 99999-0003",
+      "servico": "e-CPF A1",
+      "data_hora": "2026-05-11T21:02:42.052153-03:00",
+      "status": "confirmado",
+      "observacoes": null,
+      "created_at": "2026-05-11T16:02:42.052153-03:00"
+    },
+    {
+      "id": "4c1d50ac-165e-4e07-bef7-e567353116f7",
+      "cliente": "Juliana Ramos",
+      "telefone": "(11) 99999-0004",
+      "servico": "e-CNPJ A3",
+      "data_hora": "2026-05-11T22:02:42.052153-03:00",
+      "status": "confirmado",
+      "observacoes": null,
+      "created_at": "2026-05-11T16:02:42.052153-03:00"
+    },
+    {
+      "id": "f6821b28-684b-477b-9378-a48c942e5108",
+      "cliente": "Marcos Oliveira",
+      "telefone": "(11) 99999-0005",
+      "servico": "NF-e A1",
+      "data_hora": "2026-05-12T00:02:42.052153-03:00",
+      "status": "aguardando",
+      "observacoes": null,
+      "created_at": "2026-05-11T16:02:42.052153-03:00"
+    },
+    {
+      "id": "cb5a5488-ad25-405d-a037-deac4b2e0530",
+      "cliente": "Roberto Freitas",
+      "telefone": "(11) 99999-0001",
+      "servico": "e-CPF A3",
+      "data_hora": "2026-05-11T17:02:42.052153-03:00",
+      "status": "aguardando",
+      "observacoes": null,
+      "created_at": "2026-05-11T16:02:42.052153-03:00"
+    }
+  ]
+}

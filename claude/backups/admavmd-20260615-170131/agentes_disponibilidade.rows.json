@@ -1,0 +1,79 @@
+{
+  "rows": [
+    {
+      "id": "c65f9ff3-410a-43a4-851d-33d1d322200d",
+      "agente_registro_id": "f9e5427b-4bfc-430b-9904-6bc1b1f2c0e7",
+      "ponto_atendimento_id": "8a1a8727-5f60-40c3-bf9a-2bd58b581c82",
+      "dia_semana": 1,
+      "hora_inicio": "09:00:00",
+      "hora_fim": "17:00:00",
+      "intervalo_minutos": 10,
+      "capacidade_por_slot": 1,
+      "tipo_atendimento": null,
+      "ativo": true,
+      "metadata": {},
+      "created_at": "2026-05-27T17:20:52.946151-03:00",
+      "updated_at": "2026-05-27T17:20:52.946151-03:00"
+    },
+    {
+      "id": "8f505275-44c8-4153-9b4e-d0ebd1774fbd",
+      "agente_registro_id": "f9e5427b-4bfc-430b-9904-6bc1b1f2c0e7",
+      "ponto_atendimento_id": "8a1a8727-5f60-40c3-bf9a-2bd58b581c82",
+      "dia_semana": 2,
+      "hora_inicio": "09:00:00",
+      "hora_fim": "17:00:00",
+      "intervalo_minutos": 10,
+      "capacidade_por_slot": 1,
+      "tipo_atendimento": null,
+      "ativo": true,
+      "metadata": {},
+      "created_at": "2026-05-27T17:20:52.946151-03:00",
+      "updated_at": "2026-05-27T17:20:52.946151-03:00"
+    },
+    {
+      "id": "286115ff-9398-4c8b-815d-5dfa9d6868ec",
+      "agente_registro_id": "f9e5427b-4bfc-430b-9904-6bc1b1f2c0e7",
+      "ponto_atendimento_id": "8a1a8727-5f60-40c3-bf9a-2bd58b581c82",
+      "dia_semana": 3,
+      "hora_inicio": "09:00:00",
+      "hora_fim": "17:00:00",
+      "intervalo_minutos": 10,
+      "capacidade_por_slot": 1,
+      "tipo_atendimento": null,
+      "ativo": true,
+      "metadata": {},
+      "created_at": "2026-05-27T17:20:52.946151-03:00",
+      "updated_at": "2026-05-27T17:20:52.946151-03:00"
+    },
+    {
+      "id": "af341cb9-3a2f-443c-9706-0559cc6e4dd8",
+      "agente_registro_id": "f9e5427b-4bfc-430b-9904-6bc1b1f2c0e7",
+      "ponto_atendimento_id": "8a1a8727-5f60-40c3-bf9a-2bd58b581c82",
+      "dia_semana": 4,
+      "hora_inicio": "09:00:00",
+      "hora_fim": "17:00:00",
+      "intervalo_minutos": 10,
+      "capacidade_por_slot": 1,
+      "tipo_atendimento": null,
+      "ativo": true,
+      "metadata": {},
+      "created_at": "2026-05-27T17:20:52.946151-03:00",
+      "updated_at": "2026-05-27T17:20:52.946151-03:00"
+    },
+    {
+      "id": "453a5ac6-7185-4853-8d14-0b50cc8d1ce7",
+      "agente_registro_id": "f9e5427b-4bfc-430b-9904-6bc1b1f2c0e7",
+      "ponto_atendimento_id": "8a1a8727-5f60-40c3-bf9a-2bd58b581c82",
+      "dia_semana": 5,
+      "hora_inicio": "09:00:00",
+      "hora_fim": "17:00:00",
+      "intervalo_minutos": 10,
+      "capacidade_por_slot": 1,
+      "tipo_atendimento": null,
+      "ativo": true,
+      "metadata": {},
+      "created_at": "2026-05-27T17:20:52.946151-03:00",
+      "updated_at": "2026-05-27T17:20:52.946151-03:00"
+    }
+  ]
+}

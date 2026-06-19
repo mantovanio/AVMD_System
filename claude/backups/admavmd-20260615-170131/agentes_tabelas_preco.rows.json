@@ -1,0 +1,44 @@
+{
+  "rows": [
+    {
+      "id": "40b2d6c7-c1e5-4b71-a9e6-7c352c2c9a2a",
+      "tabela_preco_id": "bda9ea18-910c-44c7-9bf9-6efe799639ae",
+      "agente_registro_id": "f9e5427b-4bfc-430b-9904-6bc1b1f2c0e7",
+      "ponto_atendimento_id": "8a1a8727-5f60-40c3-bf9a-2bd58b581c82",
+      "ativo": true,
+      "metadata": {},
+      "created_at": "2026-05-25T19:41:43.896387-03:00",
+      "updated_at": "2026-05-25T19:41:43.896387-03:00"
+    },
+    {
+      "id": "a1bc1e99-7e59-44b4-a70f-40799c085c1c",
+      "tabela_preco_id": "84a9d1c5-267a-4608-b0a9-4e123e013659",
+      "agente_registro_id": "f9e5427b-4bfc-430b-9904-6bc1b1f2c0e7",
+      "ponto_atendimento_id": "8a1a8727-5f60-40c3-bf9a-2bd58b581c82",
+      "ativo": true,
+      "metadata": {},
+      "created_at": "2026-05-25T19:52:28.684384-03:00",
+      "updated_at": "2026-05-25T19:52:28.684384-03:00"
+    },
+    {
+      "id": "7e888c78-e311-40bd-8d71-a99958e3192c",
+      "tabela_preco_id": "feb18d5d-c7a9-4696-95bc-581da73ae36f",
+      "agente_registro_id": "f9e5427b-4bfc-430b-9904-6bc1b1f2c0e7",
+      "ponto_atendimento_id": "8a1a8727-5f60-40c3-bf9a-2bd58b581c82",
+      "ativo": true,
+      "metadata": {},
+      "created_at": "2026-05-25T20:21:44.338152-03:00",
+      "updated_at": "2026-05-25T20:21:44.338152-03:00"
+    },
+    {
+      "id": "589db21e-2cf0-487c-a36b-318a9b102b5e",
+      "tabela_preco_id": "570ad3bd-bf5d-4e8f-9d78-b9454ec51976",
+      "agente_registro_id": "f9e5427b-4bfc-430b-9904-6bc1b1f2c0e7",
+      "ponto_atendimento_id": "8a1a8727-5f60-40c3-bf9a-2bd58b581c82",
+      "ativo": true,
+      "metadata": {},
+      "created_at": "2026-05-27T19:01:11.925638-03:00",
+      "updated_at": "2026-05-27T19:01:11.925638-03:00"
+    }
+  ]
+}

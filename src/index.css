@@ -1,0 +1,51 @@
+* {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Glassmorphism chat container */
+.chat-container {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 1rem;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+/* Message bubbles */
+.message-bubble {
+  max-width: 70%;
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  margin-bottom: 0.5rem;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.message-sent {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  align-self: flex-end;
+  border-bottom-right-radius: 0.25rem;
+}
+
+.message-received {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  align-self: flex-start;
+  border-bottom-left-radius: 0.25rem;
+}
+
+/* Sidebar styling */
+.lead-sidebar {
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(8px);
+  border-left: 1px solid rgba(255,255,255,0.2);
+  padding: 1rem;
+}

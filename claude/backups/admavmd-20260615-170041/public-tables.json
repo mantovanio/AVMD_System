@@ -1,0 +1,224 @@
+[
+  {
+    "table_name": "agendamentos"
+  },
+  {
+    "table_name": "agendamentos_validacao"
+  },
+  {
+    "table_name": "agentes_disponibilidade"
+  },
+  {
+    "table_name": "agentes_indisponibilidades"
+  },
+  {
+    "table_name": "agentes_tabelas_preco"
+  },
+  {
+    "table_name": "app_settings"
+  },
+  {
+    "table_name": "automation_rules"
+  },
+  {
+    "table_name": "bancos"
+  },
+  {
+    "table_name": "cadastros_base"
+  },
+  {
+    "table_name": "catalogo_ia"
+  },
+  {
+    "table_name": "centros_custos"
+  },
+  {
+    "table_name": "certificados"
+  },
+  {
+    "table_name": "chat_kanban_columns"
+  },
+  {
+    "table_name": "chat_lead_documentos"
+  },
+  {
+    "table_name": "comissoes_lancamentos"
+  },
+  {
+    "table_name": "communication_events"
+  },
+  {
+    "table_name": "communication_outbox"
+  },
+  {
+    "table_name": "communication_templates"
+  },
+  {
+    "table_name": "contas_bancarias"
+  },
+  {
+    "table_name": "contas_bancarias_v2"
+  },
+  {
+    "table_name": "contestacao_documentos"
+  },
+  {
+    "table_name": "contestacao_signatarios"
+  },
+  {
+    "table_name": "crm_audit_logs"
+  },
+  {
+    "table_name": "crm_chat_assignments"
+  },
+  {
+    "table_name": "crm_chat_conversations"
+  },
+  {
+    "table_name": "crm_chat_messages"
+  },
+  {
+    "table_name": "crm_customers"
+  },
+  {
+    "table_name": "crm_import_files"
+  },
+  {
+    "table_name": "crm_participants"
+  },
+  {
+    "table_name": "crm_profile_participants"
+  },
+  {
+    "table_name": "crm_profiles"
+  },
+  {
+    "table_name": "crm_renewal_records"
+  },
+  {
+    "table_name": "crm_sales"
+  },
+  {
+    "table_name": "crm_settings"
+  },
+  {
+    "table_name": "crm_validations"
+  },
+  {
+    "table_name": "documentos_financeiros"
+  },
+  {
+    "table_name": "empresas_cliente"
+  },
+  {
+    "table_name": "external_integrations"
+  },
+  {
+    "table_name": "faixas_comissao"
+  },
+  {
+    "table_name": "fechamentos_agentes_item_comissoes"
+  },
+  {
+    "table_name": "fechamentos_agentes_itens"
+  },
+  {
+    "table_name": "fechamentos_agentes_lotes"
+  },
+  {
+    "table_name": "formas_pagamento"
+  },
+  {
+    "table_name": "formas_pagamento_disponibilidade"
+  },
+  {
+    "table_name": "formas_pagamento_v2"
+  },
+  {
+    "table_name": "horario_comercial"
+  },
+  {
+    "table_name": "lancamentos_financeiros"
+  },
+  {
+    "table_name": "leads_contabilidade"
+  },
+  {
+    "table_name": "lgpd_solicitacoes_exclusao"
+  },
+  {
+    "table_name": "links_produtos"
+  },
+  {
+    "table_name": "live_chat"
+  },
+  {
+    "table_name": "lojas_marketplace"
+  },
+  {
+    "table_name": "modules_config"
+  },
+  {
+    "table_name": "n8n_chat_histories"
+  },
+  {
+    "table_name": "nfse_configuracoes"
+  },
+  {
+    "table_name": "nfse_emitidas"
+  },
+  {
+    "table_name": "ordens_pagamento"
+  },
+  {
+    "table_name": "parceiros"
+  },
+  {
+    "table_name": "parceiros_agentes_permitidos"
+  },
+  {
+    "table_name": "planos_contas"
+  },
+  {
+    "table_name": "ponto_atendimento_agentes"
+  },
+  {
+    "table_name": "pontos_atendimento"
+  },
+  {
+    "table_name": "precos_certificados"
+  },
+  {
+    "table_name": "produtos_emitidos"
+  },
+  {
+    "table_name": "profiles"
+  },
+  {
+    "table_name": "regras_comissao"
+  },
+  {
+    "table_name": "renovacoes"
+  },
+  {
+    "table_name": "servicos_apice"
+  },
+  {
+    "table_name": "tabelas_preco"
+  },
+  {
+    "table_name": "tabelas_preco_itens"
+  },
+  {
+    "table_name": "tabelas_preco_participantes"
+  },
+  {
+    "table_name": "titulares_certificado"
+  },
+  {
+    "table_name": "vendas_certificados"
+  },
+  {
+    "table_name": "webhook_log"
+  }
+]

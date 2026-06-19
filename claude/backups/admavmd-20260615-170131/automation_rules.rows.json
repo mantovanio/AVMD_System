@@ -1,0 +1,78 @@
+{
+  "rows": [
+    {
+      "id": "9e9a4837-9fe9-47d6-8d17-259c28b1c2c6",
+      "rule_key": "ren30",
+      "label": "Alerta 30 dias antes do vencimento",
+      "channel": "whatsapp_email",
+      "trigger_key": "renovacao_30_dias",
+      "ativo": false,
+      "metadata": {
+        "dias": 30
+      },
+      "created_at": "2026-05-11T17:23:09.415992-03:00",
+      "updated_at": "2026-05-11T17:23:09.415992-03:00"
+    },
+    {
+      "id": "8b8c2dec-acff-4d58-9964-9500aad48f31",
+      "rule_key": "ren15",
+      "label": "Alerta 15 dias antes do vencimento",
+      "channel": "whatsapp",
+      "trigger_key": "renovacao_15_dias",
+      "ativo": false,
+      "metadata": {
+        "dias": 15
+      },
+      "created_at": "2026-05-11T17:23:09.415992-03:00",
+      "updated_at": "2026-05-11T17:23:09.415992-03:00"
+    },
+    {
+      "id": "1515724c-b781-4d87-9d18-534556fd230b",
+      "rule_key": "ren7",
+      "label": "Alerta 7 dias antes do vencimento",
+      "channel": "whatsapp",
+      "trigger_key": "renovacao_7_dias",
+      "ativo": false,
+      "metadata": {
+        "dias": 7
+      },
+      "created_at": "2026-05-11T17:23:09.415992-03:00",
+      "updated_at": "2026-05-11T17:23:09.415992-03:00"
+    },
+    {
+      "id": "1da04327-91b5-431e-bb87-8f9a2325b1ce",
+      "rule_key": "followup",
+      "label": "Follow-up após 3 dias sem resposta",
+      "channel": "whatsapp",
+      "trigger_key": "followup_3_dias",
+      "ativo": false,
+      "metadata": {
+        "dias": 3
+      },
+      "created_at": "2026-05-11T17:23:09.415992-03:00",
+      "updated_at": "2026-05-11T17:23:09.415992-03:00"
+    },
+    {
+      "id": "42418938-a737-4e57-80e3-2470d3407ac6",
+      "rule_key": "conv",
+      "label": "Confirmação automática de pagamento",
+      "channel": "whatsapp_email",
+      "trigger_key": "pagamento_confirmado",
+      "ativo": false,
+      "metadata": {},
+      "created_at": "2026-05-11T17:23:09.415992-03:00",
+      "updated_at": "2026-05-11T17:23:09.415992-03:00"
+    },
+    {
+      "id": "c066d3dd-5b0e-405a-9f17-9a745a8e0e16",
+      "rule_key": "expiro",
+      "label": "Notificação de certificado expirado",
+      "channel": "email",
+      "trigger_key": "certificado_expirado",
+      "ativo": false,
+      "metadata": {},
+      "created_at": "2026-05-11T17:23:09.415992-03:00",
+      "updated_at": "2026-05-11T17:23:09.415992-03:00"
+    }
+  ]
+}

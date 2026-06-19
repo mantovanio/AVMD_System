@@ -1,0 +1,17 @@
+[
+  {
+    "table_name": "crm_chat_admin_view"
+  },
+  {
+    "table_name": "v_certificados_emitidos"
+  },
+  {
+    "table_name": "v_clientes_fornecedores"
+  },
+  {
+    "table_name": "v_extrato_comissoes"
+  },
+  {
+    "table_name": "v_extrato_pagamentos_agentes"
+  }
+]

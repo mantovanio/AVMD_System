@@ -1,0 +1,553 @@
+import { randomUUID } from 'node:crypto'
+import type { AivenSqlClient } from '../db/aivenClient.js'
+import type {
+  AgendaAgent,
+  AgendaPoint,
+  AgendaSlot,
+  CheckoutExistingCustomerLookup,
+  CheckoutPriceTable,
+  CheckoutProduct,
+  CheckoutStore,
+  CheckoutSubmitRequest,
+} from '../contracts/checkoutContract.js'
+import type {
+  CheckoutRepository,
+  CheckoutScheduleContextInput,
+  CreateCheckoutSaleInput,
+  CreateCheckoutScheduleInput,
+  PaymentOptionRow,
+  PaymentRuntimeSetting,
+} from './checkoutRepository.js'
+import {
+  generateAgendaSlots,
+  type AgendaAvailability,
+  type AgendaBooking,
+  type AgendaEligibilityLink,
+  type AgendaPartnerRestriction,
+  type AgendaUnavailability,
+} from '../utils/agenda.js'
+
+type ProfileRow = {
+  id: string
+  nome: string | null
+}
+
+type PointRow = {
+  id: string
+  nome: string
+}
+
+export class AivenCheckoutRepository implements CheckoutRepository {
+  constructor(private readonly db: AivenSqlClient) {}
+
+  async findMarketplaceStore(slug: string | null): Promise<CheckoutStore | null> {
+    if (slug) {
+      const sql = `
+        select *
+        from lojas_marketplace
+        where ativo = true
+          and slug = $1
+        limit 1
+      `
+      const result = await this.db.query<CheckoutStore>(sql, [slug])
+      return result.rows[0] ?? null
+    }
+
+    const sql = `
+      select *
+      from lojas_marketplace
+      where ativo = true
+        and owner_tipo = 'institucional'
+      order by created_at asc
+      limit 1
+    `
+    const result = await this.db.query<CheckoutStore>(sql)
+    return result.rows[0] ?? null
+  }
+
+  async findPriceTable(tabelaPrecoId: string): Promise<CheckoutPriceTable | null> {
+    const sql = `
+      select *
+      from tabelas_preco
+      where id = $1
+      limit 1
+    `
+    const result = await this.db.query<CheckoutPriceTable>(sql, [tabelaPrecoId])
+    return result.rows[0] ?? null
+  }
+
+  async findMarketplaceProducts(tabelaPrecoId: string): Promise<CheckoutProduct[]> {
+    const sql = `
+      select
+        i.*,
+        row_to_json(c) as certificados
+      from tabelas_preco_itens i
+      join certificados c on c.id = i.certificado_id
+      where i.tabela_preco_id = $1
+        and i.ativo = true
+        and c.ativo = true
+      order by i.created_at asc
+    `
+    const result = await this.db.query<CheckoutProduct>(sql, [tabelaPrecoId])
+    return result.rows
+  }
+
+  async findMarketplaceItem(itemId: string): Promise<CheckoutProduct | null> {
+    const sql = `
+      select
+        i.*,
+        row_to_json(c) as certificados
+      from tabelas_preco_itens i
+      join certificados c on c.id = i.certificado_id
+      where i.id = $1
+        and i.ativo = true
+        and c.ativo = true
+      limit 1
+    `
+    const result = await this.db.query<CheckoutProduct>(sql, [itemId])
+    return result.rows[0] ?? null
+  }
+
+  async findActivePaymentMethods(): Promise<PaymentOptionRow[]> {
+    const sql = `
+      select id, nome, codigo, tipo
+      from formas_pagamento_v2
+      where ativo = true
+      order by nome asc
+    `
+    const result = await this.db.query<PaymentOptionRow>(sql)
+    return result.rows
+  }
+
+  async getPaymentRuntime(): Promise<PaymentRuntimeSetting> {
+    const sql = `
+      select value
+      from app_settings
+      where key = 'payment_runtime'
+      limit 1
+    `
+    const result = await this.db.query<{ value: Partial<PaymentRuntimeSetting> | null }>(sql)
+    const value = result.rows[0]?.value ?? {}
+    return {
+      modo_teste_geral: Boolean(value.modo_teste_geral),
+      bloquear_integracoes_reais: Boolean(value.bloquear_integracoes_reais),
+      aviso_checkout: String(value.aviso_checkout || 'O atendimento sera liberado apos a confirmacao do pagamento.'),
+    }
+  }
+
+  async getCheckoutScheduleContext(input: CheckoutScheduleContextInput): Promise<{ agentes: AgendaAgent[]; pontos: AgendaPoint[]; slots: AgendaSlot[] }> {
+    const vinculados = await this.findActiveTableAgentLinks(input.tabelaPrecoId)
+    if (vinculados.length === 0) {
+      return { agentes: [], pontos: [], slots: [] }
+    }
+
+    const restricoes = input.parceiroId
+      ? await this.findActivePartnerAgentRestrictions(input.parceiroId)
+      : []
+
+    const disponibilidades = await this.findActiveAgentAvailability()
+    const indisponibilidades = await this.findActiveAgentUnavailability()
+    const bookings = await this.findUpcomingBookings()
+
+    const slotsBase = generateAgendaSlots({
+      tabelaPrecoId: input.tabelaPrecoId,
+      vinculados,
+      parceiroId: input.parceiroId,
+      parceirosAgentesPermitidos: restricoes,
+      disponibilidades,
+      indisponibilidades,
+      bookings,
+    })
+
+    if (slotsBase.length === 0) {
+      return { agentes: [], pontos: [], slots: [] }
+    }
+
+    const agentIds = Array.from(new Set(slotsBase.map(slot => slot.agente_registro_id)))
+    const pointIds = Array.from(new Set(slotsBase.map(slot => slot.ponto_atendimento_id)))
+    const [profiles, points] = await Promise.all([
+      this.findAgentProfilesByIds(agentIds),
+      this.findPointsByIds(pointIds),
+    ])
+
+    const agentMap = new Map(profiles.map(item => [item.id, item.nome || 'Agente de Registro']))
+    const pointMap = new Map(points.map(item => [item.id, item.nome]))
+
+    const agentes: AgendaAgent[] = profiles
+      .map(item => ({ id: item.id, nome: item.nome || 'Agente de Registro' }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+
+    const pontos: AgendaPoint[] = points
+      .map(item => ({ id: item.id, nome: item.nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+
+    const slots: AgendaSlot[] = slotsBase.map(slot => ({
+      ...slot,
+      agente_nome: agentMap.get(slot.agente_registro_id) || 'Agente de Registro',
+      ponto_nome: pointMap.get(slot.ponto_atendimento_id) || 'Ponto de Atendimento',
+    }))
+
+    return { agentes, pontos, slots }
+  }
+
+  async findLatestActiveCustomerByDocument(documento: string): Promise<CheckoutExistingCustomerLookup | null> {
+    const sql = `
+      select id, tipo_cliente, cpf_cnpj, nome, nome_fantasia, email, telefone, cep,
+             logradouro, numero, complemento, bairro, cidade, uf
+      from cadastros_base
+      where status = 'ativo'
+        and cpf_cnpj in ($1, $2)
+      order by updated_at desc
+      limit 1
+    `
+    const digits = onlyDigits(documento)
+    const masked = formatCpfCnpj(digits)
+    const result = await this.db.query<CheckoutExistingCustomerLookup>(sql, [digits, masked])
+    return result.rows[0] ?? null
+  }
+
+  async upsertCheckoutCustomer(payload: CheckoutSubmitRequest): Promise<{ id: string }> {
+    return this.db.transaction(async trx => {
+      const documento = onlyDigits(payload.comprador.cpf_cnpj)
+      const existing = await this.findLatestActiveCustomerByDocumentWithClient(trx, documento)
+      const customerId = existing?.id ?? randomUUID()
+      const tipoCliente = documento.length === 14 ? 'pessoa_juridica' : 'pessoa_fisica'
+      const tipoCadastro = 'cliente'
+
+      if (existing?.id) {
+        const sql = `
+          update cadastros_base
+          set tipo_cliente = $2,
+              nome = $3,
+              nome_fantasia = $4,
+              email = $5,
+              telefone = $6,
+              logradouro = $7,
+              numero = $8,
+              complemento = $9,
+              bairro = $10,
+              cidade = $11,
+              uf = $12,
+              cep = $13,
+              updated_at = now()
+          where id = $1
+        `
+        await trx.query(sql, [
+          customerId,
+          tipoCliente,
+          payload.comprador.nome,
+          payload.comprador.nome_fantasia || null,
+          payload.comprador.email,
+          payload.comprador.telefone,
+          payload.fiscal.logradouro,
+          payload.fiscal.numero,
+          payload.fiscal.complemento || null,
+          payload.fiscal.bairro,
+          payload.fiscal.cidade,
+          payload.fiscal.uf,
+          payload.fiscal.cep,
+        ])
+        return { id: customerId }
+      }
+
+      const sql = `
+        insert into cadastros_base (
+          id, tipo_cliente, tipo_cadastro, cpf_cnpj, nome, nome_fantasia,
+          email, telefone, logradouro, numero, complemento, bairro, cidade, uf, cep,
+          status, metadata, created_at, updated_at
+        ) values (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10, $11, $12, $13, $14, $15,
+          $16, $17::jsonb, now(), now()
+        )
+      `
+      await trx.query(sql, [
+        customerId,
+        tipoCliente,
+        tipoCadastro,
+        documento,
+        payload.comprador.nome,
+        payload.comprador.nome_fantasia || null,
+        payload.comprador.email,
+        payload.comprador.telefone,
+        payload.fiscal.logradouro,
+        payload.fiscal.numero,
+        payload.fiscal.complemento || null,
+        payload.fiscal.bairro,
+        payload.fiscal.cidade,
+        payload.fiscal.uf,
+        payload.fiscal.cep,
+        'ativo',
+        JSON.stringify({ origem: 'checkout_aiven' }),
+      ])
+      return { id: customerId }
+    })
+  }
+
+  async upsertCheckoutHolder(payload: CheckoutSubmitRequest): Promise<{ id: string | null }> {
+    return this.db.transaction(async trx => {
+      const cpf = onlyDigits(payload.titular.cpf)
+      const sqlFind = `
+        select id
+        from titulares_certificado
+        where cpf = $1
+        order by updated_at desc
+        limit 1
+      `
+      const found = await trx.query<{ id: string }>(sqlFind, [cpf])
+      const holderId = found.rows[0]?.id ?? randomUUID()
+
+      if (found.rows[0]?.id) {
+        const sqlUpdate = `
+          update titulares_certificado
+          set nome = $2,
+              data_nascimento = $3,
+              email = $4,
+              telefone = $5,
+              updated_at = now()
+          where id = $1
+        `
+        await trx.query(sqlUpdate, [
+          holderId,
+          payload.titular.nome,
+          payload.titular.data_nascimento,
+          payload.titular.email,
+          payload.titular.telefone,
+        ])
+        return { id: holderId }
+      }
+
+      const sqlInsert = `
+        insert into titulares_certificado (
+          id, nome, cpf, data_nascimento, email, telefone, metadata, created_at, updated_at
+        ) values (
+          $1, $2, $3, $4, $5, $6, $7::jsonb, now(), now()
+        )
+      `
+      await trx.query(sqlInsert, [
+        holderId,
+        payload.titular.nome,
+        cpf,
+        payload.titular.data_nascimento,
+        payload.titular.email,
+        payload.titular.telefone,
+        JSON.stringify({ origem: 'checkout_aiven' }),
+      ])
+      return { id: holderId }
+    })
+  }
+
+  async createCheckoutSale(input: CreateCheckoutSaleInput): Promise<{ id: string; protocolo_numero: string | null }> {
+    return this.db.transaction(async trx => {
+      const saleId = randomUUID()
+      const payload = input.payload
+      const sql = `
+        insert into vendas_certificados (
+          id, loja_marketplace_id, cadastro_base_id, titular_id, certificado_id, tabela_preco_id,
+          tabela_preco_item_id, forma_pagamento_id, pago, tipo_produto, tipo_emissao, tabela_preco,
+          valor_venda, valor_custo, documento_faturamento, nome_faturamento, email_faturamento,
+          telefone_faturamento, logradouro, numero, complemento, bairro, cidade, uf, cep,
+          ponto_atendimento_id, observacoes, pedido_status, protocolo_status,
+          api_payload_pedido, api_payload_protocolo, created_at, updated_at
+        ) values (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10, $11, $12,
+          $13, $14, $15, $16, $17,
+          $18, $19, $20, $21, $22, $23, $24, $25,
+          $26, $27, $28, $29,
+          $30::jsonb, $31::jsonb, now(), now()
+        )
+        returning id, protocolo_numero
+      `
+      const result = await trx.query<{ id: string; protocolo_numero: string | null }>(sql, [
+        saleId,
+        input.loja.id,
+        input.cadastroBaseId,
+        input.titularId,
+        input.item.certificado_id,
+        input.loja.tabela_preco_id,
+        input.item.id,
+        payload.pagamento.forma_pagamento_id,
+        false,
+        input.item.certificados?.tipo ?? 'Certificado digital',
+        input.item.certificados?.tipo_emissao_padrao ?? null,
+        input.tabela?.nome ?? null,
+        input.item.valor,
+        input.item.valor_custo,
+        onlyDigits(payload.comprador.cpf_cnpj),
+        payload.comprador.nome,
+        payload.comprador.email,
+        payload.comprador.telefone,
+        payload.fiscal.logradouro,
+        payload.fiscal.numero,
+        payload.fiscal.complemento || null,
+        payload.fiscal.bairro,
+        payload.fiscal.cidade,
+        payload.fiscal.uf,
+        payload.fiscal.cep,
+        payload.agendamento?.ponto_atendimento_id ?? null,
+        payload.observacoes,
+        'pendente',
+        'nao_gerado',
+        JSON.stringify({ origem: 'checkout_aiven' }),
+        JSON.stringify({}),
+      ])
+      return result.rows[0] ?? { id: saleId, protocolo_numero: null }
+    })
+  }
+
+  async createCheckoutSchedule(input: CreateCheckoutScheduleInput): Promise<void> {
+    const agendamento = input.payload.agendamento
+    if (!agendamento) return
+
+    await this.db.transaction(async trx => {
+      const scheduleId = randomUUID()
+      const sql = `
+        insert into agendamentos_validacao (
+          id, venda_certificado_id, cadastro_base_id, titular_id,
+          agente_registro_id, ponto_atendimento_id, data_agendada,
+          tipo_atendimento, status_agendamento, observacoes, metadata, created_at, updated_at
+        ) values (
+          $1, $2, $3, $4,
+          $5, $6, $7,
+          $8, $9, $10, $11::jsonb, now(), now()
+        )
+      `
+      await trx.query(sql, [
+        scheduleId,
+        input.vendaId,
+        input.cadastroBaseId,
+        input.titularId,
+        agendamento.agente_registro_id,
+        agendamento.ponto_atendimento_id,
+        agendamento.data_agendada,
+        null,
+        'pendente',
+        input.payload.observacoes,
+        JSON.stringify({ origem: 'checkout_aiven' }),
+      ])
+    })
+  }
+
+  private async findActiveTableAgentLinks(tabelaPrecoId: string): Promise<AgendaEligibilityLink[]> {
+    const sql = `
+      select tabela_preco_id, agente_registro_id, ponto_atendimento_id, ativo
+      from agentes_tabelas_preco
+      where ativo = true
+        and tabela_preco_id = $1
+      order by created_at asc
+    `
+    const result = await this.db.query<AgendaEligibilityLink>(sql, [tabelaPrecoId])
+    return result.rows
+  }
+
+  private async findActivePartnerAgentRestrictions(parceiroId: string): Promise<AgendaPartnerRestriction[]> {
+    const sql = `
+      select parceiro_id, agente_registro_id, ponto_atendimento_id, ativo
+      from parceiros_agentes_permitidos
+      where ativo = true
+        and parceiro_id = $1
+      order by created_at asc
+    `
+    const result = await this.db.query<AgendaPartnerRestriction>(sql, [parceiroId])
+    return result.rows
+  }
+
+  private async findActiveAgentAvailability(): Promise<AgendaAvailability[]> {
+    const sql = `
+      select agente_registro_id, ponto_atendimento_id, dia_semana, hora_inicio, hora_fim,
+             intervalo_minutos, capacidade_por_slot, tipo_atendimento, ativo
+      from agentes_disponibilidade
+      where ativo = true
+    `
+    const result = await this.db.query<AgendaAvailability>(sql)
+    return result.rows
+  }
+
+  private async findActiveAgentUnavailability(): Promise<AgendaUnavailability[]> {
+    const sql = `
+      select agente_registro_id, ponto_atendimento_id, inicio_em, fim_em, ativo
+      from agentes_indisponibilidades
+      where ativo = true
+        and fim_em >= now()
+    `
+    const result = await this.db.query<AgendaUnavailability>(sql)
+    return result.rows
+  }
+
+  private async findUpcomingBookings(): Promise<AgendaBooking[]> {
+    const sql = `
+      select agente_registro_id, ponto_atendimento_id, data_agendada as data_hora, status_agendamento as status
+      from agendamentos_validacao
+      where data_agendada is not null
+        and data_agendada >= now()
+        and status_agendamento in ('pendente', 'confirmado', 'realizado', 'cancelado')
+    `
+    const result = await this.db.query<AgendaBooking>(sql)
+    return result.rows
+  }
+
+  private async findAgentProfilesByIds(agentIds: string[]): Promise<ProfileRow[]> {
+    if (agentIds.length === 0) return []
+
+    const sql = `
+      select id, nome
+      from profiles
+      where id = any($1::uuid[])
+        and perfil = 'agente_registro'
+        and status = 'ativo'
+      order by nome asc
+    `
+    const result = await this.db.query<ProfileRow>(sql, [agentIds])
+    return result.rows
+  }
+
+  private async findPointsByIds(pointIds: string[]): Promise<PointRow[]> {
+    if (pointIds.length === 0) return []
+
+    const sql = `
+      select id, nome
+      from pontos_atendimento
+      where id = any($1::uuid[])
+        and status = 'ativo'
+      order by nome asc
+    `
+    const result = await this.db.query<PointRow>(sql, [pointIds])
+    return result.rows
+  }
+
+  private async findLatestActiveCustomerByDocumentWithClient(client: AivenSqlClient, documento: string) {
+    const sql = `
+      select id, tipo_cliente, cpf_cnpj, nome, nome_fantasia, email, telefone, cep,
+             logradouro, numero, complemento, bairro, cidade, uf
+      from cadastros_base
+      where status = 'ativo'
+        and cpf_cnpj in ($1, $2)
+      order by updated_at desc
+      limit 1
+    `
+    const digits = onlyDigits(documento)
+    const masked = formatCpfCnpj(digits)
+    const result = await client.query<CheckoutExistingCustomerLookup>(sql, [digits, masked])
+    return result.rows[0] ?? null
+  }
+}
+
+function formatCpfCnpj(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 14)
+  if (digits.length <= 11) {
+    return digits
+      .replace(/^(\d{3})(\d)/, '$1.$2')
+      .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+      .replace(/\.(\d{3})(\d)/, '.$1-$2')
+  }
+  return digits
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2')
+}
+
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, '')
+}

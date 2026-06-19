@@ -1,0 +1,153 @@
+{
+  "rows": [
+    {
+      "key": "agency",
+      "value": {
+        "cidade": "São Paulo - SP",
+        "logo_url": "https://www.certiid.com.br/repositorio/logo-branco.png",
+        "telefone": "+55 11983500019",
+        "fundo_fim": "#1e3a8a",
+        "responsavel": "Alexandre Aparecido Mantovan",
+        "cor_primaria": "#2563eb",
+        "fundo_inicio": "#172554",
+        "login_titulo": "AR CERTI ID",
+        "nome_agencia": "AR CERTI ID",
+        "logo_login_url": "https://www.certiid.com.br/repositorio/logo-branco.png",
+        "login_subtitulo": "Agência de Certificação Digital",
+        "logo_interna_url": "https://certiid.com.br/wp-content/uploads/2025/07/logo-transparente-certiid.png"
+      },
+      "updated_by": "0d5c281e-3ce5-43bc-8a7a-9b0e9cf36301",
+      "updated_at": "2026-05-14T14:27:35.077538-03:00"
+    },
+    {
+      "key": "payment_methods",
+      "value": {
+        "methods": [
+          {
+            "id": "safe2pay",
+            "label": "Safe2Pay",
+            "enabled": false,
+            "ambiente": "sandbox",
+            "categoria": "gateway",
+            "client_id": "",
+            "is_default": false,
+            "secret_key": "",
+            "observacoes": "",
+            "webhook_url": ""
+          },
+          {
+            "id": "mercado_pago",
+            "label": "Mercado Pago",
+            "enabled": false,
+            "ambiente": "sandbox",
+            "categoria": "gateway",
+            "client_id": "",
+            "is_default": false,
+            "secret_key": "",
+            "observacoes": "",
+            "webhook_url": ""
+          },
+          {
+            "id": "itau",
+            "label": "Itaú",
+            "enabled": false,
+            "ambiente": "sandbox",
+            "categoria": "banco",
+            "client_id": "",
+            "is_default": false,
+            "secret_key": "",
+            "observacoes": "",
+            "webhook_url": ""
+          },
+          {
+            "id": "inter",
+            "label": "Inter",
+            "enabled": false,
+            "ambiente": "sandbox",
+            "categoria": "banco",
+            "client_id": "",
+            "is_default": false,
+            "secret_key": "",
+            "observacoes": "",
+            "webhook_url": ""
+          },
+          {
+            "id": "c6",
+            "label": "C6 Bank",
+            "enabled": false,
+            "ambiente": "sandbox",
+            "categoria": "banco",
+            "client_id": "",
+            "is_default": false,
+            "secret_key": "",
+            "observacoes": "",
+            "webhook_url": ""
+          }
+        ],
+        "default_method_id": null
+      },
+      "updated_by": "0d5c281e-3ce5-43bc-8a7a-9b0e9cf36301",
+      "updated_at": "2026-05-25T19:04:13.915828-03:00"
+    },
+    {
+      "key": "payment_runtime",
+      "value": {
+        "aviso_checkout": "Ambiente de testes ativo. Use apenas clientes, pagamentos e emissoes de homologacao.",
+        "modo_teste_geral": true,
+        "bloquear_integracoes_reais": true
+      },
+      "updated_by": "0d5c281e-3ce5-43bc-8a7a-9b0e9cf36301",
+      "updated_at": "2026-05-25T19:04:13.915708-03:00"
+    },
+    {
+      "key": "nfse_modelo_layout",
+      "value": {
+        "rodape": "Modelo visual configurável da CertiID. Ajuste livre para operação comercial e fiscal.",
+        "titulo": "Nota Fiscal de Serviços",
+        "subtitulo": "Emissão inteligente para certificação digital",
+        "nome_modelo": "Modelo CertiID Premium",
+        "cor_primaria": "#1d4ed8",
+        "mostrar_logo": true,
+        "mensagem_destaque": "Documento gerado com padrão visual próprio da operação.",
+        "observacao_padrao": "Conferir retenções, dados do tomador e regras municipais antes do envio definitivo.",
+        "bloco_servico_titulo": "Detalhamento do serviço prestado"
+      },
+      "updated_by": "0d5c281e-3ce5-43bc-8a7a-9b0e9cf36301",
+      "updated_at": "2026-05-28T10:30:16.312775-03:00"
+    },
+    {
+      "key": "nfse_automation_settings",
+      "value": {
+        "gatilho_emissao": "apos_validacao",
+        "permitir_emissao_manual_rapida": true,
+        "permitir_emissao_lote_comercial": true
+      },
+      "updated_by": "0d5c281e-3ce5-43bc-8a7a-9b0e9cf36301",
+      "updated_at": "2026-05-28T11:19:53.660163-03:00"
+    },
+    {
+      "key": "pricing_matrix_rules",
+      "value": {
+        "rules": [
+          {
+            "tabela_base_id": "bda9ea18-910c-44c7-9bf9-6efe799639ae",
+            "tabela_preco_id": "09e193c3-adb4-4967-a51e-b544afa84986",
+            "ajuste_percentual": 0
+          },
+          {
+            "tabela_base_id": "36df0e64-8dcc-4721-b015-bca51e5814b7",
+            "tabela_preco_id": "6aaefa9d-78fa-42fa-a624-63dd3e2a345f",
+            "ajuste_percentual": -15
+          },
+          {
+            "tabela_base_id": "36df0e64-8dcc-4721-b015-bca51e5814b7",
+            "tabela_preco_id": "84a9d1c5-267a-4608-b0a9-4e123e013659",
+            "ajuste_percentual": 0
+          }
+        ]
+      },
+      "updated_by": "0d5c281e-3ce5-43bc-8a7a-9b0e9cf36301",
+      "updated_at": "2026-05-25T20:41:39.733262-03:00"
+    }
+  ]
+}
