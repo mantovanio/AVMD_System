@@ -40,13 +40,17 @@ rm -rf "${FRONT_DIR:?}"/*
 cp -R dist/* "${FRONT_DIR}/"
 
 log "4) Instalando config nginx (sem mexer no legado)"
-if [ -f "${APP_DIR}/ops/nginx/crm.certiid.mantovan.com.br.conf" ]; then
-  cp "${APP_DIR}/ops/nginx/crm.certiid.mantovan.com.br.conf" "${NGINX_SITE}"
-  ln -sfn "${NGINX_SITE}" "${NGINX_SITE_LINK}"
-  nginx -t
-  systemctl reload nginx
+if command -v nginx >/dev/null 2>&1; then
+  if [ -d /etc/nginx/sites-available ] && [ -d /etc/nginx/sites-enabled ] && [ -f "${APP_DIR}/ops/nginx/crm.certiid.mantovan.com.br.conf" ]; then
+    cp "${APP_DIR}/ops/nginx/crm.certiid.mantovan.com.br.conf" "${NGINX_SITE}"
+    ln -sfn "${NGINX_SITE}" "${NGINX_SITE_LINK}"
+    nginx -t
+    systemctl reload nginx
+  else
+    log "Nginx presente, mas sem estrutura esperada ou arquivo ausente; pulando configuracao de proxy"
+  fi
 else
-  log "Arquivo de nginx nao encontrado em ${APP_DIR}/ops/nginx/crm.certiid.mantovan.com.br.conf"
+  log "Nginx nao instalado neste host; pulando etapa de proxy"
 fi
 
 log "5) Instalando/atualizando service do backend"

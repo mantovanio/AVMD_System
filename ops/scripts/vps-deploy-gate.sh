@@ -10,7 +10,7 @@ set -euo pipefail
 
 BACKUP_ROOT="/opt/backups/certiid"
 BACKUP_MAX_AGE_HOURS="${BACKUP_MAX_AGE_HOURS:-24}"
-ROLLOUT_SCRIPT="${ROLLOUT_SCRIPT:-/root/vps-rollout-avmd.sh}"
+ROLLOUT_SCRIPT="${ROLLOUT_SCRIPT:-/opt/avmd/AVMD_System/ops/scripts/vps-rollout-avmd.sh}"
 LOCK_FILE="/var/lock/avmd-deploy.lock"
 LOG_FILE="/var/log/avmd-deploy-gate.log"
 
@@ -75,7 +75,7 @@ run_with_lock() {
     exit 1
   fi
 
-  log "Gate aprovado. Iniciando rollout."
+  log "Gate aprovado. Iniciando rollout via ${ROLLOUT_SCRIPT}."
   DEPLOY_GATE_APPROVED=1 "${ROLLOUT_SCRIPT}"
   log "Deploy concluido com gate."
 }
