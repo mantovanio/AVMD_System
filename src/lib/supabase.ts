@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
-import { assertRuntimeConfig } from '@/lib/runtimeConfig'
+import { getRuntimeConfig } from '@/lib/runtimeConfig'
 
-const runtime = assertRuntimeConfig()
+const runtime = getRuntimeConfig()
 const supabaseUrl = runtime.supabaseUrl
 const supabaseAnonKey = runtime.supabaseAnonKey
 
@@ -31,11 +31,10 @@ function stripSupabaseClientInfo(input: RequestInfo | URL, init?: RequestInit) {
   return fetch(input, nextInit)
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  global: {
-    fetch: stripSupabaseClientInfo,
-  },
-})
+// Only instantiate if URL is present — in aiven_api mode the URL is not required
+export const supabase = (supabaseUrl && supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, { global: { fetch: stripSupabaseClientInfo } })
+  : null as unknown as ReturnType<typeof createClient>
 
 export const SUPABASE_URL = supabaseUrl
 export const SUPABASE_ANON_KEY = supabaseAnonKey
