@@ -6,13 +6,21 @@ import { DEFAULT_AGENCY_CONFIG, buildAuthBackground, fetchAgencyConfig } from '@
 type View = 'login' | 'register' | 'forgot'
 
 function translateError(msg: string): string {
-  if (msg.includes('Invalid login credentials'))   return 'Email ou senha incorretos.'
-  if (msg.includes('Email not confirmed'))          return 'Confirme seu email antes de acessar o sistema.'
-  if (msg.includes('User already registered'))      return 'Este email já está cadastrado.'
-  if (msg.includes('Password should be at least')) return 'A senha deve ter pelo menos 6 caracteres.'
-  if (msg.includes('signup is disabled'))           return 'Novos cadastros estão desabilitados. Contate o administrador.'
-  if (msg.includes('rate limit'))                   return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
-  if (msg.includes('Failed to fetch'))              return 'Falha de conexão com o servidor de autenticação. Atualize a página e tente novamente.'
+  if (msg.includes('Invalid login credentials'))      return 'Email ou senha incorretos.'
+  if (msg.includes('Email not confirmed'))            return 'Confirme seu email antes de acessar o sistema.'
+  if (msg.includes('User already registered'))        return 'Este email já está cadastrado.'
+  if (msg.includes('Password should be at least'))   return 'A senha deve ter pelo menos 6 caracteres.'
+  if (msg.includes('signup is disabled'))             return 'Novos cadastros estão desabilitados. Contate o administrador.'
+  if (msg.includes('rate limit'))                     return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
+  if (msg.includes('Failed to fetch'))                return 'Falha de conexão com o servidor de autenticação. Atualize a página e tente novamente.'
+  if (msg.includes('Couldn\'t find your account'))   return 'Conta não encontrada. Verifique o email ou crie uma conta.'
+  if (msg.includes('data breach') || msg.includes('pwned') || msg.includes('online data breach'))
+                                                      return 'Esta senha foi encontrada em vazamentos de dados. Por segurança, escolha uma senha diferente.'
+  if (msg.includes('password_found_in_breach') || msg.includes('found in a list')) return 'Esta senha foi encontrada em vazamentos de dados. Por segurança, escolha uma senha diferente.'
+  if (msg.includes('is incorrect') || msg.includes('password is incorrect')) return 'Email ou senha incorretos.'
+  if (msg.includes('account does not exist') || msg.includes('No account'))  return 'Conta não encontrada. Verifique o email ou crie uma conta.'
+  if (msg.includes('too many requests') || msg.includes('Too many'))         return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
+  if (msg.includes('network') || msg.includes('Network'))                    return 'Erro de conexão. Verifique sua internet e tente novamente.'
   return msg
 }
 
@@ -35,7 +43,7 @@ function InputField({
 }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{label}</label>
+      <label className="block text-xs font-medium text-white/90 mb-1 text-center">{label}</label>
       <input
         type={type}
         value={value}
@@ -43,9 +51,9 @@ function InputField({
         placeholder={placeholder}
         autoFocus={autoFocus}
         required={required}
-        className="w-full border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-sm
-          bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
-          focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+        className="w-full border border-white/30 rounded-xl px-4 py-3 text-sm
+          bg-white/10 text-white placeholder:text-white/60
+          focus:outline-none focus:ring-2 focus:ring-white/70 transition-shadow"
       />
     </div>
   )
@@ -65,7 +73,7 @@ function PasswordInput({
   const [show, setShow] = useState(false)
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{label}</label>
+      {label ? <label className="block text-xs font-medium text-white/90 mb-1 text-center">{label}</label> : null}
       <div className="relative">
         <input
           type={show ? 'text' : 'password'}
@@ -73,14 +81,14 @@ function PasswordInput({
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder ?? '••••••••'}
           required
-          className="w-full border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 pr-10 text-sm
-            bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
-            focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+          className="w-full border border-white/30 rounded-xl px-4 py-3 pr-10 text-sm
+            bg-white/10 text-white placeholder:text-white/60
+            focus:outline-none focus:ring-2 focus:ring-white/70 transition-shadow"
         />
         <button
           type="button"
           onClick={() => setShow(s => !s)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-white/70 hover:text-white transition-colors"
           tabIndex={-1}
         >
           {show ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -92,7 +100,7 @@ function PasswordInput({
 
 function ErrorBox({ msg }: { msg: string }) {
   return (
-    <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-sm text-red-600 dark:text-red-400">
+    <div className="flex items-start gap-2 p-3 bg-red-500/20 border border-red-300/60 rounded-xl text-sm text-white">
       <span className="shrink-0 mt-0.5">⚠</span>
       <span>{msg}</span>
     </div>
@@ -130,7 +138,7 @@ function SubmitButton({
 }
 
 export default function Login() {
-  const { signIn, signUp, resetPassword } = useAuth()
+  const { signIn, signUp, resetPassword, confirmPasswordReset } = useAuth()
   const [view, setView] = useState<View>('login')
   const [agencyConfig, setAgencyConfig] = useState(DEFAULT_AGENCY_CONFIG)
 
@@ -151,10 +159,16 @@ export default function Login() {
   const [regOk,        setRegOk]        = useState(false)
 
   // forgot
-  const [forgotEmail,   setForgotEmail]   = useState('')
-  const [forgotLoading, setForgotLoading] = useState(false)
-  const [forgotError,   setForgotError]   = useState<string | null>(null)
-  const [forgotOk,      setForgotOk]      = useState(false)
+  const [forgotEmail,       setForgotEmail]       = useState('')
+  const [forgotLoading,     setForgotLoading]     = useState(false)
+  const [forgotError,       setForgotError]       = useState<string | null>(null)
+  const [forgotOk,          setForgotOk]          = useState(false)
+  const [forgotCode,        setForgotCode]        = useState('')
+  const [forgotNewPass,     setForgotNewPass]     = useState('')
+  const [forgotNewConfirm,  setForgotNewConfirm]  = useState('')
+  const [forgotResetLoading,setForgotResetLoading]= useState(false)
+  const [forgotResetError,  setForgotResetError]  = useState<string | null>(null)
+  const [forgotDone,        setForgotDone]        = useState(false)
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -188,10 +202,24 @@ export default function Login() {
     setForgotLoading(false)
   }
 
+  async function handleForgotReset(e: React.FormEvent) {
+    e.preventDefault()
+    setForgotResetError(null)
+    if (forgotNewPass !== forgotNewConfirm) { setForgotResetError('As senhas não coincidem.'); return }
+    if (forgotNewPass.length < 8) { setForgotResetError('A senha deve ter pelo menos 8 caracteres.'); return }
+    setForgotResetLoading(true)
+    const { error } = await confirmPasswordReset(forgotCode.trim(), forgotNewPass)
+    if (error) setForgotResetError(translateError(error))
+    else setForgotDone(true)
+    setForgotResetLoading(false)
+  }
+
   function goLogin() {
     setLoginError(null)
     setRegError(null); setRegOk(false)
     setForgotError(null); setForgotOk(false)
+    setForgotCode(''); setForgotNewPass(''); setForgotNewConfirm('')
+    setForgotResetError(null); setForgotDone(false)
     setView('login')
   }
 
@@ -209,16 +237,25 @@ export default function Login() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4"
+      className="min-h-screen flex items-center justify-center p-4 sm:p-6"
       style={{ background: buildAuthBackground(agencyConfig.fundo_inicio, agencyConfig.fundo_fim) }}
     >
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md text-center">
 
         {/* Logo */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-5 px-8">
           {agencyConfig.logo_login_url.trim() ? (
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-white/10 backdrop-blur-sm mb-4 shadow-lg p-3">
-              <img src={agencyConfig.logo_login_url} alt={agencyConfig.login_titulo} className="w-full h-full object-contain" />
+            <div className="relative w-full h-24 sm:h-28 mb-3 overflow-visible">
+              <div
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[78%] h-[78%] rounded-full blur-2xl"
+                style={{ backgroundColor: `${agencyConfig.cor_primaria}55` }}
+              />
+              <img
+                src={agencyConfig.logo_login_url}
+                alt={agencyConfig.login_titulo}
+                className="relative z-10 w-full h-full object-contain object-center"
+                style={{ filter: 'brightness(0) invert(1)' }}
+              />
             </div>
           ) : (
             <div
@@ -228,18 +265,17 @@ export default function Login() {
               <Shield size={28} className="text-white" />
             </div>
           )}
-          <h1 className="text-2xl font-bold text-white tracking-tight">{agencyConfig.login_titulo}</h1>
           <p className="text-white/80 text-sm mt-1">{agencyConfig.login_subtitulo}</p>
         </div>
 
         {/* Card */}
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden">
+        <div className="bg-black/30 border border-white/20 rounded-2xl shadow-2xl shadow-black/40 backdrop-blur-md overflow-hidden text-white">
 
           {/* ── LOGIN ── */}
           {view === 'login' && (
             <div className="p-8">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Bem-vindo!</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+              <h2 className="text-xl font-bold text-white mb-1">Bem-vindo!</h2>
+              <p className="text-sm text-white/80 mb-6">
                 Entre com sua conta para acessar o sistema
               </p>
 
@@ -249,9 +285,9 @@ export default function Login() {
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Senha</span>
+                    <span className="text-xs font-medium text-white/90">Senha</span>
                     <button type="button" onClick={() => { setLoginError(null); setView('forgot') }}
-                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                      className="text-xs text-white/90 hover:underline">
                       Esqueci minha senha
                     </button>
                   </div>
@@ -263,11 +299,11 @@ export default function Login() {
                 <SubmitButton loading={loginLoading} label="Entrar" loadingLabel="Entrando..." primaryColor={agencyConfig.cor_primaria} />
               </form>
 
-              <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-800 text-center">
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+              <div className="mt-6 pt-6 border-t border-white/15 text-center">
+                <p className="text-sm text-white/80">
                   Não tem conta?{' '}
                   <button type="button" onClick={() => { setLoginError(null); setView('register') }}
-                    className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
+                    className="text-white font-semibold hover:underline">
                     Criar conta
                   </button>
                 </p>
@@ -279,29 +315,29 @@ export default function Login() {
           {view === 'register' && (
             <div className="p-8">
               <button type="button" onClick={goLogin}
-                className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-5 -ml-1 transition-colors">
+                className="flex items-center gap-1.5 text-sm text-white/85 hover:text-white mb-5 -ml-1 transition-colors mx-auto">
                 <ArrowLeft size={15} /> Voltar ao login
               </button>
 
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Criar conta</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+              <h2 className="text-xl font-bold text-white mb-1">Criar conta</h2>
+              <p className="text-sm text-white/80 mb-6">
                 Preencha os dados para solicitar acesso ao sistema
               </p>
 
               {regOk ? (
                 <div className="text-center py-6 space-y-4">
-                  <div className="w-14 h-14 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto">
-                    <CheckCircle size={28} className="text-green-600 dark:text-green-400" />
+                  <div className="w-14 h-14 rounded-full bg-green-500/20 border border-green-300/50 flex items-center justify-center mx-auto">
+                    <CheckCircle size={28} className="text-white" />
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900 dark:text-white text-lg">Conta criada!</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                    <p className="font-semibold text-white text-lg">Conta criada!</p>
+                    <p className="text-sm text-white/80 mt-2">
                       Enviamos um email de confirmação para <strong>{regEmail}</strong>.<br />
                       Depois da confirmação, o administrador precisa liberar seu primeiro acesso.
                     </p>
                   </div>
                   <button type="button" onClick={goLogin}
-                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium">
+                    className="text-sm text-white hover:underline font-medium">
                     Voltar ao login
                   </button>
                 </div>
@@ -315,7 +351,7 @@ export default function Login() {
                     <PasswordInput label="Confirmar senha" value={regConfirm} onChange={setRegConfirm} />
                   </div>
 
-                  <p className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/70 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2">
+                  <p className="text-xs text-white/85 bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-center">
                     O tipo de acesso será definido pelo administrador em Configurações.
                   </p>
 
@@ -328,9 +364,9 @@ export default function Login() {
                       className="mt-0.5 shrink-0 accent-current"
                       required
                     />
-                    <span className="text-xs text-gray-600 dark:text-gray-400">
+                    <span className="text-xs text-white/90">
                       Li e aceito a{' '}
-                      <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-900 dark:hover:text-gray-200">
+                      <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="underline hover:text-white">
                         Política de Privacidade
                       </a>
                       {' '}e autorizo o tratamento dos meus dados pessoais conforme a LGPD (Lei 13.709/2018).
@@ -349,32 +385,52 @@ export default function Login() {
           {view === 'forgot' && (
             <div className="p-8">
               <button type="button" onClick={goLogin}
-                className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-5 -ml-1 transition-colors">
+                className="flex items-center gap-1.5 text-sm text-white/85 hover:text-white mb-5 -ml-1 transition-colors mx-auto">
                 <ArrowLeft size={15} /> Voltar ao login
               </button>
 
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Recuperar senha</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+              <h2 className="text-xl font-bold text-white mb-1">Recuperar senha</h2>
+              <p className="text-sm text-white/80 mb-6">
                 Informe seu email e enviaremos um link para redefinir sua senha.
               </p>
 
-              {forgotOk ? (
+              {forgotDone ? (
                 <div className="text-center py-6 space-y-4">
-                  <div className="w-14 h-14 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mx-auto">
-                    <Mail size={28} className="text-blue-600 dark:text-blue-400" />
+                  <div className="w-14 h-14 rounded-full bg-green-500/20 border border-green-300/50 flex items-center justify-center mx-auto">
+                    <CheckCircle size={28} className="text-white" />
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900 dark:text-white text-lg">Email enviado!</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                      Verifique a caixa de entrada de <strong>{forgotEmail}</strong>.<br />
-                      O link expira em 1 hora.
-                    </p>
+                    <p className="font-semibold text-white text-lg">Senha redefinida!</p>
+                    <p className="text-sm text-white/80 mt-2">Sua senha foi atualizada. Você já está conectado.</p>
                   </div>
-                  <button type="button" onClick={goLogin}
-                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium">
-                    Voltar ao login
+                  <button type="button" onClick={goLogin} className="text-sm text-white hover:underline font-medium">
+                    Ir para o sistema
                   </button>
                 </div>
+              ) : forgotOk ? (
+                <form onSubmit={handleForgotReset} className="space-y-4">
+                  <div className="text-center pb-2">
+                    <p className="text-sm text-white/80">
+                      Enviamos um código para <strong>{forgotEmail}</strong>.<br />
+                      Digite o código e defina sua nova senha.
+                    </p>
+                  </div>
+
+                  <InputField label="Código recebido no email" type="text" value={forgotCode}
+                    onChange={setForgotCode} placeholder="000000" autoFocus />
+                  <PasswordInput label="Nova senha" value={forgotNewPass} onChange={setForgotNewPass}
+                    placeholder="Mínimo 8 caracteres" />
+                  <PasswordInput label="Confirmar nova senha" value={forgotNewConfirm} onChange={setForgotNewConfirm} />
+
+                  {forgotResetError && <ErrorBox msg={forgotResetError} />}
+
+                  <SubmitButton loading={forgotResetLoading} label="Redefinir senha" loadingLabel="Verificando..." primaryColor={agencyConfig.cor_primaria} />
+
+                  <button type="button" onClick={() => { setForgotOk(false); setForgotError(null) }}
+                    className="w-full text-xs text-white/60 hover:text-white/90 text-center mt-1">
+                    Não recebeu o código? Reenviar
+                  </button>
+                </form>
               ) : (
                 <form onSubmit={handleForgot} className="space-y-4">
                   <InputField label="Email cadastrado" type="email" value={forgotEmail} onChange={setForgotEmail}
@@ -382,14 +438,14 @@ export default function Login() {
 
                   {forgotError && <ErrorBox msg={forgotError} />}
 
-                  <SubmitButton loading={forgotLoading} label="Enviar link de recuperação" loadingLabel="Enviando..." primaryColor={agencyConfig.cor_primaria} />
+                  <SubmitButton loading={forgotLoading} label="Enviar código de recuperação" loadingLabel="Enviando..." primaryColor={agencyConfig.cor_primaria} />
                 </form>
               )}
             </div>
           )}
         </div>
 
-        <p className="text-center text-white/40 text-xs mt-6">
+        <p className="text-center text-white/60 text-xs mt-6">
           © 2026 {agencyConfig.nome_agencia}
         </p>
       </div>

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useClerk, useSession, useSignIn, useSignUp, useUser } from '@clerk/clerk-react'
 import { supabase } from '@/lib/supabase'
+import { getApiUrl, useLegacySupabase } from '@/lib/api'
 import type { Profile } from '@/types'
 
 export interface SignUpData {
@@ -23,6 +24,7 @@ interface AuthContextValue {
   signUp: (data: SignUpData) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<{ error: string | null }>
+  confirmPasswordReset: (code: string, newPassword: string) => Promise<{ error: string | null }>
   updatePassword: (password: string) => Promise<{ error: string | null }>
   isPasswordRecovery: boolean
   finishPasswordRecovery: () => void
@@ -62,11 +64,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function loadProfile(userId: string, email?: string) {
     setProfileLoading(true)
-    let result = await supabase.from('profiles').select('*').eq('id', userId).single()
-    if (!result.data && email) {
-      result = await supabase.from('profiles').select('*').eq('email', email).single()
+    try {
+      if (useLegacySupabase()) {
+        let result = await supabase.from('profiles').select('*').eq('id', userId).single()
+        if (!result.data && email) {
+          result = await supabase.from('profiles').select('*').eq('email', email).single()
+        }
+        setProfile(result.data ?? null)
+      } else {
+        const response = await fetch(getApiUrl('/auth/profile'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, email }),
+        })
+        const data = await response.json().catch(() => null) as { ok: boolean; profile: Profile | null } | null
+        setProfile(data?.profile ?? null)
+      }
+    } catch {
+      setProfile(null)
     }
-    setProfile(result.data ?? null)
     setProfileLoading(false)
   }
 
@@ -131,7 +147,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: null }
       }
 
-      return { error: 'Não foi possível criar a conta. Verifique os dados e tente novamente.' }
+      // Clerk pode retornar status intermediário aguardando verificação de email.
+      // Nesse caso a conta foi criada e o próximo passo é confirmar o email.
+      if (result.status === 'missing_requirements') {
+        return { error: null }
+      }
+
+      return { error: 'Não foi possível finalizar o cadastro agora. Tente novamente em instantes.' }
     } catch (error) {
       if (error instanceof Error) return { error: error.message }
       return { error: 'Falha ao criar conta. Tente novamente.' }
@@ -158,6 +180,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       if (error instanceof Error) return { error: error.message }
       return { error: 'Falha ao enviar o email de recuperação. Tente novamente.' }
+    }
+  }
+
+  async function confirmPasswordReset(code: string, newPassword: string) {
+    if (!signInLoaded || !signIn) {
+      return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
+    }
+
+    try {
+      const firstFactor = await signIn.attemptFirstFactor({
+        strategy: 'reset_password_email_code',
+        code,
+      })
+
+      if (firstFactor.status === 'needs_new_password') {
+        const result = await signIn.resetPassword({ password: newPassword, signOutOfOtherSessions: false })
+        if (result.status === 'complete' && result.createdSessionId && setActive) {
+          await setActive({ session: result.createdSessionId })
+          return { error: null }
+        }
+        return { error: 'Não foi possível redefinir a senha. Tente novamente.' }
+      }
+
+      if (firstFactor.status === 'complete' && firstFactor.createdSessionId && setActive) {
+        await setActive({ session: firstFactor.createdSessionId })
+        return { error: null }
+      }
+
+      return { error: 'Código inválido ou expirado. Solicite um novo código.' }
+    } catch (error) {
+      if (error instanceof Error) return { error: error.message }
+      return { error: 'Falha ao verificar o código. Tente novamente.' }
     }
   }
 
@@ -200,6 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUp: signUpWithPassword,
         signOut,
         resetPassword,
+        confirmPasswordReset,
         updatePassword,
         isPasswordRecovery,
         finishPasswordRecovery,

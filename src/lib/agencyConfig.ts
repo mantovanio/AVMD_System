@@ -1,6 +1,12 @@
 import { supabase } from '@/lib/supabase'
 
-const DEFAULT_BRAND_LOGO = 'favicon.svg'
+const DEFAULT_BRAND_LOGO = '/logo-certiid.png'
+
+function normalizeLogoUrl(value: string | undefined, fallback: string) {
+  const trimmed = String(value || '').trim()
+  if (!trimmed || trimmed === 'favicon.svg') return fallback
+  return trimmed
+}
 
 function env(name: string) {
   return String(import.meta.env[name] || '').trim()
@@ -48,14 +54,14 @@ export function buildAuthBackground(startColor: string, endColor: string) {
 }
 
 function normalizeAgencyConfig(value: Partial<AgencyConfig>) {
-  const legacyLogo = value.logo_url?.trim() || DEFAULT_BRAND_LOGO
+  const legacyLogo = normalizeLogoUrl(value.logo_url, DEFAULT_BRAND_LOGO)
 
   const merged = {
     ...DEFAULT_AGENCY_CONFIG,
     ...value,
     logo_url: legacyLogo,
-    logo_login_url: value.logo_login_url?.trim() || legacyLogo,
-    logo_interna_url: value.logo_interna_url?.trim() || legacyLogo,
+    logo_login_url: normalizeLogoUrl(value.logo_login_url, legacyLogo),
+    logo_interna_url: normalizeLogoUrl(value.logo_interna_url, legacyLogo),
   }
 
   if (BRAND_NAME_OVERRIDE) {

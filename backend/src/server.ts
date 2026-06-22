@@ -10,6 +10,8 @@ import { CheckoutService } from './services/checkoutService.js'
 import { handleCheckoutRoutes } from './routes/checkoutRoutes.js'
 import { handleCommercialRoutes } from './routes/commercialRoutes.js'
 import { handleIntegrationRoutes } from './routes/integrationRoutes.js'
+import { handleProfileRoutes } from './routes/profileRoutes.js'
+import { ProfileRepository } from './repositories/profileRepository.js'
 import { writeJson } from './utils/http.js'
 
 const config = loadConfig()
@@ -17,6 +19,7 @@ const db = createAivenSqlClient()
 const checkoutRepository = new AivenCheckoutRepository(db)
 const commercialRepository = new CommercialRepository(db)
 const integrationEventRepository = new IntegrationEventRepository(db)
+const profileRepository = new ProfileRepository(db)
 const integrationRegistry = createIntegrationRegistry(config)
 const integrationEventProcessor = new IntegrationEventProcessor(integrationEventRepository, integrationRegistry)
 const service = new CheckoutService(checkoutRepository)
@@ -32,6 +35,9 @@ const server = createServer(async (req, res) => {
       writeJson(res, 204, {}, config.corsOrigin)
       return
     }
+
+    const handledProfile = await handleProfileRoutes(req, res, profileRepository, config.corsOrigin)
+    if (handledProfile) return
 
     const handledCommercial = await handleCommercialRoutes(req, res, commercialRepository, config.corsOrigin)
     if (handledCommercial) return

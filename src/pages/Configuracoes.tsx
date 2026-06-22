@@ -94,6 +94,7 @@ type UserEditForm = {
 
 type ModalSenha = { userId: string; nome: string } | null
 type ModalNovoUsuario = { aberto: boolean }
+const ADMIN_INITIAL_PASSWORD = '1234qwer'
 
 const PROVIDER_LABEL: Record<IntegrationProvider, string> = {
   evolution:         'WhatsApp API',
@@ -670,6 +671,13 @@ function AbaUsuarios() {
     setNovoModal({ aberto: true })
   }
 
+  function handleNovoPerfilChange(perfil: PerfilAcesso) {
+    setNovoPerfil(perfil)
+    if (perfil === 'admin' && !novoSenhaU.trim()) {
+      setNovoSenhaU(ADMIN_INITIAL_PASSWORD)
+    }
+  }
+
   async function criarUsuario(e: React.FormEvent) {
     e.preventDefault()
     setCriadoErro(null)
@@ -861,7 +869,7 @@ function AbaUsuarios() {
               <CampoSenha label="Senha inicial" value={novoSenhaU} onChange={setNovoSenhaU} />
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Perfil de acesso</label>
-                <select value={novoPerfil} onChange={e => setNovoPerfil(e.target.value as PerfilAcesso)}
+                <select value={novoPerfil} onChange={e => handleNovoPerfilChange(e.target.value as PerfilAcesso)}
                   title="Perfil de acesso" aria-label="Perfil de acesso"
                   className="w-full border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="admin">Administrador</option>
