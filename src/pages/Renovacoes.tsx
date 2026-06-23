@@ -491,8 +491,21 @@ export default function Renovacoes() {
 
   // ── template values (for rendering) ─────────────────────────
 
+  function findLinkForProduto(tipo: string) {
+    // Busca exata primeiro, depois parcial (chave mais longa que o produto contém)
+    if (linksMap.has(tipo)) return linksMap.get(tipo)
+    const tipoLow = tipo.toLowerCase()
+    let best: LinkProduto | undefined
+    for (const [key, link] of linksMap) {
+      if (tipoLow.includes(key.toLowerCase())) {
+        if (!best || key.length > best.tipo_certificado.length) best = link
+      }
+    }
+    return best
+  }
+
   function tplValues(r: RenovacaoV2): Record<string, string | number> {
-    const linkData = linksMap.get(r.tipo_certificado)
+    const linkData = findLinkForProduto(r.tipo_certificado)
     const nomeCompleto = r.razao_social ?? r.cliente
     return {
       cliente:           nomeCompleto,
