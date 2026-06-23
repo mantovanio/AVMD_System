@@ -1806,8 +1806,8 @@ export default function Renovacoes() {
                           className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
                       </td>
 
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-1 flex-wrap">
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1">
                           <button type="button" disabled={busy} onClick={() => void marcarRenovado(r)}
                             title={r.status === 'convertido' ? 'Desmarcar renovado' : 'Marcar como renovado'}
                             className={cn('p-1 rounded transition-colors disabled:opacity-40',
