@@ -201,11 +201,14 @@ export async function fetchN8nWebhookUrl(): Promise<string | null> {
 // ── Status helpers ────────────────────────────────────────────
 
 export function enrichRenovacao(r: RenovacaoV2): RenovacaoV2 {
+  // pg retorna DATE como ISO datetime "2026-07-02T03:00:00.000Z" — normaliza para "YYYY-MM-DD"
+  const dateStr = (r.data_vencimento ?? '').slice(0, 10)
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
-  const venc = new Date(r.data_vencimento + 'T00:00:00'); venc.setHours(0, 0, 0, 0)
+  const venc = new Date(dateStr + 'T00:00:00'); venc.setHours(0, 0, 0, 0)
   const dias = Math.round((venc.getTime() - hoje.getTime()) / 86400000)
   return {
     ...r,
+    data_vencimento: dateStr,
     dias_restantes: dias,
     prioridade: dias <= 7 ? 'urgente' : dias <= 15 ? 'media' : 'normal',
   }
