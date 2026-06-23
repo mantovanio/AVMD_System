@@ -143,9 +143,18 @@ const TEMPLATE_VARS = [
 ]
 
 function parseBrDate(s: string): string {
-  const parts = s.trim().split('/')
-  if (parts.length === 3) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`
-  return s
+  const trimmed = s.trim()
+  const slashParts = trimmed.split('/')
+  if (slashParts.length === 3) {
+    const [a, b, c] = slashParts
+    return `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`
+  }
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10)
+  // Excel serial number (e.g. "46105")
+  const serial = Number(trimmed)
+  if (!isNaN(serial) && serial > 40000 && serial < 60000)
+    return new Date(Date.UTC(1899, 11, 30) + serial * 86400000).toISOString().slice(0, 10)
+  return trimmed
 }
 
 function normalizePhoneBR(raw: string | null | undefined): string | null {
@@ -209,15 +218,31 @@ const EMPTY_CONTATO: ContatoForm = {
 
 // ── helpers ───────────────────────────────────────────────────
 
+function normalizeAccents(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
+
+// Aliases para nomes de colunas de planilhas externas (Certifast, etc.)
+const COLUMN_ALIASES: Record<string, string> = {
+  'data de vencimento': 'data_vencimento',
+  'data_de_vencimento': 'data_vencimento',
+  'vencimento': 'data_vencimento',
+  'ponto de atendimento': 'agr',
+  'nome cliente': 'cliente',
+  'nome do cliente': 'cliente',
+  'status do pedido': 'status',
+}
+
 function normalizeRowKeys(rows: Record<string, string>[]): Record<string, string>[] {
   if (rows.length === 0) return []
   const rawHeaders = Object.keys(rows[0] ?? {})
   const fieldKeys = CSV_FIELDS.map(f => f.key as string)
   const headerMap = rawHeaders.map(h => {
-    const clean = h.trim().replace(/"/g, '')
-    const byKey   = fieldKeys.find(k => k.toLowerCase() === clean.toLowerCase())
-    const byLabel = CSV_FIELDS.find(f => f.label.toLowerCase().replace(/\s*\(.*\)/, '') === clean.toLowerCase())?.key as string | undefined
-    return byKey ?? byLabel ?? clean.toLowerCase().replace(/\s+/g, '_')
+    const clean = normalizeAccents(h.trim().replace(/"/g, '')).toLowerCase()
+    const byKey   = fieldKeys.find(k => k.toLowerCase() === clean)
+    const byLabel = CSV_FIELDS.find(f => normalizeAccents(f.label).toLowerCase().replace(/\s*\(.*\)/, '') === clean)?.key as string | undefined
+    const byAlias = COLUMN_ALIASES[clean]
+    return byKey ?? byLabel ?? byAlias ?? clean.replace(/\s+/g, '_')
   })
   return rows.map(row => Object.fromEntries(
     rawHeaders.map((header, index) => [headerMap[index], String(row[header] ?? '').trim()]),

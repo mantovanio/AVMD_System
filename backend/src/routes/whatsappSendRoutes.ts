@@ -48,7 +48,7 @@ export async function handleWhatsappSendRoutes(
         'Content-Type': 'application/json',
         apikey: integration.api_token,
       },
-      body: JSON.stringify({ number: body.phone, text: body.body }),
+      body: JSON.stringify({ number: body.phone.replace(/^\+/, ''), text: body.body }),
     })
 
     const payload = await evRes.json().catch(() => ({ status: evRes.status })) as Record<string, unknown>
