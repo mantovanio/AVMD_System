@@ -7,6 +7,7 @@ export interface LinkProdutoRow {
   link_nova_emissao: string | null
   descricao: string | null
   ativo: boolean
+  whatsapp_template_id: string | null
   created_at: string
   updated_at: string
 }
@@ -26,8 +27,8 @@ export class LinksProdutosRepository {
 
   async create(input: CreateLinkInput): Promise<LinkProdutoRow> {
     const result = await this.db.query<LinkProdutoRow>(
-      `INSERT INTO links_produtos (tipo_certificado, link_renovacao, link_nova_emissao, descricao, ativo)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO links_produtos (tipo_certificado, link_renovacao, link_nova_emissao, descricao, ativo, whatsapp_template_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
       [
         input.tipo_certificado,
@@ -35,6 +36,7 @@ export class LinksProdutosRepository {
         input.link_nova_emissao ?? null,
         input.descricao ?? null,
         input.ativo ?? true,
+        input.whatsapp_template_id ?? null,
       ],
     )
     return result.rows[0]
@@ -47,10 +49,11 @@ export class LinksProdutosRepository {
 
     const field = (col: string, val: unknown) => { sets.push(`${col} = $${idx++}`); params.push(val) }
 
-    if (input.link_renovacao !== undefined)    field('link_renovacao', input.link_renovacao)
-    if (input.link_nova_emissao !== undefined) field('link_nova_emissao', input.link_nova_emissao)
-    if (input.descricao !== undefined)         field('descricao', input.descricao)
-    if (input.ativo !== undefined)             field('ativo', input.ativo)
+    if (input.link_renovacao !== undefined)       field('link_renovacao', input.link_renovacao)
+    if (input.link_nova_emissao !== undefined)   field('link_nova_emissao', input.link_nova_emissao)
+    if (input.descricao !== undefined)           field('descricao', input.descricao)
+    if (input.ativo !== undefined)               field('ativo', input.ativo)
+    if (input.whatsapp_template_id !== undefined) field('whatsapp_template_id', input.whatsapp_template_id)
 
     if (sets.length === 0) return null
 

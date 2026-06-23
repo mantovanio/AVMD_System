@@ -187,7 +187,7 @@ const CSV_FIELDS: { key: keyof RenovacaoV2 | 'produto'; label: string }[] = [
 ]
 
 type TplForm  = { name: string; channel: 'whatsapp' | 'email'; subject: string; body: string; template_key: string }
-type LinkForm = { tipo_certificado: string; link_renovacao: string; link_nova_emissao: string; descricao: string }
+type LinkForm = { tipo_certificado: string; link_renovacao: string; link_nova_emissao: string; descricao: string; whatsapp_template_id: string }
 type ContatoForm = {
   cliente: string
   email: string
@@ -202,7 +202,7 @@ type ContatoForm = {
 }
 
 const EMPTY_TPL:  TplForm  = { name: '', channel: 'whatsapp', subject: '', body: '', template_key: '' }
-const EMPTY_LINK: LinkForm = { tipo_certificado: '', link_renovacao: '', link_nova_emissao: '', descricao: '' }
+const EMPTY_LINK: LinkForm = { tipo_certificado: '', link_renovacao: '', link_nova_emissao: '', descricao: '', whatsapp_template_id: '' }
 const EMPTY_CONTATO: ContatoForm = {
   cliente: '',
   email: '',
@@ -594,10 +594,19 @@ export default function Renovacoes() {
     }
   }
 
+  function getTemplateForRenovacao(r: RenovacaoV2): CommunicationTemplate | undefined {
+    const link = findLinkForProduto(r.tipo_certificado)
+    if (link?.whatsapp_template_id) {
+      const tpl = templates.find(t => t.id === link.whatsapp_template_id)
+      if (tpl) return tpl
+    }
+    return getSelectedTpl('whatsapp')
+  }
+
   async function enviarWhatsApp(r: RenovacaoV2) {
     if (!r.telefone) { showMsg('Cliente sem telefone.', 'err'); return }
     setSendingId(r.id)
-    const tpl = getSelectedTpl('whatsapp')
+    const tpl = getTemplateForRenovacao(r)
     const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
     const result = await apiSendWhatsApp(r.telefone, body)
     if (!result.ok) { setSendingId(null); showMsg('Erro WhatsApp: ' + result.error, 'err'); return }
@@ -647,11 +656,11 @@ export default function Renovacoes() {
   async function bulkEnviarWhatsApp() {
     const alvos = listagem.filter(r => selectedIds.has(r.id) && r.telefone)
     if (!alvos.length) { showMsg('Nenhum selecionado com telefone.', 'err'); return }
-    const tpl = getSelectedTpl('whatsapp')
     setBulkSending(true)
     let enviados = 0
     let erros = 0
     for (const r of alvos) {
+      const tpl = getTemplateForRenovacao(r)
       const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
       const result = await apiSendWhatsApp(r.telefone!, body)
       if (result.ok) {
@@ -728,11 +737,11 @@ export default function Renovacoes() {
   async function enviarMassa() {
     const alvos = listagem.filter(r => r.telefone && r.status !== 'convertido' && r.status !== 'perdido')
     if (!alvos.length) { showMsg('Nenhum cliente elegível com telefone.', 'err'); return }
-    const tpl = getSelectedTpl('whatsapp')
     setSendingId('massa')
     let enviados = 0
     let falhas = 0
     for (const r of alvos) {
+      const tpl = getTemplateForRenovacao(r)
       const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
       const result = await apiSendWhatsApp(r.telefone!, body)
       if (result.ok) {
@@ -776,9 +785,10 @@ export default function Renovacoes() {
   function abrirEditarLink(link: LinkProduto) {
     setEditingLink(link)
     setLinkForm({
-      tipo_certificado:  link.tipo_certificado,
-      link_renovacao:    link.link_renovacao    ?? '',
-      link_nova_emissao: link.link_nova_emissao ?? '',
+      tipo_certificado:     link.tipo_certificado,
+      link_renovacao:       link.link_renovacao        ?? '',
+      link_nova_emissao:    link.link_nova_emissao     ?? '',
+      whatsapp_template_id: link.whatsapp_template_id  ?? '',
       descricao:         link.descricao         ?? '',
     })
   }
@@ -794,9 +804,10 @@ export default function Renovacoes() {
     try {
       await apiSaveLink({
         id: editingLink?.id,
-        tipo_certificado:  linkForm.tipo_certificado.trim(),
-        link_renovacao:    linkForm.link_renovacao.trim()    || null,
-        link_nova_emissao: linkForm.link_nova_emissao.trim() || null,
+        tipo_certificado:     linkForm.tipo_certificado.trim(),
+        link_renovacao:       linkForm.link_renovacao.trim()        || null,
+        link_nova_emissao:    linkForm.link_nova_emissao.trim()     || null,
+        whatsapp_template_id: linkForm.whatsapp_template_id.trim()  || null,
         descricao:         linkForm.descricao.trim()         || null,
         ativo: true,
       })
@@ -1485,6 +1496,19 @@ export default function Renovacoes() {
                       onChange={e => setLinkForm(p => ({ ...p, link_nova_emissao: e.target.value }))}
                       placeholder="https://…"
                       className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                  </label>
+
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-gray-500">Template WhatsApp para este produto</span>
+                    <select value={linkForm.whatsapp_template_id}
+                      onChange={e => setLinkForm(p => ({ ...p, whatsapp_template_id: e.target.value }))}
+                      className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                      <option value="">— usar template padrão selecionado —</option>
+                      {templates.filter(t => t.channel === 'whatsapp').map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                    <span className="text-xs text-gray-400">Se definido, ignora o template global e usa este ao enviar para clientes deste produto.</span>
                   </label>
 
                   <label className="flex flex-col gap-1">

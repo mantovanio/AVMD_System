@@ -340,6 +340,7 @@ export interface LinkProduto {
   link_nova_emissao: string | null
   descricao: string | null
   ativo: boolean
+  whatsapp_template_id: string | null
   created_at: string
   updated_at: string
 }
