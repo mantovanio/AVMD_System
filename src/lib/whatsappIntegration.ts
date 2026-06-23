@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { getApiUrl } from '@/lib/api'
 import type { ExternalIntegration, IntegrationProvider, WhatsAppEngine } from '@/types'
 
 type IntegrationMetadata = Record<string, unknown>
@@ -70,21 +70,23 @@ export function normalizeWhatsAppProvider(
   return 'evolution'
 }
 
-export async function loadActiveWhatsAppIntegration(): Promise<ActiveWhatsAppIntegration | null> {
-  const { data, error } = await supabase
-    .from('external_integrations')
-    .select('*')
-    .eq('status', 'ativo')
-    .order('updated_at', { ascending: false })
+export async function loadActiveWhatsAppIntegration(canal?: 'atendimento' | 'renovacao'): Promise<ActiveWhatsAppIntegration | null> {
+  let list: ExternalIntegration[]
+  try {
+    const res = await fetch(getApiUrl('/integrations'))
+    const data = await res.json() as { ok: boolean; integrations: ExternalIntegration[] }
+    list = (data.integrations ?? []).filter(i => i.status === 'ativo').filter(isWhatsAppIntegration)
+  } catch {
+    return null
+  }
 
-  if (error) throw error
+  const preferred = canal
+    ? (list.find(i => (i.metadata as Record<string, unknown>)?.canal === canal) ?? list.find(item => getWhatsAppEngine(item) === 'evolution') ?? list[0])
+    : (list.find(item => getWhatsAppEngine(item) === 'evolution') ?? list[0])
 
-  const list = ((data ?? []) as ExternalIntegration[]).filter(isWhatsAppIntegration)
-  const preferred = list.find(item => getWhatsAppEngine(item) === 'evolution') ?? list[0]
   if (!preferred) return null
 
   const engine = getWhatsAppEngine(preferred)
-
   return {
     id: preferred.id,
     provider: preferred.provider,

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Loader2, MapPin, Pencil, X, Check, KeyRound, UserPlus, Eye, EyeOff, MessageCircle, Mail, Webhook, Save, Send, Trash2, Plus, ToggleLeft, ToggleRight, CreditCard, FileText, Upload, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase, getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
+import { getApiUrl } from '@/lib/api'
 import { createAdminManagedUser, deleteAdminManagedUser, updateAdminManagedPassword } from '@/lib/adminUsers'
 import { DEFAULT_AGENCY_CONFIG, type AgencyConfig, fetchAgencyConfig } from '@/lib/agencyConfig'
 import { DEFAULT_CONTACT_DOCUMENT_STORAGE, loadContactDocumentStorageConfig, type ContactDocumentStorageConfig } from '@/lib/contactDocumentStorage'
@@ -1487,7 +1488,9 @@ function AbaIntegracoes() {
             patch.webhook_url = webhookUrl ?? null
           }
 
-          await supabase.from('external_integrations').update(patch).eq('id', integracao.id)
+          await fetch(getApiUrl(`/integrations/${integracao.id}`), {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
+          })
           setIntegracoes(prev => prev.map(item => (
             item.id === integracao.id
               ? { ...item, ...patch } as ExternalIntegration
@@ -1503,17 +1506,17 @@ function AbaIntegracoes() {
       setLoading(true)
       setErro(null)
     const [integracoesRes, outboxRes] = await Promise.all([
-      supabase.from('external_integrations').select('*').order('name', { ascending: true }),
+      fetch(getApiUrl('/integrations')).then(r => r.json() as Promise<{ ok: boolean; integrations: ExternalIntegration[]; error?: string }>),
       supabase.from('communication_outbox').select('*').order('created_at', { ascending: false }).limit(8),
     ])
 
-    if (integracoesRes.error) {
-      setErro(integracoesRes.error.message)
+    if (!integracoesRes.ok) {
+      setErro(integracoesRes.error ?? 'Erro ao carregar integrações')
       setLoading(false)
       return
     }
 
-    const lista = (integracoesRes.data ?? []) as ExternalIntegration[]
+    const lista = (integracoesRes.integrations ?? []) as ExternalIntegration[]
     setIntegracoes(lista)
     setOutbox((outboxRes.data ?? []) as CommunicationOutbox[])
     try {
@@ -1612,30 +1615,35 @@ function AbaIntegracoes() {
       ? buildWhatsAppMetadata({ ...editing, ...form }, engineAtual)
       : (form.metadata ?? editing.metadata ?? {})
 
-    const { error } = await supabase.from('external_integrations').update({
-      provider: providerFinal,
-      name: form.name,
-      description: form.description,
-      status: statusFinal,
-      base_url: form.base_url || null,
-      webhook_url: form.webhook_url || null,
-      api_token:     form.api_token     || null,
-      account_id:    form.account_id    || null,
-      inbox_id:      form.inbox_id      || null,
-      instance_name: editingIsWhatsApp ? normalizeWhatsAppInstanceName(form.instance_name) || null : form.instance_name || null,
-      sender_name: form.sender_name || null,
-      sender_email: form.sender_email || null,
-      host: form.host || null,
-      port: form.port || null,
-      username: form.username || null,
-      metadata: metadataFinal,
-      last_test_at: lastTestAt,
-      last_error: lastError,
-    }).eq('id', editing.id)
+    const saveRes = await fetch(getApiUrl(`/integrations/${editing.id}`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: providerFinal,
+        name: form.name,
+        description: form.description,
+        status: statusFinal,
+        base_url: form.base_url || null,
+        webhook_url: form.webhook_url || null,
+        api_token:     form.api_token     || null,
+        account_id:    form.account_id    || null,
+        inbox_id:      form.inbox_id      || null,
+        instance_name: editingIsWhatsApp ? normalizeWhatsAppInstanceName(form.instance_name) || null : form.instance_name || null,
+        sender_name: form.sender_name || null,
+        sender_email: form.sender_email || null,
+        host: form.host || null,
+        port: form.port || null,
+        username: form.username || null,
+        metadata: metadataFinal,
+        last_test_at: lastTestAt,
+        last_error: lastError,
+      }),
+    })
+    const saveData = await saveRes.json() as { ok: boolean; error?: string }
     setSaving(false)
 
-    if (error) {
-      showMsgI('Erro ao salvar: ' + error.message)
+    if (!saveData.ok) {
+      showMsgI('Erro ao salvar: ' + (saveData.error ?? 'erro desconhecido'))
       return
     }
 
@@ -1676,11 +1684,15 @@ function AbaIntegracoes() {
               lastError = webhookResultado.erro
             }
           }
-          await supabase.from('external_integrations').update({
-            status: resultado.ok && !lastError ? novoStatus : 'erro',
-            last_test_at: new Date().toISOString(),
-            last_error: lastError,
-          }).eq('id', integracao.id)
+          await fetch(getApiUrl(`/integrations/${integracao.id}`), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: resultado.ok && !lastError ? novoStatus : 'erro',
+              last_test_at: new Date().toISOString(),
+              last_error: lastError,
+            }),
+          })
           if (resultado.ok && !lastError) {
             showMsgI('Canal WhatsApp conectado com sucesso!', 'ok')
           } else if (resultado.ok && lastError) {
@@ -1713,10 +1725,11 @@ function AbaIntegracoes() {
       }])
     }
 
-    await supabase.from('external_integrations').update({
-      last_test_at: new Date().toISOString(),
-      last_error: null,
-    }).eq('id', integracao.id)
+    await fetch(getApiUrl(`/integrations/${integracao.id}`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ last_test_at: new Date().toISOString(), last_error: null }),
+    })
 
     setTestando(null)
     void load()
@@ -1757,27 +1770,32 @@ function AbaIntegracoes() {
     const creatingWhatsApp = novaProvider === 'evolution'
     const engineNovo = getWhatsAppEngineFromForm({ provider: novaProvider, metadata: novaForm.metadata ?? {} })
     const providerFinal = creatingWhatsApp ? normalizeWhatsAppProvider(novaProvider, engineNovo) : novaProvider
-    const { error } = await supabase.from('external_integrations').insert([{
-      provider: providerFinal,
-      name: novaForm.name || (providerFinal === 'evolution' || providerFinal === 'n8n' ? 'WhatsApp API' : PROVIDER_LABEL[providerFinal]),
-      description: novaForm.description ?? null,
-      status: 'pendente',
-      base_url: novaForm.base_url || null,
-      webhook_url: novaForm.webhook_url || null,
-      api_token: novaForm.api_token || null,
-      account_id: novaForm.account_id || null,
-      inbox_id: novaForm.inbox_id || null,
-      sender_name: novaForm.sender_name || null,
-      sender_email: novaForm.sender_email || null,
-      host: novaForm.host || null,
-      port: novaForm.port || null,
-      username: novaForm.username || null,
-      metadata: creatingWhatsApp
-        ? buildWhatsAppMetadata({ provider: providerFinal, metadata: novaForm.metadata ?? {} }, engineNovo)
-        : {},
-    }])
+    const criarRes = await fetch(getApiUrl('/integrations'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: providerFinal,
+        name: novaForm.name || (providerFinal === 'evolution' || providerFinal === 'n8n' ? 'WhatsApp API' : PROVIDER_LABEL[providerFinal]),
+        description: novaForm.description ?? null,
+        status: 'pendente',
+        base_url: novaForm.base_url || null,
+        webhook_url: novaForm.webhook_url || null,
+        api_token: novaForm.api_token || null,
+        account_id: novaForm.account_id || null,
+        inbox_id: novaForm.inbox_id || null,
+        sender_name: novaForm.sender_name || null,
+        sender_email: novaForm.sender_email || null,
+        host: novaForm.host || null,
+        port: novaForm.port || null,
+        username: novaForm.username || null,
+        metadata: creatingWhatsApp
+          ? buildWhatsAppMetadata({ provider: providerFinal, metadata: novaForm.metadata ?? {} }, engineNovo)
+          : {},
+      }),
+    })
+    const criarData = await criarRes.json() as { ok: boolean; error?: string }
     setCriando(false)
-    if (error) { showMsgI('Erro ao criar: ' + error.message); return }
+    if (!criarData.ok) { showMsgI('Erro ao criar: ' + (criarData.error ?? 'erro desconhecido')); return }
     setNovaModal(false)
     void load()
   }
@@ -1785,9 +1803,10 @@ function AbaIntegracoes() {
   async function deletarIntegracao() {
     if (!confirmDelete) return
     setDeletando(true)
-    const { error } = await supabase.from('external_integrations').delete().eq('id', confirmDelete.id)
+    const delRes = await fetch(getApiUrl(`/integrations/${confirmDelete.id}`), { method: 'DELETE' })
+    const delData = await delRes.json() as { ok: boolean; error?: string }
     setDeletando(false)
-    if (error) { showMsgI('Erro ao remover: ' + error.message); setConfirmDelete(null); return }
+    if (!delData.ok) { showMsgI('Erro ao remover: ' + (delData.error ?? 'erro desconhecido')); setConfirmDelete(null); return }
     setConfirmDelete(null)
     void load()
   }

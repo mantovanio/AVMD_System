@@ -1,11 +1,18 @@
+export type EvolutionInstanceConfig = {
+  baseUrl: string
+  apiToken: string
+  instanceName: string
+}
+
 export type BackendConfig = {
   port: number
   databaseUrl: string
   corsOrigin: string
   n8nWebhookUrl: string
-  evolutionBaseUrl: string
-  evolutionApiToken: string
-  evolutionInstanceName: string
+  // Canal de atendimento humano (dia a dia, sem IA)
+  evolutionAtendimento: EvolutionInstanceConfig
+  // Canal CertiID — renovações de certificados (com IA)
+  evolutionCertiid: EvolutionInstanceConfig
 }
 
 try {
@@ -19,13 +26,21 @@ function env(name: string, fallback = '') {
 }
 
 export function loadConfig(): BackendConfig {
+  const baseUrl = env('EVOLUTION_BASE_URL')
   return {
     port: Number(env('PORT', '8787')),
     databaseUrl: env('DATABASE_URL'),
     corsOrigin: env('CORS_ORIGIN', 'http://localhost:5173'),
     n8nWebhookUrl: env('N8N_WEBHOOK_URL'),
-    evolutionBaseUrl: env('EVOLUTION_BASE_URL'),
-    evolutionApiToken: env('EVOLUTION_API_TOKEN'),
-    evolutionInstanceName: env('EVOLUTION_INSTANCE_NAME'),
+    evolutionAtendimento: {
+      baseUrl,
+      apiToken: env('EVOLUTION_ATENDIMENTO_API_TOKEN'),
+      instanceName: env('EVOLUTION_ATENDIMENTO_INSTANCE_NAME', 'atendimento'),
+    },
+    evolutionCertiid: {
+      baseUrl,
+      apiToken: env('EVOLUTION_CERTIID_API_TOKEN'),
+      instanceName: env('EVOLUTION_CERTIID_INSTANCE_NAME', 'CertiID'),
+    },
   }
 }

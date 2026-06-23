@@ -6,40 +6,31 @@ import {
   ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { supabase } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
 import { queueEmailMessage, renderTemplate } from '@/lib/communication'
-import { loadActiveWhatsAppIntegration } from '@/lib/whatsappIntegration'
 import { openCentralChat } from '@/lib/chatNavigation'
-
-const EDGE_FN = 'https://api.certiid.mantovan.com.br/functions/v1/evolution-webhook'
-
-async function sendWhatsAppDirect(phone: string, body: string, accessToken: string): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const integration = await loadActiveWhatsAppIntegration()
-    if (!integration?.base_url || !integration?.api_token || !integration?.instance_name) {
-      return { ok: false, error: 'Integracao WhatsApp nao configurada. Verifique em Configuracoes.' }
-    }
-    const res = await fetch(EDGE_FN, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
-      body: JSON.stringify({
-        _action: 'send_message',
-        base_url: integration.base_url,
-        api_token: integration.api_token,
-        instance_name: integration.instance_name,
-        number: phone,
-        content: body,
-        queue_override: 'renovacao',
-      }),
-    })
-    const payload = await res.json() as { ok?: boolean; error?: string }
-    if (!res.ok || !payload.ok) return { ok: false, error: payload.error ?? 'Falha no envio' }
-    return { ok: true }
-  } catch (e) {
-    return { ok: false, error: String(e) }
-  }
-}
+import {
+  fetchRenovacoes as apiFetchRenovacoes,
+  fetchTemplates as apiFetchTemplates,
+  fetchAutoRules as apiFetchAutoRules,
+  fetchLinks as apiFetchLinks,
+  fetchN8nWebhookUrl as apiFetchN8nWebhookUrl,
+  saveTemplate as apiSaveTemplate,
+  deleteTemplate as apiDeleteTemplate,
+  setTemplatePadrao as apiSetTemplatePadrao,
+  saveLink as apiSaveLink,
+  deleteLink as apiDeleteLink,
+  toggleAutomationRule as apiToggleRule,
+  updateRenovacao as apiUpdateRenovacao,
+  bulkUpdateRenovacoes as apiBulkUpdate,
+  bulkCreateRenovacoes as apiBulkCreate,
+  softDeleteRenovacao as apiSoftDelete,
+  bulkSoftDeleteRenovacoes as apiBulkSoftDelete,
+  criarLeadKanban as apiCriarLead,
+  cancelarFollowUps as apiCancelarFollowUps,
+  sendWhatsApp as apiSendWhatsApp,
+  enrichRenovacao,
+} from '@/lib/renovacoesApi'
 import { useAuth } from '@/contexts/AuthContext'
 import { hasPerfil, isAdminProfile } from '@/lib/security'
 import * as XLSX from 'xlsx'
@@ -368,82 +359,53 @@ export default function Renovacoes() {
 
   const fetchRenovacoes = useCallback(async () => {
     setLoading(true)
-    const { data, error: err } = await supabase
-      .from('renovacoes').select('*').is('deleted_at', null).order('data_vencimento', { ascending: true })
-    if (err) { setError(err.message); setLoading(false); return }
-    const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
-    const enriched: RenovacaoV2[] = ((data ?? []) as Record<string, unknown>[]).map(r => {
-      const venc = new Date(r.data_vencimento as string); venc.setHours(0, 0, 0, 0)
-      const dias = Math.round((venc.getTime() - hoje.getTime()) / 86400000)
-      return {
-        id: r.id as string, cliente: r.cliente as string,
-        telefone: (r.telefone as string | null) ?? null,
-        email: (r.email as string | null) ?? null,
-        tipo_certificado: r.tipo_certificado as string,
-        data_vencimento: r.data_vencimento as string,
-        valor: (r.valor as number | null) ?? null,
-        status: r.status as StatusRenovacao,
-        observacoes: (r.observacoes as string | null) ?? null,
-        created_at: r.created_at as string,
-        pedido: (r.pedido as string | null) ?? null,
-        protocolo: (r.protocolo as string | null) ?? null,
-        cpf: (r.cpf as string | null) ?? null,
-        cnpj: (r.cnpj as string | null) ?? null,
-        razao_social: (r.razao_social as string | null) ?? null,
-        agr: (r.agr as string | null) ?? null,
-        vendedor: (r.vendedor as string | null) ?? null,
-        contador: (r.contador as string | null) ?? null,
-        renovado: (r.renovado as boolean) ?? false,
-        ultimo_lembrete: (r.ultimo_lembrete as string | null) ?? null,
-        dias_restantes: dias,
-        prioridade: dias <= 7 ? 'urgente' : dias <= 15 ? 'media' : 'normal',
-        // campos v2
-        venda_certificado_id:   (r.venda_certificado_id as string | null)   ?? null,
-        produto_emitido_id:     (r.produto_emitido_id as string | null)     ?? null,
-        cadastro_base_id:       (r.cadastro_base_id as string | null)       ?? null,
-        empresa_id:             (r.empresa_id as string | null)             ?? null,
-        titular_id:             (r.titular_id as string | null)             ?? null,
-        vendedor_fk_id:         (r.vendedor_fk_id as string | null)         ?? null,
-        agente_registro_fk_id:  (r.agente_registro_fk_id as string | null)  ?? null,
-        contador_fk_id:         (r.contador_fk_id as string | null)         ?? null,
-        snapshot_json:          (r.snapshot_json as Record<string, unknown>) ?? {},
-        deleted_at:             (r.deleted_at as string | null)             ?? null,
-        deleted_by:             (r.deleted_by as string | null)             ?? null,
-        motivo_exclusao:        (r.motivo_exclusao as string | null)        ?? null,
-      }
-    })
-    setLista(enriched)
-    setLoading(false)
+    try {
+      const rows = await apiFetchRenovacoes()
+      setLista(rows.map(enrichRenovacao))
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar renovações')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   const fetchAutoRules = useCallback(async () => {
     setLoadingRules(true)
-    const { data } = await supabase.from('automation_rules').select('*')
-      .in('rule_key', ['ren30','ren15','ren7','followup']).order('rule_key')
-    setAutoRules((data ?? []) as AutomationRule[])
-    setLoadingRules(false)
+    try {
+      const rules = await apiFetchAutoRules()
+      setAutoRules(rules)
+    } catch (err) {
+      logger.warn('Renovacoes', `Erro ao carregar automation_rules: ${err}`)
+    } finally {
+      setLoadingRules(false)
+    }
   }, [])
 
   const fetchTemplates = useCallback(async () => {
     setLoadingTpls(true)
-    const { data } = await supabase.from('communication_templates').select('*').order('created_at')
-    const nextTemplates = (data ?? []) as CommunicationTemplate[]
-    setTemplates(nextTemplates)
-    setSelectedWaTplId(prev => {
-      const stillExists = nextTemplates.some(t => t.id === prev && t.channel === 'whatsapp')
-      if (stillExists) return prev
-      return nextTemplates.find(t => t.channel === 'whatsapp' && t.ativo)?.id
-        ?? nextTemplates.find(t => t.channel === 'whatsapp')?.id
-        ?? ''
-    })
-    setSelectedEmailTplId(prev => {
-      const stillExists = nextTemplates.some(t => t.id === prev && t.channel === 'email')
-      if (stillExists) return prev
-      return nextTemplates.find(t => t.channel === 'email' && t.ativo)?.id
-        ?? nextTemplates.find(t => t.channel === 'email')?.id
-        ?? ''
-    })
-    setLoadingTpls(false)
+    try {
+      const nextTemplates = await apiFetchTemplates()
+      setTemplates(nextTemplates)
+      setSelectedWaTplId(prev => {
+        const stillExists = nextTemplates.some(t => t.id === prev && t.channel === 'whatsapp')
+        if (stillExists) return prev
+        return nextTemplates.find(t => t.channel === 'whatsapp' && t.ativo)?.id
+          ?? nextTemplates.find(t => t.channel === 'whatsapp')?.id
+          ?? ''
+      })
+      setSelectedEmailTplId(prev => {
+        const stillExists = nextTemplates.some(t => t.id === prev && t.channel === 'email')
+        if (stillExists) return prev
+        return nextTemplates.find(t => t.channel === 'email' && t.ativo)?.id
+          ?? nextTemplates.find(t => t.channel === 'email')?.id
+          ?? ''
+      })
+    } catch (err) {
+      logger.warn('Renovacoes', `Erro ao carregar templates: ${err}`)
+    } finally {
+      setLoadingTpls(false)
+    }
   }, [])
 
   useEffect(() => { void fetchRenovacoes() }, [fetchRenovacoes])
@@ -453,57 +415,25 @@ export default function Renovacoes() {
   useEffect(() => { listaRef.current = lista }, [lista])
   useEffect(() => { autoKanbanRef.current = autoKanban }, [autoKanban])
 
-  // ── realtime: auto-kanban quando cliente responde ─────────────
-  useEffect(() => {
-    const channel = supabase.channel('auto-kanban-renovacoes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'communication_events' },
-        async (payload) => {
-          if (!autoKanbanRef.current) return
-          const ev = payload.new as Record<string, unknown>
-          if (ev.event_type !== 'message_received') return
-          const phone = String(ev.contact ?? '').replace(/\D/g, '')
-          if (!phone) return
-          const match = listaRef.current.find(r =>
-            r.telefone?.replace(/\D/g, '') === phone &&
-            r.status !== 'contatado' && r.status !== 'convertido'
-          )
-          if (!match) return
-          await supabase.from('leads_contabilidade').insert([{
-            nome_lead:          match.razao_social ?? match.cliente,
-            whatsapp_lead:      match.telefone,
-            motivo_contato:     `Resposta automática — renovação: ${match.tipo_certificado}`,
-            status:             'iniciou_conversa',
-            inicio_atendimento: new Date().toISOString(),
-            anotacoes: [
-              match.cpf       && `CPF: ${match.cpf}`,
-              match.cnpj      && `CNPJ: ${match.cnpj}`,
-              match.pedido    && `Pedido: ${match.pedido}`,
-              match.protocolo && `Protocolo: ${match.protocolo}`,
-            ].filter(Boolean).join(' | ') || null,
-          }])
-          await supabase.from('renovacoes').update({ status: 'contatado' }).eq('id', match.id)
-          setLista(prev => prev.map(r => r.id === match.id ? { ...r, status: 'contatado' } : r))
-          setToast({ msg: `Resposta recebida! Lead criado: ${match.razao_social ?? match.cliente}`, type: 'ok' })
-          setTimeout(() => setToast(null), 5000)
-        })
-      .subscribe()
-    return () => { void supabase.removeChannel(channel) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // auto-kanban via realtime removido (era Supabase Realtime)
+  // N8N notifica diretamente via webhook quando cliente responde
 
   // ── fetches complementares ────────────────────────────────────
 
   const fetchLinks = useCallback(async () => {
     setLoadingLinks(true)
-    const { data } = await supabase.from('links_produtos').select('*').order('tipo_certificado')
-    setLinks((data ?? []) as LinkProduto[])
-    setLoadingLinks(false)
+    try {
+      const links = await apiFetchLinks()
+      setLinks(links)
+    } catch (err) {
+      logger.warn('Renovacoes', `Erro ao carregar links: ${err}`)
+    } finally {
+      setLoadingLinks(false)
+    }
   }, [])
 
   const fetchN8nWebhookUrl = useCallback(async () => {
-    const { data } = await supabase
-      .from('external_integrations').select('webhook_url').eq('provider', 'n8n').maybeSingle()
-    setN8nWebhookUrl((data as { webhook_url: string | null } | null)?.webhook_url ?? null)
+    setN8nWebhookUrl(await apiFetchN8nWebhookUrl())
   }, [])
 
 
@@ -572,39 +502,50 @@ export default function Renovacoes() {
       r.vendedor  && `Vendedor: ${r.vendedor}`,
       r.contador  && `Contador: ${r.contador}`,
     ].filter(Boolean).join(' | ') || null
-    const { error } = await supabase.from('leads_contabilidade').insert([{
-      nome_lead: r.razao_social ?? r.cliente,
-      whatsapp_lead: r.telefone,
-      motivo_contato: `Renovação: ${r.tipo_certificado} — vence em ${r.dias_restantes}d`,
-      status: 'iniciou_conversa',
-      inicio_atendimento: new Date().toISOString(),
-      anotacoes,
-    }])
-    if (error) showMsg('Erro ao criar lead: ' + error.message, 'err')
-    else showMsg(`Lead criado no Kanban: ${r.razao_social ?? r.cliente}`)
+    try {
+      await apiCriarLead(r.id, {
+        nome_lead: r.razao_social ?? r.cliente,
+        whatsapp_lead: r.telefone ?? null,
+        motivo_contato: `Renovação: ${r.tipo_certificado} — vence em ${r.dias_restantes}d`,
+        anotacoes,
+      })
+      showMsg(`Lead criado no Kanban: ${r.razao_social ?? r.cliente}`)
+    } catch (err) {
+      showMsg('Erro ao criar lead: ' + String(err), 'err')
+    }
   }
 
   async function atualizarStatus(id: string, status: StatusRenovacao) {
-    await supabase.from('renovacoes').update({ status }).eq('id', id)
+    await apiUpdateRenovacao(id, { status })
     setLista(prev => prev.map(r => r.id === id ? { ...r, status } : r))
   }
 
   async function marcarRenovado(r: RenovacaoV2) {
     const s: StatusRenovacao = r.status === 'convertido' ? 'pendente' : 'convertido'
     setUpdatingId(r.id)
-    await supabase.from('renovacoes').update({ status: s, renovado: s === 'convertido' }).eq('id', r.id)
-    setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: s, renovado: s === 'convertido' } : x))
-    setUpdatingId(null)
-    showMsg(s === 'convertido' ? 'Marcado como Renovado!' : 'Marcação removida.')
+    try {
+      await apiUpdateRenovacao(r.id, { status: s, renovado: s === 'convertido' })
+      setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: s, renovado: s === 'convertido' } : x))
+      showMsg(s === 'convertido' ? 'Marcado como Renovado!' : 'Marcação removida.')
+    } catch (err) {
+      showMsg('Erro: ' + String(err), 'err')
+    } finally {
+      setUpdatingId(null)
+    }
   }
 
   async function marcarNaoRenovado(r: RenovacaoV2) {
     const s: StatusRenovacao = r.status === 'perdido' ? 'pendente' : 'perdido'
     setUpdatingId(r.id)
-    await supabase.from('renovacoes').update({ status: s }).eq('id', r.id)
-    setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: s } : x))
-    setUpdatingId(null)
-    showMsg(s === 'perdido' ? 'Marcado como Não Renovado.' : 'Marcação removida.')
+    try {
+      await apiUpdateRenovacao(r.id, { status: s })
+      setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: s } : x))
+      showMsg(s === 'perdido' ? 'Marcado como Não Renovado.' : 'Marcação removida.')
+    } catch (err) {
+      showMsg('Erro: ' + String(err), 'err')
+    } finally {
+      setUpdatingId(null)
+    }
   }
 
   async function enviarWhatsApp(r: RenovacaoV2) {
@@ -612,15 +553,11 @@ export default function Renovacoes() {
     setSendingId(r.id)
     const tpl = getSelectedTpl('whatsapp')
     const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
-    const { data: sessionData } = await supabase.auth.getSession()
-    const accessToken = sessionData.session?.access_token
-    if (!accessToken) { setSendingId(null); showMsg('Sessao expirada. Atualize a pagina.', 'err'); return }
-    const result = await sendWhatsAppDirect(r.telefone, body, accessToken)
+    const result = await apiSendWhatsApp(r.telefone, body)
     if (!result.ok) { setSendingId(null); showMsg('Erro WhatsApp: ' + result.error, 'err'); return }
-    await atualizarStatus(r.id, 'contatado')
     const agora = new Date().toISOString()
-    await supabase.from('renovacoes').update({ ultimo_lembrete: agora }).eq('id', r.id)
-    setLista(prev => prev.map(x => x.id === r.id ? { ...x, ultimo_lembrete: agora } : x))
+    await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
+    setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
     await criarLeadKanban(r)
     setSendingId(null)
     showMsg('WhatsApp enviado com sucesso!')
@@ -634,9 +571,9 @@ export default function Renovacoes() {
     const subject = renderTemplate(tpl?.subject ?? 'Renovação do seu certificado digital', tplValues(r))
     const { error } = await queueEmailMessage({ to: r.email, subject, body, payload: { renovacao_id: r.id, tipo: 'renovacao' } })
     if (error) { setSendingId(null); showMsg('Erro e-mail: ' + error, 'err'); return }
-    await atualizarStatus(r.id, 'contatado')
-    await supabase.from('renovacoes').update({ ultimo_lembrete: new Date().toISOString() }).eq('id', r.id)
-    setLista(prev => prev.map(x => x.id === r.id ? { ...x, ultimo_lembrete: new Date().toISOString() } : x))
+    const agora = new Date().toISOString()
+    await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
+    setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
     await criarLeadKanban(r)
     setSendingId(null)
   }
@@ -666,23 +603,20 @@ export default function Renovacoes() {
     if (!alvos.length) { showMsg('Nenhum selecionado com telefone.', 'err'); return }
     const tpl = getSelectedTpl('whatsapp')
     setBulkSending(true)
-    const { data: sessionData } = await supabase.auth.getSession()
-    const accessToken = sessionData.session?.access_token
-    if (!accessToken) { setBulkSending(false); showMsg('Sessao expirada. Atualize a pagina.', 'err'); return }
     let enviados = 0
     let erros = 0
     for (const r of alvos) {
       const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
-      const result = await sendWhatsAppDirect(r.telefone!, body, accessToken)
+      const result = await apiSendWhatsApp(r.telefone!, body)
       if (result.ok) {
         enviados++
-        await atualizarStatus(r.id, 'contatado')
-        await supabase.from('renovacoes').update({ ultimo_lembrete: new Date().toISOString() }).eq('id', r.id)
+        const agora = new Date().toISOString()
+        await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
+        setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
       } else {
         erros++
         logger.warn('Renovacoes', `Erro envio WA para ${r.telefone}: ${result.error}`)
       }
-      // Pausa entre envios para não sobrecarregar a Evolution
       await new Promise(resolve => setTimeout(resolve, 1500))
     }
     setBulkSending(false)
@@ -709,21 +643,31 @@ export default function Renovacoes() {
   async function bulkMarcarRenovado() {
     const ids = [...selectedIds]
     setBulkSending(true)
-    await supabase.from('renovacoes').update({ status: 'convertido', renovado: true }).in('id', ids)
-    setLista(prev => prev.map(r => ids.includes(r.id) ? { ...r, status: 'convertido', renovado: true } : r))
-    setSelectedIds(new Set())
-    setBulkSending(false)
-    showMsg(`${ids.length} marcado(s) como Renovado.`)
+    try {
+      await apiBulkUpdate(ids, { status: 'convertido', renovado: true })
+      setLista(prev => prev.map(r => ids.includes(r.id) ? { ...r, status: 'convertido', renovado: true } : r))
+      setSelectedIds(new Set())
+      showMsg(`${ids.length} marcado(s) como Renovado.`)
+    } catch (err) {
+      showMsg('Erro: ' + String(err), 'err')
+    } finally {
+      setBulkSending(false)
+    }
   }
 
   async function bulkMarcarNaoRenovado() {
     const ids = [...selectedIds]
     setBulkSending(true)
-    await supabase.from('renovacoes').update({ status: 'perdido' }).in('id', ids)
-    setLista(prev => prev.map(r => ids.includes(r.id) ? { ...r, status: 'perdido' } : r))
-    setSelectedIds(new Set())
-    setBulkSending(false)
-    showMsg(`${ids.length} marcado(s) como Não Renovado.`)
+    try {
+      await apiBulkUpdate(ids, { status: 'perdido' })
+      setLista(prev => prev.map(r => ids.includes(r.id) ? { ...r, status: 'perdido' } : r))
+      setSelectedIds(new Set())
+      showMsg(`${ids.length} marcado(s) como Não Renovado.`)
+    } catch (err) {
+      showMsg('Erro: ' + String(err), 'err')
+    } finally {
+      setBulkSending(false)
+    }
   }
 
   async function bulkKanban() {
@@ -740,18 +684,16 @@ export default function Renovacoes() {
     if (!alvos.length) { showMsg('Nenhum cliente elegível com telefone.', 'err'); return }
     const tpl = getSelectedTpl('whatsapp')
     setSendingId('massa')
-    const { data: sessionData } = await supabase.auth.getSession()
-    const accessToken = sessionData.session?.access_token
-    if (!accessToken) { setSendingId(null); showMsg('Sessao expirada. Atualize a pagina.', 'err'); return }
     let enviados = 0
     let falhas = 0
     for (const r of alvos) {
       const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
-      const result = await sendWhatsAppDirect(r.telefone!, body, accessToken)
+      const result = await apiSendWhatsApp(r.telefone!, body)
       if (result.ok) {
         enviados++
-        await atualizarStatus(r.id, 'contatado')
-        await supabase.from('renovacoes').update({ ultimo_lembrete: new Date().toISOString() }).eq('id', r.id)
+        const agora = new Date().toISOString()
+        await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
+        setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
       } else {
         falhas++
       }
@@ -766,19 +708,21 @@ export default function Renovacoes() {
   }
 
   async function cancelarFollowUps(renovacaoId: string) {
-    await supabase
-      .from('communication_outbox')
-      .delete()
-      .filter('payload->>renovacao_id', 'eq', renovacaoId)
-      .filter('payload->>tipo', 'eq', 'renovacao_followup_auto')
-      .gte('scheduled_for', new Date().toISOString())
-    showMsg('Avisos agendados cancelados.')
+    try {
+      await apiCancelarFollowUps(renovacaoId)
+      showMsg('Avisos agendados cancelados.')
+    } catch (err) {
+      showMsg('Erro ao cancelar avisos: ' + String(err), 'err')
+    }
   }
 
   async function toggleAutomation(rule: AutomationRule) {
-    const { error } = await supabase.from('automation_rules').update({ ativo: !rule.ativo }).eq('id', rule.id)
-    if (error) { showMsg('Erro ao atualizar regra.', 'err'); return }
-    setAutoRules(prev => prev.map(r => r.id === rule.id ? { ...r, ativo: !r.ativo } : r))
+    try {
+      const updated = await apiToggleRule(rule.id, !rule.ativo)
+      setAutoRules(prev => prev.map(r => r.id === rule.id ? { ...r, ativo: updated.ativo } : r))
+    } catch (err) {
+      showMsg('Erro ao atualizar regra: ' + String(err), 'err')
+    }
   }
 
   // ── links CRUD ───────────────────────────────────────────────
@@ -801,30 +745,36 @@ export default function Renovacoes() {
   async function salvarLink() {
     if (!linkForm.tipo_certificado.trim()) return
     setSavingLink(true)
-    const payload = {
-      tipo_certificado:  linkForm.tipo_certificado.trim(),
-      link_renovacao:    linkForm.link_renovacao.trim()    || null,
-      link_nova_emissao: linkForm.link_nova_emissao.trim() || null,
-      descricao:         linkForm.descricao.trim()         || null,
-      ativo: true,
+    try {
+      await apiSaveLink({
+        id: editingLink?.id,
+        tipo_certificado:  linkForm.tipo_certificado.trim(),
+        link_renovacao:    linkForm.link_renovacao.trim()    || null,
+        link_nova_emissao: linkForm.link_nova_emissao.trim() || null,
+        descricao:         linkForm.descricao.trim()         || null,
+        ativo: true,
+      })
+      showMsg('Link salvo!')
+      setEditingLink(null)
+      setLinkForm({ ...EMPTY_LINK })
+      void fetchLinks()
+    } catch (err) {
+      showMsg('Erro ao salvar link: ' + String(err), 'err')
+    } finally {
+      setSavingLink(false)
     }
-    const { error } = editingLink
-      ? await supabase.from('links_produtos').update(payload).eq('id', editingLink.id)
-      : await supabase.from('links_produtos').insert([payload])
-    setSavingLink(false)
-    if (error) { showMsg('Erro ao salvar link: ' + error.message, 'err'); return }
-    showMsg('Link salvo!')
-    setEditingLink(null)
-    setLinkForm({ ...EMPTY_LINK })
-    void fetchLinks()
   }
 
   async function deletarLink(link: LinkProduto) {
     if (!confirm(`Excluir links de "${link.tipo_certificado}"?`)) return
-    await supabase.from('links_produtos').delete().eq('id', link.id)
-    setLinks(prev => prev.filter(l => l.id !== link.id))
-    if (editingLink?.id === link.id) { setEditingLink(null); setLinkForm({ ...EMPTY_LINK }) }
-    showMsg('Link excluído.')
+    try {
+      await apiDeleteLink(link.id)
+      setLinks(prev => prev.filter(l => l.id !== link.id))
+      if (editingLink?.id === link.id) { setEditingLink(null); setLinkForm({ ...EMPTY_LINK }) }
+      showMsg('Link excluído.')
+    } catch (err) {
+      showMsg('Erro ao excluir link: ' + String(err), 'err')
+    }
   }
 
   function toggleAutoKanban() {
@@ -848,52 +798,55 @@ export default function Renovacoes() {
   async function salvarTemplate() {
     if (!tplForm.name.trim() || !tplForm.body.trim()) return
     setSavingTpl(true)
-    const key     = tplForm.template_key.trim() || tplForm.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
-    const payload = {
-      name:         tplForm.name.trim(),
-      channel:      tplForm.channel,
-      subject:      tplForm.channel === 'email' ? (tplForm.subject || null) : null,
-      body:         tplForm.body.trim(),
-      template_key: key,
-      ativo:        true,
+    try {
+      const key = tplForm.template_key.trim() || tplForm.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+      await apiSaveTemplate({
+        id: editingTpl?.id,
+        name:         tplForm.name.trim(),
+        channel:      tplForm.channel,
+        subject:      tplForm.channel === 'email' ? (tplForm.subject || null) : null,
+        body:         tplForm.body.trim(),
+        template_key: key,
+        ativo:        true,
+      })
+      showMsg('Template salvo!')
+      setEditingTpl(null)
+      setTplForm({ ...EMPTY_TPL })
+      void fetchTemplates()
+    } catch (err) {
+      showMsg('Erro ao salvar: ' + String(err), 'err')
+    } finally {
+      setSavingTpl(false)
     }
-    const { error } = editingTpl
-      ? await supabase.from('communication_templates').update(payload).eq('id', editingTpl.id)
-      : await supabase.from('communication_templates').insert([payload])
-    setSavingTpl(false)
-    if (error) { showMsg('Erro ao salvar: ' + error.message, 'err'); return }
-    showMsg('Template salvo!')
-    setEditingTpl(null)
-    setTplForm({ ...EMPTY_TPL })
-    void fetchTemplates()
   }
 
   async function deletarTemplate(tpl: CommunicationTemplate) {
     if (!confirm(`Excluir template "${tpl.name}"?`)) return
-    await supabase.from('communication_templates').delete().eq('id', tpl.id)
-    setTemplates(prev => prev.filter(t => t.id !== tpl.id))
-    if (editingTpl?.id === tpl.id) { setEditingTpl(null); setTplForm({ ...EMPTY_TPL }) }
-    showMsg('Template excluído.')
+    try {
+      await apiDeleteTemplate(tpl.id)
+      setTemplates(prev => prev.filter(t => t.id !== tpl.id))
+      if (editingTpl?.id === tpl.id) { setEditingTpl(null); setTplForm({ ...EMPTY_TPL }) }
+      showMsg('Template excluído.')
+    } catch (err) {
+      showMsg('Erro ao excluir template: ' + String(err), 'err')
+    }
   }
 
   async function definirTemplatePadrao(tpl: CommunicationTemplate, ativo: boolean) {
-    if (ativo) {
-      const sameChannelIds = templates.filter(t => t.channel === tpl.channel).map(t => t.id)
-      if (sameChannelIds.length > 0) {
-        const { error: clearError } = await supabase.from('communication_templates')
-          .update({ ativo: false }).in('id', sameChannelIds)
-        if (clearError) { showMsg('Erro ao atualizar templates: ' + clearError.message, 'err'); return }
+    try {
+      await apiSetTemplatePadrao(tpl.id, tpl.channel, ativo)
+      if (ativo) {
+        if (tpl.channel === 'whatsapp') setSelectedWaTplId(tpl.id)
+        else setSelectedEmailTplId(tpl.id)
+      } else {
+        if (tpl.channel === 'whatsapp' && selectedWaTplId === tpl.id) setSelectedWaTplId('')
+        if (tpl.channel === 'email' && selectedEmailTplId === tpl.id) setSelectedEmailTplId('')
       }
-      if (tpl.channel === 'whatsapp') setSelectedWaTplId(tpl.id)
-      else setSelectedEmailTplId(tpl.id)
-    } else {
-      if (tpl.channel === 'whatsapp' && selectedWaTplId === tpl.id) setSelectedWaTplId('')
-      if (tpl.channel === 'email' && selectedEmailTplId === tpl.id) setSelectedEmailTplId('')
+      await fetchTemplates()
+      showMsg(ativo ? 'Template marcado como padrão.' : 'Template desmarcado.')
+    } catch (err) {
+      showMsg('Erro ao atualizar template: ' + String(err), 'err')
     }
-    const { error } = await supabase.from('communication_templates').update({ ativo }).eq('id', tpl.id)
-    if (error) { showMsg('Erro ao atualizar template: ' + error.message, 'err'); return }
-    await fetchTemplates()
-    showMsg(ativo ? 'Template marcado como padrão.' : 'Template desmarcado.')
   }
 
   function toggleTplSelection(tpl: CommunicationTemplate) {
@@ -936,23 +889,14 @@ export default function Renovacoes() {
   async function excluirRenovacao(r: RenovacaoV2) {
     if (!isAdmin) { showMsg('Somente administradores podem excluir registros.', 'err'); return }
     if (!confirm(`Excluir "${r.razao_social ?? r.cliente}" da lista de renovações?`)) return
-    const { data } = await supabase.auth.getUser()
-    const { error } = await supabase
-      .from('renovacoes')
-      .update({
-        deleted_at: new Date().toISOString(),
-        deleted_by: data.user?.id ?? null,
-        motivo_exclusao: 'Excluído manualmente pela tela de renovações',
-      })
-      .eq('id', r.id)
-    if (error) { showMsg('Erro ao excluir renovação: ' + error.message, 'err'); return }
-    setLista(prev => prev.filter(item => item.id !== r.id))
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      next.delete(r.id)
-      return next
-    })
-    showMsg('Renovação excluída da lista.')
+    try {
+      await apiSoftDelete(r.id, profile?.id ?? null)
+      setLista(prev => prev.filter(item => item.id !== r.id))
+      setSelectedIds(prev => { const next = new Set(prev); next.delete(r.id); return next })
+      showMsg('Renovação excluída da lista.')
+    } catch (err) {
+      showMsg('Erro ao excluir renovação: ' + String(err), 'err')
+    }
   }
 
   async function bulkExcluirRenovacoes() {
@@ -961,20 +905,16 @@ export default function Renovacoes() {
     if (!ids.length) return
     if (!confirm(`Excluir ${ids.length} renovação(ões) selecionada(s)?`)) return
     setBulkSending(true)
-    const { data } = await supabase.auth.getUser()
-    const { error } = await supabase
-      .from('renovacoes')
-      .update({
-        deleted_at: new Date().toISOString(),
-        deleted_by: data.user?.id ?? null,
-        motivo_exclusao: 'Excluído manualmente em lote pela tela de renovações',
-      })
-      .in('id', ids)
-    setBulkSending(false)
-    if (error) { showMsg('Erro ao excluir em lote: ' + error.message, 'err'); return }
-    setLista(prev => prev.filter(r => !ids.includes(r.id)))
-    setSelectedIds(new Set())
-    showMsg(`${ids.length} renovação(ões) excluída(s).`)
+    try {
+      await apiBulkSoftDelete(ids, profile?.id ?? null)
+      setLista(prev => prev.filter(r => !ids.includes(r.id)))
+      setSelectedIds(new Set())
+      showMsg(`${ids.length} renovação(ões) excluída(s).`)
+    } catch (err) {
+      showMsg('Erro ao excluir em lote: ' + String(err), 'err')
+    } finally {
+      setBulkSending(false)
+    }
   }
 
   function abrirEditarContato(r: RenovacaoV2) {
@@ -1005,13 +945,17 @@ export default function Renovacoes() {
       email: contatoForm.email.trim() || null,
       telefone: normalizePhoneBR(contatoForm.telefone),
     }
-    const { error } = await supabase.from('renovacoes').update(payload).eq('id', editingContato.id)
-    setSavingContato(false)
-    if (error) { showMsg('Erro ao salvar contato: ' + error.message, 'err'); return }
-    setLista(prev => prev.map(item => item.id === editingContato.id ? { ...item, ...payload } : item))
-    setEditingContato(null)
-    setContatoForm({ ...EMPTY_CONTATO })
-    showMsg('Contato atualizado.')
+    try {
+      await apiUpdateRenovacao(editingContato.id, payload)
+      setLista(prev => prev.map(item => item.id === editingContato.id ? { ...item, ...payload } : item))
+      setEditingContato(null)
+      setContatoForm({ ...EMPTY_CONTATO })
+      showMsg('Contato atualizado.')
+    } catch (err) {
+      showMsg('Erro ao salvar contato: ' + String(err), 'err')
+    } finally {
+      setSavingContato(false)
+    }
   }
 
   async function confirmarImport() {
@@ -1028,12 +972,17 @@ export default function Renovacoes() {
       agr: r.agr || null, vendedor: r.vendedor || null, contador: r.contador || null,
       status: 'pendente' as StatusRenovacao, renovado: false,
     }))
-    const { error } = await supabase.from('renovacoes').insert(records)
-    setImporting(false)
-    if (error) { showMsg('Erro na importação: ' + error.message, 'err'); return }
-    showMsg(`${records.length} renovações importadas!`)
-    setShowImport(false); setCsvRows([])
-    void fetchRenovacoes()
+    try {
+      const inserted = await apiBulkCreate(records)
+      showMsg(`${inserted} renovações importadas!`)
+      setShowImport(false)
+      setCsvRows([])
+      void fetchRenovacoes()
+    } catch (err) {
+      showMsg('Erro na importação: ' + String(err), 'err')
+    } finally {
+      setImporting(false)
+    }
   }
 
   // ── derived state ────────────────────────────────────────────

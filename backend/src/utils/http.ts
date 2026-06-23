@@ -17,7 +17,7 @@ export function writeJson(res: ServerResponse, status: number, payload: unknown,
   if (corsOrigin) {
     res.setHeader('Access-Control-Allow-Origin', corsOrigin)
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
   }
   res.end(JSON.stringify(payload))
 }

@@ -1,9 +1,52 @@
-import type { BackendConfig } from '../config/env.js'
+import type { BackendConfig, EvolutionInstanceConfig } from '../config/env.js'
 import type { IntegrationEventEnvelope, IntegrationExecutionResult } from './contracts.js'
 import type { IntegrationAdapter } from './registry.js'
 
 function cleanBaseUrl(value: string) {
   return value.replace(/\/$/, '')
+}
+
+async function sendEvolutionMessage(
+  instance: EvolutionInstanceConfig,
+  to: string,
+  body: string,
+): Promise<IntegrationExecutionResult> {
+  if (!instance.baseUrl || !instance.apiToken || !instance.instanceName) {
+    return {
+      ok: false,
+      status: 'failed',
+      error: 'Evolution API nao configurada para este canal.',
+    }
+  }
+
+  const url = `${cleanBaseUrl(instance.baseUrl)}/message/sendText/${instance.instanceName}`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: instance.apiToken,
+    },
+    body: JSON.stringify({ number: to, text: body }),
+  })
+
+  const payload = await response.json().catch(() => ({ status: response.status })) as Record<string, unknown>
+  if (!response.ok) {
+    return {
+      ok: false,
+      status: 'failed',
+      error: `Evolution retornou HTTP ${response.status}`,
+      payload,
+    }
+  }
+
+  return {
+    ok: true,
+    status: 'sent',
+    external_id: typeof payload === 'object' && payload && 'key' in payload
+      ? JSON.stringify((payload as { key: unknown }).key)
+      : null,
+    payload,
+  }
 }
 
 export class EvolutionAdapter implements IntegrationAdapter {
@@ -13,14 +56,6 @@ export class EvolutionAdapter implements IntegrationAdapter {
   constructor(private readonly config: BackendConfig) {}
 
   async execute(event: IntegrationEventEnvelope): Promise<IntegrationExecutionResult> {
-    if (!this.config.evolutionBaseUrl || !this.config.evolutionApiToken || !this.config.evolutionInstanceName) {
-      return {
-        ok: false,
-        status: 'failed',
-        error: 'Evolution API nao configurada no backend.',
-      }
-    }
-
     if (event.event_type !== 'message.send') {
       return {
         ok: true,
@@ -39,35 +74,14 @@ export class EvolutionAdapter implements IntegrationAdapter {
       }
     }
 
-    const url = `${cleanBaseUrl(this.config.evolutionBaseUrl)}/message/sendText/${this.config.evolutionInstanceName}`
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: this.config.evolutionApiToken,
-      },
-      body: JSON.stringify({
-        number: to,
-        text: body,
-      }),
-    })
+    // Roteia para a instância correta com base no canal do evento.
+    // canal='renovacao' → CertiID (IA de renovações)
+    // canal='atendimento' ou ausente → atendimento humano (padrão)
+    const canal = String(event.payload.canal ?? 'atendimento').trim()
+    const instance = canal === 'renovacao'
+      ? this.config.evolutionCertiid
+      : this.config.evolutionAtendimento
 
-    const payload = await response.json().catch(() => ({ status: response.status })) as Record<string, unknown>
-    if (!response.ok) {
-      return {
-        ok: false,
-        status: 'failed',
-        error: `Evolution retornou HTTP ${response.status}`,
-        payload,
-      }
-    }
-
-    return {
-      ok: true,
-      status: 'sent',
-      external_id: typeof payload === 'object' && payload && 'key' in payload ? JSON.stringify((payload as { key: unknown }).key) : null,
-      payload,
-    }
+    return sendEvolutionMessage(instance, to, body)
   }
 }
-

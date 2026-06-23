@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { getApiUrl, useLegacySupabase } from '@/lib/api'
 import { loadActiveWhatsAppIntegration } from '@/lib/whatsappIntegration'
 import type { CommunicationChannel, CommunicationProvider } from '@/types'
 
@@ -33,17 +34,37 @@ export async function queueCommunication({
   payload = {},
   scheduledFor,
 }: QueueMessageInput) {
-  const { error } = await supabase.from('communication_outbox').insert([{
-    channel,
-    provider,
-    to_address: to,
-    subject,
-    body,
-    payload,
-    scheduled_for: scheduledFor ?? new Date().toISOString(),
-  }])
+  if (useLegacySupabase()) {
+    const { error } = await supabase.from('communication_outbox').insert([{
+      channel,
+      provider,
+      to_address: to,
+      subject,
+      body,
+      payload,
+      scheduled_for: scheduledFor ?? new Date().toISOString(),
+    }])
+    return { error: error?.message ?? null }
+  }
 
-  return { error: error?.message ?? null }
+  try {
+    await fetch(getApiUrl('/communication/outbox'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        channel,
+        provider,
+        to_address: to,
+        subject,
+        body,
+        payload,
+        scheduled_for: scheduledFor ?? new Date().toISOString(),
+      }),
+    })
+    return { error: null }
+  } catch (err) {
+    return { error: String(err) }
+  }
 }
 
 export async function queueWhatsAppMessage(input: Omit<QueueMessageInput, 'channel' | 'provider'>) {
