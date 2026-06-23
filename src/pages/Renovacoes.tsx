@@ -276,16 +276,24 @@ function parseSpreadsheet(buffer: ArrayBuffer, fileName: string): Record<string,
   if (fileName.toLowerCase().endsWith('.csv')) {
     return parseCSV(new TextDecoder('utf-8').decode(buffer))
   }
-  const workbook = XLSX.read(buffer, { type: 'array' })
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
   const firstSheetName = workbook.SheetNames[0]
   if (!firstSheetName) return []
   const sheet = workbook.Sheets[firstSheetName]
-  const rows = XLSX.utils.sheet_to_json<Record<string, string | number | null>>(sheet, {
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
     defval: '',
-    raw: false,
+    raw: true,
   })
   return normalizeRowKeys(rows.map(row =>
-    Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value ?? '').trim()])),
+    Object.fromEntries(Object.entries(row).map(([key, value]) => {
+      if (value instanceof Date) {
+        const y = value.getFullYear()
+        const m = String(value.getMonth() + 1).padStart(2, '0')
+        const d = String(value.getDate()).padStart(2, '0')
+        return [key, `${d}/${m}/${y}`]
+      }
+      return [key, String(value ?? '').trim()]
+    })),
   ))
 }
 
