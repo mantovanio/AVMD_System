@@ -42,10 +42,9 @@ cp -R dist/* "${FRONT_DIR}/"
 log "4) Instalando config nginx (sem mexer no legado)"
 if command -v nginx >/dev/null 2>&1; then
   if [ -d /etc/nginx/sites-available ] && [ -d /etc/nginx/sites-enabled ] && [ -f "${APP_DIR}/ops/nginx/crm.certiid.mantovan.com.br.conf" ]; then
-    cp "${APP_DIR}/ops/nginx/crm.certiid.mantovan.com.br.conf" "${NGINX_SITE}"
-    ln -sfn "${NGINX_SITE}" "${NGINX_SITE_LINK}"
-    nginx -t
-    systemctl reload nginx
+    cp "${APP_DIR}/ops/nginx/crm.certiid.mantovan.com.br.conf" "${NGINX_SITE}" || { log "Aviso: falha ao copiar config nginx; continuando"; }
+    ln -sfn "${NGINX_SITE}" "${NGINX_SITE_LINK}" || true
+    nginx -t && systemctl reload nginx || log "Aviso: reload nginx falhou; continuando"
   else
     log "Nginx presente, mas sem estrutura esperada ou arquivo ausente; pulando configuracao de proxy"
   fi
