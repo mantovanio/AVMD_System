@@ -63,24 +63,23 @@ export async function handleClaraAutomationRoutes(
     body.context?.renovacao_id ? 'Renovacao: ' + body.context.renovacao_id + '.' : null,
     body.context?.agendamento_id ? 'Agendamento: ' + body.context.agendamento_id + '.' : null,
     body.conversation_id ? 'Conversa: ' + body.conversation_id + '.' : null,
+    body.message_text ? 'Ultima mensagem: ' + body.message_text + '.' : null,
   ].filter(Boolean)
 
+  const transferidoEm = new Date().toISOString()
   const lead = await leadRepository.markHumanHandoff({
     leadId: existingLead?.id ?? null,
     nomeLead: normalizeText(body.customer_name),
     whatsappLead: phoneDigits,
     motivoContato,
-    ultimaMensagem: normalizeText(body.message_text),
     anotacoes: noteParts.join(' '),
-    transferidoPor: 'IA Clara',
-    evolutionInstance: flowType === 'renovacao' ? 'certiid' : 'atendimento',
   })
 
   writeJson(res, 200, {
     ok: true,
     lead_id: lead.id,
     lead_status: lead.status,
-    transferido_em: lead.transferido_em ?? new Date().toISOString(),
+    transferido_em: transferidoEm,
     conversation_id: normalizeText(body.conversation_id),
     customer_name: normalizeText(body.customer_name),
     customer_phone: phoneDigits,
