@@ -1969,10 +1969,10 @@ export default function Comercial() {
         estoque:              0,
         ativo:                (row['cadastrado'] ?? row['status'] ?? '').toLowerCase() === 'sim' || (row['status'] ?? '').toLowerCase() === 'ativo',
       }))
-      const existResp = await fetch(getApiUrl('/catalog/itens/certificados-id'))
+      const existResp = await fetch(getApiUrl('/catalog/certificados'))
       const existData = await existResp.json()
       const existMap = new Map(
-        ((existData.rows ?? []) as { id: string; codigo: number | null }[]).filter(e => e.codigo != null).map(e => [e.codigo as number, e.id])
+        ((existData.certificados ?? []) as Certificado[]).filter(e => e.codigo != null).map(e => [e.codigo as number, e.id])
       )
       const toInsert = records.filter(r => r.codigo == null || !existMap.has(r.codigo))
       const toUpdate = records.filter(r => r.codigo != null && existMap.has(r.codigo!))
@@ -2431,7 +2431,15 @@ export default function Comercial() {
           ativo:           true,
         }
       }).filter((r): r is NovaTabelaPrecoItem => r !== null)
-      if (!records.length) { showMsg('Nenhum item reconhecido. Verifique as colunas: Código (ou Nome), Preço Venda, Valor Custo, Valor Repasse.'); return }
+      if (!records.length) {
+        const totalCerts = certsAll.data.length
+        if (totalCerts === 0) {
+          showMsg('Nenhum certificado cadastrado no catálogo. Importe os certificados primeiro na aba "Certificados", depois volte para importar esta tabela.')
+        } else {
+          showMsg(`Nenhum produto da planilha correspondeu aos ${totalCerts} certificados cadastrados. Verifique as colunas: Código (ou Nome), Preço Venda, Valor Custo, Valor Repasse.`)
+        }
+        return
+      }
       const existResp2 = await fetch(getApiUrl(`/catalog/itens`))
       const existData2 = await existResp2.json()
       const existMap = new Map(
