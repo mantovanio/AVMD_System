@@ -17,7 +17,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"ok\": true,\n  \"received\": true,\n  \"event_type\": $json.event_type,\n  \"entity_type\": $json.entity_type,\n  \"entity_id\": $json.entity_id\n}",
+        "responseBody": "={{ ({ ok: true, received: true, event_type: $json.event_type, entity_type: $json.entity_type, entity_id: $json.entity_id }) }}",
         "options": {
           "responseCode": 200
         }
@@ -31,15 +31,7 @@
   ],
   "connections": {
     "AVMD Events Webhook": {
-      "main": [
-        [
-          {
-            "node": "Ack AVMD Event",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Ack AVMD Event", "type": "main", "index": 0 }]]
     }
   },
   "settings": {

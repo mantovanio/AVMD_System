@@ -33,7 +33,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.AVMD_SCHEDULE_API_URL || 'http://localhost:8787/api/automation/schedule-email' }}",
+        "url": "https://api.certiid.mantovan.com.br/api/automation/schedule-email",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json }}",

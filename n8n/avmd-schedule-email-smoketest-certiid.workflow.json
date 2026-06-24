@@ -28,7 +28,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.N8N_SCHEDULE_ROUTER_URL || 'http://localhost:5678/webhook/avmd-schedule-email' }}",
+        "url": "https://auto.mantovan.com.br/webhook/avmd-schedule-email",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json }}",

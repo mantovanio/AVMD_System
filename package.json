@@ -9,7 +9,8 @@
     "build:backend": "tsc -p backend/tsconfig.json",
     "start:backend": "node backend/dist/server.js",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "n8n:import": "node scripts/import-n8n-workflows.mjs"
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.61.8",

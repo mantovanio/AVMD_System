@@ -1,0 +1,109 @@
+{
+  "name": "AVMD - Clara Inbound Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "avmd-clara-inbound",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Clara Inbound Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function asText(value) {\n  if (value == null) return '';\n  if (typeof value === 'string') return value;\n  if (Array.isArray(value)) return value.map(asText).filter(Boolean).join(' ');\n  return String(value);\n}\n\nfunction compact(value) {\n  return asText(value).replace(/\\r/g, '').replace(/\\s+/g, ' ').trim();\n}\n\nfunction digits(value) {\n  return asText(value).replace(/\\D/g, '');\n}\n\nfunction lower(value) {\n  return compact(value).toLowerCase();\n}\n\nfunction firstNonEmpty(...values) {\n  for (const value of values) {\n    const text = compact(value);\n    if (text) return text;\n  }\n  return null;\n}\n\nfunction inferIntent(message, context) {\n  const text = lower(message);\n  const flow = lower(context.tipo_fluxo || context.flow_type || '');\n\n  if (/humano|atendente|pessoa|suporte|falar com/.test(text)) return 'human_handoff';\n  if (/link|boleto|pagamento|pix|2 via|segunda via|reenvia/.test(text)) return 'link_resend';\n  if (/cancelar|cancelamento/.test(text)) return 'cancelar_agendamento';\n  if (/reagendar|remarcar|trocar horario|trocar horário/.test(text)) return 'reagendar_agendamento';\n  if (/documento|documentos|anexo|arquivo|rg|cnh|contrato/.test(text)) return 'enviar_documentos';\n  if (/videoconferencia|videochamada|link da reuniao|link da reunião/.test(text)) return 'link_videoconferencia';\n  if (/renovar|renovacao|renovação|quero seguir|continuar/.test(text) && flow !== 'agendamento') return 'seguir_renovacao';\n  if (/agendamento|agendar|horario|horário|confirmar horario|confirmar horário/.test(text) || flow === 'agendamento') return 'seguir_agendamento';\n  if (flow === 'renovacao') return 'seguir_renovacao';\n  return 'human_handoff';\n}\n\nfunction inferRoute(intent, context) {\n  if (intent === 'human_handoff') return 'human_handoff';\n  if (intent === 'link_resend') return 'link_resend';\n  if (['cancelar_agendamento', 'reagendar_agendamento', 'enviar_documentos', 'link_videoconferencia', 'seguir_agendamento'].includes(intent)) return 'agendamento';\n  if (lower(context.tipo_fluxo || context.flow_type || '') === 'agendamento') return 'agendamento';\n  if (lower(context.tipo_fluxo || context.flow_type || '') === 'renovacao') return 'renovacao';\n  if (intent === 'seguir_renovacao') return 'renovacao';\n  return 'human_handoff';\n}\n\nconst raw = $json;\nconst context = raw.context || raw.payload?.context || raw.metadata?.context || {};\nconst messageText = firstNonEmpty(raw.message_text, raw.text, raw.body, raw.content, raw.message?.text, raw.last_message, raw.payload?.message_text) || '';\nconst customerPhone = firstNonEmpty(raw.customer_phone, raw.phone, raw.from, raw.remoteJid, raw.contact?.phone, raw.sender?.phone, context.customer_phone);\nconst customerEmail = firstNonEmpty(raw.customer_email, raw.email, raw.contact?.email, context.customer_email);\nconst customerName = firstNonEmpty(raw.customer_name, raw.name, raw.contact?.name, raw.sender?.name, context.customer_name, 'Cliente');\nconst conversationId = firstNonEmpty(raw.conversation_id, raw.chat_id, raw.ticket_id, raw.id, context.conversation_id);\nconst flowType = firstNonEmpty(context.tipo_fluxo, context.flow_type, context.tipo, raw.flow_type);\nconst intent = inferIntent(messageText, context);\nconst routeTarget = inferRoute(intent, { ...context, tipo_fluxo: flowType });\nconst urls = {\n  renovacao: $env.N8N_CLARA_RENOVACAO_URL || 'http://localhost:5678/webhook/avmd-clara-renovacao',\n  agendamento: $env.N8N_CLARA_AGENDAMENTO_URL || 'http://localhost:5678/webhook/avmd-clara-agendamento',\n  link_resend: $env.N8N_CLARA_LINK_URL || 'http://localhost:5678/webhook/avmd-clara-link-resender',\n  human_handoff: $env.N8N_CLARA_HUMAN_URL || 'http://localhost:5678/webhook/avmd-clara-human-handoff',\n};\n\nreturn [{\n  json: {\n    conversation_id: conversationId,\n    customer_name: customerName,\n    customer_phone: digits(customerPhone),\n    customer_email: customerEmail,\n    channel: compact(raw.channel || context.channel || 'whatsapp').toLowerCase(),\n    message_text: messageText,\n    message_id: firstNonEmpty(raw.message_id, raw.id, context.message_id),\n    source: compact(raw.source || context.source || 'clara').toLowerCase(),\n    intent,\n    route_target: routeTarget,\n    handler_url: urls[routeTarget],\n    context: {\n      ...context,\n      tipo_fluxo: flowType || null,\n    },\n    raw,\n  }\n}];"
+      },
+      "id": "normalize-node",
+      "name": "Normalize Clara Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.handler_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "dispatch-node",
+      "name": "Dispatch To Clara Handler",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-node",
+      "name": "Ack Clara Router",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Clara Inbound Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Clara Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Clara Message": {
+      "main": [
+        [
+          {
+            "node": "Dispatch To Clara Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch To Clara Handler": {
+      "main": [
+        [
+          {
+            "node": "Ack Clara Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "1"
+}

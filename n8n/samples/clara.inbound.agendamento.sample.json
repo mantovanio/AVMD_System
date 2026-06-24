@@ -1,0 +1,17 @@
+{
+  "source": "whatsapp",
+  "channel": "whatsapp",
+  "conversation_id": "conv-clara-age-001",
+  "customer_name": "Carlos Eduardo",
+  "customer_phone": "21988887777",
+  "message_text": "Preciso reagendar meu atendimento",
+  "context": {
+    "tipo_fluxo": "agendamento",
+    "agendamento_id": "age-001",
+    "pedido_numero": "26390716",
+    "source": "certifast",
+    "link_agendamento": "https://agenda.exemplo.com/reagendar/26390716",
+    "link_videoconferencia": "https://meet.exemplo.com/sala/26390716",
+    "customer_email": "cliente@exemplo.com"
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "name": "AVMD - Clara Inbound Smoke Test",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-node",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    source: 'whatsapp',\n    channel: 'whatsapp',\n    conversation_id: 'conv-clara-001',\n    customer_name: 'Ana Paula',\n    customer_phone: '11999998888',\n    message_text: 'Oi Clara, pode reenviar o link da renovacao?',\n    context: {\n      tipo_fluxo: 'renovacao',\n      renovacao_id: 'ren-001',\n      link_renovacao: 'https://pagamentos.exemplo.com/ren-001',\n      customer_email: 'ana@exemplo.com'\n    }\n  }\n}];"
+      },
+      "id": "sample-node",
+      "name": "Build Clara Sample",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://auto.mantovan.com.br/webhook/avmd-clara-inbound",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "router-node",
+      "name": "Post To Clara Router",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        820,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Clara Sample",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Clara Sample": {
+      "main": [
+        [
+          {
+            "node": "Post To Clara Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "1"
+}

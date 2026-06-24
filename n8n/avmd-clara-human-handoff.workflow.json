@@ -1,0 +1,109 @@
+{
+  "name": "AVMD - Clara Human Handoff",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "avmd-clara-human-handoff",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Clara Handler Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [320, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "function firstName(name) {\n  return String(name || 'cliente').trim().split(/\\s+/)[0] || 'cliente';\n}\nconst data = $json;\nconst nome = firstName(data.customer_name);\nconst reply = 'Olá, ' + nome + '. Vou encaminhar seu atendimento para nossa equipe humana dar sequência e te responder por aqui.';\nreturn [{ json: { ...data, reply_text: reply, reply_subject: 'Transferencia para atendimento humano', event_type: 'automation.trigger', entity_type: 'leads_contabilidade' } }];"
+      },
+      "id": "prepare-node",
+      "name": "Prepare Clara Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.certiid.mantovan.com.br/api/automation/clara-handoff",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "handoff-node",
+      "name": "Register Human Handoff",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.certiid.mantovan.com.br/api/communication/outbox",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ channel: 'whatsapp', provider: 'n8n', to_address: $json.customer_phone || '00000000000', subject: $json.reply_subject || null, body: $json.reply_text, payload: { source: 'clara', lead_id: $json.lead_id || null, conversation_id: $json.conversation_id || null, message_id: $json.message_id || null, intent: $json.intent || null, route_target: $json.route_target || null, context: $json.context || {} } }) }}",
+        "options": {}
+      },
+      "id": "outbox-node",
+      "name": "Queue WhatsApp Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.certiid.mantovan.com.br/api/integrations/events",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ domain: 'automation', provider: 'n8n', direction: 'inbound', event_type: $json.event_type || 'automation.trigger', entity_type: $json.entity_type || null, entity_id: $json.lead_id || null, correlation_id: $json.conversation_id || null, payload: { customer_name: $json.customer_name, customer_phone: $json.customer_phone, intent: $json.intent, route_target: $json.route_target, message_text: $json.message_text, context: $json.context || {} }, metadata: { workflow: $workflow.name, handoff: true } }) }}",
+        "options": {}
+      },
+      "id": "event-node",
+      "name": "Log Clara Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({ ok: true, workflow: $workflow.name, lead_id: $json.lead_id || null, customer_phone: $json.customer_phone || null, intent: $json.intent || null, route_target: $json.route_target || null, reply_text: $json.reply_text || null }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-node",
+      "name": "Ack Clara Flow",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1740, 300]
+    }
+  ],
+  "connections": {
+    "Clara Handler Webhook": {
+      "main": [[{ "node": "Prepare Clara Reply", "type": "main", "index": 0 }]]
+    },
+    "Prepare Clara Reply": {
+      "main": [[{ "node": "Register Human Handoff", "type": "main", "index": 0 }]]
+    },
+    "Register Human Handoff": {
+      "main": [[{ "node": "Queue WhatsApp Reply", "type": "main", "index": 0 }]]
+    },
+    "Queue WhatsApp Reply": {
+      "main": [[{ "node": "Log Clara Event", "type": "main", "index": 0 }]]
+    },
+    "Log Clara Event": {
+      "main": [[{ "node": "Ack Clara Flow", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "1"
+}

@@ -28,6 +28,7 @@ import { handleLinksProdutosRoutes } from './routes/linksProdutosRoutes.js'
 import { handleWhatsappSendRoutes } from './routes/whatsappSendRoutes.js'
 import { handleCommunicationOutboxRoutes } from './routes/communicationOutboxRoutes.js'
 import { handleScheduleAutomationRoutes } from './routes/scheduleAutomationRoutes.js'
+import { handleClaraAutomationRoutes } from './routes/claraAutomationRoutes.js'
 import { writeJson } from './utils/http.js'
 
 const config = loadConfig()
@@ -92,6 +93,14 @@ const server = createServer(async (req, res) => {
       config.corsOrigin,
     )
     if (handledScheduleAutomation) return
+
+    const handledClaraAutomation = await handleClaraAutomationRoutes(
+      req,
+      res,
+      leadRepository,
+      config.corsOrigin,
+    )
+    if (handledClaraAutomation) return
 
     const handledCommercial = await handleCommercialRoutes(req, res, commercialRepository, config.corsOrigin)
     if (handledCommercial) return

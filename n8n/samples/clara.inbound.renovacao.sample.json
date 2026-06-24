@@ -1,0 +1,14 @@
+{
+  "source": "whatsapp",
+  "channel": "whatsapp",
+  "conversation_id": "conv-clara-ren-001",
+  "customer_name": "Ana Paula",
+  "customer_phone": "11999998888",
+  "message_text": "Clara, me manda o link da renovacao de novo",
+  "context": {
+    "tipo_fluxo": "renovacao",
+    "renovacao_id": "ren-001",
+    "link_renovacao": "https://pagamentos.exemplo.com/ren-001",
+    "customer_email": "ana@exemplo.com"
+  }
+}

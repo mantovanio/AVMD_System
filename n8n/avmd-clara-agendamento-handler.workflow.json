@@ -1,0 +1,138 @@
+{
+  "name": "AVMD - Clara Agendamento Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "avmd-clara-agendamento",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Clara Handler Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function firstName(name) {\n  return String(name || 'cliente').trim().split(/\\s+/)[0] || 'cliente';\n}\nconst data = $json;\nconst ctx = data.context || {};\nconst nome = firstName(data.customer_name);\nconst scheduleLink = ctx.link_agendamento || ctx.link_reagendamento || null;\nconst meetingLink = ctx.link_videoconferencia || ctx.link_video || null;\nlet reply = '';\nif (data.intent === 'cancelar_agendamento') {\n  reply = 'Olá, ' + nome + '. Recebi sua solicitação de cancelamento do agendamento. Vou registrar isso e, se quiser um novo horário, posso te orientar por aqui.';\n} else if (data.intent === 'reagendar_agendamento') {\n  reply = scheduleLink\n    ? 'Olá, ' + nome + '. Para reagendar seu atendimento, use este link: ' + scheduleLink\n    : 'Olá, ' + nome + '. Recebi seu pedido de reagendamento. Vou deixar sua solicitação encaminhada para ajuste do horário.';\n} else if (data.intent === 'link_videoconferencia') {\n  reply = meetingLink\n    ? 'Olá, ' + nome + '. Segue o link da sua videoconferência: ' + meetingLink\n    : 'Olá, ' + nome + '. Ainda não encontrei o link da videoconferência neste contexto. Vou encaminhar para o time e te retorno.';\n} else if (data.intent === 'enviar_documentos') {\n  reply = 'Olá, ' + nome + '. Para agilizar a validação, envie por aqui os documentos solicitados antes do atendimento. Assim a equipe consegue seguir com mais rapidez.';\n} else {\n  reply = 'Olá, ' + nome + '. Estou acompanhando seu agendamento por aqui. Se precisar reagendar, mandar documentos ou pedir o link da videoconferência, pode me responder nesta conversa.';\n}\nreturn [{ json: { ...data, reply_text: reply, reply_subject: 'Continuidade do agendamento', event_type: 'commercial.validation_agenda.saved', entity_type: 'agendamentos_validacao' } }];"
+      },
+      "id": "prepare-node",
+      "name": "Prepare Clara Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.certiid.mantovan.com.br/api/communication/outbox",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ channel: 'whatsapp', provider: 'n8n', to_address: $json.customer_phone || '00000000000', subject: $json.reply_subject || null, body: $json.reply_text, payload: { source: 'clara', conversation_id: $json.conversation_id || null, message_id: $json.message_id || null, intent: $json.intent || null, route_target: $json.route_target || null, context: $json.context || {} } }) }}",
+        "options": {}
+      },
+      "id": "outbox-node",
+      "name": "Queue WhatsApp Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.certiid.mantovan.com.br/api/integrations/events",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ domain: 'automation', provider: 'n8n', direction: 'inbound', event_type: $json.event_type || 'automation.trigger', entity_type: $json.entity_type || null, entity_id: $json.context?.renovacao_id || $json.context?.agendamento_id || null, correlation_id: $json.conversation_id || null, payload: { customer_name: $json.customer_name, customer_phone: $json.customer_phone, intent: $json.intent, route_target: $json.route_target, message_text: $json.message_text, context: $json.context || {} }, metadata: { workflow: $workflow.name } }) }}",
+        "options": {}
+      },
+      "id": "event-node",
+      "name": "Log Clara Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({ ok: true, workflow: $workflow.name, customer_phone: $json.customer_phone || null, intent: $json.intent || null, route_target: $json.route_target || null, reply_text: $json.reply_text || null }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-node",
+      "name": "Ack Clara Flow",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Clara Handler Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Clara Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Clara Reply": {
+      "main": [
+        [
+          {
+            "node": "Queue WhatsApp Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue WhatsApp Reply": {
+      "main": [
+        [
+          {
+            "node": "Log Clara Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Clara Event": {
+      "main": [
+        [
+          {
+            "node": "Ack Clara Flow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "1"
+}
