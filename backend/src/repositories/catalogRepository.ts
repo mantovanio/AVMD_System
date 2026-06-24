@@ -257,9 +257,9 @@ export class CatalogRepository {
   async getAppSettings(keys: string[]) {
     if (!keys.length) return {}
     const phs = keys.map((_, i) => `$${i + 1}`).join(', ')
-    const r = await this.db.query(`select key, value from app_settings where key in (${phs})`, keys)
+    const r = await this.db.query<{ key: string; value: unknown }>(`select key, value from app_settings where key in (${phs})`, keys)
     const map: Record<string, unknown> = {}
-    for (const row of r.rows) map[row.key as string] = row.value
+    for (const row of r.rows) map[row.key] = row.value
     return map
   }
 
