@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import type { Pool } from 'pg'
+import type { AivenSqlClient } from '../db/aivenClient.js'
 
 export class CatalogRepository {
-  constructor(private db: Pool) {}
+  constructor(private readonly db: AivenSqlClient) {}
 
   // ── Certificados ─────────────────────────────────────────────────────
   async listCertificados() {
