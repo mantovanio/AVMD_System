@@ -1,0 +1,11 @@
+{
+  "mailbox": "contato@certifast.com.br",
+  "from": "contato@certifast.com.br",
+  "to": "operacao@seudominio.com.br",
+  "subject": "Novo pedido agendado - 26390716 dia 25/06/2026 às 15:00",
+  "external_id": "certifast-26390716-20260625-1500",
+  "message_id": "<certifast-26390716@avmd.local>",
+  "received_at": "2026-06-23T11:14:00-03:00",
+  "body_text": "O cliente COND ED D'AVILA agendou a visita do pedido código 26390716 para o dia 25/06/2026 às 15:00h.\n\nDetalhes do Agendamento\nCliente: COND ED D'AVILA\nCPF/CNPJ: 39933759000162\nTelefone: (21) 9721-43373\nTelefone Celular: (00) 0000-0000\nEmail: lilian@amplasolucoes.com.br\nPedido: 26390716\nCódigo: SRFA1PJHV2\nProduto: e-CNPJ (CERTISIGN - RFB) A1 COMPUTADOR 1 ANO\nPosto: AR Certifast - videoconferencia\nData: 25/06/2026\nHora: 15:00",
+  "body_html": "<p>O cliente COND ED D'AVILA agendou a visita do pedido código 26390716 para o dia 25/06/2026 às 15:00h.</p><p>Cliente: COND ED D'AVILA</p><p>CPF/CNPJ: 39933759000162</p><p>Telefone: (21) 9721-43373</p><p>Email: lilian@amplasolucoes.com.br</p><p>Pedido: 26390716</p><p>Código: SRFA1PJHV2</p><p>Produto: e-CNPJ (CERTISIGN - RFB) A1 COMPUTADOR 1 ANO</p><p>Posto: AR Certifast - videoconferencia</p><p>Data: 25/06/2026</p><p>Hora: 15:00</p>"
+}

@@ -1,0 +1,76 @@
+{
+  "name": "AVMD - Schedule Email Smoke Test - CertiID",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-node",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    mailbox: 'contato@certiid.com.br',\n    from: 'contato@certiid.com.br',\n    to: 'operacao@seudominio.com.br',\n    subject: 'Novo agendamento realizado',\n    external_id: 'certiid-17706-20260623-1600',\n    message_id: '<certiid-17706@avmd.local>',\n    received_at: '2026-06-23T16:00:00-03:00',\n    body_text: 'Novo agendamento realizado\\n\\nDADOS DO AGENDAMENTO\\nPedido 17706\\nProduto e-CNPJ A1 - Instalado no Computador - PME /MEI/ME\\nData e horário 23/06/2026 às 16h00\\nNome completo ASSOCIACAO PARAGUAI BRASIL DOS TRANSPORTADORES DE VEICULOS - APBTV\\nCNPJ / CPF 67198636000160\\nTelefone (11) 992412000\\nE-mail contabilidadejaf@outlook.com',\n    body_html: '<h1>Novo agendamento realizado</h1><p>Pedido 17706</p><p>Produto e-CNPJ A1 - Instalado no Computador - PME /MEI/ME</p><p>Data e horário 23/06/2026 às 16h00</p><p>Nome completo ASSOCIACAO PARAGUAI BRASIL DOS TRANSPORTADORES DE VEICULOS - APBTV</p><p>CNPJ / CPF 67198636000160</p><p>Telefone (11) 992412000</p><p>E-mail contabilidadejaf@outlook.com</p>'\n  }\n}];"
+      },
+      "id": "payload-node",
+      "name": "Build CertiID Sample",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_SCHEDULE_ROUTER_URL || 'http://localhost:5678/webhook/avmd-schedule-email' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "router-node",
+      "name": "Post To Schedule Router",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        820,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build CertiID Sample",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build CertiID Sample": {
+      "main": [
+        [
+          {
+            "node": "Post To Schedule Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "1"
+}

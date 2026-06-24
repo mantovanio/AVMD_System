@@ -1,0 +1,109 @@
+{
+  "name": "AVMD - Schedule Email Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "avmd-schedule-email",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "schedule-webhook-node",
+      "name": "Schedule Email Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function asText(value) {\n  if (value == null) return '';\n  if (typeof value === 'string') return value;\n  if (Array.isArray(value)) return value.map(asText).filter(Boolean).join(' ');\n  if (typeof value === 'object') {\n    if (typeof value.text === 'string') return value.text;\n    if (typeof value.value === 'string') return value.value;\n  }\n  return String(value);\n}\n\nfunction compactSpaces(value) {\n  return asText(value).replace(/\\r/g, '').replace(/[ \\t]+/g, ' ').replace(/\\n{3,}/g, '\\n\\n').trim();\n}\n\nfunction decodeHtml(value) {\n  return asText(value)\n    .replace(/<br\\s*\\/?>/gi, '\\n')\n    .replace(/<\\/p>/gi, '\\n')\n    .replace(/<\\/div>/gi, '\\n')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/gi, ' ')\n    .replace(/&amp;/gi, '&')\n    .replace(/&lt;/gi, '<')\n    .replace(/&gt;/gi, '>');\n}\n\nfunction matchFirst(text, patterns) {\n  for (const pattern of patterns) {\n    const match = text.match(pattern);\n    if (match?.[1]) return compactSpaces(match[1]);\n  }\n  return null;\n}\n\nfunction parsePtBrDateTime(value) {\n  const text = compactSpaces(value);\n  if (!text) return null;\n\n  const normalized = text\n    .replace(/às?/gi, ' ')\n    .replace(/hs?/gi, '')\n    .replace(/h(?![a-z])/gi, ':')\n    .replace(/\\s+/g, ' ')\n    .trim();\n\n  const match = normalized.match(/(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})(?:\\s+(\\d{1,2})(?::(\\d{2}))?)?/);\n  if (!match) return null;\n\n  const day = match[1].padStart(2, '0');\n  const month = match[2].padStart(2, '0');\n  const year = match[3];\n  const hour = (match[4] ?? '00').padStart(2, '0');\n  const minute = (match[5] ?? '00').padStart(2, '0');\n  return `${year}-${month}-${day}T${hour}:${minute}:00-03:00`;\n}\n\nfunction inferSource(input) {\n  const explicit = compactSpaces(input.source).toLowerCase();\n  if (explicit) return explicit;\n\n  const joined = [\n    input.mailbox,\n    input.from,\n    input.to,\n    input.subject,\n    input.body_text,\n    input.body_html,\n  ].map((part) => asText(part).toLowerCase()).join(' ');\n\n  if (joined.includes('contato@certifast.com.br')) return 'certifast';\n  if (joined.includes('contato@certiid.com.br')) return 'certiid';\n  if (joined.includes('certisign')) return 'certifast';\n  if (joined.includes('certifast')) return 'certifast';\n  if (joined.includes('certiid') || joined.includes('ar certi id')) return 'certiid';\n  return 'unknown';\n}\n\nfunction inferEventType(input) {\n  const explicit = compactSpaces(input?.parsed?.event_type).toLowerCase();\n  if (explicit.includes('cancel')) return 'cancelamento';\n  if (explicit.includes('reag')) return 'reagendamento';\n  if (explicit.includes('novo')) return 'novo_agendamento';\n\n  const joined = [input.subject, input.body_text, input.body_html].map((part) => asText(part).toLowerCase()).join(' ');\n  if (joined.includes('cancelado') || joined.includes('cancelamento') || joined.includes('agendamento cancelado')) return 'cancelamento';\n  if (joined.includes('reagend')) return 'reagendamento';\n  if (joined.includes('novo pedido agendado') || joined.includes('novo agendamento realizado') || joined.includes('novo agendamento')) return 'novo_agendamento';\n  return 'unknown';\n}\n\nfunction extractCertifast(input) {\n  const content = compactSpaces(`${input.subject || ''}\\n${input.body_text || ''}\\n${decodeHtml(input.body_html || '')}`);\n  const date = matchFirst(content, [/Data:\\s*(.+)/i]);\n  const hour = matchFirst(content, [/Hora:\\s*(.+)/i]);\n\n  return {\n    customer_name: matchFirst(content, [/Cliente:\\s*(.+)/i]),\n    customer_document: matchFirst(content, [/(?:CPF\\/CNPJ|CNPJ\\/CPF):\\s*(.+)/i]),\n    customer_phone: matchFirst(content, [/Telefone(?:\\s*Celular)?:\\s*(.+)/i]),\n    customer_email: matchFirst(content, [/Email:\\s*([^\\s]+@[^\\s]+)/i]),\n    pedido_numero: matchFirst(content, [/Pedido:\\s*(.+)/i, /pedido código\\s*(\\d+)/i]),\n    protocolo_numero: matchFirst(content, [/Código:\\s*(.+)/i]),\n    product_name: matchFirst(content, [/Produto:\\s*(.+)/i]),\n    location_name: matchFirst(content, [/Posto:\\s*(.+)/i]),\n    data_agendada: parsePtBrDateTime(date && hour ? `${date} ${hour}` : input.subject),\n    observacoes: compactSpaces([\n      matchFirst(content, [/Produto:\\s*(.+)/i]),\n      matchFirst(content, [/Posto:\\s*(.+)/i]),\n    ].filter(Boolean).join(' | ')) || null,\n  };\n}\n\nfunction extractCertiid(input) {\n  const content = compactSpaces(`${decodeHtml(input.body_html || '')}\\n${input.body_text || ''}`);\n  const dateTimeRaw = matchFirst(content, [\n    /Data e horário\\s*:??\\s*(.+?)\\s*(?:Nome completo|CNPJ \\/ CPF|Telefone|E-mail|$)/i,\n    /Data e horário\\s*(.+)/i,\n  ]);\n\n  return {\n    pedido_numero: matchFirst(content, [/Pedido\\s*:??\\s*(.+?)\\s*(?:Produto|Data e horário|Nome completo|$)/i]),\n    product_name: matchFirst(content, [/Produto\\s*:??\\s*(.+?)\\s*(?:Data e horário|Nome completo|CNPJ \\/ CPF|Telefone|E-mail|$)/i]),\n    customer_name: matchFirst(content, [/Nome completo\\s*:??\\s*(.+?)\\s*(?:CNPJ \\/ CPF|Telefone|E-mail|$)/i]),\n    customer_document: matchFirst(content, [/CNPJ \\/ CPF\\s*:??\\s*(.+?)\\s*(?:Telefone|E-mail|$)/i]),\n    customer_phone: matchFirst(content, [/Telefone\\s*:??\\s*(.+?)\\s*(?:E-mail|$)/i]),\n    customer_email: matchFirst(content, [/E-mail\\s*:??\\s*([^\\s]+@[^\\s]+)/i]),\n    data_agendada: parsePtBrDateTime(dateTimeRaw),\n    observacoes: compactSpaces([\n      matchFirst(content, [/Produto\\s*:??\\s*(.+?)\\s*(?:Data e horário|Nome completo|CNPJ \\/ CPF|Telefone|E-mail|$)/i]),\n    ].filter(Boolean).join(' | ')) || null,\n  };\n}\n\nconst raw = $json;\nconst normalized = {\n  source: raw.source ?? null,\n  mailbox: raw.mailbox ?? raw.to?.value?.[0]?.address ?? raw.to ?? null,\n  from: raw.from?.value?.[0]?.address ?? raw.from?.text ?? raw.from ?? raw.sender ?? null,\n  to: raw.to?.value?.[0]?.address ?? raw.to?.text ?? raw.to ?? null,\n  subject: raw.subject ?? raw.headers?.subject ?? null,\n  body_text: compactSpaces(raw.body_text ?? raw.textPlain ?? raw.text ?? raw.plainText ?? raw.body ?? ''),\n  body_html: raw.body_html ?? raw.textHtml ?? raw.html ?? '',\n  message_id: raw.message_id ?? raw.messageId ?? raw.headers?.['message-id'] ?? raw.headers?.messageId ?? null,\n  external_id: raw.external_id ?? raw.uid ?? raw.id ?? raw.messageId ?? null,\n  received_at: raw.received_at ?? raw.date ?? raw.sentDate ?? new Date().toISOString(),\n  parsed: raw.parsed ?? null,\n  raw,\n};\n\nconst source = inferSource(normalized);\nconst extracted = source === 'certiid' ? extractCertiid(normalized) : extractCertifast(normalized);\nconst eventType = inferEventType(normalized);\n\nreturn [{\n  json: {\n    source,\n    mailbox: normalized.mailbox,\n    from: normalized.from,\n    to: normalized.to,\n    subject: normalized.subject,\n    body_text: normalized.body_text,\n    body_html: normalized.body_html,\n    message_id: normalized.message_id,\n    external_id: normalized.external_id,\n    received_at: normalized.received_at,\n    parsed: {\n      event_type: normalized?.parsed?.event_type ?? eventType,\n      customer_name: normalized?.parsed?.customer_name ?? extracted.customer_name ?? null,\n      customer_email: normalized?.parsed?.customer_email ?? extracted.customer_email ?? null,\n      customer_phone: normalized?.parsed?.customer_phone ?? extracted.customer_phone ?? null,\n      customer_document: normalized?.parsed?.customer_document ?? extracted.customer_document ?? null,\n      protocolo_numero: normalized?.parsed?.protocolo_numero ?? extracted.protocolo_numero ?? null,\n      pedido_numero: normalized?.parsed?.pedido_numero ?? extracted.pedido_numero ?? null,\n      data_agendada: normalized?.parsed?.data_agendada ?? extracted.data_agendada ?? null,\n      observacoes: normalized?.parsed?.observacoes ?? extracted.observacoes ?? null,\n      product_name: normalized?.parsed?.product_name ?? extracted.product_name ?? null,\n      location_name: normalized?.parsed?.location_name ?? extracted.location_name ?? null,\n      source_sender: normalized.from,\n    },\n    raw,\n  }\n}];"
+      },
+      "id": "normalize-node",
+      "name": "Normalize Schedule Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AVMD_SCHEDULE_API_URL || 'http://localhost:8787/api/automation/schedule-email' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "backend-node",
+      "name": "Send To AVMD Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-node",
+      "name": "Ack Schedule Email",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Email Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Schedule Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Schedule Email": {
+      "main": [
+        [
+          {
+            "node": "Send To AVMD Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send To AVMD Backend": {
+      "main": [
+        [
+          {
+            "node": "Ack Schedule Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "1"
+}

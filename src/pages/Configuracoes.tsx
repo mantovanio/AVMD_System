@@ -1356,6 +1356,38 @@ function normalizeWhatsAppInstanceName(value: string | null | undefined) {
   return (value ?? '').trim()
 }
 
+function createEmptyIntegrationDraft(provider: IntegrationProvider): Partial<ExternalIntegration> {
+  if (provider === 'email_smtp') {
+    return {
+      status: 'pendente',
+      provider,
+      name: 'Email SMTP',
+      port: 587,
+    }
+  }
+
+  if (provider === 'n8n') {
+    return {
+      status: 'pendente',
+      provider,
+      name: 'N8N Webhooks',
+    }
+  }
+
+  if (provider === 'chatwoot' || provider === 'chatwoot_disparo') {
+    return {
+      status: 'pendente',
+      provider,
+      name: PROVIDER_LABEL[provider],
+    }
+  }
+
+  return {
+    status: 'pendente',
+    provider,
+  }
+}
+
 function AbaIntegracoes() {
   const { profile } = useAuth()
   const isAdmin = isAdminProfile(profile)
@@ -1755,7 +1787,7 @@ function AbaIntegracoes() {
     const disponiveis = providersDisponiveis()
     if (disponiveis.length === 0) return
     setNovaProvider(disponiveis[0])
-    setNovaForm({ status: 'pendente' as IntegrationStatus })
+    setNovaForm(createEmptyIntegrationDraft(disponiveis[0]))
     setNovaModal(true)
   }
 
@@ -1950,7 +1982,11 @@ function AbaIntegracoes() {
           <div className="space-y-3">
             <label className="flex flex-col gap-1">
               <span className="text-xs text-gray-500 dark:text-gray-400">Tipo de integração</span>
-              <select value={novaProvider} onChange={e => setNovaProvider(e.target.value as IntegrationProvider)}
+              <select value={novaProvider} onChange={e => {
+                const provider = e.target.value as IntegrationProvider
+                setNovaProvider(provider)
+                setNovaForm(createEmptyIntegrationDraft(provider))
+              }}
                 className="border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 {providersDisponiveis().map(p => (
                   <option key={p} value={p}>{PROVIDER_LABEL[p]}</option>
@@ -1977,15 +2013,27 @@ function AbaIntegracoes() {
                 </select>
               </label>
             )}
-            <ConfigInput
-              label={novaProvider === 'evolution' ? 'URL base / gateway WhatsApp' : 'URL base / API'}
-              value={novaForm.base_url ?? ''}
-              onChange={v => setNovaForm(f => ({ ...f, base_url: v }))}
-              placeholder={novaProvider === 'evolution'
-                ? whatsAppBaseUrlPlaceholder(getWhatsAppEngineFromForm({ provider: novaProvider, metadata: novaForm.metadata ?? {} }))
-                : 'https://...'}
-            />
-            <ConfigInput label="Webhook" value={novaForm.webhook_url ?? ''} onChange={v => setNovaForm(f => ({ ...f, webhook_url: v }))} placeholder="https://..." />
+            {novaProvider === 'email_smtp' && (
+              <div className="rounded-lg border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/70 dark:bg-emerald-950/20 px-3 py-2">
+                <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Configuração de envio</p>
+                <p className="text-[11px] text-emerald-600/80 dark:text-emerald-300/80 mt-1">
+                  Aqui você configura apenas o envio de e-mails do CRM. A leitura da caixa de entrada de agendamentos deve ficar no n8n/automação.
+                </p>
+              </div>
+            )}
+            {novaProvider !== 'email_smtp' && (
+              <>
+                <ConfigInput
+                  label={novaProvider === 'evolution' ? 'URL base / gateway WhatsApp' : 'URL base / API'}
+                  value={novaForm.base_url ?? ''}
+                  onChange={v => setNovaForm(f => ({ ...f, base_url: v }))}
+                  placeholder={novaProvider === 'evolution'
+                    ? whatsAppBaseUrlPlaceholder(getWhatsAppEngineFromForm({ provider: novaProvider, metadata: novaForm.metadata ?? {} }))
+                    : 'https://...'}
+                />
+                <ConfigInput label="Webhook" value={novaForm.webhook_url ?? ''} onChange={v => setNovaForm(f => ({ ...f, webhook_url: v }))} placeholder="https://..." />
+              </>
+            )}
             {novaProvider === 'evolution' && (
               <>
                 <ConfigInput label="Apelido do número" value={novaForm.name ?? ''} onChange={v => setNovaForm(f => ({ ...f, name: v }))} placeholder="Atendimento, Renovações, Financeiro..." />
@@ -2005,12 +2053,19 @@ function AbaIntegracoes() {
             )}
             {novaProvider === 'email_smtp' && (
               <>
+                <ConfigInput label="Nome da integração" value={novaForm.name ?? ''} onChange={v => setNovaForm(f => ({ ...f, name: v }))} placeholder="Email CertiID, Email Certifast..." />
                 <ConfigInput label="Servidor SMTP" value={novaForm.host ?? ''} onChange={v => setNovaForm(f => ({ ...f, host: v }))} placeholder="smtp.gmail.com" />
                 <ConfigInput label="Porta" type="number" value={String(novaForm.port ?? '')} onChange={v => setNovaForm(f => ({ ...f, port: Number(v) || null }))} placeholder="587" />
-                <ConfigInput label="Usuário SMTP" value={novaForm.username ?? ''} onChange={v => setNovaForm(f => ({ ...f, username: v }))} />
+                <ConfigInput label="Usuário SMTP" value={novaForm.username ?? ''} onChange={v => setNovaForm(f => ({ ...f, username: v }))} placeholder="contato@seudominio.com.br" />
                 <ConfigInput label="Senha / App Password" type="password" value={novaForm.api_token ?? ''} onChange={v => setNovaForm(f => ({ ...f, api_token: v }))} />
-                <ConfigInput label="Nome remetente" value={novaForm.sender_name ?? ''} onChange={v => setNovaForm(f => ({ ...f, sender_name: v }))} />
-                <ConfigInput label="Email remetente" type="email" value={novaForm.sender_email ?? ''} onChange={v => setNovaForm(f => ({ ...f, sender_email: v }))} />
+                <ConfigInput label="Nome remetente" value={novaForm.sender_name ?? ''} onChange={v => setNovaForm(f => ({ ...f, sender_name: v }))} placeholder="CertiID" />
+                <ConfigInput label="Email remetente" type="email" value={novaForm.sender_email ?? ''} onChange={v => setNovaForm(f => ({ ...f, sender_email: v }))} placeholder="contato@certiid.com.br" />
+                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/60 px-3 py-2">
+                  <p className="text-[11px] font-medium text-slate-700 dark:text-slate-300">Para seu cenário</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    Crie uma integração SMTP para `contato@certiid.com.br` e outra para `contato@certifast.com.br`. A entrada desses e-mails de agendamento deve ser monitorada no n8n, não aqui.
+                  </p>
+                </div>
               </>
             )}
             <div className="flex gap-2 pt-2">

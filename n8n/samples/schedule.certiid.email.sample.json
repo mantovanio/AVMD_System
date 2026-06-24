@@ -1,0 +1,11 @@
+{
+  "mailbox": "contato@certiid.com.br",
+  "from": "contato@certiid.com.br",
+  "to": "operacao@seudominio.com.br",
+  "subject": "Novo agendamento realizado",
+  "external_id": "certiid-17706-20260623-1600",
+  "message_id": "<certiid-17706@avmd.local>",
+  "received_at": "2026-06-23T16:00:00-03:00",
+  "body_text": "Novo agendamento realizado\n\nDADOS DO AGENDAMENTO\nPedido 17706\nProduto e-CNPJ A1 - Instalado no Computador - PME /MEI/ME\nData e horário 23/06/2026 às 16h00\nNome completo ASSOCIACAO PARAGUAI BRASIL DOS TRANSPORTADORES DE VEICULOS - APBTV\nCNPJ / CPF 67198636000160\nTelefone (11) 992412000\nE-mail contabilidadejaf@outlook.com",
+  "body_html": "<h1>Novo agendamento realizado</h1><p>Pedido 17706</p><p>Produto e-CNPJ A1 - Instalado no Computador - PME /MEI/ME</p><p>Data e horário 23/06/2026 às 16h00</p><p>Nome completo ASSOCIACAO PARAGUAI BRASIL DOS TRANSPORTADORES DE VEICULOS - APBTV</p><p>CNPJ / CPF 67198636000160</p><p>Telefone (11) 992412000</p><p>E-mail contabilidadejaf@outlook.com</p>"
+}
