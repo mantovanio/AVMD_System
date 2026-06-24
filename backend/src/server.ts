@@ -3,6 +3,8 @@ import { loadConfig } from './config/env.js'
 import { createAivenSqlClient } from './db/aivenClient.js'
 import { AivenCheckoutRepository } from './repositories/aivenCheckoutRepository.js'
 import { CommercialRepository } from './repositories/commercialRepository.js'
+import { CatalogRepository } from './repositories/catalogRepository.js'
+import { handleCatalogRoutes } from './routes/catalogRoutes.js'
 import { IntegrationEventRepository } from './repositories/integrationEventRepository.js'
 import { createIntegrationRegistry } from './integrations/createRegistry.js'
 import { IntegrationEventProcessor } from './integrations/eventProcessor.js'
@@ -35,6 +37,7 @@ const config = loadConfig()
 const db = createAivenSqlClient()
 const checkoutRepository = new AivenCheckoutRepository(db)
 const commercialRepository = new CommercialRepository(db)
+const catalogRepository = new CatalogRepository(db)
 const integrationEventRepository = new IntegrationEventRepository(db)
 const profileRepository = new ProfileRepository(db)
 const externalIntegrationRepository = new ExternalIntegrationRepository(db)
@@ -101,6 +104,9 @@ const server = createServer(async (req, res) => {
       config.corsOrigin,
     )
     if (handledClaraAutomation) return
+
+    const handledCatalog = await handleCatalogRoutes(req, res, catalogRepository, config.corsOrigin)
+    if (handledCatalog) return
 
     const handledCommercial = await handleCommercialRoutes(req, res, commercialRepository, config.corsOrigin)
     if (handledCommercial) return

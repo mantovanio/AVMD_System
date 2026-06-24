@@ -72,6 +72,48 @@ export async function saveAivenCommercialAgenda(payload: {
 }
 
 
+export async function saveAivenCommercialSale(payload: Record<string, unknown>) {
+  const response = await postJson<ApiResponse<'venda', VendaCertificado>>(getApiUrl('/comercial/vendas/criar'), payload)
+  return response.venda ?? null
+}
+
+export async function getAivenCommercialSaleById(id: string) {
+  const response = await postJson<ApiResponse<'venda', VendaCertificado & { cadastros_base: null; pontos_atendimento: null }>>(getApiUrl('/comercial/vendas/get'), { id })
+  return response.venda ?? null
+}
+
+export async function getAivenCommercialScheduleByVenda(vendaId: string) {
+  const response = await postJson<ApiResponse<'agenda', AivenAgendaRow | null>>(getApiUrl('/comercial/agenda/venda'), { vendaId })
+  return response.agenda ?? null
+}
+
+export async function saveAivenCommercialAgendaPendente(payload: Record<string, unknown>) {
+  const response = await postJson<ApiResponse<'agenda', {
+    id: string
+    agente_registro_id?: string | null
+    ponto_atendimento_id?: string | null
+    data_agendada?: string | null
+    tipo_atendimento?: string | null
+    observacoes?: string | null
+  }>>(getApiUrl('/comercial/agenda/pendente'), payload)
+  return response.agenda ?? null
+}
+
+export async function getAivenCommercialClientesByDocs(docs: string[]) {
+  const response = await postJson<ApiResponse<'clientes', { id: string; cpf_cnpj: string }[]>>(getApiUrl('/comercial/clientes/ids'), { docs })
+  return response.clientes ?? []
+}
+
+export async function getAivenCommercialSafewebVendas() {
+  const response = await postJson<ApiResponse<'vendas', (VendaCertificado & { cadastros_base: { nome: string | null; cpf_cnpj: string | null } | null })[]>>(getApiUrl('/comercial/vendas/safeweb'), {})
+  return response.vendas ?? []
+}
+
+export async function getAivenTitularByCpf(cpf: string) {
+  const response = await postJson<ApiResponse<'titular', Record<string, unknown> | null>>(getApiUrl('/titulares/por-cpf'), { cpf })
+  return response.titular ?? null
+}
+
 export async function saveAivenCommercialCustomer(payload: {
   id?: string | null
   tipo_cliente?: string | null

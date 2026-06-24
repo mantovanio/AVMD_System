@@ -43,6 +43,9 @@ type SaveCustomerRequest = {
 type SearchCustomerRequest = { term?: string }
 
 export async function handleCommercialRoutes(req: IncomingMessage, res: ServerResponse, repository: CommercialRepository, corsOrigin: string) {
+  const method = req.method ?? ''
+  const url = req.url ?? ''
+
   if (req.method === 'POST' && req.url === '/api/comercial/vendas') {
     const body = await readJson<SalesRequest>(req)
     const vendas = await repository.listSales(body)
@@ -115,6 +118,112 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
   if (req.method === 'POST' && req.url === '/api/comercial/agentes') {
     const agentes = await repository.listAgents()
     writeJson(res, 200, { ok: true, agentes }, corsOrigin)
+    return true
+  }
+
+  // ── Pontos de atendimento (admin CRUD) ──────────────────────────────
+  if (method === 'GET' && url === '/api/config/pontos') {
+    const pontos = await repository.listAllPoints()
+    writeJson(res, 200, { ok: true, pontos }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/config/pontos') {
+    const body = await readJson<Record<string, unknown>>(req)
+    const ponto = await repository.savePoint(body as Parameters<typeof repository.savePoint>[0])
+    writeJson(res, 200, { ok: true, ponto }, corsOrigin)
+    return true
+  }
+
+  const pontosStatusMatch = url.match(/^\/api\/config\/pontos\/([^/]+)\/status$/)
+  if (method === 'PATCH' && pontosStatusMatch) {
+    const body = await readJson<{ status: string }>(req)
+    await repository.updatePointStatus(pontosStatusMatch[1], body.status ?? 'ativo')
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  // ── Dados de referência ─────────────────────────────────────────────
+  if (method === 'GET' && url === '/api/ref/bancos') {
+    const bancos = await repository.listBancos()
+    writeJson(res, 200, { ok: true, bancos }, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && url === '/api/ref/centros') {
+    const centros = await repository.listCentrosCustos()
+    writeJson(res, 200, { ok: true, centros }, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && url === '/api/ref/agentes') {
+    const agentes = await repository.listActiveAgents()
+    writeJson(res, 200, { ok: true, agentes }, corsOrigin)
+    return true
+  }
+
+  // ── Parceiros agentes permitidos (antes das rotas /:id p/ evitar conflito) ──
+  if (method === 'GET' && url === '/api/parceiros/agentes') {
+    const agentes = await repository.listParceiroAgentes()
+    writeJson(res, 200, { ok: true, agentes }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/parceiros/agentes') {
+    const body = await readJson<{ parceiro_id: string; agente_registro_id: string; ponto_atendimento_id?: string | null; ativo?: boolean }>(req)
+    const agente = await repository.saveParceiroAgente(body)
+    writeJson(res, 200, { ok: true, agente }, corsOrigin)
+    return true
+  }
+
+  const agenteIdMatch = url.match(/^\/api\/parceiros\/agentes\/([^/]+)$/)
+
+  if (method === 'PATCH' && agenteIdMatch) {
+    const body = await readJson<{ ativo: boolean }>(req)
+    await repository.toggleParceiroAgente(agenteIdMatch[1], body.ativo)
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  if (method === 'DELETE' && agenteIdMatch) {
+    await repository.deleteParceiroAgente(agenteIdMatch[1])
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  // ── Parceiros ───────────────────────────────────────────────────────
+  if (method === 'GET' && url === '/api/parceiros') {
+    const parceiros = await repository.listParceiros()
+    writeJson(res, 200, { ok: true, parceiros }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/parceiros') {
+    const body = await readJson<Record<string, unknown>>(req)
+    const parceiro = await repository.saveParceiro(body)
+    writeJson(res, 200, { ok: true, parceiro }, corsOrigin)
+    return true
+  }
+
+  const parceiroVinculosMatch = url.match(/^\/api\/parceiros\/([^/]+)\/vinculos$/)
+  if (method === 'GET' && parceiroVinculosMatch) {
+    const count = await repository.countVinculosParceiro(parceiroVinculosMatch[1])
+    writeJson(res, 200, { ok: true, count }, corsOrigin)
+    return true
+  }
+
+  const parceiroIdMatch = url.match(/^\/api\/parceiros\/([^/]+)$/)
+
+  if (method === 'PATCH' && parceiroIdMatch) {
+    const body = await readJson<{ status: string; segmento: string; data_desativacao: string | null }>(req)
+    await repository.updateParceiroStatus(parceiroIdMatch[1], body)
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  if (method === 'DELETE' && parceiroIdMatch) {
+    await repository.deleteParceiro(parceiroIdMatch[1])
+    writeJson(res, 200, { ok: true }, corsOrigin)
     return true
   }
 

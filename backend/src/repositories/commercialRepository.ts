@@ -366,6 +366,138 @@ export class CommercialRepository {
     `)
     return result.rows
   }
+  async listAllPoints() {
+    const result = await this.db.query(`select * from pontos_atendimento order by nome asc`)
+    return result.rows
+  }
+
+  async savePoint(input: {
+    id?: string | null
+    nome: string
+    codigo?: string | null
+    endereco?: string | null
+    cidade?: string | null
+    uf?: string | null
+    status?: string | null
+    metadata?: Record<string, unknown> | null
+  }) {
+    const id = input.id?.trim() || randomUUID()
+    const result = await this.db.query<{ id: string }>(`
+      insert into pontos_atendimento (id, nome, codigo, endereco, cidade, uf, status, metadata)
+      values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+      on conflict (id) do update set
+        nome = excluded.nome, codigo = excluded.codigo, endereco = excluded.endereco,
+        cidade = excluded.cidade, uf = excluded.uf, status = excluded.status,
+        metadata = excluded.metadata, updated_at = now()
+      returning id
+    `, [id, input.nome, input.codigo ?? null, input.endereco ?? null,
+        input.cidade ?? null, input.uf ?? null, input.status ?? 'ativo',
+        JSON.stringify(input.metadata ?? {})])
+    return result.rows[0] ?? { id }
+  }
+
+  async updatePointStatus(id: string, status: string) {
+    await this.db.query(`update pontos_atendimento set status = $2, updated_at = now() where id = $1::uuid`, [id, status])
+  }
+
+  async listBancos() {
+    const result = await this.db.query(`select * from bancos where ativo = true order by codigo asc`)
+    return result.rows
+  }
+
+  async listCentrosCustos() {
+    const result = await this.db.query(`select * from centros_custos where ativo = true order by nome asc`)
+    return result.rows
+  }
+
+  async listActiveAgents() {
+    const result = await this.db.query(`
+      select id, nome, perfil, status from profiles
+      where perfil in ('admin', 'vendedor', 'agente_registro') and status = 'ativo'
+      order by nome asc
+    `)
+    return result.rows
+  }
+
+  async listParceiros() {
+    const result = await this.db.query(`select * from parceiros order by created_at desc`)
+    return result.rows
+  }
+
+  async saveParceiro(input: Record<string, unknown>) {
+    const id = (input.id as string | null)?.trim() || randomUUID()
+    const fields = [
+      'codigo_parceiro','cpf_cnpj','nome','razao_social','nome_fantasia','responsavel',
+      'id_local_atendimento','senha_acesso','email_acesso','ddd','telefone','email',
+      'email_adicional_1','email_adicional_2','email_adicional_3',
+      'cep','logradouro','numero','ibge','complemento','bairro','cidade','estado',
+      'observacao','token','inscricao_municipal','inscricao_estadual','tipo_parceiro',
+      'data_ativacao','data_desativacao',
+      'bloquear_vendas_protocolos','nao_enviar_whatsapp_vendas','nao_enviar_email_vendas',
+      'nao_enviar_renovacao_clientes','nao_quero_receber_whatsapp','nao_quero_receber_email',
+      'gestor_1_id','gestor_2_id','gestor_3_id','gestor_4_id','gestor_5_id',
+      'tipo_conta','banco_id','agencia','agencia_digito','conta','conta_digito','operacao',
+      'cnpj_cpf_titular','titular_conta','chave_pix','centro_custo_id',
+      'segmento','status','emissoes_mes','receita_mes','desde',
+    ]
+    const vals = fields.map(f => input[f] ?? null)
+    const colList = fields.join(', ')
+    const placeholders = fields.map((_, i) => `$${i + 2}`).join(', ')
+    const updates = fields.map((f, i) => `${f} = excluded.${f}`).join(', ')
+    const result = await this.db.query<{ id: string }>(`
+      insert into parceiros (id, ${colList})
+      values ($1, ${placeholders})
+      on conflict (id) do update set ${updates}, updated_at = now()
+      returning id
+    `, [id, ...vals])
+    return result.rows[0] ?? { id }
+  }
+
+  async updateParceiroStatus(id: string, updates: { status: string; segmento: string; data_desativacao: string | null }) {
+    await this.db.query(`
+      update parceiros set status = $2, segmento = $3, data_desativacao = $4, updated_at = now()
+      where id = $1::uuid
+    `, [id, updates.status, updates.segmento, updates.data_desativacao])
+  }
+
+  async deleteParceiro(id: string) {
+    await this.db.query(`delete from parceiros where id = $1::uuid`, [id])
+  }
+
+  async countVinculosParceiro(id: string) {
+    const result = await this.db.query<{ n: string }>(`
+      select count(*)::text as n from vendas_certificados where parceiro_id = $1::uuid
+    `, [id])
+    return parseInt(result.rows[0]?.n ?? '0', 10)
+  }
+
+  async listParceiroAgentes() {
+    const result = await this.db.query(`select * from parceiros_agentes_permitidos order by created_at asc`)
+    return result.rows
+  }
+
+  async saveParceiroAgente(input: {
+    parceiro_id: string
+    agente_registro_id: string
+    ponto_atendimento_id?: string | null
+    ativo?: boolean
+  }) {
+    const result = await this.db.query<{ id: string }>(`
+      insert into parceiros_agentes_permitidos (parceiro_id, agente_registro_id, ponto_atendimento_id, ativo, metadata)
+      values ($1::uuid, $2::uuid, $3::uuid, $4, '{}'::jsonb)
+      returning id
+    `, [input.parceiro_id, input.agente_registro_id, input.ponto_atendimento_id ?? null, input.ativo ?? true])
+    return result.rows[0]
+  }
+
+  async toggleParceiroAgente(id: string, ativo: boolean) {
+    await this.db.query(`update parceiros_agentes_permitidos set ativo = $2, updated_at = now() where id = $1::uuid`, [id, ativo])
+  }
+
+  async deleteParceiroAgente(id: string) {
+    await this.db.query(`delete from parceiros_agentes_permitidos where id = $1::uuid`, [id])
+  }
+
   private async recordIntegrationEvent(input: {
     eventType: string
     entityType: string

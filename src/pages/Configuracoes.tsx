@@ -2437,17 +2437,16 @@ function AbaAutomacoes() {
   const load = useCallback(async () => {
     setLoading(true)
     setErro(null)
-    const { data, error } = await supabase.from('automation_rules').select('*').order('created_at', { ascending: true })
-    if (error) {
-      const schemaMissing = error.code === '42P01' || /automation_rules/i.test(error.message)
-      setSchemaPronto(!schemaMissing)
-      setErro(error.message)
+    try {
+      const resp = await fetch(getApiUrl('/automation/rules'))
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error ?? `Erro ${resp.status}`)
+      setAutomacoes((data.rules ?? []) as AutomationRule[])
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao carregar automações')
+    } finally {
       setLoading(false)
-      return
     }
-    setSchemaPronto(true)
-    setAutomacoes((data ?? []) as AutomationRule[])
-    setLoading(false)
   }, [])
 
   useEffect(() => { void load() }, [load])
@@ -2455,11 +2454,18 @@ function AbaAutomacoes() {
   async function toggleAutomacao(rule: AutomationRule) {
     setSavingId(rule.id)
     setAutomacoes(prev => prev.map(a => a.id === rule.id ? { ...a, ativo: !a.ativo } : a))
-    const { error } = await supabase.from('automation_rules').update({ ativo: !rule.ativo }).eq('id', rule.id)
-    setSavingId(null)
-    if (error) {
+    try {
+      const resp = await fetch(getApiUrl(`/automation/rules/${rule.id}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ativo: !rule.ativo }),
+      })
+      if (!resp.ok) throw new Error()
+    } catch {
       setAutomacoes(prev => prev.map(a => a.id === rule.id ? { ...a, ativo: rule.ativo } : a))
-      showMsgA('Erro ao atualizar automação: ' + error.message)
+      showMsgA('Erro ao atualizar automação')
+    } finally {
+      setSavingId(null)
     }
   }
 
@@ -2470,7 +2476,7 @@ function AbaAutomacoes() {
   if (erro) {
     return (
       <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-lg p-4 text-sm">
-        Erro ao carregar automações: {erro}. Execute o SQL <strong>sql/integrations_schema.sql</strong> no Supabase.
+        Erro ao carregar automações: {erro}
       </div>
     )
   }
@@ -2583,11 +2589,16 @@ function AbaPontos() {
   const load = useCallback(async () => {
     setLoading(true)
     setErro(null)
-    const { data, error } = await supabase
-      .from('pontos_atendimento').select('*').order('nome', { ascending: true })
-    if (error) { setErro(error.message); setLoading(false); return }
-    setPontos((data ?? []) as PontoAtendimento[])
-    setLoading(false)
+    try {
+      const resp = await fetch(getApiUrl('/config/pontos'))
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error ?? `Erro ${resp.status}`)
+      setPontos((data.pontos ?? []) as PontoAtendimento[])
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao carregar pontos')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { void load() }, [load])
@@ -2620,11 +2631,13 @@ function AbaPontos() {
       uf: form.uf?.trim() || null,
       metadata: { ...form.metadata, numero: numeroPa.trim() || null, complemento: complementoPa.trim() || null },
     }
-    const { error } = editingId
-      ? await supabase.from('pontos_atendimento').update(payload).eq('id', editingId)
-      : await supabase.from('pontos_atendimento').insert([payload])
+    const resp = await fetch(getApiUrl('/config/pontos'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editingId ? { ...payload, id: editingId } : payload),
+    })
     setSaving(false)
-    if (error) { showMsgP('Erro: ' + error.message); return }
+    if (!resp.ok) { const d = await resp.json().catch(() => null); showMsgP('Erro: ' + (d?.error ?? 'falha')); return }
     setShowForm(false)
     setEditingId(null)
     setForm({ ...EMPTY_PONTO })
@@ -2635,11 +2648,15 @@ function AbaPontos() {
     setTogglingId(p.id)
     const novoStatus = p.status === 'ativo' ? 'inativo' : 'ativo'
     setPontos(prev => prev.map(x => x.id === p.id ? { ...x, status: novoStatus } : x))
-    const { error } = await supabase.from('pontos_atendimento').update({ status: novoStatus }).eq('id', p.id)
+    const resp = await fetch(getApiUrl(`/config/pontos/${p.id}/status`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: novoStatus }),
+    })
     setTogglingId(null)
-    if (error) {
+    if (!resp.ok) {
       setPontos(prev => prev.map(x => x.id === p.id ? { ...x, status: p.status } : x))
-      showMsgP('Erro: ' + error.message)
+      showMsgP('Erro ao atualizar status')
     }
   }
 
@@ -2647,7 +2664,7 @@ function AbaPontos() {
 
   if (erro) return (
     <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-lg p-4 text-sm">
-      Erro ao carregar pontos de atendimento: {erro}. Verifique se a migration V2 foi aplicada.
+      Erro ao carregar pontos de atendimento: {erro}
     </div>
   )
 

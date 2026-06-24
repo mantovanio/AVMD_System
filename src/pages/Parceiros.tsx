@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Edit3, PlusCircle, RefreshCw, Search, X, Trash2, PowerOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { supabase } from '@/lib/supabase'
+import { getApiUrl } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { hasPerfil } from '@/lib/security'
 import { buscarCep } from '@/lib/cep'
@@ -138,27 +138,26 @@ export default function Parceiros() {
   async function fetchAll() {
     setLoading(true)
     setError(null)
-    const [parceirosRes, bancosRes, centrosRes, gestoresRes, pontosRes, agentesRes] = await Promise.all([
-      supabase.from('parceiros').select('*').order('created_at', { ascending: false }),
-      supabase.from('bancos').select('*').eq('ativo', true).order('codigo', { ascending: true }),
-      supabase.from('centros_custos').select('*').eq('ativo', true).order('nome', { ascending: true }),
-      supabase.from('profiles').select('id, nome, perfil, status').in('perfil', ['admin', 'vendedor', 'agente_registro']).eq('status', 'ativo').order('nome', { ascending: true }),
-      supabase.from('pontos_atendimento').select('*').eq('status', 'ativo').order('nome', { ascending: true }),
-      supabase.from('parceiros_agentes_permitidos').select('*').order('created_at', { ascending: true }),
-    ])
-    const err = parceirosRes.error ?? bancosRes.error ?? centrosRes.error ?? gestoresRes.error ?? pontosRes.error ?? agentesRes.error
-    if (err) {
-      setError(`${err.message}. Se for relacionado a campos novos, execute sql/parceiros_gestao_v2.sql no Supabase.`)
+    try {
+      const [parceirosRes, bancosRes, centrosRes, gestoresRes, pontosRes, agentesRes] = await Promise.all([
+        fetch(getApiUrl('/parceiros')).then(r => r.json()),
+        fetch(getApiUrl('/ref/bancos')).then(r => r.json()),
+        fetch(getApiUrl('/ref/centros')).then(r => r.json()),
+        fetch(getApiUrl('/ref/agentes')).then(r => r.json()),
+        fetch(getApiUrl('/comercial/pontos'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(r => r.json()),
+        fetch(getApiUrl('/parceiros/agentes')).then(r => r.json()),
+      ])
+      setLista((parceirosRes.parceiros ?? []) as Parceiro[])
+      setBancos((bancosRes.bancos ?? []) as Banco[])
+      setCentros((centrosRes.centros ?? []) as CentroCusto[])
+      setGestores((gestoresRes.agentes ?? []) as GestorOption[])
+      setPontos((pontosRes.pontos ?? []) as PontoAtendimento[])
+      setAgentesPermitidos((agentesRes.agentes ?? []) as ParceiroAgentePermitido[])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao carregar dados')
+    } finally {
       setLoading(false)
-      return
     }
-    setLista((parceirosRes.data ?? []) as Parceiro[])
-    setBancos((bancosRes.data ?? []) as Banco[])
-    setCentros((centrosRes.data ?? []) as CentroCusto[])
-    setGestores((gestoresRes.data ?? []) as GestorOption[])
-    setPontos((pontosRes.data ?? []) as PontoAtendimento[])
-    setAgentesPermitidos((agentesRes.data ?? []) as ParceiroAgentePermitido[])
-    setLoading(false)
   }
 
   function updateField<K extends keyof NovoParceiro>(key: K, value: NovoParceiro[K]) {
@@ -302,13 +301,15 @@ export default function Parceiros() {
       gestor_5_id: form.gestor_5_id || null,
       desde: form.data_ativacao || form.desde || null,
     }
-    const query = editingId
-      ? supabase.from('parceiros').update(payload).eq('id', editingId)
-      : supabase.from('parceiros').insert([payload])
-    const { error: err } = await query
+    const resp = await fetch(getApiUrl('/parceiros'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editingId ? { ...payload, id: editingId } : payload),
+    })
     setSalvando(false)
-    if (err) {
-      setError(`${err.message}. Se os campos novos ainda não existirem, execute sql/parceiros_gestao_v2.sql no Supabase.`)
+    if (!resp.ok) {
+      const d = await resp.json().catch(() => null)
+      setError(d?.error ?? 'Erro ao salvar parceiro')
       return
     }
     setShowForm(false)
@@ -318,11 +319,11 @@ export default function Parceiros() {
   }
 
   async function contarVinculos(parceiroId: string): Promise<number> {
-    const { count } = await supabase
-      .from('vendas')
-      .select('id', { count: 'exact', head: true })
-      .eq('parceiro_id', parceiroId)
-    return count ?? 0
+    try {
+      const resp = await fetch(getApiUrl(`/parceiros/${parceiroId}/vinculos`))
+      const d = await resp.json()
+      return d.count ?? 0
+    } catch { return 0 }
   }
 
   async function iniciarExcluir(parceiro: Parceiro) {
@@ -340,12 +341,14 @@ export default function Parceiros() {
     setExecutando(true)
     const { parceiro, tipo } = acaoModal
     if (tipo === 'excluir') {
-      await supabase.from('parceiros').delete().eq('id', parceiro.id)
+      await fetch(getApiUrl(`/parceiros/${parceiro.id}`), { method: 'DELETE' })
     } else {
       const dataDesativacao = new Date().toISOString().slice(0, 10)
-      await supabase.from('parceiros')
-        .update({ status: 'inativo', segmento: 'inativo', data_desativacao: dataDesativacao })
-        .eq('id', parceiro.id)
+      await fetch(getApiUrl(`/parceiros/${parceiro.id}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'inativo', segmento: 'inativo', data_desativacao: dataDesativacao }),
+      })
     }
     setAcaoModal(null)
     setExecutando(false)
@@ -357,12 +360,14 @@ export default function Parceiros() {
     const novoStatus = parceiro.status === 'ativo' ? 'inativo' : 'ativo'
     const segmento = novoStatus === 'inativo' ? 'inativo' : parceiro.segmento === 'inativo' ? 'baixo' : parceiro.segmento
     const dataDesativacao = novoStatus === 'inativo' ? new Date().toISOString().slice(0, 10) : null
-    const { error: err } = await supabase
-      .from('parceiros')
-      .update({ status: novoStatus, segmento, data_desativacao: dataDesativacao })
-      .eq('id', parceiro.id)
-    if (err) {
-      setError(err.message)
+    const resp = await fetch(getApiUrl(`/parceiros/${parceiro.id}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: novoStatus, segmento, data_desativacao: dataDesativacao }),
+    })
+    if (!resp.ok) {
+      const d = await resp.json().catch(() => null)
+      setError(d?.error ?? 'Erro ao atualizar status')
       return
     }
     await fetchAll()
@@ -371,16 +376,20 @@ export default function Parceiros() {
   async function salvarAgentePermitido() {
     if (!editingId || !formAgente.agente_registro_id) return
     setSalvandoAgente(true)
-    const { error } = await supabase.from('parceiros_agentes_permitidos').insert([{
-      parceiro_id: editingId,
-      agente_registro_id: formAgente.agente_registro_id,
-      ponto_atendimento_id: formAgente.ponto_atendimento_id || null,
-      ativo: formAgente.ativo,
-      metadata: {},
-    }])
+    const resp = await fetch(getApiUrl('/parceiros/agentes'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        parceiro_id: editingId,
+        agente_registro_id: formAgente.agente_registro_id,
+        ponto_atendimento_id: formAgente.ponto_atendimento_id || null,
+        ativo: formAgente.ativo,
+      }),
+    })
     setSalvandoAgente(false)
-    if (error) {
-      setError(`Erro ao vincular agente ao parceiro: ${error.message}`)
+    if (!resp.ok) {
+      const d = await resp.json().catch(() => null)
+      setError(`Erro ao vincular agente: ${d?.error ?? 'falha'}`)
       return
     }
     setFormAgente({ agente_registro_id: '', ponto_atendimento_id: '', ativo: true })
@@ -388,23 +397,18 @@ export default function Parceiros() {
   }
 
   async function toggleAgentePermitido(item: ParceiroAgentePermitido) {
-    const { error } = await supabase
-      .from('parceiros_agentes_permitidos')
-      .update({ ativo: !item.ativo })
-      .eq('id', item.id)
-    if (error) {
-      setError(error.message)
-      return
-    }
+    const resp = await fetch(getApiUrl(`/parceiros/agentes/${item.id}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ativo: !item.ativo }),
+    })
+    if (!resp.ok) { setError('Erro ao atualizar agente'); return }
     await fetchAll()
   }
 
   async function excluirAgentePermitido(id: string) {
-    const { error } = await supabase.from('parceiros_agentes_permitidos').delete().eq('id', id)
-    if (error) {
-      setError(error.message)
-      return
-    }
+    const resp = await fetch(getApiUrl(`/parceiros/agentes/${id}`), { method: 'DELETE' })
+    if (!resp.ok) { setError('Erro ao excluir agente'); return }
     await fetchAll()
   }
 

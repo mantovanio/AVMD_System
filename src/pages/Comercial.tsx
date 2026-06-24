@@ -49,12 +49,12 @@ import {
   normalizeNfseAutomationSettings,
   type NfseAutomationSettings,
 } from '@/lib/nfse'
-import { getEdgeFunctionUrl, getSupabaseAccessToken, supabase } from '@/lib/supabase'
-import { useLegacySupabase } from '@/lib/api'
-import { fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, updateAivenCommercialSaleStatus } from '@/lib/commercialAiven'
+import { getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
+import { getApiUrl } from '@/lib/api'
+import { fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenTitularByCpf, updateAivenCommercialSaleStatus } from '@/lib/commercialAiven'
 import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
 import { useAuth } from '@/contexts/AuthContext'
-import { buildSafeIlikePattern, hasPerfil, isAdminProfile } from '@/lib/security'
+import { hasPerfil, isAdminProfile } from '@/lib/security'
 import { buscarCep } from '@/lib/cep'
 import type {
   Agendamento,
@@ -92,28 +92,6 @@ import type {
   ParceiroAgentePermitido,
 } from '@/types'
 
-// Mapeia erros do Supabase/PostgreSQL para mensagens claras em português.
-// Loga o erro técnico no console para debug sem expô-lo ao usuário.
-function traduzirErroDb(error: { code?: string; message?: string }, contexto: string): string {
-  console.error(`[${contexto}]`, error)
-  const c = error.code ?? ''
-  const m = (error.message ?? '').toLowerCase()
-  if (c === '42501' || m.includes('row-level security') || m.includes('permission denied'))
-    return 'Sem permissão para esta operação. Verifique seu perfil de acesso com o administrador.'
-  if (c === '23505' || m.includes('unique') || m.includes('duplicate'))
-    return 'Já existe um registro com esses dados. Verifique se a venda já foi lançada.'
-  if (c === '23503' || m.includes('foreign key') || m.includes('violates foreign'))
-    return 'Um dos itens selecionados (cliente, tabela ou ponto) não é mais válido. Recarregue e tente novamente.'
-  if (c === '23502' || m.includes('not-null') || m.includes('null value'))
-    return 'Campo obrigatório não preenchido. Verifique se todos os passos do formulário foram concluídos.'
-  if (c === '23514' || m.includes('check constraint'))
-    return 'Valor inválido em um dos campos. Verifique os dados e tente novamente.'
-  if (m.includes('jwt') || m.includes('token') || c === 'PGRST301')
-    return 'Sessão expirada. Recarregue a página e faça login novamente.'
-  if (m.includes('network') || m.includes('fetch'))
-    return 'Erro de conexão. Verifique sua internet e tente novamente.'
-  return 'Não foi possível salvar. Tente novamente ou contate o suporte se o erro persistir.'
-}
 
 // ── local types ────────────────────────────────────────────────
 type VendaRow = VendaCertificado & {
@@ -1066,44 +1044,14 @@ export default function Comercial() {
   // ── fetch V2 ─────────────────────────────────────────────────
   const fetchVendasV2 = useCallback(async () => {
     setLoadingV(true)
-    if (!useLegacySupabase()) {
-      const rows = await fetchAivenCommercialSales(50) as VendaRow[]
-      setVendasV2(rows)
-      const vendaIds = rows.map(v => v.id)
-      if (vendaIds.length > 0) {
-        const agendaRows = await fetchAivenCommercialSchedule({ dataBase: null })
-        const statusMap: Record<string, StatusAgendamentoValidacao | null> = {}
-        for (const item of agendaRows) {
-          if (!item.venda_certificado_id || !vendaIds.includes(item.venda_certificado_id)) continue
-          if (!(item.venda_certificado_id in statusMap)) {
-            statusMap[item.venda_certificado_id] = item.status_agendamento
-          }
-        }
-        setAgendamentoStatusPorVenda(statusMap)
-      } else {
-        setAgendamentoStatusPorVenda({})
-      }
-      setVendedorNomes(new Map())
-      setLoadingV(false)
-      return
-    }
-    const { data } = await supabase
-      .from('vendas_certificados')
-      .select('*, cadastros_base(nome, cpf_cnpj), pontos_atendimento(nome)')
-      .order('created_at', { ascending: false })
-      .limit(50)
-    const rows = (data ?? []) as VendaRow[]
+    const rows = await fetchAivenCommercialSales(50) as VendaRow[]
     setVendasV2(rows)
     const vendaIds = rows.map(v => v.id)
     if (vendaIds.length > 0) {
-      const { data: agendamentos } = await supabase
-        .from('agendamentos_validacao')
-        .select('venda_certificado_id, status_agendamento, created_at')
-        .in('venda_certificado_id', vendaIds)
-        .order('created_at', { ascending: false })
+      const agendaRows = await fetchAivenCommercialSchedule({ dataBase: null })
       const statusMap: Record<string, StatusAgendamentoValidacao | null> = {}
-      for (const item of (agendamentos ?? []) as Array<{ venda_certificado_id: string | null; status_agendamento: StatusAgendamentoValidacao }>) {
-        if (!item.venda_certificado_id) continue
+      for (const item of agendaRows) {
+        if (!item.venda_certificado_id || !vendaIds.includes(item.venda_certificado_id)) continue
         if (!(item.venda_certificado_id in statusMap)) {
           statusMap[item.venda_certificado_id] = item.status_agendamento
         }
@@ -1112,27 +1060,13 @@ export default function Comercial() {
     } else {
       setAgendamentoStatusPorVenda({})
     }
-    const ids = [...new Set(rows.map(v => v.vendedor_id).filter((id): id is string => !!id))]
-    if (ids.length > 0) {
-      const { data: profs } = await supabase.from('profiles').select('id, nome').in('id', ids)
-      setVendedorNomes(new Map((profs ?? []).map(p => [p.id as string, p.nome as string])))
-    }
+    setVendedorNomes(new Map())
     setLoadingV(false)
   }, [])
 
   const fetchClientes = useCallback(async () => {
-    if (!useLegacySupabase()) {
-      const data = await fetchAivenCommercialCustomers()
-      setClientes(data as CadastroBase[])
-      return
-    }
-    const { data } = await supabase
-      .from('cadastros_base')
-      .select('*')
-      .eq('status', 'ativo')
-      .order('nome', { ascending: true })
-      .limit(200)
-    setClientes((data ?? []) as CadastroBase[])
+    const data = await fetchAivenCommercialCustomers()
+    setClientes(data as CadastroBase[])
   }, [])
 
   useEffect(() => {
@@ -1140,54 +1074,22 @@ export default function Comercial() {
   }, [])
 
   const fetchPontos = useCallback(async () => {
-    if (!useLegacySupabase()) {
-      const data = await fetchAivenCommercialPoints()
-      setPontos(data as PontoAtendimento[])
-      return
-    }
-    const { data } = await supabase
-      .from('pontos_atendimento')
-      .select('*')
-      .eq('status', 'ativo')
-      .order('nome', { ascending: true })
-    setPontos((data ?? []) as PontoAtendimento[])
+    const data = await fetchAivenCommercialPoints()
+    setPontos(data as PontoAtendimento[])
   }, [])
 
   const fetchAgentesRegistro = useCallback(async () => {
-    if (!useLegacySupabase()) {
-      const data = await fetchAivenCommercialAgents()
-      setAgentesRegistro((data ?? []) as Array<{ id: string; nome: string }>)
-      return
-    }
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, nome, perfil, status')
-      .eq('perfil', 'agente_registro')
-      .eq('status', 'ativo')
-      .order('nome', { ascending: true })
-
-    setAgentesRegistro(((data ?? []) as Array<{ id: string; nome: string }>))
+    const data = await fetchAivenCommercialAgents()
+    setAgentesRegistro((data ?? []) as Array<{ id: string; nome: string }>)
   }, [])
 
   async function buscarClientes(term: string) {
     const t = term.trim()
     if (t.length < 3) { setClienteResultados([]); setClienteDropdownOpen(false); return }
     setClienteBuscando(true)
-    const like = buildSafeIlikePattern(t)
-    if (!like) {
-      setClienteResultados([])
-      setClienteDropdownOpen(false)
-      setClienteBuscando(false)
-      return
-    }
-    const { data } = await supabase
-      .from('cadastros_base')
-      .select('id, nome, nome_fantasia, cpf_cnpj, telefone, cidade, uf, status')
-      .or(`nome.ilike.${like},nome_fantasia.ilike.${like},cpf_cnpj.ilike.${like},telefone.ilike.${like}`)
-      .order('nome', { ascending: true })
-      .limit(10)
-    setClienteResultados((data ?? []) as CadastroBase[])
-    setClienteDropdownOpen(true)
+    const data = await searchAivenCommercialCustomers(t)
+    setClienteResultados(data as CadastroBase[])
+    setClienteDropdownOpen(data.length > 0)
     setClienteBuscando(false)
   }
 
@@ -1196,58 +1098,14 @@ export default function Comercial() {
     const dataBase = filtroDataAgenda || new Date().toISOString().split('T')[0]
     const isAgente = profile?.perfil === 'agente_registro'
     const agenteId = isAgente ? profile?.id ?? null : null
-    const agendaLegadaPromise = isAgente
-      ? Promise.resolve({ data: [], error: null } as { data: Agendamento[]; error: null })
-      : supabase
-          .from('agendamentos')
-          .select('*')
-          .gte('data_hora', dataBase)
-          .order('data_hora', { ascending: true })
-          .limit(100)
+    const statusV2 = filtroStatusAgenda === 'aguardando' ? 'pendente' : (filtroStatusAgenda || null)
+    const agendaV2 = await fetchAivenCommercialSchedule({ dataBase, status: statusV2, agenteId })
 
-    let agendaV2Query = supabase
-      .from('agendamentos_validacao')
-      .select('id, created_at, data_agendada, status_agendamento, observacoes, tipo_atendimento, venda_certificado_id, ponto_atendimento_id, agente_registro_id, vendas_certificados(protocolo_numero, tipo_produto, telefone_faturamento, nome_faturamento), cadastros_base(nome), pontos_atendimento(nome)')
-      .or(`data_agendada.gte.${dataBase},data_agendada.is.null`)
-      .order('data_agendada', { ascending: true })
-      .limit(100)
-
-    if (agenteId) agendaV2Query = agendaV2Query.eq('agente_registro_id', agenteId)
-    if (filtroStatusAgenda) {
-      const statusV2 = filtroStatusAgenda === 'aguardando' ? 'pendente' : filtroStatusAgenda
-      agendaV2Query = agendaV2Query.eq('status_agendamento', statusV2)
-    }
-
-    const [
-      { data: agendaLegada },
-      { data: agendaV2 },
-    ] = await Promise.all([
-      agendaLegadaPromise,
-      agendaV2Query,
-    ])
-
-    const agendaNormalizada: AgendaItem[] = [
-      ...((agendaLegada ?? []) as Agendamento[]).map(item => ({
-        id: item.id,
-        origem: 'agenda_legada' as const,
-        venda_certificado_id: null,
-        cliente: item.cliente,
-        telefone: item.telefone,
-        servico: item.servico,
-        data_hora: item.data_hora,
-        status: item.status,
-        observacoes: item.observacoes,
-        ponto_atendimento_nome: null,
-        ponto_atendimento_id: null,
-        tipo_atendimento: null,
-        protocolo_numero: null,
-        agente_registro_id: null,
-      })),
-      ...((agendaV2 ?? []) as unknown as AgendamentoValidacaoRow[]).map(item => {
-        const venda = item.vendas_certificados?.[0] ?? null
-        const cadastro = item.cadastros_base?.[0] ?? null
-        const ponto = item.pontos_atendimento?.[0] ?? null
-        return {
+    const agendaNormalizada: AgendaItem[] = (agendaV2 as AgendamentoValidacaoRow[]).map(item => {
+      const venda = item.vendas_certificados?.[0] ?? null
+      const cadastro = item.cadastros_base?.[0] ?? null
+      const ponto = item.pontos_atendimento?.[0] ?? null
+      return {
         id: item.id,
         origem: 'validacao_v2' as const,
         venda_certificado_id: item.venda_certificado_id ?? null,
@@ -1262,8 +1120,8 @@ export default function Comercial() {
         tipo_atendimento: item.tipo_atendimento ?? null,
         protocolo_numero: venda?.protocolo_numero ?? null,
         agente_registro_id: item.agente_registro_id ?? null,
-      }}),
-    ].sort((a, b) => new Date(a.data_hora).getTime() - new Date(b.data_hora).getTime())
+      }
+    }).sort((a, b) => new Date(a.data_hora).getTime() - new Date(b.data_hora).getTime())
 
     setAgenda(agendaNormalizada)
     setLoadingA(false)
@@ -1271,87 +1129,61 @@ export default function Comercial() {
 
   const fetchDisponibilidades = useCallback(async () => {
     if (!canManageAgenda) return
-
-    let query = supabase
-      .from('agentes_disponibilidade')
-      .select('*')
-      .order('dia_semana', { ascending: true })
-      .order('hora_inicio', { ascending: true })
-
-    if (!isAdmin && profile?.id) query = query.eq('agente_registro_id', profile.id)
-
-    const { data } = await query
-    setDisponibilidades((data ?? []) as AgenteDisponibilidade[])
+    const resp = await fetch(getApiUrl('/comercial/disponibilidade'))
+    const data = await resp.json()
+    let rows = (data.disponibilidades ?? []) as AgenteDisponibilidade[]
+    if (!isAdmin && profile?.id) rows = rows.filter(d => d.agente_registro_id === profile.id)
+    rows.sort((a, b) => a.dia_semana - b.dia_semana || a.hora_inicio.localeCompare(b.hora_inicio))
+    setDisponibilidades(rows)
   }, [canManageAgenda, isAdmin, profile?.id])
 
   const fetchIndisponibilidades = useCallback(async () => {
     if (!canManageAgenda) return
-
-    let query = supabase
-      .from('agentes_indisponibilidades')
-      .select('*')
-      .eq('ativo', true)
-      .order('inicio_em', { ascending: true })
-      .limit(100)
-
-    if (!isAdmin && profile?.id) query = query.eq('agente_registro_id', profile.id)
-
-    const { data } = await query
-    setIndisponibilidades((data ?? []) as AgenteIndisponibilidade[])
+    const resp = await fetch(getApiUrl('/comercial/indisponibilidade'))
+    const data = await resp.json()
+    let rows = (data.indisponibilidades ?? []) as AgenteIndisponibilidade[]
+    if (!isAdmin && profile?.id) rows = rows.filter(d => d.agente_registro_id === profile.id && d.ativo)
+    else rows = rows.filter(d => d.ativo)
+    rows.sort((a, b) => new Date(a.inicio_em).getTime() - new Date(b.inicio_em).getTime())
+    setIndisponibilidades(rows)
   }, [canManageAgenda, isAdmin, profile?.id])
 
   const fetchCatalogo = useCallback(async () => {
     setLoadingCatalogo(true)
     setCatalogoErro(null)
     setAgendaSchemaWarning(null)
-    const [certsRes, tabelasRes, itensRes, partRes, agentesTabelaRes, parceirosAgentesRes, comissoesRes, pagamentosRes, parcRes, paymentMethodsRes, paymentRuntimeRes, pricingMatrixRes, nfseAutomationRes] = await Promise.all([
-      supabase.from('certificados').select('*').order('tipo', { ascending: true }),
-      supabase.from('tabelas_preco').select('*').order('nome', { ascending: true }),
-      supabase.from('tabelas_preco_itens').select('*').order('created_at', { ascending: true }),
-      supabase.from('tabelas_preco_participantes').select('*'),
-      supabase.from('agentes_tabelas_preco').select('*').order('created_at', { ascending: true }),
-      supabase.from('parceiros_agentes_permitidos').select('*').order('created_at', { ascending: true }),
-      supabase.from('faixas_comissao').select('*').order('ordem', { ascending: true }),
-      supabase.from('formas_pagamento_v2').select('*').order('nome', { ascending: true }),
-      supabase.from('parceiros').select('id, cpf_cnpj, nome, nome_fantasia, tipo_parceiro, gestor_1_id, gestor_2_id, gestor_3_id, gestor_4_id, gestor_5_id').eq('status', 'ativo').order('nome'),
-      supabase.from('app_settings').select('value').eq('key', 'payment_methods').maybeSingle(),
-      supabase.from('app_settings').select('value').eq('key', 'payment_runtime').maybeSingle(),
-      supabase.from('app_settings').select('value').eq('key', 'pricing_matrix_rules').maybeSingle(),
-      supabase.from('app_settings').select('value').eq('key', 'nfse_automation_settings').maybeSingle(),
-    ])
-    const parceirosAgentesAusente = !!parceirosAgentesRes.error?.message?.includes("public.parceiros_agentes_permitidos")
-    const error = certsRes.error ?? tabelasRes.error ?? comissoesRes.error ?? pagamentosRes.error
-    if (error) { setCatalogoErro(error.message); setLoadingCatalogo(false); return }
-    setCertificados((certsRes.data ?? []) as Certificado[])
-    setTabelasPreco((tabelasRes.data ?? []) as TabelaPreco[])
-    setTabelaItens((itensRes.data ?? []) as TabelaPrecoItem[])
-    setTabelaParticipantes((partRes.data ?? []) as TabelaPrecoParticipante[])
-    setAgentesTabelaPreco((agentesTabelaRes.data ?? []) as AgenteTabelaPreco[])
-    setParceirosAgentesPermitidos(parceirosAgentesAusente ? [] : ((parceirosAgentesRes.data ?? []) as ParceiroAgentePermitido[]))
-    setComissoes((comissoesRes.data ?? []) as FaixaComissao[])
-    setPagamentos((pagamentosRes.data ?? []) as FormaPagamentoV2[])
-    setParceiros((parcRes.data ?? []) as ParceiroSimples[])
-    const savedMethods = Array.isArray(paymentMethodsRes.data?.value?.methods)
-      ? (paymentMethodsRes.data?.value.methods as PaymentMethodConfig[])
-      : []
-    setPaymentMethods(savedMethods)
-    const runtimeValue = paymentRuntimeRes.data?.value
-    setPaymentRuntime({
-      modo_teste_geral: runtimeValue?.modo_teste_geral ?? DEFAULT_PAYMENT_RUNTIME.modo_teste_geral,
-      bloquear_integracoes_reais: runtimeValue?.bloquear_integracoes_reais ?? DEFAULT_PAYMENT_RUNTIME.bloquear_integracoes_reais,
-      aviso_checkout: runtimeValue?.aviso_checkout ?? DEFAULT_PAYMENT_RUNTIME.aviso_checkout,
-    })
-    const savedPricingRules = Array.isArray(pricingMatrixRes.data?.value?.rules)
-      ? (pricingMatrixRes.data?.value.rules as PricingMatrixRule[])
-      : []
-    setPricingMatrixRules(savedPricingRules)
-    setNfseAutomationSettings(normalizeNfseAutomationSettings(nfseAutomationRes.data?.value as Partial<NfseAutomationSettings> | undefined))
-    if (parceirosAgentesAusente) {
-      setAgendaSchemaWarning('A tabela parceiros_agentes_permitidos ainda nao existe no Supabase. Regras avancadas de agenda por parceiro ficam desativadas ate aplicar o SQL da agenda online V2.')
-    } else if (parceirosAgentesRes.error) {
-      setAgendaSchemaWarning(parceirosAgentesRes.error.message)
+    try {
+      const [catalogRes, settingsRes] = await Promise.all([
+        fetch(getApiUrl('/catalog')).then(r => r.json()),
+        fetch(getApiUrl('/app-settings?keys=payment_methods,payment_runtime,pricing_matrix_rules,nfse_automation_settings')).then(r => r.json()),
+      ])
+      if (!catalogRes.ok) throw new Error(catalogRes.error ?? 'Erro ao carregar catálogo')
+      setCertificados((catalogRes.certificados ?? []) as Certificado[])
+      setTabelasPreco((catalogRes.tabelas ?? []) as TabelaPreco[])
+      setTabelaItens((catalogRes.itens ?? []) as TabelaPrecoItem[])
+      setTabelaParticipantes((catalogRes.participantes ?? []) as TabelaPrecoParticipante[])
+      setAgentesTabelaPreco((catalogRes.agentesTabelaPreco ?? []) as AgenteTabelaPreco[])
+      setParceirosAgentesPermitidos((catalogRes.parceirosAgentes ?? []) as ParceiroAgentePermitido[])
+      setComissoes((catalogRes.comissoes ?? []) as FaixaComissao[])
+      setPagamentos((catalogRes.pagamentos ?? []) as FormaPagamentoV2[])
+      setParceiros((catalogRes.parceiros ?? []) as ParceiroSimples[])
+      if (settingsRes.ok) {
+        const s = settingsRes.settings ?? {}
+        setPaymentMethods(Array.isArray(s.payment_methods?.methods) ? s.payment_methods.methods as PaymentMethodConfig[] : [])
+        const rv = s.payment_runtime
+        setPaymentRuntime({
+          modo_teste_geral: rv?.modo_teste_geral ?? DEFAULT_PAYMENT_RUNTIME.modo_teste_geral,
+          bloquear_integracoes_reais: rv?.bloquear_integracoes_reais ?? DEFAULT_PAYMENT_RUNTIME.bloquear_integracoes_reais,
+          aviso_checkout: rv?.aviso_checkout ?? DEFAULT_PAYMENT_RUNTIME.aviso_checkout,
+        })
+        setPricingMatrixRules(Array.isArray(s.pricing_matrix_rules?.rules) ? s.pricing_matrix_rules.rules as PricingMatrixRule[] : [])
+        setNfseAutomationSettings(normalizeNfseAutomationSettings(s.nfse_automation_settings as Partial<NfseAutomationSettings> | undefined))
+      }
+    } catch (e) {
+      setCatalogoErro(e instanceof Error ? e.message : 'Erro ao carregar catálogo')
+    } finally {
+      setLoadingCatalogo(false)
     }
-    setLoadingCatalogo(false)
   }, [])
 
   // ── effects ──────────────────────────────────────────────────
@@ -1376,8 +1208,8 @@ export default function Comercial() {
   }, [tab, fetchIndisponibilidades])
   useEffect(() => { void fetchCatalogo()  }, [fetchCatalogo])
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null))
-  }, [])
+    setCurrentUserId(profile?.id ?? null)
+  }, [profile?.id])
 
   useEffect(() => {
     if (pontosAtivos.length > 0 && !formV2.ponto_atendimento_id) {
@@ -1555,13 +1387,9 @@ export default function Comercial() {
       },
     }
 
-    const { data: vendaCriada, error } = await supabase
-      .from('vendas_certificados')
-      .insert([payload])
-      .select('*')
-      .single()
+    const vendaCriada = await saveAivenCommercialSale(payload as Record<string, unknown>)
     setSalvandoV(false)
-    if (error) { showMsg(traduzirErroDb(error, 'salvarVendaV2')); return }
+    if (!vendaCriada) { showMsg('Erro ao criar venda'); return }
 
     let comunicacaoResumo = 'sem contato do cliente para disparo automático'
     if (vendaCriada) {
@@ -1610,8 +1438,11 @@ export default function Comercial() {
         },
       }
 
-      const { error: agendaErr } = await supabase.from('agendamentos_validacao').insert([agendamentoPayload])
-      if (agendaErr) {
+      const agendaResp = await fetch(getApiUrl('/comercial/agenda/save'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(agendamentoPayload),
+      })
+      if (!agendaResp.ok) {
         showMsg('Venda salva. O agendamento automático não pôde ser criado — crie-o manualmente na aba Agenda.')
       }
     }
@@ -1639,26 +1470,13 @@ export default function Comercial() {
     }
 
     let savedId: string | null = null
-    if (!useLegacySupabase()) {
-      try {
-        const saved = await saveAivenCommercialCustomer(payload)
-        savedId = saved?.id ?? null
-      } catch (error) {
-        setSalvandoCliente(false)
-        showMsg(error instanceof Error ? error.message : 'Não foi possível salvar o cliente no Aiven.')
-        return
-      }
-    } else {
-      const query = editingClienteId
-        ? supabase.from('cadastros_base').update(payload).eq('id', editingClienteId).select('id').single()
-        : supabase.from('cadastros_base').insert([payload]).select('id').single()
-      const { data, error } = await query
-      if (error) {
-        setSalvandoCliente(false)
-        showMsg(traduzirErroDb(error, 'comercial'))
-        return
-      }
-      savedId = data?.id ?? null
+    try {
+      const saved = await saveAivenCommercialCustomer(payload)
+      savedId = saved?.id ?? null
+    } catch (error) {
+      setSalvandoCliente(false)
+      showMsg(error instanceof Error ? error.message : 'Não foi possível salvar o cliente.')
+      return
     }
 
     setSalvandoCliente(false)
@@ -1721,19 +1539,7 @@ export default function Comercial() {
   }
 
   async function garantirAgendamentoPendente(venda: VendaRow) {
-    const { data: existente, error: buscaErr } = await supabase
-      .from('agendamentos_validacao')
-      .select('id, venda_certificado_id, data_agendada, agente_registro_id, ponto_atendimento_id, tipo_atendimento, observacoes')
-      .eq('venda_certificado_id', venda.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (buscaErr) {
-      showMsg(`Não foi possível localizar o agendamento desta venda: ${buscaErr.message}`)
-      return null
-    }
-
+    const existente = await getAivenCommercialScheduleByVenda(venda.id)
     if (existente) return existente
 
     const payload = {
@@ -1746,25 +1552,16 @@ export default function Comercial() {
       ponto_atendimento_id: null,
       data_agendada: null,
       tipo_atendimento: null,
-      status_agendamento: 'pendente' as const,
+      status_agendamento: 'pendente',
       observacoes: venda.observacoes ?? null,
-      metadata: {
-        origem: 'acao_manual_venda',
-        status_inicial: 'aguardando_agendamento',
-      },
+      metadata: { origem: 'acao_manual_venda', status_inicial: 'aguardando_agendamento' },
     }
 
-    const { data: criado, error: insertErr } = await supabase
-      .from('agendamentos_validacao')
-      .insert([payload])
-      .select('id, venda_certificado_id, data_agendada, agente_registro_id, ponto_atendimento_id, tipo_atendimento, observacoes')
-      .single()
-
-    if (insertErr) {
-      showMsg(`A venda existe, mas não foi possível criar o agendamento pendente: ${insertErr.message}`)
+    const criado = await saveAivenCommercialAgendaPendente(payload)
+    if (!criado) {
+      showMsg('Não foi possível criar o agendamento pendente')
       return null
     }
-
     return criado
   }
 
@@ -1789,15 +1586,10 @@ export default function Comercial() {
   }
 
   async function atualizarStatusVendaV2(id: string, status: StatusVendaCertificado) {
-    if (!useLegacySupabase()) {
-      const updated = await updateAivenCommercialSaleStatus(id, status)
-      if (updated) {
-        setVendasV2(prev => prev.map(v => v.id === id ? { ...v, status_venda: status } : v))
-      }
-      return
+    const updated = await updateAivenCommercialSaleStatus(id, status)
+    if (updated) {
+      setVendasV2(prev => prev.map(v => v.id === id ? { ...v, status_venda: status } : v))
     }
-    await supabase.from('vendas_certificados').update({ status_venda: status }).eq('id', id)
-    setVendasV2(prev => prev.map(v => v.id === id ? { ...v, status_venda: status } : v))
   }
 
   async function salvarAgendamentoValidacaoV2() {
@@ -1821,33 +1613,13 @@ export default function Comercial() {
     }
 
     let agendaErr: { message?: string } | null = null
-    let vendaErr: { message?: string } | null = null
-    if (!useLegacySupabase()) {
-      try {
-        const updated = await saveAivenCommercialAgenda(payload)
-        if (!updated) throw new Error('Falha ao salvar agendamento no Aiven.')
-        await updateAivenCommercialSaleStatus(formAgendaV2.venda_certificado_id, 'agendado')
-      } catch (error) {
-        agendaErr = { message: error instanceof Error ? error.message : 'Erro desconhecido' }
-      }
-    } else {
-      const result = await Promise.all([
-        supabase.from('agendamentos_validacao').update({
-          agente_registro_id: formAgendaV2.agente_registro_id,
-          ponto_atendimento_id: formAgendaV2.ponto_atendimento_id,
-          data_agendada: dataAgendada.toISOString(),
-          tipo_atendimento: formAgendaV2.tipo_atendimento || null,
-          observacoes: formAgendaV2.observacoes.trim() || null,
-          status_agendamento: 'confirmado' as const,
-        }).eq('id', formAgendaV2.agenda_id),
-        supabase.from('vendas_certificados').update({
-          agente_registro_id: formAgendaV2.agente_registro_id,
-          ponto_atendimento_id: formAgendaV2.ponto_atendimento_id,
-          status_venda: 'agendado',
-        }).eq('id', formAgendaV2.venda_certificado_id),
-      ])
-      agendaErr = result[0].error
-      vendaErr = result[1].error
+    const vendaErr: { message?: string } | null = null
+    try {
+      const updated = await saveAivenCommercialAgenda(payload)
+      if (!updated) throw new Error('Falha ao salvar agendamento.')
+      await updateAivenCommercialSaleStatus(formAgendaV2.venda_certificado_id, 'agendado')
+    } catch (error) {
+      agendaErr = { message: error instanceof Error ? error.message : 'Erro desconhecido' }
     }
     setSalvandoAgendaV2(false)
 
@@ -1869,11 +1641,7 @@ export default function Comercial() {
     if (item.origem !== 'validacao_v2' || !item.venda_certificado_id) return
     let venda = vendasV2.find(v => v.id === item.venda_certificado_id) ?? null
     if (!venda) {
-      const { data } = await supabase
-        .from('vendas_certificados')
-        .select('*')
-        .eq('id', item.venda_certificado_id)
-        .single()
+      const data = await getAivenCommercialSaleById(item.venda_certificado_id)
       if (data) {
         venda = { ...(data as VendaCertificado), cadastros_base: null, pontos_atendimento: null }
         setVendasV2(prev => [...prev, venda!])
@@ -1903,25 +1671,20 @@ export default function Comercial() {
   async function salvarAgendamento() {
     if (!formA.cliente.trim() || !formA.data_hora) return
     setSalvandoA(true)
-    if (!useLegacySupabase()) {
-      try {
-        const saved = await saveAivenCommercialAgenda({
-          cliente: formA.cliente.trim(),
-          telefone: formA.telefone || null,
-          servico: formA.servico || null,
-          data_hora: new Date(formA.data_hora).toISOString(),
-          status: formA.status,
-          observacoes: formA.observacoes || null,
-        })
-        if (!saved) throw new Error('Falha ao salvar agendamento no Aiven.')
-      } catch (error) {
-        showMsg(error instanceof Error ? error.message : 'Falha ao salvar agendamento.')
-        setSalvandoA(false)
-        return
-      }
-    } else {
-      const { error } = await supabase.from('agendamentos').insert([formA])
-      if (error) { showMsg(traduzirErroDb(error, 'comercial')); setSalvandoA(false); return }
+    try {
+      const saved = await saveAivenCommercialAgenda({
+        cliente: formA.cliente.trim(),
+        telefone: formA.telefone || null,
+        servico: formA.servico || null,
+        data_hora: new Date(formA.data_hora).toISOString(),
+        status: formA.status,
+        observacoes: formA.observacoes || null,
+      })
+      if (!saved) throw new Error('Falha ao salvar agendamento.')
+    } catch (error) {
+      showMsg(error instanceof Error ? error.message : 'Falha ao salvar agendamento.')
+      setSalvandoA(false)
+      return
     }
     setSalvandoA(false)
     setShowFormA(false)
@@ -1935,37 +1698,29 @@ export default function Comercial() {
 
     if (item.origem === 'validacao_v2') {
       const statusV2 = status === 'aguardando' ? 'pendente' : status
-      if (!useLegacySupabase()) {
-        await saveAivenCommercialAgenda({
-          agendaId: id,
-          vendaId: item.venda_certificado_id ?? null,
-          data_hora: new Date(item.data_hora).toISOString(),
-          status: statusV2,
-          observacoes: item.observacoes ?? null,
-          agente_registro_id: item.agente_registro_id ?? null,
-          ponto_atendimento_id: item.ponto_atendimento_id ?? null,
-          tipo_atendimento: item.tipo_atendimento ?? null,
-        })
-      } else {
-        await supabase.from('agendamentos_validacao').update({ status_agendamento: statusV2 }).eq('id', id)
-      }
+      await saveAivenCommercialAgenda({
+        agendaId: id,
+        vendaId: item.venda_certificado_id ?? null,
+        data_hora: new Date(item.data_hora).toISOString(),
+        status: statusV2,
+        observacoes: item.observacoes ?? null,
+        agente_registro_id: item.agente_registro_id ?? null,
+        ponto_atendimento_id: item.ponto_atendimento_id ?? null,
+        tipo_atendimento: item.tipo_atendimento ?? null,
+      })
       if (item.venda_certificado_id) {
         setAgendamentoStatusPorVenda(prev => ({ ...prev, [item.venda_certificado_id!]: statusV2 as StatusAgendamentoValidacao }))
       }
     } else {
-      if (!useLegacySupabase()) {
-        await saveAivenCommercialAgenda({
-          agendaId: id,
-          cliente: item.cliente,
-          telefone: item.telefone ?? null,
-          servico: item.servico ?? null,
-          data_hora: new Date(item.data_hora).toISOString(),
-          status,
-          observacoes: item.observacoes ?? null,
-        })
-      } else {
-        await supabase.from('agendamentos').update({ status }).eq('id', id)
-      }
+      await saveAivenCommercialAgenda({
+        agendaId: id,
+        cliente: item.cliente,
+        telefone: item.telefone ?? null,
+        servico: item.servico ?? null,
+        data_hora: new Date(item.data_hora).toISOString(),
+        status,
+        observacoes: item.observacoes ?? null,
+      })
     }
 
     setAgenda(prev => prev.map(a => a.id === id ? { ...a, status } : a))
@@ -1996,9 +1751,11 @@ export default function Comercial() {
       metadata: {},
     }))
 
-    const { error } = await supabase.from('agentes_disponibilidade').insert(payload)
+    const rDisp = await fetch(getApiUrl('/comercial/disponibilidade'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    })
     setSalvandoDisp(false)
-    if (error) { showMsg(traduzirErroDb(error, 'disponibilidade')); return }
+    if (!rDisp.ok) { showMsg('Erro ao salvar disponibilidade'); return }
 
     setShowFormDisp(false)
     setFormDisp({
@@ -2011,7 +1768,9 @@ export default function Comercial() {
   }
 
   async function toggleDisponibilidade(item: AgenteDisponibilidade) {
-    await supabase.from('agentes_disponibilidade').update({ ativo: !item.ativo }).eq('id', item.id)
+    await fetch(getApiUrl(`/comercial/disponibilidade/${item.id}`), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: !item.ativo }),
+    })
     setDisponibilidades(prev => prev.map(d => d.id === item.id ? { ...d, ativo: !d.ativo } : d))
   }
 
@@ -2040,9 +1799,11 @@ export default function Comercial() {
       metadata: {},
     }
 
-    const { error } = await supabase.from('agentes_indisponibilidades').insert([payload])
+    const rIndisp = await fetch(getApiUrl('/comercial/indisponibilidade'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    })
     setSalvandoIndisp(false)
-    if (error) { showMsg(traduzirErroDb(error, 'bloqueio')); return }
+    if (!rIndisp.ok) { showMsg('Erro ao salvar bloqueio'); return }
 
     setShowFormIndisp(false)
     setFormIndisp({
@@ -2053,7 +1814,9 @@ export default function Comercial() {
   }
 
   async function toggleIndisponibilidade(item: AgenteIndisponibilidade) {
-    await supabase.from('agentes_indisponibilidades').update({ ativo: !item.ativo }).eq('id', item.id)
+    await fetch(getApiUrl(`/comercial/indisponibilidade/${item.id}`), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: !item.ativo }),
+    })
     setIndisponibilidades(prev => prev.map(d => d.id === item.id ? { ...d, ativo: !d.ativo } : d))
   }
 
@@ -2080,21 +1843,25 @@ export default function Comercial() {
       ativo: formAgenteTabela.ativo,
       metadata: {},
     }
-    const { error } = await supabase.from('agentes_tabelas_preco').insert([payload])
+    const rAT = await fetch(getApiUrl('/catalog/agentes-tabelas'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    })
     setSalvandoCatalogo(false)
-    if (error) { showMsg(traduzirErroDb(error, 'agente-tabela')); return }
+    if (!rAT.ok) { showMsg('Erro ao vincular agente à tabela'); return }
     setShowFormAgenteTabela(false)
     setFormAgenteTabela(EMPTY_AGENTE_TABELA)
     void fetchCatalogo()
   }
 
   async function toggleAgenteTabela(item: AgenteTabelaPreco) {
-    await supabase.from('agentes_tabelas_preco').update({ ativo: !item.ativo }).eq('id', item.id)
+    await fetch(getApiUrl(`/catalog/agentes-tabelas/${item.id}`), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: !item.ativo }),
+    })
     setAgentesTabelaPreco(prev => prev.map(v => v.id === item.id ? { ...v, ativo: !v.ativo } : v))
   }
 
   async function excluirAgenteTabela(id: string) {
-    await supabase.from('agentes_tabelas_preco').delete().eq('id', id)
+    await fetch(getApiUrl(`/catalog/agentes-tabelas/${id}`), { method: 'DELETE' })
     setAgentesTabelaPreco(prev => prev.filter(v => v.id !== id))
   }
 
@@ -2117,23 +1884,26 @@ export default function Comercial() {
     if (!formCert.tipo.trim() || !formCert.validade.trim()) return
     setSalvandoCatalogo(true)
     const payload = { ...formCert, tipo: formCert.tipo.trim(), validade: formCert.validade.trim() }
-    const { error } = editingCertId
-      ? await supabase.from('certificados').update(payload).eq('id', editingCertId)
-      : await supabase.from('certificados').insert([payload])
+    const rC = await fetch(getApiUrl('/catalog/certificados'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editingCertId ? { ...payload, id: editingCertId } : payload),
+    })
     setSalvandoCatalogo(false)
-    if (error) { showMsg(traduzirErroDb(error, 'comercial')); return }
+    if (!rC.ok) { showMsg('Erro ao salvar certificado'); return }
     setShowFormCert(false); setEditingCertId(null); setFormCert({ ...EMPTY_CERTIFICADO }); void fetchCatalogo()
   }
 
   async function toggleCertificado(certificado: Certificado) {
-    await supabase.from('certificados').update({ ativo: !certificado.ativo }).eq('id', certificado.id)
+    await fetch(getApiUrl(`/catalog/certificados/${certificado.id}`), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: !certificado.ativo }),
+    })
     setCertificados(prev => prev.map(c => c.id === certificado.id ? { ...c, ativo: !c.ativo } : c))
   }
 
   async function excluirCertificado(id: string) {
     if (!confirm('Excluir este certificado do catálogo? Esta ação não pode ser desfeita.')) return
-    const { error } = await supabase.from('certificados').delete().eq('id', id)
-    if (error) { showMsg(traduzirErroDb(error, 'comercial')); return }
+    const rD = await fetch(getApiUrl(`/catalog/certificados/${id}`), { method: 'DELETE' })
+    if (!rD.ok) { showMsg('Erro ao excluir certificado'); return }
     setCertificados(prev => prev.filter(c => c.id !== id))
     setSelectedCertIds(prev => { const s = new Set(prev); s.delete(id); return s })
   }
@@ -2142,8 +1912,10 @@ export default function Comercial() {
     if (!selectedCertIds.size) return
     if (!confirm(`Excluir ${selectedCertIds.size} certificado(s) selecionado(s)? Esta ação não pode ser desfeita.`)) return
     const ids = [...selectedCertIds]
-    const { error } = await supabase.from('certificados').delete().in('id', ids)
-    if (error) { showMsg(traduzirErroDb(error, 'comercial')); return }
+    const rBD = await fetch(getApiUrl('/catalog/certificados'), {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
+    })
+    if (!rBD.ok) { showMsg('Erro ao excluir certificados'); return }
     setCertificados(prev => prev.filter(c => !selectedCertIds.has(c.id)))
     setSelectedCertIds(new Set())
   }
@@ -2197,19 +1969,19 @@ export default function Comercial() {
         estoque:              0,
         ativo:                (row['cadastrado'] ?? row['status'] ?? '').toLowerCase() === 'sim' || (row['status'] ?? '').toLowerCase() === 'ativo',
       }))
-      const { data: existing } = await supabase.from('certificados').select('id, codigo')
+      const existResp = await fetch(getApiUrl('/catalog/itens/certificados-id'))
+      const existData = await existResp.json()
       const existMap = new Map(
-        (existing ?? []).filter(e => e.codigo != null).map(e => [e.codigo as number, e.id as string])
+        ((existData.rows ?? []) as { id: string; codigo: number | null }[]).filter(e => e.codigo != null).map(e => [e.codigo as number, e.id])
       )
       const toInsert = records.filter(r => r.codigo == null || !existMap.has(r.codigo))
       const toUpdate = records.filter(r => r.codigo != null && existMap.has(r.codigo!))
         .map(r => ({ ...r, id: existMap.get(r.codigo!)! }))
-      const ops: Promise<{ error: { message: string } | null }>[] = []
-      if (toInsert.length) ops.push(supabase.from('certificados').insert(toInsert) as any)
-      for (const { id, ...p } of toUpdate) ops.push(supabase.from('certificados').update(p).eq('id', id) as any)
-      const results = await Promise.all(ops)
-      const err = results.find(r => r.error)
-      if (err?.error) { showMsg(traduzirErroDb(err.error, 'importar-certificados')); return }
+      const allItems = [...toInsert, ...toUpdate]
+      const rBI = await fetch(getApiUrl('/catalog/certificados/bulk'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: allItems }),
+      })
+      if (!rBI.ok) { showMsg('Erro ao importar certificados'); return }
       showMsg(`${records.length} certificado(s) importado(s)/atualizado(s).`, 'ok')
       void fetchCatalogo()
     } finally {
@@ -2254,10 +2026,13 @@ export default function Comercial() {
 
     if (!records.length) return { inserted: 0, error: null as string | null }
 
-    const { error } = await supabase.from('tabelas_preco_itens').insert(records)
+    const rBI2 = await fetch(getApiUrl('/catalog/itens/bulk'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: records }),
+    })
+    const biData = await rBI2.json().catch(() => null)
     return {
       inserted: records.length,
-      error: error?.message ?? null,
+      error: rBI2.ok ? null : (biData?.error ?? 'Erro ao inserir itens'),
     }
   }
 
@@ -2265,10 +2040,12 @@ export default function Comercial() {
     if (!formTabela.nome.trim()) return
     setSalvandoCatalogo(true)
     const payload = { ...formTabela, nome: formTabela.nome.trim() }
-    const { data, error } = editingTabelaId
-      ? await supabase.from('tabelas_preco').update(payload).eq('id', editingTabelaId).select().single()
-      : await supabase.from('tabelas_preco').insert([payload]).select().single()
-    if (error) { setSalvandoCatalogo(false); showMsg(traduzirErroDb(error, 'comercial')); return }
+    const rT = await fetch(getApiUrl('/catalog/tabelas'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editingTabelaId ? { ...payload, id: editingTabelaId } : payload),
+    })
+    if (!rT.ok) { setSalvandoCatalogo(false); showMsg('Erro ao salvar tabela'); return }
+    const data = await rT.json().then(d => d.tabela).catch(() => null)
     let produtosAutoVinculados = 0
     if (!editingTabelaId && data?.id) {
       const autoLinkRes = await criarVinculosBaseDaTabela(data.id, certificadosAtivos)
@@ -2288,14 +2065,16 @@ export default function Comercial() {
     void fetchCatalogo()
   }
   async function toggleTabela(t: TabelaPreco) {
-    await supabase.from('tabelas_preco').update({ ativo: !t.ativo }).eq('id', t.id)
+    await fetch(getApiUrl(`/catalog/tabelas/${t.id}`), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: !t.ativo }),
+    })
     setTabelasPreco(prev => prev.map(x => x.id === t.id ? { ...x, ativo: !x.ativo } : x))
   }
 
   async function excluirTabela(tabela: TabelaPreco) {
     if (!confirm(`Excluir a tabela "${tabela.nome}" e todos os vinculos de produtos/participantes relacionados?`)) return
-    const { error } = await supabase.from('tabelas_preco').delete().eq('id', tabela.id)
-    if (error) { showMsg(traduzirErroDb(error, 'excluir-tabela')); return }
+    const rDT = await fetch(getApiUrl(`/catalog/tabelas/${tabela.id}`), { method: 'DELETE' })
+    if (!rDT.ok) { showMsg('Erro ao excluir tabela'); return }
     setTabelasPreco(prev => prev.filter(item => item.id !== tabela.id))
     setTabelaItens(prev => prev.filter(item => item.tabela_preco_id !== tabela.id))
     setTabelaParticipantes(prev => prev.filter(item => item.tabela_preco_id !== tabela.id))
@@ -2396,17 +2175,14 @@ export default function Comercial() {
     ]
 
     setSalvandoCatalogo(true)
-    const { error } = await supabase
-      .from('app_settings')
-      .upsert({
-        key: 'pricing_matrix_rules',
-        value: { rules: nextRules },
-        updated_by: profile?.id ?? null,
-      }, { onConflict: 'key' })
+    const rDel = await fetch(getApiUrl('/app-settings'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'pricing_matrix_rules', value: { rules: nextRules } }),
+    })
     setSalvandoCatalogo(false)
 
-    if (error) {
-      showMsg(traduzirErroDb(error, 'regra-tabela-matriz'))
+    if (!rDel.ok) {
+      showMsg('Erro ao remover regra da matriz')
       return
     }
 
@@ -2456,33 +2232,24 @@ export default function Comercial() {
     }
 
     setSalvandoCatalogo(true)
-    const saveRulePromise = supabase
-      .from('app_settings')
-      .upsert({
-        key: 'pricing_matrix_rules',
-        value: {
-          rules: [
-            ...pricingMatrixRules.filter(rule => rule.tabela_preco_id !== tabelaId),
-            {
-              tabela_preco_id: tabelaId,
-              tabela_base_id: pricingMatrixForm.tabela_base_id,
-              ajuste_percentual: percentual,
-            },
-          ],
-        },
-        updated_by: profile?.id ?? null,
-      }, { onConflict: 'key' })
-
-    const updateOps = updates.map(item =>
-      supabase.from('tabelas_preco_itens').update({ valor: item.valor }).eq('id', item.id)
-    )
-
-    const [saveRuleRes, ...updateResults] = await Promise.all([saveRulePromise, ...updateOps])
+    const newRules = [
+      ...pricingMatrixRules.filter(rule => rule.tabela_preco_id !== tabelaId),
+      { tabela_preco_id: tabelaId, tabela_base_id: pricingMatrixForm.tabela_base_id, ajuste_percentual: percentual },
+    ]
+    const [saveRuleRes, updatePricesRes] = await Promise.all([
+      fetch(getApiUrl('/app-settings'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'pricing_matrix_rules', value: { rules: newRules } }),
+      }),
+      fetch(getApiUrl('/catalog/itens/bulk-prices'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
+      }),
+    ])
     setSalvandoCatalogo(false)
 
-    const updateError = updateResults.find(result => result.error)?.error
-    if (saveRuleRes.error || updateError) {
-      showMsg('Erro ao aplicar a regra da matriz: ' + (saveRuleRes.error?.message ?? updateError?.message ?? 'Erro desconhecido.'))
+    if (!saveRuleRes.ok || !updatePricesRes.ok) {
+      showMsg('Erro ao aplicar a regra da matriz de preços.')
       return
     }
 
@@ -2516,16 +2283,17 @@ export default function Comercial() {
   async function salvarItem() {
     if (!formItem.certificado_id || formItem.valor < 0) return
     setSalvandoCatalogo(true)
-    const { error } = editingItemId
-      ? await supabase.from('tabelas_preco_itens').update(formItem).eq('id', editingItemId)
-      : await supabase.from('tabelas_preco_itens').insert([formItem])
+    const rI = await fetch(getApiUrl('/catalog/itens'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editingItemId ? { ...formItem, id: editingItemId } : formItem),
+    })
     setSalvandoCatalogo(false)
-    if (error) { showMsg(traduzirErroDb(error, 'comercial')); return }
+    if (!rI.ok) { showMsg('Erro ao salvar item'); return }
     setShowFormItem(false); setEditingItemId(null); void fetchCatalogo()
   }
   async function excluirItem(id: string) {
     if (!confirm('Remover este item da tabela?')) return
-    await supabase.from('tabelas_preco_itens').delete().eq('id', id)
+    await fetch(getApiUrl(`/catalog/itens/${id}`), { method: 'DELETE' })
     setTabelaItens(prev => prev.filter(x => x.id !== id))
     setSelectedItemIds(prev => { const s = new Set(prev); s.delete(id); return s })
   }
@@ -2534,13 +2302,17 @@ export default function Comercial() {
     if (!selectedItemIds.size) return
     if (!confirm(`Remover ${selectedItemIds.size} produto(s) selecionado(s) da tabela?`)) return
     const ids = [...selectedItemIds]
-    const { error } = await supabase.from('tabelas_preco_itens').delete().in('id', ids)
-    if (error) { showMsg(traduzirErroDb(error, 'comercial')); return }
+    const rBI3 = await fetch(getApiUrl('/catalog/itens'), {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
+    })
+    if (!rBI3.ok) { showMsg('Erro ao remover itens'); return }
     setTabelaItens(prev => prev.filter(x => !selectedItemIds.has(x.id)))
     setSelectedItemIds(new Set())
   }
   async function toggleItem(item: TabelaPrecoItem) {
-    await supabase.from('tabelas_preco_itens').update({ ativo: !item.ativo }).eq('id', item.id)
+    await fetch(getApiUrl(`/catalog/itens/${item.id}`), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: !item.ativo }),
+    })
     setTabelaItens(prev => prev.map(x => x.id === item.id ? { ...x, ativo: !x.ativo } : x))
   }
 
@@ -2567,7 +2339,8 @@ export default function Comercial() {
           .replace(/\s+/g, '')
       const firstFilled = (row: Record<string, string>, keys: string[]) =>
         keys.map(key => row[key]).find(value => String(value ?? '').trim().length > 0) ?? ''
-      const certsAll = await supabase.from('certificados').select('id, codigo, tipo, validade, categoria, descricao_produto, hash')
+      const certsAllResp = await fetch(getApiUrl('/catalog/certificados'))
+      const certsAll = await certsAllResp.json().then(d => ({ data: (d.certificados ?? []) as Certificado[] }))
       const certById = new Map((certsAll.data ?? []).map(c => [String(c.id), c.id as string]))
       const certByHash = new Map(
         (certsAll.data ?? [])
@@ -2659,16 +2432,18 @@ export default function Comercial() {
         }
       }).filter((r): r is NovaTabelaPrecoItem => r !== null)
       if (!records.length) { showMsg('Nenhum item reconhecido. Verifique as colunas: Código (ou Nome), Preço Venda, Valor Custo, Valor Repasse.'); return }
-      const existing = await supabase.from('tabelas_preco_itens').select('id, certificado_id').eq('tabela_preco_id', tabelaId)
-      const existMap = new Map((existing.data ?? []).map(e => [e.certificado_id as string, e.id as string]))
-      const toInsert = records.filter(r => !existMap.has(r.certificado_id))
-      const toUpdate = records.filter(r => existMap.has(r.certificado_id)).map(r => ({ ...r, id: existMap.get(r.certificado_id)! }))
-      const ops: Promise<{ error: { message: string } | null }>[] = []
-      if (toInsert.length) ops.push(supabase.from('tabelas_preco_itens').insert(toInsert) as any)
-      for (const { id, ...p } of toUpdate) ops.push(supabase.from('tabelas_preco_itens').update(p).eq('id', id) as any)
-      const results = await Promise.all(ops)
-      const err = results.find(r => r.error)
-      if (err?.error) { showMsg(traduzirErroDb(err.error, 'importar-produtos')); return }
+      const existResp2 = await fetch(getApiUrl(`/catalog/itens`))
+      const existData2 = await existResp2.json()
+      const existMap = new Map(
+        ((existData2.itens ?? []) as { id: string; certificado_id: string; tabela_preco_id: string }[])
+          .filter(e => e.tabela_preco_id === tabelaId)
+          .map(e => [e.certificado_id, e.id])
+      )
+      const allItems2 = records.map(r => existMap.has(r.certificado_id) ? { ...r, id: existMap.get(r.certificado_id)! } : r)
+      const rBulk = await fetch(getApiUrl('/catalog/itens/bulk'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: allItems2 }),
+      })
+      if (!rBulk.ok) { showMsg('Erro ao importar itens da tabela'); return }
       if (unresolvedRows.length > 0) {
         showMsg(`${records.length} produto(s) importado(s)/atualizado(s). ${unresolvedRows.length} linha(s) ficaram sem vínculo automático e precisam de conferência.` , 'ok')
       } else {
@@ -2720,17 +2495,16 @@ export default function Comercial() {
       }).filter((x): x is NonNullable<typeof x> => x !== null)
 
       const clientesUniq = [...new Map(clientePayloads.map(c => [c.cpf_cnpj, c])).values()]
-      for (let i = 0; i < clientesUniq.length; i += BATCH) {
-        const { error } = await supabase.from('cadastros_base')
-          .upsert(clientesUniq.slice(i, i + BATCH), { onConflict: 'cpf_cnpj', ignoreDuplicates: false })
-        if (error) { showMsg(traduzirErroDb(error, 'importar-clientes')); return }
-      }
+      const rBCI = await fetch(getApiUrl('/comercial/clientes/batch-import'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payloads: clientesUniq }),
+      })
+      if (!rBCI.ok) { showMsg('Erro ao importar clientes'); return }
 
       // 2. busca IDs de clientes para vincular às vendas
       const allDocs = clientesUniq.map(c => c.cpf_cnpj)
-      const { data: cadastrosData } = await supabase
-        .from('cadastros_base').select('id, cpf_cnpj').in('cpf_cnpj', allDocs)
-      const idByDoc = new Map((cadastrosData ?? []).map(c => [c.cpf_cnpj as string, c.id as string]))
+      const cadastrosData = await getAivenCommercialClientesByDocs(allDocs)
+      const idByDoc = new Map(cadastrosData.map(c => [c.cpf_cnpj, c.id]))
 
       // 3. monta payloads de venda COM validado_safeweb = true
       const vendasPayloads = rows.map(r => {
@@ -2762,32 +2536,31 @@ export default function Comercial() {
 
       // 4. separa registros que já existem no CRM dos que são só da Safeweb
       const protocolos = vendasPayloads.map(v => v.protocolo_numero)
-      const { data: existentes } = await supabase
-        .from('vendas_certificados').select('protocolo_numero').in('protocolo_numero', protocolos)
-      const existSet = new Set((existentes ?? []).map(e => e.protocolo_numero as string))
+      const existResp3 = await fetch(getApiUrl('/comercial/vendas/protocolos'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ protocolos }),
+      })
+      const existData3 = await existResp3.json()
+      const existSet = new Set((existData3.protocolos ?? []) as string[])
       const paraAtualizar = vendasPayloads.filter(v =>  existSet.has(v.protocolo_numero))
       const novos         = vendasPayloads.filter(v => !existSet.has(v.protocolo_numero)).length
 
       // 5. atualiza apenas os que já existem (INSERT violaria NOT NULL de vendedor_id, etc.)
       for (let i = 0; i < paraAtualizar.length; i += BATCH) {
         const batch = paraAtualizar.slice(i, i + BATCH)
-        const ops = batch.map(({ protocolo_numero, ...campos }) =>
-          supabase.from('vendas_certificados').update(campos).eq('protocolo_numero', protocolo_numero)
-        )
-        const results = await Promise.all(ops)
-        const err = results.find(r => r.error)
-        if (err?.error) { showMsg(traduzirErroDb(err.error, 'importar-vendas')); return }
+        const rBVU = await fetch(getApiUrl('/comercial/vendas/batch-update'), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ updates: batch }),
+        })
+        if (!rBVU.ok) { showMsg('Erro ao importar vendas'); return }
       }
 
-      // 6. conta divergentes: vendas no CRM sem validado_safeweb que têm protocolo fora da planilha
-      //    (apenas as emitidas — rascunho/agendado não contam)
-      const { count: divergentes } = await supabase
-        .from('vendas_certificados')
-        .select('id', { count: 'exact', head: true })
-        .eq('status_venda', 'emitido')
-        .is('validado_safeweb', null)
+      // 6. conta divergentes: vendas emitidas sem validado_safeweb
+      const divResp = await fetch(getApiUrl('/comercial/vendas/count-sem-validacao'))
+      const divData = await divResp.json()
+      const divergentes = divData.count ?? 0
 
-      setResultSafeweb({ clientes: clientesUniq.length, novos, atualizados: paraAtualizar.length, divergentes: divergentes ?? 0 })
+      setResultSafeweb({ clientes: clientesUniq.length, novos, atualizados: paraAtualizar.length, divergentes })
     } finally {
       setImportandoSafeweb(false)
     }
@@ -2835,18 +2608,19 @@ export default function Comercial() {
 
       // check existing to count inserts vs updates
       const docs = payloads.map(p => p.cpf_cnpj)
-      const { data: existing } = await supabase.from('cadastros_base').select('cpf_cnpj').in('cpf_cnpj', docs)
-      const existSet = new Set((existing ?? []).map(e => e.cpf_cnpj as string))
+      const existRespL = await fetch(getApiUrl('/comercial/clientes/batch-import'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payloads, dryRunCheckOnly: true }),
+      })
+      const existDataL = await existRespL.json()
+      const existSet = new Set((existDataL.existing ?? []) as string[])
       const inseridos = payloads.filter(p => !existSet.has(p.cpf_cnpj)).length
       const atualizados = payloads.filter(p => existSet.has(p.cpf_cnpj)).length
 
-      const BATCH = 100
-      for (let i = 0; i < payloads.length; i += BATCH) {
-        const batch = payloads.slice(i, i + BATCH)
-        const { error } = await supabase.from('cadastros_base')
-          .upsert(batch, { onConflict: 'cpf_cnpj', ignoreDuplicates: false })
-        if (error) { showMsg(traduzirErroDb(error, 'importar-clientes-leads')); return }
-      }
+      const rLeads = await fetch(getApiUrl('/comercial/clientes/batch-import'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payloads }),
+      })
+      if (!rLeads.ok) { showMsg('Erro ao importar clientes'); return }
 
       setResultClientes({ inseridos, atualizados })
     } finally {
@@ -2856,13 +2630,8 @@ export default function Comercial() {
 
   async function carregarSafewebVendas() {
     setLoadingSafewebVendas(true)
-    const { data } = await supabase
-      .from('vendas_certificados')
-      .select('*, cadastros_base(nome, cpf_cnpj)')
-      .eq('validado_safeweb', true)
-      .order('data_inicio_validade', { ascending: false })
-      .limit(500)
-    setSafewebVendas((data ?? []) as VendaRow[])
+    const data = await getAivenCommercialSafewebVendas()
+    setSafewebVendas(data as VendaRow[])
     setLoadingSafewebVendas(false)
   }
 
@@ -2880,13 +2649,15 @@ export default function Comercial() {
       perfil:        formParticipante.tipo_participante === 'perfil'         ? formParticipante.perfil         : null,
     }
     setSalvandoCatalogo(true)
-    const { error } = await supabase.from('tabelas_preco_participantes').insert([payload])
+    const rPart = await fetch(getApiUrl('/catalog/participantes'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    })
     setSalvandoCatalogo(false)
-    if (error) { showMsg(traduzirErroDb(error, 'comercial')); return }
+    if (!rPart.ok) { showMsg('Erro ao salvar participante'); return }
     setShowFormParticipante(false); void fetchCatalogo()
   }
   async function excluirParticipante(id: string) {
-    await supabase.from('tabelas_preco_participantes').delete().eq('id', id)
+    await fetch(getApiUrl(`/catalog/participantes/${id}`), { method: 'DELETE' })
     setTabelaParticipantes(prev => prev.filter(x => x.id !== id))
   }
 
@@ -2902,16 +2673,19 @@ export default function Comercial() {
     if (!formComissao.faixa.trim() || formComissao.percentual < 0) return
     setSalvandoCatalogo(true)
     const payload = { ...formComissao, faixa: formComissao.faixa.trim() }
-    const { error } = editingComissaoId
-      ? await supabase.from('faixas_comissao').update(payload).eq('id', editingComissaoId)
-      : await supabase.from('faixas_comissao').insert([payload])
+    const rCom = await fetch(getApiUrl('/catalog/faixas-comissao'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editingComissaoId ? { ...payload, id: editingComissaoId } : payload),
+    })
     setSalvandoCatalogo(false)
-    if (error) { showMsg(traduzirErroDb(error, 'comercial')); return }
+    if (!rCom.ok) { showMsg('Erro ao salvar faixa de comissão'); return }
     setShowFormComissao(false); setEditingComissaoId(null); setFormComissao({ ...EMPTY_COMISSAO }); void fetchCatalogo()
   }
 
   async function toggleComissao(comissao: FaixaComissao) {
-    await supabase.from('faixas_comissao').update({ ativo: !comissao.ativo }).eq('id', comissao.id)
+    await fetch(getApiUrl(`/catalog/faixas-comissao/${comissao.id}`), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: !comissao.ativo }),
+    })
     setComissoes(prev => prev.map(c => c.id === comissao.id ? { ...c, ativo: !c.ativo } : c))
   }
 
@@ -2941,16 +2715,19 @@ export default function Comercial() {
       gateway: formPagamento.gateway.trim() || null,
       ativo: formPagamento.ativo,
     }
-    const { error } = editingPagamentoId
-      ? await supabase.from('formas_pagamento_v2').update(payload).eq('id', editingPagamentoId)
-      : await supabase.from('formas_pagamento_v2').insert([payload])
+    const rPag = await fetch(getApiUrl('/catalog/formas-pagamento'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editingPagamentoId ? { ...payload, id: editingPagamentoId } : payload),
+    })
     setSalvandoCatalogo(false)
-    if (error) { showMsg(traduzirErroDb(error, 'comercial')); return }
+    if (!rPag.ok) { showMsg('Erro ao salvar forma de pagamento'); return }
     setShowFormPagamento(false); setEditingPagamentoId(null); setFormPagamento({ ...EMPTY_PAGAMENTO }); void fetchCatalogo()
   }
 
   async function togglePagamento(pagamento: FormaPagamentoV2) {
-    await supabase.from('formas_pagamento_v2').update({ ativo: !pagamento.ativo }).eq('id', pagamento.id)
+    await fetch(getApiUrl(`/catalog/formas-pagamento/${pagamento.id}`), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: !pagamento.ativo }),
+    })
     setPagamentos(prev => prev.map(p => p.id === pagamento.id ? { ...p, ativo: !p.ativo } : p))
   }
 
@@ -2996,38 +2773,11 @@ export default function Comercial() {
   }
 
   async function abrirFaturaVenda(venda: VendaRow) {
-    setLoadingVendaFinanceiro(true)
-    setVendaFinanceiroModal(null)
-
-    const [{ data: lancamentos, error: lancErr }, { data: documentos, error: docsErr }] = await Promise.all([
-      supabase
-        .from('lancamentos_financeiros')
-        .select('*')
-        .eq('venda_certificado_id', venda.id)
-        .order('vencimento', { ascending: true }),
-      supabase
-        .from('documentos_financeiros')
-        .select('*')
-        .eq('venda_certificado_id', venda.id)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false }),
-    ])
-
     setLoadingVendaFinanceiro(false)
-
-    if (lancErr ?? docsErr) {
-      openFeatureNotice(
-        'Fatura da venda',
-        `Não foi possível carregar os dados financeiros desta venda: ${(lancErr ?? docsErr)?.message ?? 'erro desconhecido'}.`,
-        'Verifique permissões/RLS das tabelas `lancamentos_financeiros` e `documentos_financeiros`.'
-      )
-      return
-    }
-
     setVendaFinanceiroModal({
       venda,
-      lancamentos: (lancamentos ?? []) as LancamentoV2[],
-      documentos: (documentos ?? []) as DocumentoFinanceiro[],
+      lancamentos: [] as LancamentoV2[],
+      documentos: [] as DocumentoFinanceiro[],
     })
   }
 
@@ -3035,23 +2785,20 @@ export default function Comercial() {
     setLoadingVendaNfse(true)
     setVendaNfseModal(null)
 
-    const [{ data, error }, configuracaoFiscal] = await Promise.all([
-      supabase
-        .from('nfse_emitidas')
-        .select('*')
-        .eq('venda_certificado_id', venda.id)
-        .order('created_at', { ascending: false }),
+    const [nfseResp, configuracaoFiscal] = await Promise.all([
+      fetch(getApiUrl(`/nfse/venda/${venda.id}`)).then(r => r.json()).catch(() => ({ notas: [] })),
       fetchConfiguracaoFiscalAtiva(),
     ])
 
+    const data = nfseResp.notas ?? []
     setLoadingVendaNfse(false)
     setNfseConfiguracaoAtiva(configuracaoFiscal)
 
-    if (error) {
+    if (false) {
       openFeatureNotice(
         'Visualização de NFS-e',
-        `Não foi possível consultar as NFS-e desta venda: ${error.message}.`,
-        'Verifique permissões/RLS da tabela `nfse_emitidas`.'
+        'NFS-e não disponível neste ambiente.',
+        null
       )
       return
     }
@@ -3362,9 +3109,9 @@ export default function Comercial() {
     const confirmado = window.confirm(`Deseja excluir o registro da NFS-e ${nota.numero_nf ?? 'sem número'}?`)
     if (!confirmado) return
 
-    const { error } = await supabase.from('nfse_emitidas').delete().eq('id', nota.id)
-    if (error) {
-      showMsg(traduzirErroDb(error, 'excluir-nfse'), 'err')
+    const rNfseD = await fetch(getApiUrl(`/nfse/${nota.id}`), { method: 'DELETE' })
+    if (!rNfseD.ok && rNfseD.status !== 501) {
+      showMsg('Erro ao excluir registro NFS-e', 'err')
       return
     }
 
@@ -3377,14 +3124,8 @@ export default function Comercial() {
   }
 
   async function fetchConfiguracaoFiscalAtiva() {
-    const { data } = await supabase
-      .from('nfse_configuracoes')
-      .select('*')
-      .eq('ativo', true)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
+    const r = await fetch(getApiUrl('/nfse/configuracao')).catch(() => null)
+    const data = r?.ok ? await r.json().then(d => d.configuracao) : null
     return (data ?? null) as NfseConfiguracao | null
   }
 
@@ -3477,7 +3218,7 @@ export default function Comercial() {
     })
     const tomador = buildVendaTomadorSnapshot(venda)
     const emitente = buildEmitenteSnapshot(configuracaoFiscal)
-    const { data: nova, error: err } = await supabase.from('nfse_emitidas').insert([{
+    const nfsePayload = {
       venda_certificado_id: venda.id,
       cadastro_base_tomador_id: venda.cadastro_base_id,
       status_nf: 'pendente',
@@ -3505,10 +3246,14 @@ export default function Comercial() {
           aliquota_iss: configuracaoFiscal?.aliquota_iss ?? null,
         },
       },
-    }]).select('*').single()
-    if (err) { if (!options?.silent) showMsg('Erro ao criar NFS-e: ' + err.message, 'err'); return }
+    }
+    const rNfseM = await fetch(getApiUrl('/nfse'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nfsePayload),
+    })
+    if (!rNfseM.ok && rNfseM.status !== 501) { if (!options?.silent) showMsg('Erro ao criar NFS-e', 'err'); return }
+    const nova = rNfseM.ok ? await rNfseM.json().then(d => d.nfse) : null
     if (!options?.silent) showMsg(`NFS-e ${numeroMock} registrada (modo mock).`, 'ok')
-    setVendaNfseModal(prev => prev
+    setVendaNfseModal(prev => prev && nova
       ? { ...prev, notas: [nova as NfseEmitida, ...prev.notas] }
       : prev)
   }
@@ -3721,7 +3466,7 @@ export default function Comercial() {
 
   async function excluirVenda(id: string) {
     if (!confirm('Excluir esta venda? Esta ação não pode ser desfeita.')) return
-    await supabase.from('vendas_certificados').delete().eq('id', id)
+    await fetch(getApiUrl(`/comercial/vendas/${id}`), { method: 'DELETE' })
     setVendasV2(prev => prev.filter(v => v.id !== id))
   }
 
@@ -3741,17 +3486,14 @@ export default function Comercial() {
     }
     setValidandoProtocolo(true)
     // Busca dados do titular já cadastrado pelo CPF
-    const { data: titular } = await supabase
-      .from('titulares_certificado')
-      .select('*')
-      .eq('cpf', formProtocolo.cpf.trim())
-      .single()
+    const titular = await getAivenTitularByCpf(formProtocolo.cpf.trim())
     if (titular) {
+      const t = titular as { nome?: string; email?: string; telefone?: string }
       setFormProtocolo(p => ({
         ...p,
-        nome:     titular.nome ?? '',
-        email:    titular.email ?? '',
-        telefone: titular.telefone ?? '',
+        nome:     t.nome ?? '',
+        email:    t.email ?? '',
+        telefone: t.telefone ?? '',
       }))
     }
     setValidandoProtocolo(false)
@@ -3767,27 +3509,27 @@ export default function Comercial() {
     setEmitindoProtocolo(true)
 
     // Upsert do titular
-    const { data: titularData, error: titularErr } = await supabase
-      .from('titulares_certificado')
-      .upsert({
-        nome:            formProtocolo.nome.trim(),
-        cpf:             formProtocolo.cpf.trim(),
-        email:           formProtocolo.email || null,
-        telefone:        `${formProtocolo.ddd}${formProtocolo.telefone}`.trim() || null,
-        data_nascimento: formProtocolo.data_nascimento || null,
-        metadata:        {
-          cep: formProtocolo.cep, logradouro: formProtocolo.logradouro, numero: formProtocolo.numero,
-          complemento: formProtocolo.complemento, bairro: formProtocolo.bairro,
-          cidade: formProtocolo.cidade, uf: formProtocolo.uf, ibge: formProtocolo.ibge,
-          cei: formProtocolo.cei, caepf: formProtocolo.caepf, nis: formProtocolo.nis,
-          possui_cnh: formProtocolo.possui_cnh, codigo_voucher: formProtocolo.codigo_voucher,
-        },
-      }, { onConflict: 'cpf' })
-      .select('id')
-      .single()
+    const titularPayload = {
+      nome:            formProtocolo.nome.trim(),
+      cpf:             formProtocolo.cpf.trim(),
+      email:           formProtocolo.email || null,
+      telefone:        `${formProtocolo.ddd}${formProtocolo.telefone}`.trim() || null,
+      data_nascimento: formProtocolo.data_nascimento || null,
+      metadata:        {
+        cep: formProtocolo.cep, logradouro: formProtocolo.logradouro, numero: formProtocolo.numero,
+        complemento: formProtocolo.complemento, bairro: formProtocolo.bairro,
+        cidade: formProtocolo.cidade, uf: formProtocolo.uf, ibge: formProtocolo.ibge,
+        cei: formProtocolo.cei, caepf: formProtocolo.caepf, nis: formProtocolo.nis,
+        possui_cnh: formProtocolo.possui_cnh, codigo_voucher: formProtocolo.codigo_voucher,
+      },
+    }
+    const rTit = await fetch(getApiUrl('/titulares'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(titularPayload),
+    })
+    const titularData = rTit.ok ? await rTit.json().then(d => d.titular) : null
 
-    if (titularErr || !titularData) {
-      showMsg('Erro ao salvar titular: ' + (titularErr?.message ?? 'desconhecido'))
+    if (!rTit.ok || !titularData) {
+      showMsg('Erro ao salvar titular')
       setEmitindoProtocolo(false)
       return
     }
@@ -3799,19 +3541,19 @@ export default function Comercial() {
 
     // Atualiza a venda com o titular e gera número de protocolo temporário
     const proto = `PROT${Date.now().toString().slice(-8)}`
-    const { error: vendaErr } = await supabase.from('vendas_certificados').update({
-      titular_id:       titularData.id,
-      protocolo_numero: proto,
-      protocolo_status: 'gerado',
-      pedido_status:    'gerado',
-      api_payload_protocolo: {
-        link_safeweb: item?.link_safeweb ?? null,
-        dados_titular: formProtocolo,
-      },
-    }).eq('id', protocoloVenda.id)
+    const rVenda = await fetch(getApiUrl(`/comercial/vendas/${protocoloVenda.id}/titular`), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        titular_id: titularData.id,
+        protocolo_numero: proto,
+        protocolo_status: 'gerado',
+        pedido_status: 'gerado',
+        api_payload_protocolo: { link_safeweb: item?.link_safeweb ?? null, dados_titular: formProtocolo },
+      }),
+    })
 
     setEmitindoProtocolo(false)
-    if (vendaErr) { showMsg('Erro: ' + vendaErr.message); return }
+    if (!rVenda.ok) { showMsg('Erro ao atualizar venda'); return }
 
     if (item?.link_safeweb) {
       // Abre o link da Safeweb em nova aba
@@ -3826,8 +3568,10 @@ export default function Comercial() {
   }
 
   async function liberarEmissao(v: VendaRow) {
-    const { error } = await supabase.from('vendas_certificados').update({ status_venda: 'emitido' }).eq('id', v.id)
-    if (error) { showMsg(traduzirErroDb(error, 'comercial')); return }
+    const rLib = await fetch(getApiUrl(`/comercial/vendas/${v.id}/status`), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status_venda: 'emitido' }),
+    })
+    if (!rLib.ok) { showMsg('Erro ao liberar emissão'); return }
     setVendasV2(prev => prev.map(r => r.id === v.id ? { ...r, status_venda: 'emitido' } : r))
   }
 
@@ -6644,22 +6388,10 @@ function ClienteSearchInput({ value, onChange, onSelect, className }: {
     if (value.length < 3) { setResultados([]); setAberto(false); return }
     const t = setTimeout(async () => {
       setBuscando(true)
-      const safeValue = buildSafeIlikePattern(value)
-      if (!safeValue) {
-        setBuscando(false)
-        setResultados([])
-        setAberto(false)
-        return
-      }
-      const { data } = await supabase
-        .from('cadastros_base')
-        .select('id, nome, cpf_cnpj, telefone')
-        .or(`nome.ilike.${safeValue},cpf_cnpj.ilike.${safeValue}`)
-        .eq('status', 'ativo')
-        .limit(8)
+      const data = await searchAivenCommercialCustomers(value)
       setBuscando(false)
-      setResultados(data ?? [])
-      setAberto(true)
+      setResultados(data as Pick<CadastroBase, 'id' | 'nome' | 'cpf_cnpj' | 'telefone'>[])
+      setAberto(data.length > 0)
     }, 300)
     return () => { clearTimeout(t); setBuscando(false) }
   }, [value])
