@@ -48,9 +48,10 @@ export class ExternalIntegrationRepository {
   async findActiveWhatsApp(): Promise<ExternalIntegrationRow[]> {
     const result = await this.db.query<ExternalIntegrationRow>(
       `SELECT * FROM external_integrations
-       WHERE status = 'ativo'
+       WHERE status <> 'inativo'
          AND (provider = 'evolution' OR metadata->>'integration_family' = 'whatsapp_api')
-       ORDER BY updated_at DESC`,
+       ORDER BY CASE status WHEN 'ativo' THEN 0 WHEN 'pendente' THEN 1 ELSE 2 END,
+                updated_at DESC`,
     )
     return result.rows
   }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Send, Loader2, Smile, Paperclip, Mic, StopCircle, Trash2, MessageCircle, Phone, CalendarClock, Clock3, Copy, RefreshCw, Pencil, Save, CornerUpLeft } from 'lucide-react'
-import { supabase, getSupabaseAccessToken } from '@/lib/supabase'
+import { supabase, getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
 import { DEFAULT_CONTACT_DOCUMENT_STORAGE, loadContactDocumentStorageConfig, type ContactDocumentStorageConfig } from '@/lib/contactDocumentStorage'
@@ -105,7 +105,7 @@ type LeadEditForm = {
 
 // ── Constants ──────────────────────────────────────────────────
 
-const EDGE_FN = 'https://cvfrhfiaprdtwxxplngk.supabase.co/functions/v1/evolution-webhook'
+const EDGE_FN = getEdgeFunctionUrl('evolution-webhook')
 const CHAT_LEAD_DOC_BUCKET = 'chat-lead-documentos'
 
 const EMOJIS = [
@@ -1972,3 +1972,4 @@ function MessageBubble({
     </div>
   )
 }
+

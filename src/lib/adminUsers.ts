@@ -25,6 +25,18 @@ const DEFAULT_VINCULO_BY_PERFIL: Record<PerfilAcesso, TipoVinculoUsuario> = {
   usuario: 'usuario_comum',
 }
 
+function normalizeAdminUserError(error: string | undefined) {
+  const text = String(error ?? '').trim()
+  if (!text) return 'Falha ao processar o usuário.'
+  if (text === 'Given password is not strong enough.') {
+    return 'A senha inicial está fraca. Use pelo menos 8 caracteres com letras maiúsculas, minúsculas e números.'
+  }
+  if (text.toLowerCase().includes('missing data')) {
+    return 'Dados obrigatórios não foram aceitos pelo provedor de autenticação. Revise nome, e-mail e uma senha forte.'
+  }
+  return text
+}
+
 async function callAdminUsers(body: unknown) {
   const res = await fetch(getApiUrl('/admin/users'), {
     method: 'POST',
@@ -32,8 +44,8 @@ async function callAdminUsers(body: unknown) {
     body: JSON.stringify(body),
   })
   const data = await res.json().catch(() => null) as { ok?: boolean; userId?: string; error?: string } | null
-  if (!res.ok) throw new Error(data?.error ?? `Erro ${res.status}`)
-  return { ok: Boolean(data?.ok), userId: data?.userId, error: data?.error }
+  if (!res.ok) throw new Error(normalizeAdminUserError(data?.error ?? `Erro ${res.status}`))
+  return { ok: Boolean(data?.ok), userId: data?.userId, error: normalizeAdminUserError(data?.error) }
 }
 
 export async function createAdminManagedUser(payload: CreateUserPayload) {

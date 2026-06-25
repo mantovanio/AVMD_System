@@ -70,20 +70,30 @@ export function normalizeWhatsAppProvider(
   return 'evolution'
 }
 
+function integrationPriority(integration: ExternalIntegration, canal?: 'atendimento' | 'renovacao') {
+  const metadata = readMetadata(integration)
+  const engine = getWhatsAppEngine(integration)
+  const statusScore = integration.status === 'ativo' ? 0 : integration.status === 'pendente' ? 1 : 2
+  const canalScore = canal && metadata.canal === canal ? 0 : 1
+  const engineScore = engine === 'evolution' ? 0 : 1
+  const credentialScore = integration.base_url && integration.api_token && integration.instance_name ? 0 : 1
+  return `${canalScore}${engineScore}${credentialScore}${statusScore}`
+}
+
 export async function loadActiveWhatsAppIntegration(canal?: 'atendimento' | 'renovacao'): Promise<ActiveWhatsAppIntegration | null> {
   let list: ExternalIntegration[]
   try {
     const res = await fetch(getApiUrl('/integrations'))
     const data = await res.json() as { ok: boolean; integrations: ExternalIntegration[] }
-    list = (data.integrations ?? []).filter(i => i.status === 'ativo').filter(isWhatsAppIntegration)
+    list = (data.integrations ?? [])
+      .filter(isWhatsAppIntegration)
+      .filter(item => item.status !== 'inativo')
+      .sort((a, b) => integrationPriority(a, canal).localeCompare(integrationPriority(b, canal)))
   } catch {
     return null
   }
 
-  const preferred = canal
-    ? (list.find(i => (i.metadata as Record<string, unknown>)?.canal === canal) ?? list.find(item => getWhatsAppEngine(item) === 'evolution') ?? list[0])
-    : (list.find(item => getWhatsAppEngine(item) === 'evolution') ?? list[0])
-
+  const preferred = list[0]
   if (!preferred) return null
 
   const engine = getWhatsAppEngine(preferred)

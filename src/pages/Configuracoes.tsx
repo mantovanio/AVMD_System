@@ -97,6 +97,15 @@ type ModalSenha = { userId: string; nome: string } | null
 type ModalNovoUsuario = { aberto: boolean }
 const ADMIN_INITIAL_PASSWORD = '1234qwer'
 
+function validateStrongPassword(value: string) {
+  const password = value.trim()
+  if (password.length < 8) return 'Use pelo menos 8 caracteres.'
+  if (!/[A-Z]/.test(password)) return 'Inclua pelo menos 1 letra maiúscula.'
+  if (!/[a-z]/.test(password)) return 'Inclua pelo menos 1 letra minúscula.'
+  if (!/\d/.test(password)) return 'Inclua pelo menos 1 número.'
+  return null
+}
+
 const PROVIDER_LABEL: Record<IntegrationProvider, string> = {
   evolution:         'WhatsApp API',
   chatwoot:          'Chatwoot / WhatsApp (Atendimento)',
@@ -682,7 +691,8 @@ function AbaUsuarios() {
   async function criarUsuario(e: React.FormEvent) {
     e.preventDefault()
     setCriadoErro(null)
-    if (novoSenhaU.length < 6) { setCriadoErro('Senha mínima de 6 caracteres.'); return }
+    const passwordError = validateStrongPassword(novoSenhaU)
+    if (passwordError) { setCriadoErro(passwordError); return }
     setCriandoUser(true)
     try {
       const result = await createAdminManagedUser({
@@ -1242,7 +1252,7 @@ function AbaUsuarios() {
   )
 }
 
-const EDGE_FN_EVOLUTION = 'https://api.certiid.mantovan.com.br/functions/v1/evolution-webhook'
+const EDGE_FN_EVOLUTION = getEdgeFunctionUrl('evolution-webhook')
 
 function getWhatsAppEngineFromForm(form: Partial<ExternalIntegration> | null | undefined): WhatsAppEngine {
   return getWhatsAppEngine({ provider: form?.provider ?? 'evolution', metadata: form?.metadata ?? {} })
@@ -5288,4 +5298,6 @@ function AbaPrivacidade() {
     </div>
   )
 }
+
+
 
