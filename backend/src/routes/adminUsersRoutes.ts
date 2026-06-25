@@ -71,14 +71,19 @@ async function createClerkUser(secretKey: string, input: {
 
   const attempts: Array<Record<string, unknown>> = [
     {
-      email_address: [input.email],
+      email_address: input.email,
       password: input.senha,
       first_name: firstName,
       last_name: lastName,
     },
     {
+      emailAddress: input.email,
+      password: input.senha,
+      firstName,
+      lastName,
+    },
+    {
       email_address: [input.email],
-      username,
       password: input.senha,
       first_name: firstName,
       last_name: lastName,
@@ -90,7 +95,14 @@ async function createClerkUser(secretKey: string, input: {
       lastName,
     },
     {
-      emailAddress: [input.email],
+      email_address: input.email,
+      username,
+      password: input.senha,
+      first_name: firstName,
+      last_name: lastName,
+    },
+    {
+      emailAddress: input.email,
       username,
       password: input.senha,
       firstName,
@@ -189,3 +201,4 @@ export async function handleAdminUsersRoutes(
   writeJson(res, 400, { ok: false, error: 'action inválida' }, corsOrigin)
   return true
 }
+
