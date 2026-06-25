@@ -50,7 +50,7 @@ export class ProfileRepository {
       `INSERT INTO profiles (clerk_user_id, nome, email, perfil, tipo_vinculo, permissoes, status)
        VALUES ($1, $2, $3, $4, $5, $6, 'ativo')
        RETURNING *`,
-      [input.clerk_user_id, input.nome, input.email, input.perfil, input.tipo_vinculo, input.permissoes],
+      [input.clerk_user_id, input.nome, input.email, input.perfil, input.tipo_vinculo, JSON.stringify(input.permissoes ?? [])],
     )
     return result.rows[0]
   }
@@ -59,3 +59,4 @@ export class ProfileRepository {
     await this.db.query('DELETE FROM profiles WHERE clerk_user_id = $1', [clerkUserId])
   }
 }
+
