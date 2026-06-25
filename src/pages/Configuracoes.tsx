@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, MapPin, Pencil, X, Check, KeyRound, UserPlus, Eye, EyeOff, MessageCircle, Mail, Webhook, Save, Send, Trash2, Plus, ToggleLeft, ToggleRight, CreditCard, FileText, Upload, ShieldCheck } from 'lucide-react'
+import { Loader2, MapPin, Pencil, X, Check, KeyRound, UserPlus, Eye, EyeOff, MessageCircle, Mail, Webhook, Save, Send, Trash2, Plus, ToggleLeft, ToggleRight, CreditCard, FileText, Upload, ShieldCheck, ChevronDown, ChevronRight, Users, Link, Network, Percent } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase, getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { getApiUrl } from '@/lib/api'
@@ -2560,6 +2560,429 @@ function SummaryChip({ label, value, tone }: { label: string; value: number; ton
 
 // ── Aba Pontos de Atendimento ─────────────────────────────────
 
+type ProfileH = {
+  id: string; nome: string; email: string | null; perfil: string; status: string
+  nivel_hierarquia: number; parent_profile_id: string | null
+  ponto_atendimento_id: string | null; link_loja: string | null; supervisao_pct: number
+}
+type FaixaH = {
+  id: string; profile_id: string; tipo_comissao: string; faixa: string
+  min_emissoes: number; max_emissoes: number | null; percentual: number
+  valor_exemplo: number | null; ordem: number; ativo: boolean
+}
+
+const TIPO_COMISSAO_LABEL: Record<string, string> = {
+  validacao:   'Validação',
+  venda_direta: 'Venda direta',
+}
+
+function FaixasPanel({ profileId, onClose }: { profileId: string; onClose: () => void }) {
+  const [faixas, setFaixas] = useState<FaixaH[]>([])
+  const [loading, setLoading] = useState(true)
+  const [tipo, setTipo] = useState<'validacao' | 'venda_direta'>('validacao')
+  const [form, setForm] = useState({ faixa: '', min_emissoes: 1, max_emissoes: '', percentual: '', valor_exemplo: '', ordem: 1 })
+  const [editingFaixaId, setEditingFaixaId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const r = await fetch(getApiUrl(`/hierarquia/faixas/${profileId}`))
+    const d = await r.json()
+    setFaixas((d.faixas ?? []) as FaixaH[])
+    setLoading(false)
+  }, [profileId])
+
+  useEffect(() => { void load() }, [load])
+
+  const doFaixasByTipo = faixas.filter(f => f.tipo_comissao === tipo).sort((a, b) => a.ordem - b.ordem)
+
+  function editFaixa(f: FaixaH) {
+    setEditingFaixaId(f.id)
+    setForm({ faixa: f.faixa, min_emissoes: f.min_emissoes, max_emissoes: String(f.max_emissoes ?? ''), percentual: String(f.percentual), valor_exemplo: String(f.valor_exemplo ?? ''), ordem: f.ordem })
+    setTipo(f.tipo_comissao as 'validacao' | 'venda_direta')
+  }
+
+  async function salvarFaixa() {
+    if (!form.faixa.trim() || !form.percentual) return
+    setSaving(true)
+    await fetch(getApiUrl('/hierarquia/faixas'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editingFaixaId,
+        profile_id: profileId,
+        tipo_comissao: tipo,
+        faixa: form.faixa.trim(),
+        min_emissoes: Number(form.min_emissoes),
+        max_emissoes: form.max_emissoes ? Number(form.max_emissoes) : null,
+        percentual: Number(form.percentual),
+        valor_exemplo: form.valor_exemplo ? Number(form.valor_exemplo) : null,
+        ordem: Number(form.ordem),
+      }),
+    })
+    setEditingFaixaId(null)
+    setForm({ faixa: '', min_emissoes: 1, max_emissoes: '', percentual: '', valor_exemplo: '', ordem: (doFaixasByTipo.length + 1) })
+    setSaving(false)
+    void load()
+  }
+
+  async function deletarFaixa(id: string) {
+    await fetch(getApiUrl(`/hierarquia/faixas/${id}/${profileId}`), { method: 'DELETE' })
+    void load()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+          <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2"><Percent size={15} className="text-blue-500" /> Faixas de Comissão</h3>
+          <button type="button" title="Fechar" onClick={onClose}><X size={16} className="text-gray-400" /></button>
+        </div>
+        <div className="flex gap-2 px-5 pt-4">
+          {(['validacao', 'venda_direta'] as const).map(t => (
+            <button key={t} type="button" onClick={() => setTipo(t)}
+              className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-colors', tipo === t ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400')}>
+              {TIPO_COMISSAO_LABEL[t]}
+            </button>
+          ))}
+        </div>
+        <div className="overflow-y-auto flex-1 px-5 py-3 space-y-4">
+          {loading ? <div className="flex justify-center py-6"><Loader2 size={20} className="animate-spin text-gray-400" /></div> : (
+            <>
+              {doFaixasByTipo.length === 0 && <p className="text-xs text-gray-400 text-center py-4">Nenhuma faixa configurada para {TIPO_COMISSAO_LABEL[tipo].toLowerCase()}.</p>}
+              {doFaixasByTipo.map(f => (
+                <div key={f.id} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{f.faixa}</p>
+                    <p className="text-xs text-gray-500">{f.min_emissoes}{f.max_emissoes ? `–${f.max_emissoes}` : '+'} emissões → <strong>{Number(f.percentual).toFixed(2)}%</strong></p>
+                  </div>
+                  <button type="button" title="Editar" onClick={() => editFaixa(f)} className="w-7 h-7 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center justify-center"><Pencil size={13} /></button>
+                  <button type="button" title="Excluir" onClick={() => void deletarFaixa(f.id)} className="w-7 h-7 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center"><Trash2 size={13} /></button>
+                </div>
+              ))}
+            </>
+          )}
+
+          <div className="border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-3 space-y-2">
+            <p className="text-xs font-medium text-gray-500">{editingFaixaId ? 'Editando faixa' : `Nova faixa — ${TIPO_COMISSAO_LABEL[tipo]}`}</p>
+            <input type="text" placeholder="Nome da faixa (ex: Bronze, Prata)" value={form.faixa} onChange={e => setForm(p => ({ ...p, faixa: e.target.value }))}
+              className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <div className="grid grid-cols-3 gap-2">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-gray-500">Mín emissões</span>
+                <input type="number" min={1} value={form.min_emissoes} onChange={e => setForm(p => ({ ...p, min_emissoes: Number(e.target.value) }))}
+                  className="border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-gray-500">Máx (vazio=ilimitado)</span>
+                <input type="number" min={1} value={form.max_emissoes} onChange={e => setForm(p => ({ ...p, max_emissoes: e.target.value }))}
+                  className="border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-gray-500">% Comissão</span>
+                <input type="number" step="0.01" min={0} value={form.percentual} onChange={e => setForm(p => ({ ...p, percentual: e.target.value }))}
+                  className="border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => void salvarFaixa()} disabled={saving || !form.faixa.trim() || !form.percentual}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                {editingFaixaId ? 'Salvar' : 'Adicionar'}
+              </button>
+              {editingFaixaId && <button type="button" onClick={() => { setEditingFaixaId(null); setForm({ faixa: '', min_emissoes: 1, max_emissoes: '', percentual: '', valor_exemplo: '', ordem: 1 }) }} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Cancelar</button>}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ProfileNode({
+  profile, allProfiles, depth, pontoId, onRefresh, availableVendedores,
+}: {
+  profile: ProfileH
+  allProfiles: ProfileH[]
+  depth: number
+  pontoId: string
+  onRefresh: () => void
+  availableVendedores: ProfileH[]
+}) {
+  const children = allProfiles.filter(p => p.parent_profile_id === profile.id)
+  const [expanded, setExpanded] = useState(true)
+  const [showFaixas, setShowFaixas] = useState(false)
+  const [showAddChild, setShowAddChild] = useState(false)
+  const [selectedChild, setSelectedChild] = useState('')
+  const [supervisaoVal, setSupervisaoVal] = useState(String(profile.supervisao_pct ?? 0))
+  const [linkLojaVal, setLinkLojaVal] = useState(profile.link_loja ?? '')
+  const [editingConfig, setEditingConfig] = useState(false)
+  const [savingConfig, setSavingConfig] = useState(false)
+  const [addingChild, setAddingChild] = useState(false)
+  const [removendo, setRemovendo] = useState(false)
+
+  const isAgente = profile.perfil === 'agente_registro'
+  const canHaveChildren = depth < 3
+  const indent = depth * 20
+
+  async function salvarConfig() {
+    setSavingConfig(true)
+    await fetch(getApiUrl(`/hierarquia/profile/${profile.id}/config`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ supervisao_pct: Number(supervisaoVal), link_loja: linkLojaVal.trim() || null }),
+    })
+    setSavingConfig(false)
+    setEditingConfig(false)
+    onRefresh()
+  }
+
+  async function vincularFilho() {
+    if (!selectedChild) return
+    setAddingChild(true)
+    await fetch(getApiUrl('/hierarquia/vendedor/vincular'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vendedorId: selectedChild, parentId: profile.id, nivel: depth + 1 }),
+    })
+    setAddingChild(false)
+    setShowAddChild(false)
+    setSelectedChild('')
+    onRefresh()
+  }
+
+  async function remover() {
+    if (!confirm(`Remover ${profile.nome} da hierarquia?`)) return
+    setRemovendo(true)
+    if (isAgente) {
+      await fetch(getApiUrl('/hierarquia/agente/desvincular'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId: profile.id }),
+      })
+    } else {
+      await fetch(getApiUrl('/hierarquia/vendedor/desvincular'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendedorId: profile.id }),
+      })
+    }
+    setRemovendo(false)
+    onRefresh()
+  }
+
+  const levelColors = ['text-blue-600', 'text-emerald-600', 'text-violet-600', 'text-amber-600']
+  const levelBg = ['bg-blue-50 dark:bg-blue-900/20', 'bg-emerald-50 dark:bg-emerald-900/20', 'bg-violet-50 dark:bg-violet-900/20', 'bg-amber-50 dark:bg-amber-900/20']
+  const levelLabel = isAgente ? 'Agente' : `Vendedor N${depth}`
+
+  return (
+    <div style={{ marginLeft: `${indent}px` }}>
+      <div className={cn('rounded-xl border border-gray-200 dark:border-gray-800 mb-2 overflow-hidden', profile.status === 'inativo' && 'opacity-60')}>
+        <div className={cn('flex items-center gap-2 px-3 py-2.5', levelBg[depth])}>
+          {children.length > 0 && (
+            <button type="button" onClick={() => setExpanded(v => !v)} className="text-gray-400 hover:text-gray-600 shrink-0">
+              {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+          )}
+          {children.length === 0 && <div className="w-4 shrink-0" />}
+
+          <span className={cn('text-xs font-bold uppercase tracking-wide shrink-0', levelColors[depth])}>{levelLabel}</span>
+          <span className="font-medium text-sm text-gray-800 dark:text-gray-200 truncate">{profile.nome}</span>
+          {profile.email && <span className="text-xs text-gray-400 truncate hidden md:block">{profile.email}</span>}
+
+          {profile.link_loja && (
+            <span className="flex items-center gap-1 text-xs text-gray-500 bg-white dark:bg-gray-800 px-2 py-0.5 rounded-full shrink-0">
+              <Link size={10} />/loja/{profile.link_loja}
+            </span>
+          )}
+
+          {Number(profile.supervisao_pct) > 0 && (
+            <span className="text-xs text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded-full shrink-0">
+              supervisão {Number(profile.supervisao_pct).toFixed(1)}%
+            </span>
+          )}
+
+          <div className="ml-auto flex items-center gap-1 shrink-0">
+            <button type="button" title="Faixas de comissão" onClick={() => setShowFaixas(true)}
+              className="w-7 h-7 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center justify-center">
+              <Percent size={13} />
+            </button>
+            <button type="button" title="Configurar" onClick={() => setEditingConfig(v => !v)}
+              className="w-7 h-7 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-white dark:hover:bg-gray-800 flex items-center justify-center">
+              <Pencil size={13} />
+            </button>
+            {canHaveChildren && (
+              <button type="button" title="Adicionar vendedor" onClick={() => setShowAddChild(v => !v)}
+                className="w-7 h-7 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 flex items-center justify-center">
+                <Plus size={13} />
+              </button>
+            )}
+            <button type="button" title="Remover da hierarquia" onClick={() => void remover()} disabled={removendo}
+              className="w-7 h-7 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center">
+              {removendo ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+            </button>
+          </div>
+        </div>
+
+        {editingConfig && (
+          <div className="bg-white dark:bg-gray-900 px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-3 items-end">
+            {!isAgente && (
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-gray-500">Link da loja (slug)</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-gray-400">/loja/</span>
+                  <input type="text" value={linkLojaVal} onChange={e => setLinkLojaVal(e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ''))}
+                    placeholder="meu-nome" className="border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm w-32 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+            )}
+            {canHaveChildren && (
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-gray-500">Supervisão de rede (%)</span>
+                <input type="number" step="0.1" min={0} max={100} value={supervisaoVal} onChange={e => setSupervisaoVal(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm w-24 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            )}
+            <button type="button" onClick={() => void salvarConfig()} disabled={savingConfig}
+              className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              {savingConfig ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Salvar
+            </button>
+            <button type="button" onClick={() => setEditingConfig(false)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Cancelar</button>
+          </div>
+        )}
+
+        {showAddChild && (
+          <div className="bg-white dark:bg-gray-900 px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex gap-2 items-end flex-wrap">
+            <div className="flex flex-col gap-1 flex-1 min-w-48">
+              <span className="text-xs text-gray-500">Vincular vendedor existente</span>
+              <select value={selectedChild} onChange={e => setSelectedChild(e.target.value)}
+                className="border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Selecione…</option>
+                {availableVendedores.map(v => (
+                  <option key={v.id} value={v.id}>{v.nome} {v.email ? `(${v.email})` : ''}</option>
+                ))}
+              </select>
+            </div>
+            <button type="button" onClick={() => void vincularFilho()} disabled={!selectedChild || addingChild}
+              className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+              {addingChild ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />} Vincular
+            </button>
+            <button type="button" onClick={() => setShowAddChild(false)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Cancelar</button>
+          </div>
+        )}
+      </div>
+
+      {expanded && children.map(child => (
+        <ProfileNode key={child.id} profile={child} allProfiles={allProfiles} depth={depth + 1}
+          pontoId={pontoId} onRefresh={onRefresh} availableVendedores={availableVendedores} />
+      ))}
+
+      {showFaixas && <FaixasPanel profileId={profile.id} onClose={() => setShowFaixas(false)} />}
+    </div>
+  )
+}
+
+function PontoHierarquiaPanel({ ponto, onClose }: { ponto: PontoAtendimento; onClose: () => void }) {
+  const [profiles, setProfiles] = useState<ProfileH[]>([])
+  const [availableAgentes, setAvailableAgentes] = useState<ProfileH[]>([])
+  const [availableVendedores, setAvailableVendedores] = useState<ProfileH[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showAddAgente, setShowAddAgente] = useState(false)
+  const [selectedAgente, setSelectedAgente] = useState('')
+  const [addingAgente, setAddingAgente] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const [treeResp, agentesResp, vendResp] = await Promise.all([
+      fetch(getApiUrl(`/hierarquia/ponto/${ponto.id}`)),
+      fetch(getApiUrl('/hierarquia/agentes-disponiveis')),
+      fetch(getApiUrl('/hierarquia/vendedores-disponiveis')),
+    ])
+    const [tree, ag, vd] = await Promise.all([treeResp.json(), agentesResp.json(), vendResp.json()])
+    setProfiles((tree.profiles ?? []) as ProfileH[])
+    setAvailableAgentes((ag.profiles ?? []) as ProfileH[])
+    setAvailableVendedores((vd.profiles ?? []) as ProfileH[])
+    setLoading(false)
+  }, [ponto.id])
+
+  useEffect(() => { void load() }, [load])
+
+  async function vincularAgente() {
+    if (!selectedAgente) return
+    setAddingAgente(true)
+    await fetch(getApiUrl('/hierarquia/agente/vincular'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profileId: selectedAgente, pontoId: ponto.id }),
+    })
+    setAddingAgente(false)
+    setShowAddAgente(false)
+    setSelectedAgente('')
+    void load()
+  }
+
+  const agentes = profiles.filter(p => p.perfil === 'agente_registro')
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+          <div className="flex items-center gap-2">
+            <Network size={16} className="text-blue-500" />
+            <div>
+              <h3 className="font-semibold text-gray-800 dark:text-gray-200">{ponto.nome}</h3>
+              <p className="text-xs text-gray-500">Hierarquia e comissões</p>
+            </div>
+          </div>
+          <button type="button" title="Fechar" onClick={onClose}><X size={16} className="text-gray-400" /></button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-2">
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 size={24} className="animate-spin text-gray-400" /></div>
+          ) : agentes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+              <Users size={32} className="mb-2 opacity-40" />
+              <p className="text-sm font-medium">Nenhum agente vinculado</p>
+              <p className="text-xs mt-1">Vincule um Agente de Registro para configurar a hierarquia.</p>
+            </div>
+          ) : (
+            agentes.map(agente => (
+              <ProfileNode key={agente.id} profile={agente} allProfiles={profiles} depth={0}
+                pontoId={ponto.id} onRefresh={load} availableVendedores={availableVendedores} />
+            ))
+          )}
+
+          {showAddAgente ? (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 flex gap-2 items-end flex-wrap">
+              <div className="flex flex-col gap-1 flex-1 min-w-48">
+                <span className="text-xs text-gray-500">Agente de Registro disponível</span>
+                <select value={selectedAgente} onChange={e => setSelectedAgente(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">Selecione…</option>
+                  {availableAgentes.map(a => (
+                    <option key={a.id} value={a.id}>{a.nome} {a.email ? `(${a.email})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <button type="button" onClick={() => void vincularAgente()} disabled={!selectedAgente || addingAgente}
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {addingAgente ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />} Vincular
+              </button>
+              <button type="button" onClick={() => setShowAddAgente(false)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Cancelar</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setShowAddAgente(true)}
+              className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-blue-600 border border-dashed border-gray-300 dark:border-gray-700 hover:border-blue-400 rounded-xl transition-colors">
+              <Plus size={13} /> Vincular agente a este ponto
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const EMPTY_PONTO: NovoPontoAtendimento = {
   codigo: null, nome: '', endereco: null,
   cidade: null, uf: null, status: 'ativo', metadata: {},
@@ -2580,6 +3003,7 @@ function AbaPontos() {
   const [saving, setSaving]     = useState(false)
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [toastP, setToastP] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
+  const [hierarquiaPonto, setHierarquiaPonto] = useState<PontoAtendimento | null>(null)
 
   function showMsgP(msg: string, type: 'ok' | 'err' = 'err') {
     setToastP({ msg, type })
@@ -2673,7 +3097,7 @@ function AbaPontos() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-semibold text-gray-800 dark:text-gray-200">Pontos de Atendimento</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Locais de emissão de certificados. Obrigatório para lançar vendas.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Gerencie os pontos, agentes e hierarquia de vendedores com suas comissões.</p>
         </div>
         {isAdmin && (
           <button type="button" onClick={abrirNovo}
@@ -2772,57 +3196,46 @@ function AbaPontos() {
           <p className="text-xs mt-1">Crie ao menos um para poder lançar vendas.</p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left">
-                {['Código', 'Nome', 'Localização', 'Status', 'Ações'].map(h => (
-                  <th key={h} className="px-4 py-3">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {pontos.map(p => (
-                <tr key={p.id} className={cn('hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors', p.status === 'inativo' && 'opacity-50')}>
-                  <td className="px-4 py-3 text-gray-400 font-mono text-xs">{p.codigo ?? '—'}</td>
-                  <td className="px-4 py-3 font-medium flex items-center gap-2">
-                    <MapPin size={13} className="text-blue-400 shrink-0" />
-                    {p.nome}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500">
-                    {[p.cidade, p.uf].filter(Boolean).join(' — ') || (p.endereco ?? '—')}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium',
-                      p.status === 'ativo'
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                        : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400')}>
-                      {p.status === 'ativo' ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      {isAdmin && (
-                        <>
-                          <button type="button" title="Editar" onClick={() => abrirEditar(p)}
-                            className="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 flex items-center justify-center transition-colors">
-                            <Pencil size={14} />
-                          </button>
-                          <button type="button" title={p.status === 'ativo' ? 'Desativar' : 'Ativar'} onClick={() => void toggleStatus(p)} disabled={togglingId === p.id}
-                            className={cn('w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
-                              p.status === 'ativo' ? 'text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800')}>
-                            {togglingId === p.id ? <Loader2 size={16} className="animate-spin" /> : p.status === 'ativo' ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-3">
+          {pontos.map(p => (
+            <div key={p.id} className={cn('bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden', p.status === 'inativo' && 'opacity-60')}>
+              <div className="flex items-center gap-3 px-4 py-3">
+                <MapPin size={15} className="text-blue-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm text-gray-800 dark:text-gray-200">{p.nome}</p>
+                  <p className="text-xs text-gray-500">{[p.cidade, p.uf].filter(Boolean).join(' — ') || p.endereco || 'Sem endereço'}</p>
+                </div>
+                <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium shrink-0',
+                  p.status === 'ativo'
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                    : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400')}>
+                  {p.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                </span>
+                {isAdmin && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button type="button" title="Hierarquia e comissões" onClick={() => setHierarquiaPonto(p)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors">
+                      <Network size={13} /> Hierarquia
+                    </button>
+                    <button type="button" title="Editar" onClick={() => abrirEditar(p)}
+                      className="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 flex items-center justify-center transition-colors">
+                      <Pencil size={14} />
+                    </button>
+                    <button type="button" title={p.status === 'ativo' ? 'Desativar' : 'Ativar'} onClick={() => void toggleStatus(p)} disabled={togglingId === p.id}
+                      className={cn('w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
+                        p.status === 'ativo' ? 'text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800')}>
+                      {togglingId === p.id ? <Loader2 size={16} className="animate-spin" /> : p.status === 'ativo' ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       )}
+
+      {hierarquiaPonto && <PontoHierarquiaPanel ponto={hierarquiaPonto} onClose={() => setHierarquiaPonto(null)} />}
+
       {toastP && (
         <div className={cn(
           'fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-xl text-sm font-medium',

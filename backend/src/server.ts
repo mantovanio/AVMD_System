@@ -14,6 +14,8 @@ import { handleCommercialRoutes } from './routes/commercialRoutes.js'
 import { handleIntegrationRoutes } from './routes/integrationRoutes.js'
 import { handleProfileRoutes } from './routes/profileRoutes.js'
 import { handleAdminUsersRoutes } from './routes/adminUsersRoutes.js'
+import { HierarquiaRepository } from './repositories/hierarquiaRepository.js'
+import { handleHierarquiaRoutes } from './routes/hierarquiaRoutes.js'
 import { ProfileRepository } from './repositories/profileRepository.js'
 import { handleExternalIntegrationRoutes } from './routes/externalIntegrationRoutes.js'
 import { ExternalIntegrationRepository } from './repositories/externalIntegrationRepository.js'
@@ -41,6 +43,7 @@ const commercialRepository = new CommercialRepository(db)
 const catalogRepository = new CatalogRepository(db)
 const integrationEventRepository = new IntegrationEventRepository(db)
 const profileRepository = new ProfileRepository(db)
+const hierarquiaRepository = new HierarquiaRepository(db)
 const externalIntegrationRepository = new ExternalIntegrationRepository(db)
 const renovacaoRepository = new RenovacaoRepository(db)
 const communicationTemplateRepository = new CommunicationTemplateRepository(db)
@@ -70,6 +73,9 @@ const server = createServer(async (req, res) => {
 
     const handledAdminUsers = await handleAdminUsersRoutes(req, res, profileRepository, config.clerkSecretKey, config.corsOrigin)
     if (handledAdminUsers) return
+
+    const handledHierarquia = await handleHierarquiaRoutes(req, res, hierarquiaRepository, config.corsOrigin)
+    if (handledHierarquia) return
 
     const handledIntegrations = await handleExternalIntegrationRoutes(req, res, externalIntegrationRepository, config.corsOrigin)
     if (handledIntegrations) return
