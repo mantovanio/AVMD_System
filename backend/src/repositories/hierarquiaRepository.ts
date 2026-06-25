@@ -34,10 +34,18 @@ export class HierarquiaRepository {
 
   async getTreeForPonto(pontoId: string): Promise<ProfileHierarquiaRow[]> {
     const result = await this.db.query<ProfileHierarquiaRow>(`
-      WITH RECURSIVE hier AS (
+      WITH RECURSIVE roots AS (
+        SELECT DISTINCT v.agente_id AS id
+        FROM pontos_atendimento_agentes v
+        WHERE v.ponto_atendimento_id = $1
+          AND v.ativo = true
+      ),
+      hier AS (
         SELECT ${PROFILE_COLS}
         FROM profiles
-        WHERE ponto_atendimento_id = $1 AND perfil = 'agente_registro' AND status != 'removido'
+        WHERE id IN (SELECT id FROM roots)
+          AND perfil = 'agente_registro'
+          AND status != 'removido'
         UNION ALL
         SELECT p.id, p.nome, p.email, p.perfil, p.status, p.nivel_hierarquia,
                p.parent_profile_id, p.ponto_atendimento_id, p.link_loja, p.supervisao_pct
@@ -50,13 +58,25 @@ export class HierarquiaRepository {
     return result.rows
   }
 
-  async getAvailableAgentes(): Promise<ProfileHierarquiaRow[]> {
+  async getAvailableAgentes(pontoId?: string | null): Promise<ProfileHierarquiaRow[]> {
+    const params: unknown[] = []
+    const filters = ["perfil = 'agente_registro'", "status = 'ativo'"]
+
+    if (pontoId) {
+      params.push(pontoId)
+      filters.push(`id not in (
+        select agente_id
+        from pontos_atendimento_agentes
+        where ponto_atendimento_id = $${params.length}
+          and ativo = true
+      )`)
+    }
+
     const result = await this.db.query<ProfileHierarquiaRow>(`
       SELECT ${PROFILE_COLS} FROM profiles
-      WHERE perfil = 'agente_registro' AND status = 'ativo'
-        AND ponto_atendimento_id IS NULL
+      WHERE ${filters.join(' AND ')}
       ORDER BY nome
-    `)
+    `, params)
     return result.rows
   }
 
@@ -72,16 +92,19 @@ export class HierarquiaRepository {
 
   async linkAgenteAoPonto(profileId: string, pontoId: string): Promise<void> {
     await this.db.query(
-      `UPDATE profiles SET ponto_atendimento_id = $2, nivel_hierarquia = 0, updated_at = now()
-       WHERE id = $1`,
-      [profileId, pontoId],
+      `INSERT INTO pontos_atendimento_agentes (ponto_atendimento_id, agente_id, principal, ativo, metadata)
+       VALUES ($1, $2, false, true, '{}'::jsonb)
+       ON CONFLICT (ponto_atendimento_id, agente_id)
+       DO UPDATE SET ativo = true, updated_at = now()`,
+      [pontoId, profileId],
     )
   }
 
-  async unlinkAgenteFromPonto(profileId: string): Promise<void> {
+  async unlinkAgenteFromPonto(profileId: string, pontoId: string): Promise<void> {
     await this.db.query(
-      `UPDATE profiles SET ponto_atendimento_id = NULL, updated_at = now() WHERE id = $1`,
-      [profileId],
+      `DELETE FROM pontos_atendimento_agentes
+       WHERE agente_id = $1 AND ponto_atendimento_id = $2`,
+      [profileId, pontoId],
     )
   }
 

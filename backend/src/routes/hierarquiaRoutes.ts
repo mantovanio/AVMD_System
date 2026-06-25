@@ -14,11 +14,13 @@ export async function handleHierarquiaRoutes(
 ): Promise<boolean> {
   const url = req.url ?? ''
   const method = req.method ?? ''
+  const parsed = new URL(url, 'http://localhost')
+  const pathname = parsed.pathname
 
-  if (!url.startsWith('/api/hierarquia')) return false
+  if (!pathname.startsWith('/api/hierarquia')) return false
 
   // GET /api/hierarquia/ponto/:pontoId
-  const pontoMatch = route(url, '/api/hierarquia/ponto/([\\w-]+)')
+  const pontoMatch = route(pathname, '/api/hierarquia/ponto/([\\w-]+)')
   if (method === 'GET' && pontoMatch) {
     const rows = await repo.getTreeForPonto(pontoMatch[1])
     writeJson(res, 200, { ok: true, profiles: rows }, corsOrigin)
@@ -26,21 +28,21 @@ export async function handleHierarquiaRoutes(
   }
 
   // GET /api/hierarquia/agentes-disponiveis
-  if (method === 'GET' && url === '/api/hierarquia/agentes-disponiveis') {
-    const rows = await repo.getAvailableAgentes()
+  if (method === 'GET' && pathname === '/api/hierarquia/agentes-disponiveis') {
+    const rows = await repo.getAvailableAgentes(parsed.searchParams.get('pontoId'))
     writeJson(res, 200, { ok: true, profiles: rows }, corsOrigin)
     return true
   }
 
   // GET /api/hierarquia/vendedores-disponiveis
-  if (method === 'GET' && url === '/api/hierarquia/vendedores-disponiveis') {
+  if (method === 'GET' && pathname === '/api/hierarquia/vendedores-disponiveis') {
     const rows = await repo.getAvailableVendedores()
     writeJson(res, 200, { ok: true, profiles: rows }, corsOrigin)
     return true
   }
 
   // GET /api/hierarquia/faixas/:profileId
-  const faixasMatch = route(url, '/api/hierarquia/faixas/([\\w-]+)')
+  const faixasMatch = route(pathname, '/api/hierarquia/faixas/([\\w-]+)')
   if (method === 'GET' && faixasMatch) {
     const rows = await repo.getFaixasForProfile(faixasMatch[1])
     writeJson(res, 200, { ok: true, faixas: rows }, corsOrigin)
@@ -50,7 +52,7 @@ export async function handleHierarquiaRoutes(
   if (method !== 'POST' && method !== 'PATCH' && method !== 'DELETE') return false
 
   // POST /api/hierarquia/agente/vincular
-  if (method === 'POST' && url === '/api/hierarquia/agente/vincular') {
+  if (method === 'POST' && pathname === '/api/hierarquia/agente/vincular') {
     const body = await readJson<{ profileId: string; pontoId: string }>(req)
     if (!body.profileId || !body.pontoId) {
       writeJson(res, 400, { ok: false, error: 'profileId e pontoId obrigatórios' }, corsOrigin)
@@ -62,19 +64,19 @@ export async function handleHierarquiaRoutes(
   }
 
   // POST /api/hierarquia/agente/desvincular
-  if (method === 'POST' && url === '/api/hierarquia/agente/desvincular') {
-    const body = await readJson<{ profileId: string }>(req)
-    if (!body.profileId) {
-      writeJson(res, 400, { ok: false, error: 'profileId obrigatório' }, corsOrigin)
+  if (method === 'POST' && pathname === '/api/hierarquia/agente/desvincular') {
+    const body = await readJson<{ profileId: string; pontoId: string }>(req)
+    if (!body.profileId || !body.pontoId) {
+      writeJson(res, 400, { ok: false, error: 'profileId e pontoId obrigatórios' }, corsOrigin)
       return true
     }
-    await repo.unlinkAgenteFromPonto(body.profileId)
+    await repo.unlinkAgenteFromPonto(body.profileId, body.pontoId)
     writeJson(res, 200, { ok: true }, corsOrigin)
     return true
   }
 
   // POST /api/hierarquia/vendedor/vincular
-  if (method === 'POST' && url === '/api/hierarquia/vendedor/vincular') {
+  if (method === 'POST' && pathname === '/api/hierarquia/vendedor/vincular') {
     const body = await readJson<{ vendedorId: string; parentId: string; nivel: number }>(req)
     if (!body.vendedorId || !body.parentId) {
       writeJson(res, 400, { ok: false, error: 'vendedorId e parentId obrigatórios' }, corsOrigin)
@@ -91,7 +93,7 @@ export async function handleHierarquiaRoutes(
   }
 
   // POST /api/hierarquia/vendedor/desvincular
-  if (method === 'POST' && url === '/api/hierarquia/vendedor/desvincular') {
+  if (method === 'POST' && pathname === '/api/hierarquia/vendedor/desvincular') {
     const body = await readJson<{ vendedorId: string }>(req)
     if (!body.vendedorId) {
       writeJson(res, 400, { ok: false, error: 'vendedorId obrigatório' }, corsOrigin)
@@ -103,7 +105,7 @@ export async function handleHierarquiaRoutes(
   }
 
   // PATCH /api/hierarquia/profile/:id/config
-  const configMatch = route(url, '/api/hierarquia/profile/([\\w-]+)/config')
+  const configMatch = route(pathname, '/api/hierarquia/profile/([\\w-]+)/config')
   if (method === 'PATCH' && configMatch) {
     const body = await readJson<{ supervisao_pct?: number; link_loja?: string | null }>(req)
     await repo.updateProfileConfig(configMatch[1], body)
@@ -112,7 +114,7 @@ export async function handleHierarquiaRoutes(
   }
 
   // POST /api/hierarquia/faixas — save (create or update)
-  if (method === 'POST' && url === '/api/hierarquia/faixas') {
+  if (method === 'POST' && pathname === '/api/hierarquia/faixas') {
     const body = await readJson<{
       id?: string | null
       profile_id: string
@@ -138,7 +140,7 @@ export async function handleHierarquiaRoutes(
   }
 
   // DELETE /api/hierarquia/faixas/:id/:profileId
-  const deleteFaixaMatch = route(url, '/api/hierarquia/faixas/([\\w-]+)/([\\w-]+)')
+  const deleteFaixaMatch = route(pathname, '/api/hierarquia/faixas/([\\w-]+)/([\\w-]+)')
   if (method === 'DELETE' && deleteFaixaMatch) {
     await repo.deleteFaixa(deleteFaixaMatch[1], deleteFaixaMatch[2])
     writeJson(res, 200, { ok: true }, corsOrigin)

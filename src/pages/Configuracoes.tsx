@@ -2781,7 +2781,7 @@ function ProfileNode({
       await fetch(getApiUrl('/hierarquia/agente/desvincular'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId: profile.id }),
+        body: JSON.stringify({ profileId: profile.id, pontoId }),
       })
     } else {
       await fetch(getApiUrl('/hierarquia/vendedor/desvincular'), {
@@ -2918,7 +2918,7 @@ function PontoHierarquiaPanel({ ponto, onClose }: { ponto: PontoAtendimento; onC
     setLoading(true)
     const [treeResp, agentesResp, vendResp] = await Promise.all([
       fetch(getApiUrl(`/hierarquia/ponto/${ponto.id}`)),
-      fetch(getApiUrl('/hierarquia/agentes-disponiveis')),
+      fetch(getApiUrl(`/hierarquia/agentes-disponiveis?pontoId=${ponto.id}`)),
       fetch(getApiUrl('/hierarquia/vendedores-disponiveis')),
     ])
     const [tree, ag, vd] = await Promise.all([treeResp.json(), agentesResp.json(), vendResp.json()])
