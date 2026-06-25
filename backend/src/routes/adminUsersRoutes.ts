@@ -63,7 +63,6 @@ export async function handleAdminUsersRoutes(
   if (body.action === 'create_user') {
     const { nome, email, senha, perfil, tipo_vinculo, permissoes } = body.payload
     const [firstName, ...rest] = nome.trim().split(/\\s+/)
-    const lastName = rest.join(' ') || undefined
     const usernameBase = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '')
     const username = ((usernameBase || 'usuario') + Date.now().toString(36)).slice(0, 24)
 
@@ -73,7 +72,6 @@ export async function handleAdminUsersRoutes(
         username,
         password: senha,
         firstName,
-        lastName,
       })
 
       await profileRepository.createProfile({
@@ -118,5 +116,6 @@ export async function handleAdminUsersRoutes(
   writeJson(res, 400, { ok: false, error: 'action inválida' }, corsOrigin)
   return true
 }
+
 
 
