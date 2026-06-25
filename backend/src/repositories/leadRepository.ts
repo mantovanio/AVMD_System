@@ -5,14 +5,52 @@ export interface LeadRow {
   nome_lead: string | null
   whatsapp_lead: string | null
   motivo_contato: string | null
+  resumo_conversa: string | null
+  ultima_mensagem: string | null
   status: string | null
+  horario_comercial: boolean | null
+  data_agendamento: string | null
+  agendamento_criado_em: string | null
+  follow_up_1: string | null
+  follow_up_2: string | null
+  follow_up_3: string | null
+  evolution_remote_jid: string | null
+  evolution_instance: string | null
   inicio_atendimento: string | null
   anotacoes: string | null
   created_at: string
   updated_at: string
 }
 
-export type CreateLeadInput = Omit<LeadRow, 'id' | 'created_at' | 'updated_at'>
+export type KanbanColumnRow = {
+  id: string
+  status_key: string
+  label: string
+  color: string
+  bg: string
+  border: string
+  ordem: number
+  ativo: boolean
+}
+
+export type CreateLeadInput = {
+  nome_lead?: string | null
+  whatsapp_lead?: string | null
+  motivo_contato?: string | null
+  resumo_conversa?: string | null
+  ultima_mensagem?: string | null
+  status?: string | null
+  horario_comercial?: boolean | null
+  data_agendamento?: string | null
+  agendamento_criado_em?: string | null
+  follow_up_1?: string | null
+  follow_up_2?: string | null
+  follow_up_3?: string | null
+  evolution_remote_jid?: string | null
+  evolution_instance?: string | null
+  inicio_atendimento?: string | null
+  anotacoes?: string | null
+}
 
 export class LeadRepository {
   constructor(private readonly db: AivenSqlClient) {}

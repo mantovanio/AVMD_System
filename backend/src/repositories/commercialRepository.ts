@@ -30,6 +30,22 @@ export type SaveCommercialAgendaInput = {
   tipo_atendimento?: string | null
 }
 
+
+type VendaRemuneracaoContext = {
+  valor_venda: number | null
+  cpf_cnpj: string | null
+}
+
+type RemuneracaoSnapshot = {
+  regra_id: string
+  escopo: string
+  tipo_calculo: 'fixa' | 'percentual'
+  documento_tipo: 'geral' | 'cpf' | 'cnpj'
+  valor_regra: number
+  valor_calculado: number
+  base_calculo: number
+}
+
 export class CommercialRepository {
   constructor(private readonly db: AivenSqlClient) {}
 
@@ -311,6 +327,28 @@ export class CommercialRepository {
     status_agendamento: string
   }) {
     const agendaId = input.agendaId?.trim() || randomUUID()
+    const vendaContext = await this.getVendaRemuneracaoContext(input.vendaId)
+    const documentoTipo = this.resolveDocumentoTipo(vendaContext?.cpf_cnpj ?? null)
+    const snapshotValidacao = await this.resolveRemuneracaoSnapshot({
+      profileId: input.agente_registro_id,
+      pontoId: input.ponto_atendimento_id,
+      escopo: 'validacao',
+      documentoTipo,
+      baseCalculo: vendaContext?.valor_venda ?? 0,
+    })
+    const snapshotVenda = await this.resolveRemuneracaoSnapshot({
+      profileId: input.agente_registro_id,
+      pontoId: input.ponto_atendimento_id,
+      escopo: 'venda',
+      documentoTipo,
+      baseCalculo: vendaContext?.valor_venda ?? 0,
+    })
+    const metadata = JSON.stringify({
+      origem: 'comercial_aiven',
+      remuneracao_validacao: snapshotValidacao,
+      remuneracao_venda: snapshotVenda,
+    })
+
     const result = await this.db.query<{ id: string }>(`
       insert into agendamentos_validacao (
         id, venda_certificado_id, cadastro_base_id, empresa_id, titular_id, contador_id,
@@ -330,7 +368,7 @@ export class CommercialRepository {
         $6,
         $7,
         $8,
-        jsonb_build_object('origem', 'comercial_aiven'),
+        $9::jsonb,
         now(),
         now()
       from vendas_certificados v
@@ -342,18 +380,113 @@ export class CommercialRepository {
         tipo_atendimento = excluded.tipo_atendimento,
         observacoes = excluded.observacoes,
         status_agendamento = excluded.status_agendamento,
-        metadata = coalesce(agendamentos_validacao.metadata, '{}'::jsonb) || excluded.metadata,
+        metadata = excluded.metadata,
         updated_at = now()
       returning id
-    `, [agendaId, input.vendaId, input.agente_registro_id, input.ponto_atendimento_id, input.data_agendada, input.tipo_atendimento ?? null, input.observacoes ?? null, input.status_agendamento])
+    `, [agendaId, input.vendaId, input.agente_registro_id, input.ponto_atendimento_id, input.data_agendada, input.tipo_atendimento ?? null, input.observacoes ?? null, input.status_agendamento, metadata])
     const agenda = result.rows[0] ?? { id: agendaId }
+
+    if (snapshotVenda) {
+      await this.db.query(
+        `update vendas_certificados
+         set agente_registro_id = $2::uuid,
+             comissao_agente_tipo = $3,
+             comissao_agente_valor = $4,
+             updated_at = now()
+         where id = $1`,
+        [input.vendaId, input.agente_registro_id, snapshotVenda.tipo_calculo, snapshotVenda.valor_calculado],
+      )
+    } else {
+      await this.db.query(
+        `update vendas_certificados
+         set agente_registro_id = $2::uuid,
+             updated_at = now()
+         where id = $1`,
+        [input.vendaId, input.agente_registro_id],
+      )
+    }
+
     await this.recordIntegrationEvent({
       eventType: 'commercial.validation_agenda.saved',
       entityType: 'agendamentos_validacao',
       entityId: agenda.id,
-      payload: { venda_id: input.vendaId, status_agendamento: input.status_agendamento, data_agendada: input.data_agendada },
+      payload: {
+        venda_id: input.vendaId,
+        status_agendamento: input.status_agendamento,
+        data_agendada: input.data_agendada,
+        remuneracao_validacao: snapshotValidacao,
+        remuneracao_venda: snapshotVenda,
+      },
     })
     return agenda
+  }
+
+  private async getVendaRemuneracaoContext(vendaId: string): Promise<VendaRemuneracaoContext | null> {
+    const result = await this.db.query<VendaRemuneracaoContext>(
+      `select v.valor_venda, cb.cpf_cnpj
+       from vendas_certificados v
+       left join cadastros_base cb on cb.id = v.cadastro_base_id
+       where v.id = $1
+       limit 1`,
+      [vendaId],
+    )
+    return result.rows[0] ?? null
+  }
+
+  private resolveDocumentoTipo(documento: string | null): 'geral' | 'cpf' | 'cnpj' {
+    const digits = String(documento ?? '').replace(/\D/g, '')
+    if (digits.length === 11) return 'cpf'
+    if (digits.length === 14) return 'cnpj'
+    return 'geral'
+  }
+
+  private async resolveRemuneracaoSnapshot(input: {
+    profileId: string
+    pontoId: string
+    escopo: 'validacao' | 'venda'
+    documentoTipo: 'geral' | 'cpf' | 'cnpj'
+    baseCalculo: number
+  }): Promise<RemuneracaoSnapshot | null> {
+    const result = await this.db.query<{
+      id: string
+      escopo: string
+      tipo_calculo: 'fixa' | 'percentual'
+      documento_tipo: 'geral' | 'cpf' | 'cnpj'
+      valor: number
+    }>(
+      `select id, escopo, tipo_calculo, documento_tipo, valor
+       from agente_remuneracao_regras
+       where profile_id = $1
+         and escopo = $2
+         and ativo = true
+         and (ponto_atendimento_id = $3 or ponto_atendimento_id is null)
+         and (documento_tipo = $4 or documento_tipo = 'geral')
+       order by
+         case when ponto_atendimento_id = $3 then 0 else 1 end,
+         case when documento_tipo = $4 then 0 else 1 end,
+         created_at desc
+       limit 1`,
+      [input.profileId, input.escopo, input.pontoId, input.documentoTipo],
+    )
+
+    const row = result.rows[0]
+    if (!row) return null
+
+    const baseCalculo = Number(input.baseCalculo || 0)
+    const valorRegra = Number(row.valor || 0)
+    const valorCalculado = row.tipo_calculo === 'percentual'
+      ? Number(((baseCalculo * valorRegra) / 100).toFixed(2))
+      : valorRegra
+
+    return {
+      regra_id: row.id,
+      escopo: row.escopo,
+      tipo_calculo: row.tipo_calculo,
+      documento_tipo: row.documento_tipo,
+      valor_regra: valorRegra,
+      valor_calculado: valorCalculado,
+      base_calculo: baseCalculo,
+    }
   }
 
   async listAgents() {

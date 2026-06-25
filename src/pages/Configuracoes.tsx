@@ -2593,11 +2593,24 @@ type FaixaH = {
   min_emissoes: number; max_emissoes: number | null; percentual: number
   valor_exemplo: number | null; ordem: number; ativo: boolean
 }
+type RemuneracaoRegraH = {
+  id: string
+  profile_id: string
+  ponto_atendimento_id: string | null
+  escopo: 'validacao' | 'venda'
+  tipo_calculo: 'fixa' | 'percentual'
+  documento_tipo: 'geral' | 'cpf' | 'cnpj'
+  valor: number
+  ativo: boolean
+}
 
 const TIPO_COMISSAO_LABEL: Record<string, string> = {
   validacao:   'Validação',
   venda_direta: 'Venda direta',
 }
+const ESCOPO_REMUNERACAO_LABEL: Record<'validacao' | 'venda', string> = { validacao: 'Validação', venda: 'Venda' }
+const TIPO_CALCULO_LABEL: Record<'fixa' | 'percentual', string> = { fixa: 'Valor fixo', percentual: 'Percentual' }
+const DOCUMENTO_TIPO_LABEL: Record<'geral' | 'cpf' | 'cnpj', string> = { geral: 'Geral', cpf: 'CPF', cnpj: 'CNPJ' }
 
 function FaixasPanel({ profileId, onClose }: { profileId: string; onClose: () => void }) {
   const [faixas, setFaixas] = useState<FaixaH[]>([])
@@ -2722,6 +2735,125 @@ function FaixasPanel({ profileId, onClose }: { profileId: string; onClose: () =>
   )
 }
 
+
+function RemuneracaoPanel({ profileId, pontoId, onClose }: { profileId: string; pontoId: string; onClose: () => void }) {
+  const [regras, setRegras] = useState<RemuneracaoRegraH[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState<{ escopo: 'validacao' | 'venda'; tipo_calculo: 'fixa' | 'percentual'; documento_tipo: 'geral' | 'cpf' | 'cnpj'; valor: string; ativo: boolean }>({
+    escopo: 'validacao',
+    tipo_calculo: 'fixa',
+    documento_tipo: 'geral',
+    valor: '',
+    ativo: true,
+  })
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const r = await fetch(getApiUrl(`/hierarquia/remuneracao/${profileId}/${pontoId}`))
+    const d = await r.json()
+    setRegras((d.regras ?? []) as RemuneracaoRegraH[])
+    setLoading(false)
+  }, [profileId, pontoId])
+
+  useEffect(() => { void load() }, [load])
+
+  function editar(regra: RemuneracaoRegraH) {
+    setEditingId(regra.id)
+    setForm({
+      escopo: regra.escopo,
+      tipo_calculo: regra.tipo_calculo,
+      documento_tipo: regra.documento_tipo,
+      valor: String(regra.valor ?? ''),
+      ativo: regra.ativo,
+    })
+  }
+
+  async function salvar() {
+    if (!form.valor.trim()) return
+    setSaving(true)
+    await fetch(getApiUrl('/hierarquia/remuneracao'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editingId,
+        profile_id: profileId,
+        ponto_atendimento_id: pontoId,
+        escopo: form.escopo,
+        tipo_calculo: form.tipo_calculo,
+        documento_tipo: form.documento_tipo,
+        valor: Number(form.valor),
+        ativo: form.ativo,
+      }),
+    })
+    setEditingId(null)
+    setForm({ escopo: 'validacao', tipo_calculo: 'fixa', documento_tipo: 'geral', valor: '', ativo: true })
+    setSaving(false)
+    void load()
+  }
+
+  async function remover(id: string) {
+    await fetch(getApiUrl(`/hierarquia/remuneracao/${id}/${profileId}`), { method: 'DELETE' })
+    void load()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+          <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2"><CreditCard size={15} className="text-emerald-600" /> Remuneração do Agente</h3>
+          <button type="button" title="Fechar" onClick={onClose}><X size={16} className="text-gray-400" /></button>
+        </div>
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+          {loading ? <div className="flex justify-center py-6"><Loader2 size={20} className="animate-spin text-gray-400" /></div> : (
+            <div className="space-y-2">
+              {regras.length === 0 && <p className="text-xs text-gray-400 text-center py-4">Nenhuma regra cadastrada para este agente neste ponto.</p>}
+              {regras.map(regra => (
+                <div key={regra.id} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{ESCOPO_REMUNERACAO_LABEL[regra.escopo]} · {DOCUMENTO_TIPO_LABEL[regra.documento_tipo]}</p>
+                    <p className="text-xs text-gray-500">{TIPO_CALCULO_LABEL[regra.tipo_calculo]}: <strong>{regra.tipo_calculo === 'percentual' ? `${Number(regra.valor).toFixed(2)}%` : `R$ ${Number(regra.valor).toFixed(2)}`}</strong></p>
+                  </div>
+                  <button type="button" title="Editar" onClick={() => editar(regra)} className="w-7 h-7 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center justify-center"><Pencil size={13} /></button>
+                  <button type="button" title="Excluir" onClick={() => void remover(regra.id)} className="w-7 h-7 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center"><Trash2 size={13} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-3 space-y-3">
+            <p className="text-xs font-medium text-gray-500">{editingId ? 'Editar regra' : 'Nova regra de remuneração'}</p>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <select value={form.escopo} onChange={e => setForm(p => ({ ...p, escopo: e.target.value as 'validacao' | 'venda' }))} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="validacao">Validação</option>
+                <option value="venda">Venda</option>
+              </select>
+              <select value={form.tipo_calculo} onChange={e => setForm(p => ({ ...p, tipo_calculo: e.target.value as 'fixa' | 'percentual' }))} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="fixa">Valor fixo</option>
+                <option value="percentual">Percentual</option>
+              </select>
+              <select value={form.documento_tipo} onChange={e => setForm(p => ({ ...p, documento_tipo: e.target.value as 'geral' | 'cpf' | 'cnpj' }))} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="geral">Geral</option>
+                <option value="cpf">CPF</option>
+                <option value="cnpj">CNPJ</option>
+              </select>
+              <input type="number" min={0} step="0.01" value={form.valor} onChange={e => setForm(p => ({ ...p, valor: e.target.value }))} placeholder={form.tipo_calculo === 'percentual' ? 'Ex: 8.5' : 'Ex: 25'} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => void salvar()} disabled={saving || !form.valor.trim()} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                {editingId ? 'Salvar' : 'Adicionar'}
+              </button>
+              {editingId && <button type="button" onClick={() => { setEditingId(null); setForm({ escopo: 'validacao', tipo_calculo: 'fixa', documento_tipo: 'geral', valor: '', ativo: true }) }} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Cancelar</button>}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ProfileNode({
   profile, allProfiles, depth, pontoId, onRefresh, availableVendedores,
 }: {
@@ -2735,6 +2867,7 @@ function ProfileNode({
   const children = allProfiles.filter(p => p.parent_profile_id === profile.id)
   const [expanded, setExpanded] = useState(true)
   const [showFaixas, setShowFaixas] = useState(false)
+  const [showRemuneracao, setShowRemuneracao] = useState(false)
   const [showAddChild, setShowAddChild] = useState(false)
   const [selectedChild, setSelectedChild] = useState('')
   const [supervisaoVal, setSupervisaoVal] = useState(String(profile.supervisao_pct ?? 0))
@@ -2830,6 +2963,12 @@ function ProfileNode({
               className="w-7 h-7 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center justify-center">
               <Percent size={13} />
             </button>
+            {isAgente && (
+              <button type="button" title="Remuneração" onClick={() => setShowRemuneracao(true)}
+                className="w-7 h-7 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 flex items-center justify-center">
+                <CreditCard size={13} />
+              </button>
+            )}
             <button type="button" title="Configurar" onClick={() => setEditingConfig(v => !v)}
               className="w-7 h-7 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-white dark:hover:bg-gray-800 flex items-center justify-center">
               <Pencil size={13} />
@@ -2901,6 +3040,7 @@ function ProfileNode({
       ))}
 
       {showFaixas && <FaixasPanel profileId={profile.id} onClose={() => setShowFaixas(false)} />}
+      {showRemuneracao && <RemuneracaoPanel profileId={profile.id} pontoId={pontoId} onClose={() => setShowRemuneracao(false)} />}
     </div>
   )
 }

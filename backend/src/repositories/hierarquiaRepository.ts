@@ -26,6 +26,20 @@ export type FaixaPerfilRow = {
   ativo: boolean
 }
 
+export type RemuneracaoRegraRow = {
+  id: string
+  profile_id: string
+  ponto_atendimento_id: string | null
+  escopo: string
+  tipo_calculo: string
+  documento_tipo: string
+  valor: number
+  ativo: boolean
+  metadata: Record<string, unknown> | null
+  created_at: string
+  updated_at: string
+}
+
 const PROFILE_COLS = `id, nome, email, perfil, status, nivel_hierarquia,
   parent_profile_id, ponto_atendimento_id, link_loja, supervisao_pct`
 
@@ -186,6 +200,62 @@ export class HierarquiaRepository {
   async deleteFaixa(id: string, profileId: string): Promise<void> {
     await this.db.query(
       `DELETE FROM faixas_comissao WHERE id=$1 AND profile_id=$2`,
+      [id, profileId],
+    )
+  }
+
+  async listRemuneracaoRules(profileId: string, pontoId: string): Promise<RemuneracaoRegraRow[]> {
+    const result = await this.db.query<RemuneracaoRegraRow>(
+      `SELECT *
+       FROM agente_remuneracao_regras
+       WHERE profile_id = $1
+         AND (ponto_atendimento_id = $2 OR ponto_atendimento_id IS NULL)
+       ORDER BY escopo, documento_tipo, created_at ASC`,
+      [profileId, pontoId],
+    )
+    return result.rows
+  }
+
+  async saveRemuneracaoRule(input: {
+    id?: string | null
+    profile_id: string
+    ponto_atendimento_id?: string | null
+    escopo: string
+    tipo_calculo: string
+    documento_tipo: string
+    valor: number
+    ativo?: boolean
+  }): Promise<RemuneracaoRegraRow> {
+    if (input.id) {
+      const result = await this.db.query<RemuneracaoRegraRow>(
+        `UPDATE agente_remuneracao_regras
+         SET escopo = $2,
+             tipo_calculo = $3,
+             documento_tipo = $4,
+             valor = $5,
+             ativo = $6,
+             ponto_atendimento_id = $7,
+             updated_at = now()
+         WHERE id = $1 AND profile_id = $8
+         RETURNING *`,
+        [input.id, input.escopo, input.tipo_calculo, input.documento_tipo, input.valor, input.ativo ?? true, input.ponto_atendimento_id ?? null, input.profile_id],
+      )
+      return result.rows[0]
+    }
+
+    const result = await this.db.query<RemuneracaoRegraRow>(
+      `INSERT INTO agente_remuneracao_regras
+         (profile_id, ponto_atendimento_id, escopo, tipo_calculo, documento_tipo, valor, ativo, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, '{}'::jsonb)
+       RETURNING *`,
+      [input.profile_id, input.ponto_atendimento_id ?? null, input.escopo, input.tipo_calculo, input.documento_tipo, input.valor, input.ativo ?? true],
+    )
+    return result.rows[0]
+  }
+
+  async deleteRemuneracaoRule(id: string, profileId: string): Promise<void> {
+    await this.db.query(
+      `DELETE FROM agente_remuneracao_regras WHERE id = $1 AND profile_id = $2`,
       [id, profileId],
     )
   }

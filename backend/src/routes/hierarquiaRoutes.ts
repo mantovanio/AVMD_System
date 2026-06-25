@@ -19,39 +19,41 @@ export async function handleHierarquiaRoutes(
 
   if (!pathname.startsWith('/api/hierarquia')) return false
 
-  // GET /api/hierarquia/ponto/:pontoId
-  const pontoMatch = route(pathname, '/api/hierarquia/ponto/([\\w-]+)')
+  const pontoMatch = route(pathname, '/api/hierarquia/ponto/([\w-]+)')
   if (method === 'GET' && pontoMatch) {
     const rows = await repo.getTreeForPonto(pontoMatch[1])
     writeJson(res, 200, { ok: true, profiles: rows }, corsOrigin)
     return true
   }
 
-  // GET /api/hierarquia/agentes-disponiveis
   if (method === 'GET' && pathname === '/api/hierarquia/agentes-disponiveis') {
     const rows = await repo.getAvailableAgentes(parsed.searchParams.get('pontoId'))
     writeJson(res, 200, { ok: true, profiles: rows }, corsOrigin)
     return true
   }
 
-  // GET /api/hierarquia/vendedores-disponiveis
   if (method === 'GET' && pathname === '/api/hierarquia/vendedores-disponiveis') {
     const rows = await repo.getAvailableVendedores()
     writeJson(res, 200, { ok: true, profiles: rows }, corsOrigin)
     return true
   }
 
-  // GET /api/hierarquia/faixas/:profileId
-  const faixasMatch = route(pathname, '/api/hierarquia/faixas/([\\w-]+)')
+  const faixasMatch = route(pathname, '/api/hierarquia/faixas/([\w-]+)')
   if (method === 'GET' && faixasMatch) {
     const rows = await repo.getFaixasForProfile(faixasMatch[1])
     writeJson(res, 200, { ok: true, faixas: rows }, corsOrigin)
     return true
   }
 
+  const remuneracaoMatch = route(pathname, '/api/hierarquia/remuneracao/([\w-]+)/([\w-]+)')
+  if (method === 'GET' && remuneracaoMatch) {
+    const rows = await repo.listRemuneracaoRules(remuneracaoMatch[1], remuneracaoMatch[2])
+    writeJson(res, 200, { ok: true, regras: rows }, corsOrigin)
+    return true
+  }
+
   if (method !== 'POST' && method !== 'PATCH' && method !== 'DELETE') return false
 
-  // POST /api/hierarquia/agente/vincular
   if (method === 'POST' && pathname === '/api/hierarquia/agente/vincular') {
     const body = await readJson<{ profileId: string; pontoId: string }>(req)
     if (!body.profileId || !body.pontoId) {
@@ -63,7 +65,6 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
-  // POST /api/hierarquia/agente/desvincular
   if (method === 'POST' && pathname === '/api/hierarquia/agente/desvincular') {
     const body = await readJson<{ profileId: string; pontoId: string }>(req)
     if (!body.profileId || !body.pontoId) {
@@ -75,7 +76,6 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
-  // POST /api/hierarquia/vendedor/vincular
   if (method === 'POST' && pathname === '/api/hierarquia/vendedor/vincular') {
     const body = await readJson<{ vendedorId: string; parentId: string; nivel: number }>(req)
     if (!body.vendedorId || !body.parentId) {
@@ -92,7 +92,6 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
-  // POST /api/hierarquia/vendedor/desvincular
   if (method === 'POST' && pathname === '/api/hierarquia/vendedor/desvincular') {
     const body = await readJson<{ vendedorId: string }>(req)
     if (!body.vendedorId) {
@@ -104,8 +103,7 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
-  // PATCH /api/hierarquia/profile/:id/config
-  const configMatch = route(pathname, '/api/hierarquia/profile/([\\w-]+)/config')
+  const configMatch = route(pathname, '/api/hierarquia/profile/([\w-]+)/config')
   if (method === 'PATCH' && configMatch) {
     const body = await readJson<{ supervisao_pct?: number; link_loja?: string | null }>(req)
     await repo.updateProfileConfig(configMatch[1], body)
@@ -113,7 +111,6 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
-  // POST /api/hierarquia/faixas — save (create or update)
   if (method === 'POST' && pathname === '/api/hierarquia/faixas') {
     const body = await readJson<{
       id?: string | null
@@ -139,10 +136,36 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
-  // DELETE /api/hierarquia/faixas/:id/:profileId
-  const deleteFaixaMatch = route(pathname, '/api/hierarquia/faixas/([\\w-]+)/([\\w-]+)')
+  if (method === 'POST' && pathname === '/api/hierarquia/remuneracao') {
+    const body = await readJson<{
+      id?: string | null
+      profile_id: string
+      ponto_atendimento_id?: string | null
+      escopo: string
+      tipo_calculo: string
+      documento_tipo: string
+      valor: number
+      ativo?: boolean
+    }>(req)
+    if (!body.profile_id || !body.escopo || !body.tipo_calculo || !body.documento_tipo) {
+      writeJson(res, 400, { ok: false, error: 'profile_id, escopo, tipo_calculo e documento_tipo são obrigatórios' }, corsOrigin)
+      return true
+    }
+    const regra = await repo.saveRemuneracaoRule(body)
+    writeJson(res, 200, { ok: true, regra }, corsOrigin)
+    return true
+  }
+
+  const deleteFaixaMatch = route(pathname, '/api/hierarquia/faixas/([\w-]+)/([\w-]+)')
   if (method === 'DELETE' && deleteFaixaMatch) {
     await repo.deleteFaixa(deleteFaixaMatch[1], deleteFaixaMatch[2])
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  const deleteRemuneracaoMatch = route(pathname, '/api/hierarquia/remuneracao/([\w-]+)/([\w-]+)')
+  if (method === 'DELETE' && deleteRemuneracaoMatch) {
+    await repo.deleteRemuneracaoRule(deleteRemuneracaoMatch[1], deleteRemuneracaoMatch[2])
     writeJson(res, 200, { ok: true }, corsOrigin)
     return true
   }
