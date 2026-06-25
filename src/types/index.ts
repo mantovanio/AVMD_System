@@ -472,6 +472,7 @@ export type PermissaoPagina =
 
 export interface Profile {
   id: string
+  clerk_user_id: string | null
   nome: string
   email: string
   perfil: PerfilAcesso

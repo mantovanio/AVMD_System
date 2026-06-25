@@ -511,6 +511,10 @@ function AbaUsuarios() {
     if (isAdmin) void load()
   }, [isAdmin, load])
 
+  function getAuthUserId(user: Profile) {
+    return user.clerk_user_id ?? user.id
+  }
+
   async function saveEdit(userId: string) {
     if (!editForm) return
     if (editForm.permissoes.length === 0) {
@@ -563,7 +567,7 @@ function AbaUsuarios() {
     if (!confirmExcluirUser) return
     setExcluindoUser(true)
     try {
-      await deleteAdminManagedUser({ userId: confirmExcluirUser.id })
+      await deleteAdminManagedUser({ userId: getAuthUserId(confirmExcluirUser) })
       setConfirmExcluirUser(null)
       void load()
     } catch (error) {
@@ -621,7 +625,7 @@ function AbaUsuarios() {
   }
 
   function abrirModalSenha(u: Profile) {
-    setModalSenha({ userId: u.id, nome: u.nome })
+    setModalSenha({ userId: getAuthUserId(u), nome: u.nome })
     setNovaSenha('')
     setConfirmSenha('')
     setSenhaErro(null)

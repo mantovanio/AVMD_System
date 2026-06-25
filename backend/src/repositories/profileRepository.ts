@@ -31,7 +31,7 @@ export class ProfileRepository {
 
   async findById(id: string): Promise<ProfileRow | null> {
     const result = await this.db.query<ProfileRow>(
-      'SELECT * FROM profiles WHERE id = $1 LIMIT 1',
+      'SELECT * FROM profiles WHERE id::text = $1 OR clerk_user_id = $1 LIMIT 1',
       [id],
     )
     return result.rows[0] ?? null
@@ -104,7 +104,10 @@ export class ProfileRepository {
     if (input.telefone !== undefined) field('telefone', input.telefone)
     if (input.cidade !== undefined) field('cidade', input.cidade)
     if (input.observacoes !== undefined) field('observacoes', input.observacoes)
-    if (input.permissoes !== undefined) field('permissoes', JSON.stringify(input.permissoes ?? []))
+    if (input.permissoes !== undefined) {
+      sets.push(`permissoes = $${idx++}::jsonb`)
+      params.push(JSON.stringify(input.permissoes ?? []))
+    }
 
     if (sets.length === 0) return this.findById(id)
 
@@ -112,7 +115,10 @@ export class ProfileRepository {
     params.push(id)
 
     const result = await this.db.query<ProfileRow>(
-      `UPDATE profiles SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
+      `UPDATE profiles
+       SET ${sets.join(', ')}
+       WHERE id::text = $${idx} OR clerk_user_id = $${idx}
+       RETURNING *`,
       params,
     )
     return result.rows[0] ?? null
