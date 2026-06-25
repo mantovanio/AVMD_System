@@ -494,13 +494,13 @@ function AbaUsuarios() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [{ data }, { data: parceirosData }, { data: tabelasData }, { data: lojasData }] = await Promise.all([
-      supabase.from('profiles').select('*').order('created_at', { ascending: true }),
+    const [usersRes, { data: parceirosData }, { data: tabelasData }, { data: lojasData }] = await Promise.all([
+      fetch(getApiUrl('/profiles')).then(r => r.json() as Promise<{ ok: boolean; profiles: Profile[]; error?: string }>),
       supabase.from('parceiros').select('*').order('nome', { ascending: true }),
       supabase.from('tabelas_preco').select('id, nome, ativo').eq('ativo', true).order('nome'),
       supabase.from('lojas_marketplace').select('*').eq('owner_tipo', 'vendedor'),
     ])
-    setUsers(data ?? [])
+    setUsers(usersRes.ok ? (usersRes.profiles ?? []) : [])
     setParceiros((parceirosData ?? []) as Parceiro[])
     setTabelas((tabelasData ?? []) as TabelaPreco[])
     setLojas((lojasData ?? []) as LojaMarketplace[])
@@ -533,10 +533,15 @@ function AbaUsuarios() {
       observacoes: editForm.observacoes.trim() || null,
       permissoes: editForm.perfil === 'admin' ? DEFAULT_PERMISSIONS.admin : editForm.permissoes,
     }
-    const { error } = await supabase.from('profiles').update(payload).eq('id', userId)
+    const response = await fetch(getApiUrl(`/profiles/${userId}`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const result = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
     setSaving(false)
-    if (error) {
-      setEditErro(error.message)
+    if (!response.ok || !result?.ok) {
+      setEditErro(result?.error ?? 'Erro ao salvar usuário.')
       return
     }
     setEditingId(null)
@@ -546,7 +551,11 @@ function AbaUsuarios() {
 
   async function toggleStatus(u: Profile) {
     const novoStatus = u.status === 'ativo' ? 'inativo' : 'ativo'
-    await supabase.from('profiles').update({ status: novoStatus }).eq('id', u.id)
+    await fetch(getApiUrl(`/profiles/${u.id}`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: novoStatus }),
+    })
     void load()
   }
 
@@ -5298,6 +5307,9 @@ function AbaPrivacidade() {
     </div>
   )
 }
+
+
+
 
 
 
