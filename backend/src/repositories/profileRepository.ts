@@ -37,4 +37,25 @@ export class ProfileRepository {
     )
     return result.rows[0] ?? null
   }
+
+  async createProfile(input: {
+    clerk_user_id: string
+    nome: string
+    email: string
+    perfil: string
+    tipo_vinculo: string
+    permissoes: string[]
+  }): Promise<ProfileRow> {
+    const result = await this.db.query<ProfileRow>(
+      `INSERT INTO profiles (clerk_user_id, nome, email, perfil, tipo_vinculo, permissoes, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'ativo')
+       RETURNING *`,
+      [input.clerk_user_id, input.nome, input.email, input.perfil, input.tipo_vinculo, input.permissoes],
+    )
+    return result.rows[0]
+  }
+
+  async deleteByClerkId(clerkUserId: string): Promise<void> {
+    await this.db.query('DELETE FROM profiles WHERE clerk_user_id = $1', [clerkUserId])
+  }
 }

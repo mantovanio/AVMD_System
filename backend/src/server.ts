@@ -13,6 +13,7 @@ import { handleCheckoutRoutes } from './routes/checkoutRoutes.js'
 import { handleCommercialRoutes } from './routes/commercialRoutes.js'
 import { handleIntegrationRoutes } from './routes/integrationRoutes.js'
 import { handleProfileRoutes } from './routes/profileRoutes.js'
+import { handleAdminUsersRoutes } from './routes/adminUsersRoutes.js'
 import { ProfileRepository } from './repositories/profileRepository.js'
 import { handleExternalIntegrationRoutes } from './routes/externalIntegrationRoutes.js'
 import { ExternalIntegrationRepository } from './repositories/externalIntegrationRepository.js'
@@ -66,6 +67,9 @@ const server = createServer(async (req, res) => {
 
     const handledProfile = await handleProfileRoutes(req, res, profileRepository, config.corsOrigin)
     if (handledProfile) return
+
+    const handledAdminUsers = await handleAdminUsersRoutes(req, res, profileRepository, config.clerkSecretKey, config.corsOrigin)
+    if (handledAdminUsers) return
 
     const handledIntegrations = await handleExternalIntegrationRoutes(req, res, externalIntegrationRepository, config.corsOrigin)
     if (handledIntegrations) return

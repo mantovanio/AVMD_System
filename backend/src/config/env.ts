@@ -9,6 +9,7 @@ export type BackendConfig = {
   databaseUrl: string
   corsOrigin: string
   n8nWebhookUrl: string
+  clerkSecretKey: string
   // Canal de atendimento humano (dia a dia, sem IA)
   evolutionAtendimento: EvolutionInstanceConfig
   // Canal CertiID — renovações de certificados (com IA)
@@ -32,6 +33,7 @@ export function loadConfig(): BackendConfig {
     databaseUrl: env('DATABASE_URL'),
     corsOrigin: env('CORS_ORIGIN', 'http://localhost:5173'),
     n8nWebhookUrl: env('N8N_WEBHOOK_URL'),
+    clerkSecretKey: env('CLERK_SECRET_KEY'),
     evolutionAtendimento: {
       baseUrl,
       apiToken: env('EVOLUTION_ATENDIMENTO_API_TOKEN'),
