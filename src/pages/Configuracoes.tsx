@@ -2603,14 +2603,54 @@ type RemuneracaoRegraH = {
   valor: number
   ativo: boolean
 }
+type ModeloNegocioH = {
+  id: string
+  profile_id: string
+  ponto_atendimento_id: string | null
+  modo_operacao: 'comissao' | 'revenda'
+  ativo: boolean
+}
+type RevendaPrecoBaseH = {
+  id: string
+  profile_id: string
+  ponto_atendimento_id: string
+  tabela_preco_item_id: string
+  valor_base: number
+  ativo: boolean
+  tabela_nome?: string | null
+  produto_nome?: string | null
+}
+type RepasseRegraH = {
+  id: string
+  parent_profile_id: string
+  child_profile_id: string
+  ponto_atendimento_id: string
+  escopo: 'validacao' | 'venda' | 'margem_revenda'
+  tipo_calculo: 'fixa' | 'percentual'
+  valor: number
+  ativo: boolean
+  parent_nome?: string | null
+}
+type TabelaPrecoItemResumoH = {
+  id: string
+  tabela_preco_id: string
+  tabela_nome: string | null
+  certificado_id: string | null
+  produto_nome: string | null
+  valor: number | null
+  valor_custo: number | null
+  ativo: boolean
+}
 
 const TIPO_COMISSAO_LABEL: Record<string, string> = {
   validacao:   'Validação',
   venda_direta: 'Venda direta',
 }
 const ESCOPO_REMUNERACAO_LABEL: Record<'validacao' | 'venda', string> = { validacao: 'Validação', venda: 'Venda' }
+const ESCOPO_REPASSE_LABEL: Record<'validacao' | 'venda' | 'margem_revenda', string> = { validacao: 'Validação', venda: 'Venda', margem_revenda: 'Margem de revenda' }
 const TIPO_CALCULO_LABEL: Record<'fixa' | 'percentual', string> = { fixa: 'Valor fixo', percentual: 'Percentual' }
 const DOCUMENTO_TIPO_LABEL: Record<'geral' | 'cpf' | 'cnpj', string> = { geral: 'Geral', cpf: 'CPF', cnpj: 'CNPJ' }
+const MODO_OPERACAO_LABEL: Record<'comissao' | 'revenda', string> = { comissao: 'Comissão', revenda: 'Revenda' }
 
 function FaixasPanel({ profileId, onClose }: { profileId: string; onClose: () => void }) {
   const [faixas, setFaixas] = useState<FaixaH[]>([])
@@ -2854,6 +2894,273 @@ function RemuneracaoPanel({ profileId, pontoId, onClose }: { profileId: string; 
   )
 }
 
+function ModeloComercialPanel({
+  profile,
+  pontoId,
+  allProfiles,
+  onClose,
+}: {
+  profile: ProfileH
+  pontoId: string
+  allProfiles: ProfileH[]
+  onClose: () => void
+}) {
+  const [loading, setLoading] = useState(true)
+  const [savingModelo, setSavingModelo] = useState(false)
+  const [modoOperacao, setModoOperacao] = useState<'comissao' | 'revenda'>('comissao')
+  const [modeloAtual, setModeloAtual] = useState<ModeloNegocioH | null>(null)
+  const [itensTabela, setItensTabela] = useState<TabelaPrecoItemResumoH[]>([])
+  const [precosBase, setPrecosBase] = useState<RevendaPrecoBaseH[]>([])
+  const [repasses, setRepasses] = useState<RepasseRegraH[]>([])
+  const [savingPreco, setSavingPreco] = useState(false)
+  const [savingRepasse, setSavingRepasse] = useState(false)
+  const [editingPrecoId, setEditingPrecoId] = useState<string | null>(null)
+  const [editingRepasseId, setEditingRepasseId] = useState<string | null>(null)
+  const [precoForm, setPrecoForm] = useState({ tabela_preco_item_id: '', valor_base: '' })
+  const [repasseForm, setRepasseForm] = useState<{ parent_profile_id: string; escopo: 'validacao' | 'venda' | 'margem_revenda'; tipo_calculo: 'fixa' | 'percentual'; valor: string }>({
+    parent_profile_id: '',
+    escopo: 'margem_revenda',
+    tipo_calculo: 'percentual',
+    valor: '',
+  })
+
+  const perfisElegiveis = allProfiles.filter(item => item.id !== profile.id && (item.perfil === 'agente_registro' || item.perfil === 'vendedor'))
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const [modeloResp, itensResp, precosResp, repassesResp] = await Promise.all([
+      fetch(getApiUrl(`/hierarquia/modelo-comercial/${profile.id}/${pontoId}`)),
+      fetch(getApiUrl('/hierarquia/tabela-itens')),
+      fetch(getApiUrl(`/hierarquia/revenda-precos/${profile.id}/${pontoId}`)),
+      fetch(getApiUrl(`/hierarquia/repasses/${profile.id}/${pontoId}`)),
+    ])
+    const [modeloData, itensData, precosData, repassesData] = await Promise.all([
+      modeloResp.json(),
+      itensResp.json(),
+      precosResp.json(),
+      repassesResp.json(),
+    ])
+    setModeloAtual((modeloData.modelo ?? null) as ModeloNegocioH | null)
+    setModoOperacao(((modeloData.modelo?.modo_operacao as 'comissao' | 'revenda' | undefined) ?? 'comissao'))
+    setItensTabela((itensData.itens ?? []) as TabelaPrecoItemResumoH[])
+    setPrecosBase((precosData.precos ?? []) as RevendaPrecoBaseH[])
+    setRepasses((repassesData.regras ?? []) as RepasseRegraH[])
+    setLoading(false)
+  }, [profile.id, pontoId])
+
+  useEffect(() => { void load() }, [load])
+
+  async function salvarModelo() {
+    setSavingModelo(true)
+    const response = await fetch(getApiUrl('/hierarquia/modelo-comercial'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile_id: profile.id,
+        ponto_atendimento_id: pontoId,
+        modo_operacao: modoOperacao,
+        ativo: true,
+      }),
+    })
+    const data = await response.json()
+    setModeloAtual((data.modelo ?? null) as ModeloNegocioH | null)
+    setSavingModelo(false)
+  }
+
+  function editarPreco(preco: RevendaPrecoBaseH) {
+    setEditingPrecoId(preco.id)
+    setPrecoForm({ tabela_preco_item_id: preco.tabela_preco_item_id, valor_base: String(preco.valor_base ?? '') })
+  }
+
+  async function salvarPreco() {
+    if (!precoForm.tabela_preco_item_id || !precoForm.valor_base.trim()) return
+    setSavingPreco(true)
+    await fetch(getApiUrl('/hierarquia/revenda-precos'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editingPrecoId,
+        profile_id: profile.id,
+        ponto_atendimento_id: pontoId,
+        tabela_preco_item_id: precoForm.tabela_preco_item_id,
+        valor_base: Number(precoForm.valor_base),
+        ativo: true,
+      }),
+    })
+    setEditingPrecoId(null)
+    setPrecoForm({ tabela_preco_item_id: '', valor_base: '' })
+    setSavingPreco(false)
+    void load()
+  }
+
+  async function removerPreco(id: string) {
+    await fetch(getApiUrl(`/hierarquia/revenda-precos/${id}/${profile.id}`), { method: 'DELETE' })
+    void load()
+  }
+
+  function editarRepasse(regra: RepasseRegraH) {
+    setEditingRepasseId(regra.id)
+    setRepasseForm({
+      parent_profile_id: regra.parent_profile_id,
+      escopo: regra.escopo,
+      tipo_calculo: regra.tipo_calculo,
+      valor: String(regra.valor ?? ''),
+    })
+  }
+
+  async function salvarRepasse() {
+    if (!repasseForm.parent_profile_id || !repasseForm.valor.trim()) return
+    setSavingRepasse(true)
+    await fetch(getApiUrl('/hierarquia/repasses'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editingRepasseId,
+        parent_profile_id: repasseForm.parent_profile_id,
+        child_profile_id: profile.id,
+        ponto_atendimento_id: pontoId,
+        escopo: repasseForm.escopo,
+        tipo_calculo: repasseForm.tipo_calculo,
+        valor: Number(repasseForm.valor),
+        ativo: true,
+      }),
+    })
+    setEditingRepasseId(null)
+    setRepasseForm({ parent_profile_id: '', escopo: 'margem_revenda', tipo_calculo: 'percentual', valor: '' })
+    setSavingRepasse(false)
+    void load()
+  }
+
+  async function removerRepasse(id: string) {
+    await fetch(getApiUrl(`/hierarquia/repasses/${id}/${profile.id}`), { method: 'DELETE' })
+    void load()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+          <div>
+            <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2"><Network size={15} className="text-amber-600" /> Modelo Comercial</h3>
+            <p className="text-xs text-gray-500 mt-1">Defina se este perfil opera por comissão ou por revenda neste ponto.</p>
+          </div>
+          <button type="button" title="Fechar" onClick={onClose}><X size={16} className="text-gray-400" /></button>
+        </div>
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
+          {loading ? <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-400" /></div> : (
+            <>
+              <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Modo de operação</p>
+                    <p className="text-xs text-gray-500">Atual: {MODO_OPERACAO_LABEL[(modeloAtual?.modo_operacao ?? 'comissao') as 'comissao' | 'revenda']}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select value={modoOperacao} onChange={e => setModoOperacao(e.target.value as 'comissao' | 'revenda')} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="comissao">Comissão</option>
+                      <option value="revenda">Revenda</option>
+                    </select>
+                    <button type="button" onClick={() => void salvarModelo()} disabled={savingModelo} className="px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+                      {savingModelo ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                      Salvar modo
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {modoOperacao === 'revenda' && (
+                <>
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-4">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Preço base da revenda</p>
+                      <p className="text-xs text-gray-500">Esse é o custo base do perfil por produto. O valor cobrado acima disso vira margem de revenda.</p>
+                    </div>
+                    <div className="space-y-2">
+                      {precosBase.length === 0 && <p className="text-xs text-gray-400">Nenhum preço base configurado.</p>}
+                      {precosBase.map(preco => (
+                        <div key={preco.id} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{preco.produto_nome ?? 'Produto'} <span className="text-gray-400">· {preco.tabela_nome ?? 'Tabela'}</span></p>
+                            <p className="text-xs text-gray-500">Base: <strong>R$ {Number(preco.valor_base ?? 0).toFixed(2)}</strong></p>
+                          </div>
+                          <button type="button" title="Editar" onClick={() => editarPreco(preco)} className="w-7 h-7 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"><Pencil size={13} /></button>
+                          <button type="button" title="Excluir" onClick={() => void removerPreco(preco.id)} className="w-7 h-7 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center"><Trash2 size={13} /></button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <select value={precoForm.tabela_preco_item_id} onChange={e => setPrecoForm(p => ({ ...p, tabela_preco_item_id: e.target.value }))} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Selecione o produto</option>
+                        {itensTabela.map(item => (
+                          <option key={item.id} value={item.id}>{item.tabela_nome ?? 'Tabela'} · {item.produto_nome ?? 'Produto'} · Venda R$ {Number(item.valor ?? 0).toFixed(2)}</option>
+                        ))}
+                      </select>
+                      <input type="number" min={0} step="0.01" value={precoForm.valor_base} onChange={e => setPrecoForm(p => ({ ...p, valor_base: e.target.value }))} placeholder="Preço base" className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => void salvarPreco()} disabled={savingPreco || !precoForm.tabela_preco_item_id || !precoForm.valor_base.trim()} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                        {savingPreco ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                        {editingPrecoId ? 'Salvar base' : 'Adicionar base'}
+                      </button>
+                      {editingPrecoId && <button type="button" onClick={() => { setEditingPrecoId(null); setPrecoForm({ tabela_preco_item_id: '', valor_base: '' }) }} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Cancelar</button>}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-4">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Repasses da estrutura</p>
+                      <p className="text-xs text-gray-500">Define quanto este perfil repassa para quem está acima dele ou na estrutura dele, inclusive sobre a margem de revenda.</p>
+                    </div>
+                    <div className="space-y-2">
+                      {repasses.length === 0 && <p className="text-xs text-gray-400">Nenhuma regra de repasse configurada.</p>}
+                      {repasses.map(regra => (
+                        <div key={regra.id} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{regra.parent_nome ?? 'Perfil superior'} · {ESCOPO_REPASSE_LABEL[regra.escopo]}</p>
+                            <p className="text-xs text-gray-500">{TIPO_CALCULO_LABEL[regra.tipo_calculo]}: <strong>{regra.tipo_calculo === 'percentual' ? `${Number(regra.valor).toFixed(2)}%` : `R$ ${Number(regra.valor).toFixed(2)}`}</strong></p>
+                          </div>
+                          <button type="button" title="Editar" onClick={() => editarRepasse(regra)} className="w-7 h-7 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"><Pencil size={13} /></button>
+                          <button type="button" title="Excluir" onClick={() => void removerRepasse(regra.id)} className="w-7 h-7 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center"><Trash2 size={13} /></button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                      <select value={repasseForm.parent_profile_id} onChange={e => setRepasseForm(p => ({ ...p, parent_profile_id: e.target.value }))} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Quem recebe</option>
+                        {perfisElegiveis.map(item => (
+                          <option key={item.id} value={item.id}>{item.nome} · {item.perfil === 'agente_registro' ? 'Agente' : 'Vendedor'}</option>
+                        ))}
+                      </select>
+                      <select value={repasseForm.escopo} onChange={e => setRepasseForm(p => ({ ...p, escopo: e.target.value as 'validacao' | 'venda' | 'margem_revenda' }))} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="margem_revenda">Margem de revenda</option>
+                        <option value="venda">Venda</option>
+                        <option value="validacao">Validação</option>
+                      </select>
+                      <select value={repasseForm.tipo_calculo} onChange={e => setRepasseForm(p => ({ ...p, tipo_calculo: e.target.value as 'fixa' | 'percentual' }))} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="percentual">Percentual</option>
+                        <option value="fixa">Valor fixo</option>
+                      </select>
+                      <input type="number" min={0} step="0.01" value={repasseForm.valor} onChange={e => setRepasseForm(p => ({ ...p, valor: e.target.value }))} placeholder="Valor" className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => void salvarRepasse()} disabled={savingRepasse || !repasseForm.parent_profile_id || !repasseForm.valor.trim()} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                        {savingRepasse ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                        {editingRepasseId ? 'Salvar repasse' : 'Adicionar repasse'}
+                      </button>
+                      {editingRepasseId && <button type="button" onClick={() => { setEditingRepasseId(null); setRepasseForm({ parent_profile_id: '', escopo: 'margem_revenda', tipo_calculo: 'percentual', valor: '' }) }} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Cancelar</button>}
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
 function ProfileNode({
   profile, allProfiles, depth, pontoId, onRefresh, availableVendedores,
 }: {
@@ -2868,6 +3175,7 @@ function ProfileNode({
   const [expanded, setExpanded] = useState(true)
   const [showFaixas, setShowFaixas] = useState(false)
   const [showRemuneracao, setShowRemuneracao] = useState(false)
+  const [showModeloComercial, setShowModeloComercial] = useState(false)
   const [showAddChild, setShowAddChild] = useState(false)
   const [selectedChild, setSelectedChild] = useState('')
   const [supervisaoVal, setSupervisaoVal] = useState(String(profile.supervisao_pct ?? 0))
@@ -2969,6 +3277,10 @@ function ProfileNode({
                 <CreditCard size={13} />
               </button>
             )}
+            <button type="button" title="Modelo comercial" onClick={() => setShowModeloComercial(true)}
+              className="w-7 h-7 rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 flex items-center justify-center">
+              <Network size={13} />
+            </button>
             <button type="button" title="Configurar" onClick={() => setEditingConfig(v => !v)}
               className="w-7 h-7 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-white dark:hover:bg-gray-800 flex items-center justify-center">
               <Pencil size={13} />
@@ -3041,6 +3353,7 @@ function ProfileNode({
 
       {showFaixas && <FaixasPanel profileId={profile.id} onClose={() => setShowFaixas(false)} />}
       {showRemuneracao && <RemuneracaoPanel profileId={profile.id} pontoId={pontoId} onClose={() => setShowRemuneracao(false)} />}
+      {showModeloComercial && <ModeloComercialPanel profile={profile} pontoId={pontoId} allProfiles={allProfiles} onClose={() => setShowModeloComercial(false)} />}
     </div>
   )
 }

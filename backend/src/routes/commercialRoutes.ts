@@ -41,6 +41,13 @@ type SaveCustomerRequest = {
   metadata?: Record<string, unknown> | null
 }
 type SearchCustomerRequest = { term?: string }
+type CommissionReportRequest = {
+  from?: string | null
+  to?: string | null
+  viewer_profile_id: string
+  viewer_perfil: string
+  target_profile_id?: string | null
+}
 
 export async function handleCommercialRoutes(req: IncomingMessage, res: ServerResponse, repository: CommercialRepository, corsOrigin: string) {
   const method = req.method ?? ''
@@ -118,6 +125,19 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
   if (req.method === 'POST' && req.url === '/api/comercial/agentes') {
     const agentes = await repository.listAgents()
     writeJson(res, 200, { ok: true, agentes }, corsOrigin)
+    return true
+  }
+
+  if (req.method === 'GET' && req.url === '/api/comercial/relatorios/comissoes/perfis') {
+    const perfis = await repository.listCommissionReportProfiles()
+    writeJson(res, 200, { ok: true, perfis }, corsOrigin)
+    return true
+  }
+
+  if (req.method === 'POST' && req.url === '/api/comercial/relatorios/comissoes') {
+    const body = await readJson<CommissionReportRequest>(req)
+    const relatorio = await repository.getCommissionReport(body)
+    writeJson(res, 200, { ok: true, relatorio }, corsOrigin)
     return true
   }
 

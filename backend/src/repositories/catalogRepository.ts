@@ -446,14 +446,25 @@ export class CatalogRepository {
   // ── Criar nova venda ──────────────────────────────────────────────────
   async createVenda(input: Record<string, unknown>) {
     const id = randomUUID()
+    const metadataBase = this.normalizeMetadata(input.metadata)
+    const estruturaSnapshot = await this.buildEstruturaComercialSnapshot(input)
+    const metadataFinal = {
+      ...metadataBase,
+      estrutura_comercial: estruturaSnapshot,
+    }
+    const payload = {
+      ...input,
+      metadata: metadataFinal,
+    }
+
     const fields = ['cadastro_base_id','empresa_id','vendedor_id','agente_registro_id',
       'ponto_atendimento_id','tabela_preco_id','tabela_preco_item_id','tipo_produto',
       'certificado_id','quantidade','valor_venda','desconto','status_venda','pago',
       'forma_pagamento_id','nome_faturamento','cpf_cnpj_faturamento','email_faturamento',
       'telefone_faturamento','observacoes','metadata']
-    const present = fields.filter(f => f in input)
+    const present = fields.filter(f => f in payload)
     if (!present.length) throw new Error('No fields provided for venda')
-    const vals = present.map(f => input[f] ?? null)
+    const vals = present.map(f => (payload as Record<string, unknown>)[f] ?? null)
     const cols = present.join(', ')
     const phs = present.map((_, i) => `$${i + 2}`).join(', ')
     const r = await this.db.query<Record<string, unknown>>(
@@ -461,6 +472,134 @@ export class CatalogRepository {
       [id, ...vals]
     )
     return r.rows[0] ?? { id }
+  }
+
+  private normalizeMetadata(value: unknown): Record<string, unknown> {
+    if (!value) return {}
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value) as Record<string, unknown>
+        return parsed && typeof parsed === 'object' ? parsed : {}
+      } catch {
+        return {}
+      }
+    }
+    return typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+  }
+
+  private async buildEstruturaComercialSnapshot(input: Record<string, unknown>) {
+    const vendedorId = typeof input.vendedor_id === 'string' ? input.vendedor_id : null
+    const pontoId = typeof input.ponto_atendimento_id === 'string' ? input.ponto_atendimento_id : null
+    const itemId = typeof input.tabela_preco_item_id === 'string' ? input.tabela_preco_item_id : null
+    const valorVenda = Number(input.valor_venda ?? 0)
+
+    if (!vendedorId || !pontoId) {
+      return {
+        modo_operacao: 'comissao',
+        origem: 'sem_vendedor_ou_ponto',
+      }
+    }
+
+    const modelo = await this.db.query<{
+      modo_operacao: 'comissao' | 'revenda'
+    }>(
+      `select modo_operacao
+       from perfil_modelos_negocio
+       where profile_id = $1
+         and ponto_atendimento_id = $2
+         and ativo = true
+       limit 1`,
+      [vendedorId, pontoId],
+    )
+
+    const modoOperacao = modelo.rows[0]?.modo_operacao ?? 'comissao'
+    if (modoOperacao !== 'revenda') {
+      return {
+        modo_operacao: 'comissao',
+        vendedor_id: vendedorId,
+        ponto_atendimento_id: pontoId,
+      }
+    }
+
+    const precoBaseRow = itemId
+      ? await this.db.query<{
+          regra_id: string
+          valor_base: number
+          tabela_preco_item_id: string
+          produto_nome: string | null
+          tabela_nome: string | null
+        }>(
+          `select r.id as regra_id, r.valor_base, r.tabela_preco_item_id, c.tipo as produto_nome, tp.nome as tabela_nome
+           from perfil_precos_base_revenda r
+           join tabelas_preco_itens i on i.id = r.tabela_preco_item_id
+           left join certificados c on c.id = i.certificado_id
+           left join tabelas_preco tp on tp.id = i.tabela_preco_id
+           where r.profile_id = $1
+             and r.ponto_atendimento_id = $2
+             and r.tabela_preco_item_id = $3
+             and r.ativo = true
+           limit 1`,
+          [vendedorId, pontoId, itemId],
+        )
+      : { rows: [] }
+
+    const precoBase = Number(precoBaseRow.rows[0]?.valor_base ?? 0)
+    const margemBruta = Number((valorVenda - precoBase).toFixed(2))
+    const margemRevenda = margemBruta > 0 ? margemBruta : 0
+
+    const repasses = await this.db.query<{
+      id: string
+      parent_profile_id: string
+      parent_nome: string | null
+      escopo: 'validacao' | 'venda' | 'margem_revenda'
+      tipo_calculo: 'fixa' | 'percentual'
+      valor: number
+    }>(
+      `select r.id, r.parent_profile_id, p.nome as parent_nome, r.escopo, r.tipo_calculo, r.valor
+       from perfil_repasse_regras r
+       join profiles p on p.id = r.parent_profile_id
+       where r.child_profile_id = $1
+         and r.ponto_atendimento_id = $2
+         and r.escopo = 'margem_revenda'
+         and r.ativo = true
+       order by p.nome asc, r.created_at asc`,
+      [vendedorId, pontoId],
+    )
+
+    const repassesCalculados = repasses.rows.map(row => {
+      const valorRegra = Number(row.valor ?? 0)
+      const valorCalculado = row.tipo_calculo === 'percentual'
+        ? Number(((margemRevenda * valorRegra) / 100).toFixed(2))
+        : valorRegra
+      return {
+        regra_id: row.id,
+        parent_profile_id: row.parent_profile_id,
+        parent_nome: row.parent_nome,
+        escopo: row.escopo,
+        tipo_calculo: row.tipo_calculo,
+        valor_regra: valorRegra,
+        valor_calculado: valorCalculado,
+      }
+    })
+
+    const totalRepasse = Number(repassesCalculados.reduce((acc, row) => acc + Number(row.valor_calculado || 0), 0).toFixed(2))
+    const liquidoRevendedor = Number((margemRevenda - totalRepasse).toFixed(2))
+
+    return {
+      modo_operacao: 'revenda',
+      vendedor_id: vendedorId,
+      ponto_atendimento_id: pontoId,
+      tabela_preco_item_id: itemId,
+      valor_venda: valorVenda,
+      preco_base: precoBase,
+      margem_revenda: margemRevenda,
+      liquido_revendedor: liquidoRevendedor,
+      preco_base_regra_id: precoBaseRow.rows[0]?.regra_id ?? null,
+      produto_nome: precoBaseRow.rows[0]?.produto_nome ?? null,
+      tabela_nome: precoBaseRow.rows[0]?.tabela_nome ?? null,
+      repasses: repassesCalculados,
+      total_repasse: totalRepasse,
+    }
   }
 
   async getVendaById(id: string) {

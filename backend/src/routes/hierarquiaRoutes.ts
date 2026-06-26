@@ -52,6 +52,33 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
+  const modeloMatch = route(pathname, '/api/hierarquia/modelo-comercial/([\w-]+)/([\w-]+)')
+  if (method === 'GET' && modeloMatch) {
+    const modelo = await repo.getModeloNegocio(modeloMatch[1], modeloMatch[2])
+    writeJson(res, 200, { ok: true, modelo }, corsOrigin)
+    return true
+  }
+
+  const precosBaseMatch = route(pathname, '/api/hierarquia/revenda-precos/([\w-]+)/([\w-]+)')
+  if (method === 'GET' && precosBaseMatch) {
+    const precos = await repo.listRevendaPriceBases(precosBaseMatch[1], precosBaseMatch[2])
+    writeJson(res, 200, { ok: true, precos }, corsOrigin)
+    return true
+  }
+
+  const repassesMatch = route(pathname, '/api/hierarquia/repasses/([\w-]+)/([\w-]+)')
+  if (method === 'GET' && repassesMatch) {
+    const regras = await repo.listRepasseRules(repassesMatch[1], repassesMatch[2])
+    writeJson(res, 200, { ok: true, regras }, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && pathname === '/api/hierarquia/tabela-itens') {
+    const itens = await repo.listTabelaPrecoItemResumo()
+    writeJson(res, 200, { ok: true, itens }, corsOrigin)
+    return true
+  }
+
   if (method !== 'POST' && method !== 'PATCH' && method !== 'DELETE') return false
 
   if (method === 'POST' && pathname === '/api/hierarquia/agente/vincular') {
@@ -156,6 +183,60 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
+  if (method === 'POST' && pathname === '/api/hierarquia/modelo-comercial') {
+    const body = await readJson<{
+      profile_id: string
+      ponto_atendimento_id: string
+      modo_operacao: 'comissao' | 'revenda'
+      ativo?: boolean
+    }>(req)
+    if (!body.profile_id || !body.ponto_atendimento_id || !body.modo_operacao) {
+      writeJson(res, 400, { ok: false, error: 'profile_id, ponto_atendimento_id e modo_operacao são obrigatórios' }, corsOrigin)
+      return true
+    }
+    const modelo = await repo.saveModeloNegocio(body)
+    writeJson(res, 200, { ok: true, modelo }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && pathname === '/api/hierarquia/revenda-precos') {
+    const body = await readJson<{
+      id?: string | null
+      profile_id: string
+      ponto_atendimento_id: string
+      tabela_preco_item_id: string
+      valor_base: number
+      ativo?: boolean
+    }>(req)
+    if (!body.profile_id || !body.ponto_atendimento_id || !body.tabela_preco_item_id) {
+      writeJson(res, 400, { ok: false, error: 'profile_id, ponto_atendimento_id e tabela_preco_item_id são obrigatórios' }, corsOrigin)
+      return true
+    }
+    const preco = await repo.saveRevendaPriceBase(body)
+    writeJson(res, 200, { ok: true, preco }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && pathname === '/api/hierarquia/repasses') {
+    const body = await readJson<{
+      id?: string | null
+      parent_profile_id: string
+      child_profile_id: string
+      ponto_atendimento_id: string
+      escopo: 'validacao' | 'venda' | 'margem_revenda'
+      tipo_calculo: 'fixa' | 'percentual'
+      valor: number
+      ativo?: boolean
+    }>(req)
+    if (!body.parent_profile_id || !body.child_profile_id || !body.ponto_atendimento_id || !body.escopo || !body.tipo_calculo) {
+      writeJson(res, 400, { ok: false, error: 'parent_profile_id, child_profile_id, ponto_atendimento_id, escopo e tipo_calculo são obrigatórios' }, corsOrigin)
+      return true
+    }
+    const regra = await repo.saveRepasseRule(body)
+    writeJson(res, 200, { ok: true, regra }, corsOrigin)
+    return true
+  }
+
   const deleteFaixaMatch = route(pathname, '/api/hierarquia/faixas/([\w-]+)/([\w-]+)')
   if (method === 'DELETE' && deleteFaixaMatch) {
     await repo.deleteFaixa(deleteFaixaMatch[1], deleteFaixaMatch[2])
@@ -166,6 +247,20 @@ export async function handleHierarquiaRoutes(
   const deleteRemuneracaoMatch = route(pathname, '/api/hierarquia/remuneracao/([\w-]+)/([\w-]+)')
   if (method === 'DELETE' && deleteRemuneracaoMatch) {
     await repo.deleteRemuneracaoRule(deleteRemuneracaoMatch[1], deleteRemuneracaoMatch[2])
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  const deletePrecoBaseMatch = route(pathname, '/api/hierarquia/revenda-precos/([\w-]+)/([\w-]+)')
+  if (method === 'DELETE' && deletePrecoBaseMatch) {
+    await repo.deleteRevendaPriceBase(deletePrecoBaseMatch[1], deletePrecoBaseMatch[2])
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  const deleteRepasseMatch = route(pathname, '/api/hierarquia/repasses/([\w-]+)/([\w-]+)')
+  if (method === 'DELETE' && deleteRepasseMatch) {
+    await repo.deleteRepasseRule(deleteRepasseMatch[1], deleteRepasseMatch[2])
     writeJson(res, 200, { ok: true }, corsOrigin)
     return true
   }

@@ -631,6 +631,177 @@ export class CommercialRepository {
     await this.db.query(`delete from parceiros_agentes_permitidos where id = $1::uuid`, [id])
   }
 
+  async listCommissionReportProfiles() {
+    const result = await this.db.query<{
+      id: string
+      nome: string
+      perfil: string
+      parceiro_id: string | null
+      vinculo_nome: string | null
+      status: string
+    }>(`
+      select id, nome, perfil, parceiro_id, vinculo_nome, status
+      from profiles
+      where perfil in ('agente_registro', 'vendedor', 'admin')
+        and status = 'ativo'
+      order by nome asc
+    `)
+    return result.rows
+  }
+
+  async getCommissionReport(input: {
+    from?: string | null
+    to?: string | null
+    viewer_profile_id: string
+    viewer_perfil: string
+    target_profile_id?: string | null
+  }) {
+    const from = input.from?.trim() || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+    const to = input.to?.trim() || new Date().toISOString()
+    const canViewAll = input.viewer_perfil === 'admin'
+    const targetProfileId = canViewAll && input.target_profile_id?.trim()
+      ? input.target_profile_id.trim()
+      : input.viewer_profile_id
+
+    const [profileResult, salesResult, agendasResult] = await Promise.all([
+      this.db.query<{ id: string; nome: string; perfil: string; parceiro_id: string | null; vinculo_nome: string | null }>(
+        `select id, nome, perfil, parceiro_id, vinculo_nome from profiles where id = $1 limit 1`,
+        [targetProfileId],
+      ),
+      this.db.query<{
+        id: string
+        created_at: string
+        status_venda: string | null
+        nome_faturamento: string | null
+        tipo_produto: string | null
+        valor_venda: number | null
+        desconto: number | null
+        comissao_vendedor_valor: number | null
+        vendedor_id: string | null
+        metadata: Record<string, unknown> | null
+        cliente_iss_retido: boolean | null
+      }>(
+        `select v.id, v.created_at, v.status_venda, v.nome_faturamento, v.tipo_produto, v.valor_venda,
+                v.desconto, v.comissao_vendedor_valor, v.vendedor_id, v.metadata, cb.iss_retido as cliente_iss_retido
+         from vendas_certificados v
+         left join cadastros_base cb on cb.id = v.cadastro_base_id
+         where v.vendedor_id = $1
+           and v.created_at >= $2::timestamptz
+           and v.created_at <= $3::timestamptz
+           and coalesce(v.status_venda, '') != 'cancelado'
+         order by v.created_at desc`,
+        [targetProfileId, from, to],
+      ),
+      this.db.query<{
+        id: string
+        created_at: string
+        data_agendada: string | null
+        status_agendamento: string | null
+        venda_certificado_id: string | null
+        observacoes: string | null
+        metadata: Record<string, unknown> | null
+        nome_faturamento: string | null
+        tipo_produto: string | null
+      }>(
+        `select a.id, a.created_at, a.data_agendada, a.status_agendamento, a.venda_certificado_id,
+                a.observacoes, a.metadata, v.nome_faturamento, v.tipo_produto
+         from agendamentos_validacao a
+         left join vendas_certificados v on v.id = a.venda_certificado_id
+         where a.agente_registro_id = $1
+           and coalesce(a.data_agendada, a.created_at) >= $2::timestamptz
+           and coalesce(a.data_agendada, a.created_at) <= $3::timestamptz
+           and coalesce(a.status_agendamento, '') != 'cancelado'
+         order by coalesce(a.data_agendada, a.created_at) desc`,
+        [targetProfileId, from, to],
+      ),
+    ])
+
+    const profile = profileResult.rows[0] ?? null
+    const salesRows = salesResult.rows
+    const agendaRows = agendasResult.rows
+
+    const vendas = salesRows.map(row => {
+      const metadata = this.asObject(row.metadata)
+      const estrutura = this.asObject(metadata.estrutura_comercial)
+      const modoOperacao = String(estrutura.modo_operacao ?? 'comissao')
+      const liquidoRevenda = Number(estrutura.liquido_revendedor ?? 0)
+      const comissao = modoOperacao === 'revenda'
+        ? liquidoRevenda
+        : Number(row.comissao_vendedor_valor ?? 0)
+      const desconto = Number(row.desconto ?? 0)
+      const impostoRetido = Number(estrutura.imposto_retido_valor ?? 0)
+      return {
+        tipo: 'venda',
+        id: row.id,
+        data: row.created_at,
+        cliente_nome: row.nome_faturamento,
+        descricao: row.tipo_produto,
+        status: row.status_venda,
+        modo_operacao: modoOperacao,
+        valor_bruto: Number(row.valor_venda ?? 0),
+        valor_receber: comissao,
+        desconto,
+        imposto_retido: impostoRetido,
+        metadata: metadata,
+      }
+    })
+
+    const validacoes = agendaRows.map(row => {
+      const metadata = this.asObject(row.metadata)
+      const remuneracao = this.asObject(metadata.remuneracao_validacao)
+      return {
+        tipo: 'validacao',
+        id: row.id,
+        data: row.data_agendada ?? row.created_at,
+        cliente_nome: row.nome_faturamento,
+        descricao: row.tipo_produto,
+        status: row.status_agendamento,
+        modo_operacao: 'validacao',
+        valor_bruto: Number(remuneracao.base_calculo ?? 0),
+        valor_receber: Number(remuneracao.valor_calculado ?? 0),
+        desconto: 0,
+        imposto_retido: 0,
+        metadata: metadata,
+      }
+    })
+
+    const linhas = [...vendas, ...validacoes].sort((a, b) => String(b.data).localeCompare(String(a.data)))
+    const resumo = {
+      vendas_quantidade: vendas.length,
+      validacoes_quantidade: validacoes.length,
+      vendas_total_bruto: Number(vendas.reduce((acc, row) => acc + row.valor_bruto, 0).toFixed(2)),
+      vendas_total_receber: Number(vendas.reduce((acc, row) => acc + row.valor_receber, 0).toFixed(2)),
+      validacoes_total_receber: Number(validacoes.reduce((acc, row) => acc + row.valor_receber, 0).toFixed(2)),
+      descontos_total: Number(vendas.reduce((acc, row) => acc + row.desconto, 0).toFixed(2)),
+      imposto_retido_total: Number(linhas.reduce((acc, row) => acc + row.imposto_retido, 0).toFixed(2)),
+    }
+    const totalReceber = Number((resumo.vendas_total_receber + resumo.validacoes_total_receber - resumo.imposto_retido_total).toFixed(2))
+
+    return {
+      profile,
+      from,
+      to,
+      resumo: {
+        ...resumo,
+        total_receber: totalReceber,
+      },
+      linhas,
+    }
+  }
+
+  private asObject(value: unknown): Record<string, unknown> {
+    if (!value) return {}
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value) as Record<string, unknown>
+        return parsed && typeof parsed === 'object' ? parsed : {}
+      } catch {
+        return {}
+      }
+    }
+    return typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+  }
+
   private async recordIntegrationEvent(input: {
     eventType: string
     entityType: string
