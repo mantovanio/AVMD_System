@@ -22,6 +22,21 @@ Use este arquivo como ponto de entrada rapido para deploy, commit e diagnostico 
 - Backend systemd: `avmd-backend`
 - Health local backend: `http://127.0.0.1:8787/healthz`
 
+## Edge real do servidor
+
+Nao assumir Nginx em `/etc/nginx`.
+
+A estrutura real e:
+
+- Traefik publica `80/443`
+- Docker Swarm service: `avmd_web`
+- Config do Nginx desse service na VPS: `/opt/avmd/nginx-avmd.conf`
+- Arquivo fonte versionado no repo: `ops/nginx/avmd-web.conf`
+
+Resumo:
+- `crm.certiid.mantovan.com.br` serve o frontend estatico
+- `api.certiid.mantovan.com.br` faz proxy para `http://172.18.0.1:8787`
+
 ## Scripts importantes na VPS
 
 - Gate de deploy: `/root/vps-deploy-gate.sh`
@@ -57,28 +72,29 @@ Deploy:
 & 'C:\Program Files\Git\usr\bin\ssh.exe' root@147.79.111.76 'bash /root/vps-deploy-gate.sh'
 ```
 
-Status backend:
+Status backend e edge:
 
 ```powershell
-& 'C:\Program Files\Git\usr\bin\ssh.exe' root@147.79.111.76 'systemctl status avmd-backend --no-pager; curl -fsS http://127.0.0.1:8787/healthz'
+& 'C:\Program Files\Git\usr\bin\ssh.exe' root@147.79.111.76 'systemctl status avmd-backend --no-pager; curl -fsS http://127.0.0.1:8787/healthz; curl -fsS -H "Host: api.certiid.mantovan.com.br" http://127.0.0.1/healthz'
 ```
 
 ## Publicacao e rotas reais
 
 - Dominio do frontend: `https://crm.certiid.mantovan.com.br`
-- Dominio esperado da API: `https://api.certiid.mantovan.com.br`
-- O frontend usa os arquivos estaticos publicados em `/var/www/crm.certiid.mantovan.com.br`
+- Dominio da API: `https://api.certiid.mantovan.com.br/healthz`
+- Para o mapa completo da VPS: `ops/ROTAS-E-SERVICOS-VPS.md`
 
 ## Armadilhas conhecidas
 
-- O workflow `.github/workflows/jekyll-docker.yml` nao faz deploy do painel React do AVMD. Ele nao deve ser usado como referencia principal de deploy.
-- O servidor atual responde em `80/443` via `docker-proxy`.
-- O script `ops/scripts/vps-rollout-avmd.sh` tenta copiar config para `/etc/nginx/sites-available/...`, mas esse caminho pode nao existir no servidor atual.
-- Mesmo quando a etapa de Nginx falha, o frontend pode ja ter sido publicado em `/var/www/crm.certiid.mantovan.com.br`.
+- O workflow `.github/workflows/jekyll-docker.yml` nao faz deploy do painel React do AVMD.
+- O servidor atual responde em `80/443` via Traefik em Docker.
+- Deploy que tenta copiar arquivos para `/etc/nginx/sites-available/...` vai falhar no fim mesmo com frontend publicado.
+- Mesmo quando a etapa antiga de Nginx falha, o frontend pode ja ter sido publicado em `/var/www/crm.certiid.mantovan.com.br`.
 
 ## Arquivos para consultar primeiro
 
 - `DEPLOY-RAPIDO.md`
+- `ops/ROTAS-E-SERVICOS-VPS.md`
 - `ops/DEPLOY-CONTROLADO.md`
 - `ops/scripts/vps-deploy-gate.sh`
 - `ops/scripts/vps-rollout-avmd.sh`
