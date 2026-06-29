@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Send, Loader2, Smile, Paperclip, Mic, StopCircle, Trash2, MessageCircle, Phone, CalendarClock, Clock3, Copy, RefreshCw, Pencil, Save, CornerUpLeft } from 'lucide-react'
 import { supabase, getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
-import { getApiUrl } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
 import { DEFAULT_CONTACT_DOCUMENT_STORAGE, loadContactDocumentStorageConfig, type ContactDocumentStorageConfig } from '@/lib/contactDocumentStorage'
@@ -451,12 +450,14 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
     let jid = contact.evolution_remote_jid
 
     if (jid) {
+      // Lead já tem JID salvo — carrega histórico direto do Supabase
       setRemoteJid(jid)
       await loadHistory(jid)
       setLoading(false)
       return
     }
 
+    // Precisa derivar JID do telefone e salvar no lead
     if (!contact.telefone) {
       setFetchError('Contato sem WhatsApp. Adicione um número antes de abrir o chat.')
       setLoading(false)
@@ -466,18 +467,20 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
     setLoadingLabel('Iniciando conversa...')
     logger.info('ChatPanel', 'chamando init_chat', { instance: evolution.instance_name })
     try {
-      const res = await fetch(getApiUrl('/chat/init'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: contact.telefone,
-          lead_id: contact.id,
+      const accessToken = await getSupabaseAccessToken()
+      const res = await fetch(EDGE_FN, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+        body:    JSON.stringify({
+          _action:       'init_chat',
+          phone:         contact.telefone,
+          lead_id:       contact.id,
           instance_name: evolution.instance_name,
         }),
       })
       const data = await res.json() as { ok: boolean; remoteJid?: string; messages?: Record<string, unknown>[]; error?: string }
       logger.info('ChatPanel', 'init_chat resposta', { ok: data.ok, jid: data.remoteJid, msgs: data.messages?.length })
-      if (!res.ok || !data.ok || !data.remoteJid) {
+      if (!data.ok || !data.remoteJid) {
         setFetchError(data.error ?? 'Número de telefone inválido')
         setLoading(false)
         return
@@ -494,10 +497,15 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
   }
 
   async function loadHistory(jid: string) {
-    const res = await fetch(getApiUrl(`/chat/leads/${contact.id}/history?conversation_id=${encodeURIComponent(jid)}`)).catch(() => null)
-    if (!res?.ok) return
-    const data = await res.json() as { ok: boolean; messages?: Record<string, unknown>[] }
-    setMessages(parseEvolutionEvents(data.messages ?? []))
+    const { data, error } = await supabase
+      .from('communication_events')
+      .select('id, event_type, payload, created_at')
+      .eq('source', 'evolution')
+      .eq('conversation_id', jid)
+      .order('created_at', { ascending: true })
+      .limit(200)
+    if (error || !data) return
+    setMessages(parseEvolutionEvents(data as Record<string, unknown>[]))
   }
 
   async function loadLeadInfo() {
@@ -607,20 +615,25 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
     const tempNow = new Date().toISOString()
     setMessages(prev => [...prev, { id: tempId, content: text, fromMe: true, created_at: tempNow }])
     try {
-      const res = await fetch(getApiUrl('/chat/send'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversation_id: remoteJid,
-          content: text,
-          lead_id: contact.id,
+      const accessToken = await getSupabaseAccessToken()
+      const res = await fetch(EDGE_FN, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+        body:    JSON.stringify({
+          _action:       'send_message',
+          base_url:      evolution.base_url,
+          api_token:     evolution.api_token,
           instance_name: evolution.instance_name,
+          number:        remoteJid,
+          content:       text,
+          lead_id:       contact.id,
           quoted_message_id: replyTo?.messageId ?? replyTo?.id ?? null,
           quoted_content: replyTo?.content ?? (replyTo?.messageType === 'audioMessage' ? 'Audio' : 'Mensagem respondida'),
         }),
       })
-      const data = await res.json() as { ok: boolean; messageId?: string; error?: string }
-      if (res.ok && data.ok) {
+      const data = await res.json() as { ok: boolean; messageId?: string }
+      if (data.ok) {
+        // Atualiza o ID temporário para o ID real (evita duplicata quando Realtime sincronizar)
         setMessages(prev => prev.map(m => m.id === tempId ? {
           ...m,
           id: data.messageId ?? tempId,
@@ -629,16 +642,9 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
             content: replyTo.content ?? (replyTo.messageType === 'audioMessage' ? 'Audio' : 'Mensagem respondida'),
           } : null,
         } : m))
-      } else {
-        setMessages(prev => prev.filter(item => item.id !== tempId))
-        setInput(text)
-        alert(data.error || 'Nao foi possivel enviar a mensagem.')
       }
     } catch (e) {
       logger.error('ChatPanel', 'falha ao enviar mensagem', String(e))
-      setMessages(prev => prev.filter(item => item.id !== tempId))
-      setInput(text)
-      alert('Nao foi possivel enviar a mensagem.')
     } finally {
       setReplyTo(null)
       setSending(false)
@@ -664,17 +670,22 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
       pushName: profile?.nome ?? profile?.email ?? 'Operador',
     }])
 
-    const res = await fetch(getApiUrl('/chat/internal-note'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        lead_id: contact._table === 'leads_contabilidade' ? contact.id : null,
-        conversation_id: remoteJid ?? null,
+    const { error } = await supabase.from('communication_events').insert([{
+      source: 'crm',
+      event_type: 'internal_note',
+      external_id: null,
+      conversation_id: remoteJid ?? null,
+      lead_id: contact._table === 'leads_contabilidade' ? contact.id : null,
+      contact: sidebarPhone ?? null,
+      payload: {
         content: text,
-      }),
-    }).catch(() => null)
+        fromMe: true,
+        messageType: 'internalNote',
+        pushName: profile?.nome ?? profile?.email ?? 'Operador',
+      },
+    }])
 
-    if (!res?.ok) {
+    if (error) {
       setMessages(prev => prev.filter(item => item.id !== tempId))
       setInput(text)
       alert('Nao foi possivel salvar a nota interna.')
@@ -858,19 +869,18 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
       follow_up_2: leadForm.follow_up_2.trim() || null,
       follow_up_3: leadForm.follow_up_3.trim() || null,
     }
-    const res = await fetch(getApiUrl(`/chat/leads/${contact.id}`), {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).catch(() => null)
+    const { data, error } = await supabase
+      .from('leads_contabilidade')
+      .update(payload)
+      .eq('id', contact.id)
+      .select('id, nome_lead, whatsapp_lead, motivo_contato, resumo_conversa, status, ultima_mensagem, inicio_atendimento, data_agendamento, agendamento_criado_em, anotacoes, follow_up_1, follow_up_2, follow_up_3, horario_comercial, evolution_remote_jid, evolution_instance, created_at')
+      .maybeSingle()
 
     setSavingLead(false)
-    if (!res?.ok) {
+    if (error) {
       alert('Nao foi possivel salvar as informacoes.')
       return
     }
-    const result = await res.json() as { lead?: LeadSidebarInfo | null }
-    const data = result.lead ?? null
     if (data) {
       setLeadInfo(data as LeadSidebarInfo)
       setLeadForm(buildLeadEditForm(data as LeadSidebarInfo, contact.nome, contact.telefone))
@@ -1999,5 +2009,4 @@ function MessageBubble({
     </div>
   )
 }
-
 

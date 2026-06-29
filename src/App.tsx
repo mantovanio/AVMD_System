@@ -16,7 +16,7 @@ const UpdatePassword = lazy(() => import('@/pages/UpdatePassword'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const Comercial = lazy(() => import('@/pages/Comercial'))
 const Clientes = lazy(() => import('@/pages/Clientes'))
-const ChatAoVivo = lazy(() => import('@/pages/ChatAoVivo'))
+const ChatAoVivo = lazy(() => import('@/pages/ChatInboxCRM'))
 const Renovacoes = lazy(() => import('@/pages/Renovacoes'))
 const Financeiro = lazy(() => import('@/pages/Financeiro'))
 const Relatorios = lazy(() => import('@/pages/Relatorios'))
@@ -371,5 +371,4 @@ export default function App() {
     </ClerkProvider>
   )
 }
-
 
