@@ -842,38 +842,35 @@ export default function ChatInboxCRM() {
 
   async function loadConversations(showRefreshing = true) {
     if (showRefreshing) setRefreshing(true)
-    const { data, error: queryError } = await supabase
-      .from('crm_chat_admin_view')
-      .select('*')
-      .order('ultima_interacao_em', { ascending: false })
+    try {
+      const response = await fetch(getApiUrl('/chat/crm/conversations'))
+      if (!response.ok) throw new Error('Erro ao carregar conversas')
+      const json = await response.json() as { ok: boolean; data: ConversationRow[] }
+      const rows = json.data ?? []
 
-    if (queryError) {
-      setError(queryError.message)
-      if (showRefreshing) setRefreshing(false)
-      return
+      const snapshot = rows
+        .map(item => [
+          item.id,
+          item.ultima_interacao_em ?? '',
+          item.kanban_status ?? '',
+          item.atendimento_humano ? '1' : '0',
+          item.agente_atual ?? '',
+          item.ultima_mensagem ?? '',
+        ].join('|'))
+        .join('||')
+
+      if (snapshot !== lastConversationSnapshotRef.current) {
+        lastConversationSnapshotRef.current = snapshot
+        setConversations(rows)
+        void loadConversationPreviews(rows)
+      }
+      setSelectedId(current => {
+        if (current && rows.some(item => item.id === current)) return current
+        return rows[0]?.id ?? null
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar conversas')
     }
-
-    const rows = (data ?? []) as ConversationRow[]
-    const snapshot = rows
-      .map(item => [
-        item.id,
-        item.ultima_interacao_em ?? '',
-        item.kanban_status ?? '',
-        item.atendimento_humano ? '1' : '0',
-        item.agente_atual ?? '',
-        item.ultima_mensagem ?? '',
-      ].join('|'))
-      .join('||')
-
-    if (snapshot !== lastConversationSnapshotRef.current) {
-      lastConversationSnapshotRef.current = snapshot
-      setConversations(rows)
-      void loadConversationPreviews(rows)
-    }
-    setSelectedId(current => {
-      if (current && rows.some(item => item.id === current)) return current
-      return rows[0]?.id ?? null
-    })
     if (showRefreshing) setRefreshing(false)
   }
 
@@ -884,95 +881,74 @@ export default function ChatInboxCRM() {
       return
     }
 
-    const { data, error } = await supabase
-      .from('crm_chat_messages')
-      .select('id, conversation_id, document_key, direction, sender_type, sender_name, mensagem, mime_type, file_name, media_url, created_at')
-      .in('conversation_id', ids)
-      .order('created_at', { ascending: false })
-      .limit(300)
-
-    if (error || !data) {
+    try {
+      const previews: Record<string, CrmMessage[]> = {}
+      for (const id of ids) {
+        const response = await fetch(getApiUrl(`/chat/crm/messages?conversation_id=${encodeURIComponent(id)}`))
+        if (!response.ok) continue
+        const json = await response.json() as { ok: boolean; crmMessages: CrmMessage[] }
+        const msgs = (json.crmMessages ?? []).slice(-3).reverse()
+        if (msgs.length > 0) previews[id] = msgs
+      }
+      setConversationPreviews(previews)
+    } catch {
       setConversationPreviews({})
-      return
     }
-
-    const grouped: Record<string, CrmMessage[]> = {}
-    for (const row of data as CrmMessage[]) {
-      if (!grouped[row.conversation_id]) grouped[row.conversation_id] = []
-      if (grouped[row.conversation_id].length >= 3) continue
-      grouped[row.conversation_id].push(row)
-    }
-
-    setConversationPreviews(grouped)
   }
 
   async function loadMessages(conversationId: string, options: { background?: boolean } = {}) {
     const background = options.background ?? false
     if (!background) setLoadingMessages(true)
     const conversation = conversations.find(item => item.id === conversationId) ?? null
-    const documentKey = conversation?.document_key ?? null
-    const remoteJid = conversation?.document_key ? `${conversation.document_key}@s.whatsapp.net` : null
-    const [crmResult, evolutionResult] = await Promise.all([
-      supabase
-        .from('crm_chat_messages')
-        .select('id, conversation_id, document_key, external_message_id, direction, sender_type, sender_name, mensagem, mime_type, file_name, media_url, created_at')
-        .or(documentKey
-          ? `conversation_id.eq.${conversationId},document_key.eq.${documentKey}`
-          : `conversation_id.eq.${conversationId}`)
-        .order('created_at', { ascending: true }),
-      supabase
-        .from('communication_events')
-        .select('id, event_type, payload, created_at, source')
-        .in('source', ['evolution', 'chatwoot'])
-        .or([
-          `conversation_id.eq.${conversationId}`,
-          documentKey ? `conversation_id.eq.${documentKey}` : null,
-          remoteJid ? `conversation_id.eq.${remoteJid}` : null,
-        ].filter(Boolean).join(','))
-        .order('created_at', { ascending: true }),
-    ])
+    const documentKey = conversation?.document_key ?? ''
 
-    const crmMessages = (crmResult.data ?? []) as CrmMessage[]
-    const evolutionMessages = parseEvolutionEventMessages((evolutionResult.data ?? []) as EvolutionEventRow[])
-    const nextMessages = mergeConversationMessages([...crmMessages, ...evolutionMessages])
-    const nextSnapshot = nextMessages
-      .map(message => [
-        message.id,
-        message.direction,
-        message.sender_type,
-        message.sender_name ?? '',
-        message.mensagem ?? '',
-        message.mime_type ?? '',
-        message.file_name ?? '',
-        message.media_url ?? '',
-        message.created_at,
-      ].join('|'))
-      .join('||')
+    try {
+      const response = await fetch(getApiUrl(`/chat/crm/messages?conversation_id=${encodeURIComponent(conversationId)}&document_key=${encodeURIComponent(documentKey)}`))
+      if (!response.ok) throw new Error('Erro ao carregar mensagens')
+      const json = await response.json() as { ok: boolean; crmMessages: CrmMessage[]; evolutionMessages: EvolutionEventRow[] }
 
-    if (`${conversationId}:${nextSnapshot}` !== lastMessageSnapshotRef.current) {
-      lastMessageSnapshotRef.current = `${conversationId}:${nextSnapshot}`
-      setMessages(nextMessages)
+      const crmMessages = (json.crmMessages ?? []) as CrmMessage[]
+      const evolutionMessages = parseEvolutionEventMessages((json.evolutionMessages ?? []) as EvolutionEventRow[])
+      const nextMessages = mergeConversationMessages([...crmMessages, ...evolutionMessages])
+      const nextSnapshot = nextMessages
+        .map(message => [
+          message.id,
+          message.direction,
+          message.sender_type,
+          message.sender_name ?? '',
+          message.mensagem ?? '',
+          message.mime_type ?? '',
+          message.file_name ?? '',
+          message.media_url ?? '',
+          message.created_at,
+        ].join('|'))
+        .join('||')
+
+      if (`${conversationId}:${nextSnapshot}` !== lastMessageSnapshotRef.current) {
+        lastMessageSnapshotRef.current = `${conversationId}:${nextSnapshot}`
+        setMessages(nextMessages)
+      }
+    } catch (err) {
+      if (!background) setError(err instanceof Error ? err.message : 'Erro ao carregar mensagens')
     }
     if (!background) setLoadingMessages(false)
   }
 
   async function loadAgents() {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, nome, perfil')
-      .eq('status', 'ativo')
-      .in('perfil', ['admin', 'usuario', 'vendedor', 'agente_registro'])
-      .order('nome', { ascending: true })
-
-    const rows = ((data ?? []) as Partial<AgentOption>[])
-      .filter(item => Boolean(item.id) && Boolean(item.nome))
-      .map(item => ({
-        id: String(item.id),
-        nome: String(item.nome),
-        perfil: String(item.perfil ?? 'usuario'),
-      }))
-
-    setAgents(rows)
+    try {
+      const response = await fetch(getApiUrl('/chat/crm/agents'))
+      if (!response.ok) return
+      const rows = (await response.json() as AgentOption[])
+        .filter(item => Boolean(item.id) && Boolean(item.nome))
+        .map(item => ({
+          id: String(item.id),
+          nome: String(item.nome),
+          perfil: String(item.perfil ?? 'usuario'),
+        }))
+      setAgents(rows)
+    } catch {
+      setAgents([])
+    }
   }
 
   async function fetchEvolutionIntegrations() {

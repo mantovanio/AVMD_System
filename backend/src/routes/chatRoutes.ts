@@ -170,9 +170,10 @@ export async function handleChatRoutes(
 
   if (method === 'GET' && url === '/api/chat/crm/agents') {
     const result = await db.query<any>(
-      `SELECT id, nome, perfil, avatar_url, email
+      `SELECT id, nome, perfil, email
        FROM profiles
-       WHERE perfil IN ('admin', 'superadmin', 'atendente')
+       WHERE status = 'ativo'
+         AND perfil IN ('admin', 'superadmin', 'usuario', 'vendedor', 'agente_registro', 'atendente')
        ORDER BY nome ASC`,
     )
     writeJson(res, 200, result.rows, corsOrigin)
