@@ -147,6 +147,8 @@ export default function ChatAoVivo() {
   const [reagendarObs, setReagendarObs] = useState('')
   const [leadForm, setLeadForm] = useState<LeadFormState>(emptyLeadForm())
   const [evolution, setEvolution] = useState<EvolutionCfg | null>(null)
+  const [evolutionAtendimento, setEvolutionAtendimento] = useState<EvolutionCfg | null>(null)
+  const [evolutionRenovacao, setEvolutionRenovacao] = useState<EvolutionCfg | null>(null)
   const [chatLead, setChatLead] = useState<Lead | null>(null)
   const [listSearch, setListSearch] = useState('')
   const [listStatusFilter, setListStatusFilter] = useState('todos')
@@ -342,22 +344,49 @@ export default function ChatAoVivo() {
 
   async function loadEvolution() {
     try {
-      const data = await loadActiveWhatsAppIntegration()
-      if (!data) { logger.warn('ChatAoVivo', 'nenhuma integração WhatsApp ativa encontrada'); return }
-      if (!data.supportsEmbeddedChat) { logger.warn('ChatAoVivo', 'integração WhatsApp ativa sem chat embutido', data.engine); return }
-      if (data.base_url && data.api_token && data.instance_name) {
-        setEvolution({
+      const [atendimentoData, renovacaoData, fallbackData] = await Promise.all([
+        loadActiveWhatsAppIntegration('atendimento').catch(() => null),
+        loadActiveWhatsAppIntegration('renovacao').catch(() => null),
+        loadActiveWhatsAppIntegration().catch(() => null),
+      ])
+
+      const toEvolutionCfg = (data: Awaited<ReturnType<typeof loadActiveWhatsAppIntegration>>) => {
+        if (!data || !data.supportsEmbeddedChat) return null
+        if (!data.base_url || !data.api_token || !data.instance_name) return null
+        return {
           base_url: data.base_url,
           api_token: data.api_token,
           instance_name: data.instance_name,
           status: data.status,
           last_test_at: data.last_test_at,
           last_error: data.last_error,
-        })
+        } satisfies EvolutionCfg
+      }
+
+      const atendimentoCfg = toEvolutionCfg(atendimentoData)
+      const renovacaoCfg = toEvolutionCfg(renovacaoData)
+      const fallbackCfg = toEvolutionCfg(fallbackData)
+
+      setEvolutionAtendimento(atendimentoCfg)
+      setEvolutionRenovacao(renovacaoCfg)
+      setEvolution(atendimentoCfg ?? renovacaoCfg ?? fallbackCfg ?? null)
+
+      if (!atendimentoCfg && !renovacaoCfg && !fallbackCfg) {
+        logger.warn('ChatAoVivo', 'nenhuma integração WhatsApp ativa encontrada')
       }
     } catch (error) {
       logger.error('ChatAoVivo', 'erro ao buscar integração WhatsApp', String(error))
     }
+  }
+
+  function resolveEvolutionForLead(lead: Lead | null) {
+    const instance = String(lead?.evolution_instance ?? '').trim().toLowerCase()
+    if (instance) {
+      if (evolutionAtendimento?.instance_name?.trim().toLowerCase() === instance) return evolutionAtendimento
+      if (evolutionRenovacao?.instance_name?.trim().toLowerCase() === instance) return evolutionRenovacao
+      if (evolution?.instance_name?.trim().toLowerCase() === instance) return evolution
+    }
+    return evolutionAtendimento ?? evolutionRenovacao ?? evolution
   }
 
   function openWhatsApp(lead: Lead) {
@@ -952,7 +981,7 @@ export default function ChatAoVivo() {
             evolution_instance:   chatLead.evolution_instance,
             _table:               'leads_contabilidade',
           }}
-          evolution={evolution}
+          evolution={resolveEvolutionForLead(chatLead)}
           onClose={() => setChatLead(null)}
         />
       )}
@@ -1592,4 +1621,6 @@ function SelectInput({ label, value, onChange, options }: { label: string; value
     </label>
   )
 }
+
+
 
