@@ -44,4 +44,17 @@ export class CommunicationEventRepository {
 
     return result.rows[0]
   }
+
+  async listByConversation(conversationId: string, limit = 200): Promise<CommunicationEventRow[]> {
+    const result = await this.db.query<CommunicationEventRow>(
+      `SELECT *
+         FROM communication_events
+        WHERE conversation_id = $1
+        ORDER BY created_at ASC
+        LIMIT $2`,
+      [conversationId, limit],
+    )
+
+    return result.rows
+  }
 }

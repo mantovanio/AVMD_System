@@ -79,4 +79,5 @@ export type CheckoutSubmitResponse = {
   venda_id?: string | null
   protocolo_numero?: string | null
   redirect_url?: string | null
+  payment_status?: string | null
 }

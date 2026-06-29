@@ -70,7 +70,10 @@ function pickString(source: JsonRecord | null, ...keys: string[]) {
 }
 
 function cleanBaseUrl(value: string) {
-  return value.replace(/\/$/, '')
+  const raw = value.trim()
+  if (!raw) return ''
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : ('https://' + raw.replace(/^\/+/,'') )
+  return withProtocol.replace(/\/$/, '')
 }
 
 function normalizePhoneDigits(value: string | null | undefined) {
@@ -241,7 +244,8 @@ async function testEvolutionConnection(input: EvolutionControlInput) {
     return { status: 400, payload: { ok: false, error: 'base_url, api_token e instance_name sao obrigatorios.' } }
   }
 
-  const response = await fetch(`${baseUrl}/instance/connectionState/${instanceName}`, {
+  const endpoint = `${baseUrl}/instance/connectionState/${instanceName}`
+  const response = await fetch(endpoint, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
@@ -255,7 +259,10 @@ async function testEvolutionConnection(input: EvolutionControlInput) {
   const connectedStates = new Set(['open', 'opened', 'connected', 'online'])
 
   if (!response.ok) {
-    return { status: 502, payload: { ok: false, error: `Evolution retornou HTTP ${response.status}`, state, detail: payload } }
+    const error = response.status === 404
+      ? `Evolution retornou HTTP 404. Verifique a URL base e o nome exato da instância (${instanceName}). Endpoint testado: ${endpoint}`
+      : `Evolution retornou HTTP ${response.status}`
+    return { status: 502, payload: { ok: false, error, state, detail: payload } }
   }
 
   if (!connectedStates.has(normalizedState)) {
@@ -475,3 +482,6 @@ export async function handleWhatsappSendRoutes(
 
   return true
 }
+
+
+

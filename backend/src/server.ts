@@ -9,6 +9,7 @@ import { IntegrationEventRepository } from './repositories/integrationEventRepos
 import { createIntegrationRegistry } from './integrations/createRegistry.js'
 import { IntegrationEventProcessor } from './integrations/eventProcessor.js'
 import { CheckoutService } from './services/checkoutService.js'
+import { CheckoutPaymentService } from './services/checkoutPaymentService.js'
 import { handleCheckoutRoutes } from './routes/checkoutRoutes.js'
 import { handleCommercialRoutes } from './routes/commercialRoutes.js'
 import { handleIntegrationRoutes } from './routes/integrationRoutes.js'
@@ -25,15 +26,18 @@ import { AutomationRulesRepository } from './repositories/automationRulesReposit
 import { LinksProdutosRepository } from './repositories/linksProdutosRepository.js'
 import { LeadRepository } from './repositories/leadRepository.js'
 import { CommunicationOutboxRepository } from './repositories/communicationOutboxRepository.js'
+import { CommunicationEventRepository } from './repositories/communicationEventRepository.js'
 import { ScheduleAutomationRepository } from './repositories/scheduleAutomationRepository.js'
 import { handleRenovacaoRoutes } from './routes/renovacaoRoutes.js'
 import { handleCommunicationTemplateRoutes } from './routes/communicationTemplateRoutes.js'
 import { handleAutomationRulesRoutes } from './routes/automationRulesRoutes.js'
 import { handleLinksProdutosRoutes } from './routes/linksProdutosRoutes.js'
 import { handleWhatsappSendRoutes } from './routes/whatsappSendRoutes.js'
+import { handleEvolutionWebhookRoutes } from './routes/evolutionWebhookRoutes.js'
 import { handleCommunicationOutboxRoutes } from './routes/communicationOutboxRoutes.js'
 import { handleScheduleAutomationRoutes } from './routes/scheduleAutomationRoutes.js'
 import { handleClaraAutomationRoutes } from './routes/claraAutomationRoutes.js'
+import { handleChatRoutes } from './routes/chatRoutes.js'
 import { writeJson } from './utils/http.js'
 
 const config = loadConfig()
@@ -51,10 +55,12 @@ const automationRulesRepository = new AutomationRulesRepository(db)
 const linksProdutosRepository = new LinksProdutosRepository(db)
 const leadRepository = new LeadRepository(db)
 const communicationOutboxRepository = new CommunicationOutboxRepository(db)
+const communicationEventRepository = new CommunicationEventRepository(db)
 const scheduleAutomationRepository = new ScheduleAutomationRepository(db)
 const integrationRegistry = createIntegrationRegistry(config)
 const integrationEventProcessor = new IntegrationEventProcessor(integrationEventRepository, integrationRegistry)
-const service = new CheckoutService(checkoutRepository)
+const checkoutPaymentService = new CheckoutPaymentService(checkoutRepository)
+const service = new CheckoutService(checkoutRepository, checkoutPaymentService)
 
 const server = createServer(async (req, res) => {
   try {
@@ -95,6 +101,16 @@ const server = createServer(async (req, res) => {
     const handledWhatsapp = await handleWhatsappSendRoutes(req, res, externalIntegrationRepository, config.corsOrigin)
     if (handledWhatsapp) return
 
+    const handledEvolutionWebhook = await handleEvolutionWebhookRoutes(
+      req,
+      res,
+      leadRepository,
+      communicationEventRepository,
+      config,
+      config.corsOrigin,
+    )
+    if (handledEvolutionWebhook) return
+
     const handledOutbox = await handleCommunicationOutboxRoutes(req, res, communicationOutboxRepository, config.corsOrigin)
     if (handledOutbox) return
 
@@ -115,6 +131,16 @@ const server = createServer(async (req, res) => {
     )
     if (handledClaraAutomation) return
 
+    const handledChat = await handleChatRoutes(
+      req,
+      res,
+      leadRepository,
+      communicationEventRepository,
+      externalIntegrationRepository,
+      config.corsOrigin,
+    )
+    if (handledChat) return
+
     const handledCatalog = await handleCatalogRoutes(req, res, catalogRepository, config.corsOrigin)
     if (handledCatalog) return
 
@@ -130,7 +156,7 @@ const server = createServer(async (req, res) => {
     )
     if (handledIntegration) return
 
-    await handleCheckoutRoutes(req, res, service, config.corsOrigin)
+    await handleCheckoutRoutes(req, res, service, config.corsOrigin, checkoutPaymentService)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro interno do servidor.'
     writeJson(res, 500, { ok: false, error: message }, config.corsOrigin)
@@ -140,3 +166,4 @@ const server = createServer(async (req, res) => {
 server.listen(config.port, () => {
   process.stdout.write(`Backend Aiven do checkout escutando na porta ${config.port}\n`)
 })
+

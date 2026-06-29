@@ -29,7 +29,7 @@ import {
   Search,
   Send,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { getApiUrl } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminProfile } from '@/lib/security'
@@ -168,55 +168,7 @@ export default function ChatAoVivo() {
       void loadLeads()
       void loadColumns()
     }, 4000)
-
-    const channel = supabase
-      .channel('chat-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads_contabilidade' }, payload => {
-        if (payload.eventType === 'UPDATE') setLeads(prev => prev.map(lead => lead.id === (payload.new as Lead).id ? payload.new as Lead : lead))
-        if (payload.eventType === 'INSERT') setLeads(prev => [payload.new as Lead, ...prev])
-        if (payload.eventType === 'DELETE') setLeads(prev => prev.filter(lead => lead.id !== (payload.old as Lead).id))
-      })
-      .subscribe()
-
-    const columnsChannel = supabase
-      .channel('chat-kanban-columns')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_kanban_columns' }, () => {
-        void loadColumns()
-      })
-      .subscribe()
-
-    const eventsChannel = supabase
-      .channel('chat-events-feed')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'communication_events' }, change => {
-        const row = change.new as Record<string, unknown>
-        const eventType = String(row.event_type ?? '')
-        const conversationId = String(row.conversation_id ?? '')
-        if (!conversationId || !eventType) return
-
-        const payload = row.payload as Record<string, unknown> | undefined
-        const data = payload?.data as Record<string, unknown> | undefined
-        const leadMessage = (data?.content as string | undefined) ?? null
-
-        if (eventType === 'message_received') {
-          const content = (payload?.content as string | undefined) ?? (data?.content as string | undefined) ?? leadMessage
-          setLeads(prev => prev.map(lead => {
-            if (lead.evolution_remote_jid !== conversationId) return lead
-            return {
-              ...lead,
-              ultima_mensagem: content ?? lead.ultima_mensagem,
-              status: lead.status === 'iniciou_conversa' ? 'conversando' : lead.status,
-            }
-          }))
-        }
-      })
-      .subscribe()
-
-    return () => {
-      clearInterval(interval)
-      supabase.removeChannel(channel)
-      supabase.removeChannel(columnsChannel)
-      supabase.removeChannel(eventsChannel)
-    }
+    return () => { clearInterval(interval) }
   }, [])
 
   async function loadAll() {
@@ -227,46 +179,31 @@ export default function ChatAoVivo() {
   }
 
   async function loadLeads() {
-    const { data, error: err } = await supabase
-      .from('leads_contabilidade')
-      .select('id, nome_lead, whatsapp_lead, motivo_contato, resumo_conversa, ultima_mensagem, status, created_at, horario_comercial, data_agendamento, agendamento_criado_em, anotacoes, follow_up_1, follow_up_2, follow_up_3, evolution_remote_jid, evolution_instance')
-      .order('created_at', { ascending: false })
-    if (err) {
-      setError(err.message)
+    const res = await fetch(getApiUrl('/chat/leads')).catch(() => null)
+    if (!res?.ok) {
+      setError('Falha ao carregar contatos.')
       return
     }
-    setLeads((data ?? []) as Lead[])
+    const data = await res.json() as { leads?: Lead[] }
+    setLeads(data.leads ?? [])
   }
 
   async function loadColumns() {
-    const { data, error: err } = await supabase
-      .from('chat_kanban_columns')
-      .select('id, status_key, label, color, bg, border, ordem, ativo')
-      .order('ordem', { ascending: true })
-    if (err) {
-      return
-    }
-    const mapped = (data ?? []).map(item => ({
-      id: item.id,
-      status_key: item.status_key,
-      label: item.label,
-      color: item.color,
-      bg: item.bg,
-      border: item.border,
-      ordem: item.ordem,
-      ativo: item.ativo,
-    })) as ColumnConfig[]
-    setColumns((mapped.length > 0 ? mapped : DEFAULT_COLUMNS).sort((a, b) => a.ordem - b.ordem))
+    const res = await fetch(getApiUrl('/chat/kanban-columns')).catch(() => null)
+    if (!res?.ok) return
+    const data = await res.json() as { columns?: ColumnConfig[] }
+    const cols = data.columns ?? []
+    setColumns((cols.length > 0 ? cols : DEFAULT_COLUMNS).sort((a, b) => a.ordem - b.ordem))
   }
 
   async function persistColumnOrder(nextColumns: ColumnConfig[]) {
     if (!isAdmin) return
     setColumns(nextColumns)
-    await Promise.all(
-      nextColumns.map((column, index) =>
-        supabase.from('chat_kanban_columns').update({ ordem: index + 1 }).eq('id', column.id),
-      ),
-    )
+    await fetch(getApiUrl('/chat/kanban-columns/reorder'), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: nextColumns.map((c, i) => ({ id: c.id, ordem: i + 1 })) }),
+    })
   }
 
   async function moveColumn(columnId: string, direction: -1 | 1) {
@@ -288,8 +225,12 @@ export default function ChatAoVivo() {
     const lead = leads.find(item => item.id === active.id)
     if (!lead || lead.status === newStatus) return
     setLeads(prev => prev.map(item => item.id === lead.id ? { ...item, status: newStatus } : item))
-    const { error: err } = await supabase.from('leads_contabilidade').update({ status: newStatus }).eq('id', lead.id)
-    if (err) {
+    const res = await fetch(getApiUrl(`/chat/leads/${lead.id}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    if (!res.ok) {
       await loadLeads()
       alert('Erro ao mover contato.')
     }
@@ -304,9 +245,13 @@ export default function ChatAoVivo() {
       updates.agendamento_criado_em = new Date().toISOString()
       if (reagendarObs.trim()) updates.anotacoes = reagendarObs.trim()
     }
-    const { error: err } = await supabase.from('leads_contabilidade').update(updates).eq('id', quickModal.lead.id)
+    const res = await fetch(getApiUrl(`/chat/leads/${quickModal.lead.id}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    })
     setSavingQuick(false)
-    if (err) {
+    if (!res.ok) {
       alert('Erro ao salvar.')
       return
     }
@@ -329,21 +274,25 @@ export default function ChatAoVivo() {
       status: leadForm.status,
     }
 
-    const query = leadModal?.mode === 'editar' && leadModal.lead
-      ? supabase.from('leads_contabilidade').update(payload).eq('id', leadModal.lead.id)
-      : supabase.from('leads_contabilidade').insert([{ ...payload, created_at: new Date().toISOString() }])
-
-    const { data, error: err } = await query.select('*').single()
+    const isEditing = leadModal?.mode === 'editar' && leadModal.lead
+    const url = isEditing ? getApiUrl(`/chat/leads/${leadModal!.lead!.id}`) : getApiUrl('/chat/leads')
+    const res = await fetch(url, {
+      method: isEditing ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
     setSavingLead(false)
-    if (err) {
+    if (!res.ok) {
       alert('Erro ao salvar contato.')
       return
     }
+    const result = await res.json() as { lead?: Lead }
+    const saved = result.lead
 
-    if (leadModal?.mode === 'editar' && leadModal.lead) {
-      setLeads(prev => prev.map(item => item.id === leadModal.lead!.id ? data as Lead : item))
-    } else {
-      setLeads(prev => [data as Lead, ...prev])
+    if (isEditing && leadModal?.lead) {
+      setLeads(prev => prev.map(item => item.id === leadModal.lead!.id ? (saved ?? { ...item, ...payload }) as Lead : item))
+    } else if (saved) {
+      setLeads(prev => [saved, ...prev])
     }
 
     setLeadModal(null)
@@ -353,8 +302,8 @@ export default function ChatAoVivo() {
   async function deleteLead(lead: Lead) {
     if (!isAdmin) return
     if (!confirm(`Excluir o contato ${lead.nome_lead || 'sem nome'}?`)) return
-    const { error: err } = await supabase.from('leads_contabilidade').delete().eq('id', lead.id)
-    if (err) { alert('Erro ao excluir contato.'); return }
+    const res = await fetch(getApiUrl(`/chat/leads/${lead.id}`), { method: 'DELETE' })
+    if (!res.ok) { alert('Erro ao excluir contato.'); return }
     setLeads(prev => prev.filter(item => item.id !== lead.id))
     setSelectedIds(prev => { const next = new Set(prev); next.delete(lead.id); return next })
   }
@@ -364,9 +313,13 @@ export default function ChatAoVivo() {
     if (!confirm(`Excluir ${selectedIds.size} contato(s) selecionado(s)? Esta ação não pode ser desfeita.`)) return
     setDeletingBulk(true)
     const ids = [...selectedIds]
-    const { error: err } = await supabase.from('leads_contabilidade').delete().in('id', ids)
+    const res = await fetch(getApiUrl('/chat/leads'), {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    })
     setDeletingBulk(false)
-    if (err) { alert('Erro ao excluir.'); return }
+    if (!res.ok) { alert('Erro ao excluir.'); return }
     setLeads(prev => prev.filter(item => !selectedIds.has(item.id)))
     setSelectedIds(new Set())
   }
@@ -458,13 +411,14 @@ export default function ChatAoVivo() {
       ativo: column.ativo,
     }
 
-    const query = columnModal.mode === 'editar' && column.id
-      ? supabase.from('chat_kanban_columns').update(payload).eq('id', column.id)
-      : supabase.from('chat_kanban_columns').insert([payload])
-
-    const { error: err } = await query
+    const body = columnModal.mode === 'editar' && column.id ? { ...payload, id: column.id } : payload
+    const res = await fetch(getApiUrl('/chat/kanban-columns'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
     setSavingColumn(false)
-    if (err) {
+    if (!res.ok) {
       alert('Erro ao salvar coluna.')
       return
     }
@@ -476,16 +430,12 @@ export default function ChatAoVivo() {
     if (!columnModal?.column.id || !isAdmin) return
     const column = columnModal.column
     const inUse = leads.filter(lead => lead.status === column.status_key)
-    if (inUse.length > 0) {
-      const fallback = 'iniciou_conversa'
-      const { error: moveError } = await supabase.from('leads_contabilidade').update({ status: fallback }).eq('status', column.status_key)
-      if (moveError) {
-        alert('Não foi possível mover os leads antes de excluir: ' + moveError.message)
-        return
-      }
-    }
-    const { error: err } = await supabase.from('chat_kanban_columns').delete().eq('id', column.id)
-    if (err) {
+    const res = await fetch(getApiUrl(`/chat/kanban-columns/${column.id}`), {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fallbackStatusKey: 'iniciou_conversa' }),
+    })
+    if (!res.ok) {
       alert('Erro ao excluir coluna.')
       return
     }
@@ -588,21 +538,25 @@ export default function ChatAoVivo() {
       return
     }
     const activeWhatsapp = await loadActiveWhatsAppIntegration().catch(() => null)
-    const { error: err } = await supabase.from('communication_outbox').insert([{
-      channel: 'whatsapp', provider: activeWhatsapp?.provider ?? 'n8n',
-      to_address: quickSendLead.whatsapp_lead,
-      body: quickSendText.trim(),
-      payload: {
-        lead_id: quickSendLead.id,
-        tipo: 'manual_lista',
-        integration_id: activeWhatsapp?.id ?? null,
-        whatsapp_engine: activeWhatsapp?.engine ?? null,
-        instance_name: activeWhatsapp?.instance_name ?? null,
-      },
-      scheduled_for: new Date().toISOString(),
-    }])
+    const res = await fetch(getApiUrl('/communication/outbox'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        channel: 'whatsapp', provider: activeWhatsapp?.provider ?? 'n8n',
+        to_address: quickSendLead.whatsapp_lead,
+        body: quickSendText.trim(),
+        payload: {
+          lead_id: quickSendLead.id,
+          tipo: 'manual_lista',
+          integration_id: activeWhatsapp?.id ?? null,
+          whatsapp_engine: activeWhatsapp?.engine ?? null,
+          instance_name: activeWhatsapp?.instance_name ?? null,
+        },
+        scheduled_for: new Date().toISOString(),
+      }),
+    })
     setQuickSendLoading(false)
-    if (err) { alert('Erro ao enfileirar mensagem.'); return }
+    if (!res.ok) { alert('Erro ao enfileirar mensagem.'); return }
     setQuickSendLead(null)
     setQuickSendText('')
   }
@@ -1638,3 +1592,4 @@ function SelectInput({ label, value, onChange, options }: { label: string; value
     </label>
   )
 }
+

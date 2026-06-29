@@ -15,10 +15,12 @@ export type NfseModeloLayout = {
 
 export type NfseEmissionTrigger =
   | 'manual'
+  | 'antes_pagamento'
   | 'apos_pagamento'
   | 'apos_agendamento'
   | 'apos_validacao'
   | 'apos_protocolo'
+  | 'apos_emissao_certificado'
 
 export type NfseAutomationSettings = {
   gatilho_emissao: NfseEmissionTrigger
@@ -314,6 +316,7 @@ export function isNfseEmissionAllowed(params: {
     pago?: boolean | null
     protocolo_numero?: string | null
     tipo_produto?: string | null
+    status_venda?: string | null
   }
   agendamentoStatus?: string | null
 }) {
@@ -339,6 +342,12 @@ export function isNfseEmissionAllowed(params: {
       allowed: true,
       reason: '',
     }
+  }
+
+  if (gatilho === 'antes_pagamento') {
+    return !venda.pago
+      ? { allowed: true, reason: '' }
+      : { allowed: false, reason: 'A nota está configurada para emissão antes do pagamento. Após a compensação, use a emissão manual ou outro gatilho.' }
   }
 
   if (gatilho === 'apos_pagamento') {
@@ -369,6 +378,12 @@ export function isNfseEmissionAllowed(params: {
     return venda.protocolo_numero?.trim()
       ? { allowed: true, reason: '' }
       : { allowed: false, reason: 'A nota está configurada para emissão somente após a geração do protocolo.' }
+  }
+
+  if (gatilho === 'apos_emissao_certificado') {
+    return String(venda.status_venda ?? '').trim() === 'emitido'
+      ? { allowed: true, reason: '' }
+      : { allowed: false, reason: 'A nota está configurada para emissão somente após o certificado ser emitido.' }
   }
 
   return {

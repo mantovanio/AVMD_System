@@ -6,10 +6,14 @@ import type {
   CheckoutSubmitResponse,
 } from '../contracts/checkoutContract.js'
 import type { CheckoutRepository } from '../repositories/checkoutRepository.js'
+import { CheckoutPaymentService } from './checkoutPaymentService.js'
 import { isValidCpf, isValidCpfCnpj, isValidEmail, isValidPhone, isValidUf } from '../utils/validation.js'
 
 export class CheckoutService {
-  constructor(private readonly repository: CheckoutRepository) {}
+  constructor(
+    private readonly repository: CheckoutRepository,
+    private readonly paymentService: CheckoutPaymentService = new CheckoutPaymentService(repository),
+  ) {}
 
   async handleContext(body: CheckoutContextApiRequest): Promise<CheckoutContextApiResponse | CheckoutLookupCustomerApiResponse> {
     if (body.action === 'lookup_customer') {
@@ -90,12 +94,35 @@ export class CheckoutService {
       })
     }
 
+    const charge = await this.paymentService.createChargeForSale({
+      vendaId: venda.id,
+      formaPagamentoId: body.pagamento.forma_pagamento_id,
+      valor: Number(item.valor ?? 0),
+      descricao: `${item.certificados?.tipo ?? 'Certificado digital'} - ${body.comprador.nome}`,
+      comprador: {
+        nome: body.comprador.nome,
+        email: body.comprador.email,
+        telefone: body.comprador.telefone,
+        documento: body.comprador.cpf_cnpj,
+      },
+    })
+
+    const chargeLink = charge.chargeUrl ?? null
+    const message = charge.ok
+      ? (charge.mocked
+          ? 'Pedido criado com sucesso. Cobrança gerada em modo de testes.'
+          : chargeLink
+            ? 'Pedido criado com sucesso. Abra o link para concluir o pagamento.'
+            : 'Pedido criado com sucesso. A cobrança foi registrada e aguarda retorno do gateway.')
+      : 'Pedido criado, mas a cobrança não pôde ser gerada automaticamente. Nossa equipe enviará o link de pagamento.'
+
     return {
       ok: true,
-      message: 'Pedido criado com sucesso.',
+      message,
       venda_id: venda.id,
       protocolo_numero: venda.protocolo_numero,
-      redirect_url: null,
+      redirect_url: chargeLink,
+      payment_status: charge.status,
     }
   }
 

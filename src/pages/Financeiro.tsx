@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { PlusCircle, TrendingUp, TrendingDown, DollarSign, X, Zap, FileText } from 'lucide-react'
+import { PlusCircle, TrendingUp, TrendingDown, DollarSign, X, Zap, FileText, ArrowDownCircle, ArrowUpCircle, Wallet, Landmark, Search, Link as LinkIcon, Receipt } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { buildNfseDiscriminacaoFromLancamento } from '@/lib/nfse'
 import { supabase } from '@/lib/supabase'
@@ -11,6 +11,8 @@ import type {
 
 type Tab = 'pagarReceber' | 'contas' | 'centros' | 'comissoes' | 'split' | 'fiscal'
 type PeriodoFiltro = 'hoje' | 'este_mes' | 'mes_passado' | '3meses' | 'personalizado'
+type TransactionStatusFilter = 'todos' | StatusLancamento
+type SettlementFilter = 'todos' | 'com_cobranca' | 'sem_cobranca'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'pagarReceber', label: 'Pagar / Receber'  },
@@ -23,6 +25,8 @@ const TABS: { id: Tab; label: string }[] = [
 
 const CATEGORIAS = ['Vendas', 'Repasses', 'Comissões', 'Operacional', 'SaaS', 'Outros']
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
+const TRANSACTION_STATUS_LABELS: Record<TransactionStatusFilter, string> = { todos: 'Todos', pendente: 'Pendente', pago: 'Pago', recebido: 'Recebido', cancelado: 'Cancelado' }
+const SETTLEMENT_LABELS: Record<SettlementFilter, string> = { todos: 'Todas', com_cobranca: 'Com cobrança', sem_cobranca: 'Sem cobrança' }
 
 const PERIODO_LABELS: Record<PeriodoFiltro, string> = {
   hoje: 'Hoje', este_mes: 'Este mês', mes_passado: 'Mês passado',
@@ -112,6 +116,9 @@ export default function Financeiro() {
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo]     = useState('')
   const [tipoFiltro, setTipoFiltro] = useState<'todos' | TipoLancamento>('todos')
+  const [statusFiltro, setStatusFiltro] = useState<TransactionStatusFilter>('todos')
+  const [settlementFilter, setSettlementFilter] = useState<SettlementFilter>('todos')
+  const [searchTerm, setSearchTerm] = useState('')
   const [filtroComissao, setFiltroComissao] = useState<StatusComissao | 'todos'>('todos')
   const [lancPageSize, setLancPageSize] = useState(25)
   const [lancPage, setLancPage] = useState(1)
@@ -121,6 +128,7 @@ export default function Financeiro() {
   const [splitPage, setSplitPage] = useState(1)
   const [nfsePageSize, setNfsePageSize] = useState(25)
   const [nfsePage, setNfsePage] = useState(1)
+  const [selectedLancamentoId, setSelectedLancamentoId] = useState<string | null>(null)
 
   const [showForm, setShowForm]   = useState(false)
   const [form, setForm]           = useState<FormLancamento>(EMPTY_LANC)
@@ -179,10 +187,14 @@ export default function Financeiro() {
 
   useEffect(() => { fetchData() }, [fetchData])
   useEffect(() => { fetchLancs() }, [fetchLancs])
-  useEffect(() => { setLancPage(1) }, [periodo, customFrom, customTo, tipoFiltro, lancPageSize])
+  useEffect(() => { setLancPage(1) }, [periodo, customFrom, customTo, tipoFiltro, statusFiltro, settlementFilter, searchTerm, lancPageSize])
   useEffect(() => { setComissoesPage(1) }, [filtroComissao, comissoesPageSize])
   useEffect(() => { setSplitPage(1) }, [splitPageSize])
   useEffect(() => { setNfsePage(1) }, [nfsePageSize])
+  useEffect(() => {
+    if (!selectedLancamentoId && lancs[0]?.id) setSelectedLancamentoId(lancs[0].id)
+    if (selectedLancamentoId && !lancs.some(item => item.id === selectedLancamentoId)) setSelectedLancamentoId(lancs[0]?.id ?? null)
+  }, [lancs, selectedLancamentoId])
 
   async function salvarLancamento() {
     if (!form.descricao.trim() || !form.vencimento || form.valor <= 0) {
@@ -237,11 +249,11 @@ export default function Financeiro() {
   async function gerarCobranca(l: LancamentoV2) {
     const { error: err } = await supabase
       .from('lancamentos_financeiros')
-      .update({ cobranca_gateway: 'mock', cobranca_link: `mock://certiid/${l.id}` })
+      .update({ cobranca_gateway: 'mock', cobranca_link: `mock://certiid/${l.id}`, cobranca_id_externo: `mock_${l.id}` })
       .eq('id', l.id)
     if (err) { showMsg('Erro ao gerar cobrança: ' + err.message, false); return }
     setLancs(prev => prev.map(x => x.id === l.id
-      ? { ...x, cobranca_gateway: 'mock', cobranca_link: `mock://certiid/${l.id}` }
+      ? { ...x, cobranca_gateway: 'mock', cobranca_link: `mock://certiid/${l.id}`, cobranca_id_externo: `mock_${l.id}` }
       : x))
     showMsg('Cobrança gerada (modo mock).')
   }
@@ -270,13 +282,25 @@ export default function Financeiro() {
     fetchData()
   }
 
-  const filtrados = lancs.filter(l => tipoFiltro === 'todos' || l.tipo === tipoFiltro)
+  const filtrados = lancs.filter(l => {
+    const matchesTipo = tipoFiltro === 'todos' || l.tipo === tipoFiltro
+    const matchesStatus = statusFiltro === 'todos' || l.status === statusFiltro
+    const hasCobranca = Boolean(l.cobranca_gateway || l.cobranca_link || l.cobranca_id_externo)
+    const matchesSettlement = settlementFilter === 'todos' || (settlementFilter === 'com_cobranca' && hasCobranca) || (settlementFilter === 'sem_cobranca' && !hasCobranca)
+    const haystack = `${l.descricao} ${l.categoria ?? ''} ${l.cobranca_gateway ?? ''} ${l.cobranca_id_externo ?? ''}`.toLowerCase()
+    const matchesSearch = !searchTerm.trim() || haystack.includes(searchTerm.trim().toLowerCase())
+    return matchesTipo && matchesStatus && matchesSettlement && matchesSearch
+  })
   const totalLancPages = Math.max(1, Math.ceil(filtrados.length / lancPageSize))
   const lancamentosPaginados = filtrados.slice((lancPage - 1) * lancPageSize, lancPage * lancPageSize)
+  const selectedLancamento = lancs.find(item => item.id === selectedLancamentoId) ?? lancamentosPaginados[0] ?? null
   const aReceber  = lancs.filter(l => l.tipo === 'receber' && l.status === 'pendente').reduce((s, l) => s + Number(l.valor), 0)
   const aPagar    = lancs.filter(l => l.tipo === 'pagar'   && l.status === 'pendente').reduce((s, l) => s + Number(l.valor), 0)
+  const entradasRecebidas = lancs.filter(l => l.tipo === 'receber' && l.status === 'recebido').reduce((s, l) => s + Number(l.valor), 0)
+  const saidasPagas = lancs.filter(l => l.tipo === 'pagar' && l.status === 'pago').reduce((s, l) => s + Number(l.valor), 0)
   const liquidado = lancs.filter(l => l.status === 'recebido' || l.status === 'pago').reduce((s, l) => s + Number(l.valor), 0)
   const saldoTotal = contas.reduce((s, c) => s + Number(c.saldo_inicial ?? 0), 0)
+  const saldoProjetado = saldoTotal + aReceber - aPagar
   const ordensPendentes = ordens.filter(o => o.status_integracao === 'pendente' || o.status_integracao === 'processando').length
   const ordensPagas = ordens.filter(o => o.status_integracao === 'pago').reduce((sum, o) => sum + Number(o.valor_pagamento ?? 0), 0)
   const nfseEmitidasQtd = nfse.filter(n => n.status_nf === 'emitida').length
@@ -857,6 +881,43 @@ export default function Financeiro() {
       </div>
     </div>
   )
+}
+
+
+function RealtimeCard({ label, value, subtitle, icon }: { label: string; value: number; subtitle: string; icon: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="p-2 rounded-xl bg-white/10 text-white">{icon}</div>
+      </div>
+      <p className="mt-4 text-sm text-slate-300">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-white">{formatMoney(value)}</p>
+      <p className="mt-2 text-xs text-slate-400">{subtitle}</p>
+    </div>
+  )
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide text-gray-400">{label}</p>
+      <p className="mt-1 text-sm font-medium text-gray-800 dark:text-gray-200 break-words">{value}</p>
+    </div>
+  )
+}
+
+function CashFlowRow({ label, value, tone }: { label: string; value: number; tone: 'positive' | 'negative' | 'neutral' | 'info' }) {
+  const cls = {
+    positive: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300',
+    negative: 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300',
+    neutral: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+    info: 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300',
+  }[tone]
+  return <div className={cn('rounded-2xl px-4 py-3 flex items-center justify-between', cls)}><span className="text-sm font-medium">{label}</span><span className="text-sm font-semibold">{formatMoney(value)}</span></div>
+}
+
+function formatMoney(value: number) {
+  return `R$ ${Number(value ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function SaldoCard({ label, value, icon, colorCls, bg, loading }: {

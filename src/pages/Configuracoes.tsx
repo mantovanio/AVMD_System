@@ -1398,6 +1398,13 @@ function isHttpUrl(value: string | null | undefined) {
   }
 }
 
+function normalizeHttpUrlInput(value: string | null | undefined) {
+  const raw = (value ?? '').trim()
+  if (!raw) return ''
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : ('https://' + raw.replace(/^\/+/, ''))
+  return withProtocol.replace(/\/+$/, '')
+}
+
 function getMissingFields(fields: Array<[string, string | number | null | undefined]>) {
   return fields.filter(([, value]) => value === null || value === undefined || String(value).trim() === '').map(([label]) => label)
 }
@@ -1407,7 +1414,7 @@ function normalizeWhatsAppInstanceName(value: string | null | undefined) {
 }
 
 function buildEvolutionGuideState(input: Partial<ExternalIntegration> | null | undefined) {
-  const baseUrl = (input?.base_url ?? '').trim()
+  const baseUrl = normalizeHttpUrlInput(input?.base_url)
   const token = (input?.api_token ?? '').trim()
   const instanceName = normalizeWhatsAppInstanceName(input?.instance_name)
   const rawWebhook = (input?.webhook_url ?? '').trim()
@@ -1512,7 +1519,7 @@ function AbaIntegracoes() {
 
     async function validarIntegracaoAutomatica(integracao: ExternalIntegration): Promise<{ status: IntegrationStatus; lastError: string | null; webhookUrl?: string | null }> {
       if (integracao.provider === 'evolution') {
-        const baseUrl = (integracao.base_url ?? '').trim()
+        const baseUrl = normalizeHttpUrlInput(integracao.base_url)
         const token = (integracao.api_token ?? '').trim()
         const instanceName = normalizeWhatsAppInstanceName(integracao.instance_name)
         const missing = getMissingFields([
@@ -1714,7 +1721,7 @@ function AbaIntegracoes() {
     const editingIsWhatsApp = isWhatsAppIntegration(editing) || editing.provider === 'evolution'
 
       if (editingIsWhatsApp) {
-        const baseUrl  = (form.base_url      ?? '').trim()
+        const baseUrl  = normalizeHttpUrlInput(form.base_url)
         const token    = (form.api_token     ?? '').trim()
         const instance = normalizeWhatsAppInstanceName(form.instance_name)
         const webhook  = (form.webhook_url   ?? EDGE_FN_EVOLUTION).trim() || EDGE_FN_EVOLUTION
@@ -1751,7 +1758,7 @@ function AbaIntegracoes() {
         name: form.name,
         description: form.description,
         status: statusFinal,
-        base_url: form.base_url || null,
+        base_url: editingIsWhatsApp ? (normalizeHttpUrlInput(form.base_url) || null) : (form.base_url || null),
         webhook_url: form.webhook_url || null,
         api_token:     form.api_token     || null,
         account_id:    form.account_id    || null,
@@ -1789,7 +1796,7 @@ function AbaIntegracoes() {
           setTestando(null)
         return
       }
-      const baseUrl = (integracao.base_url ?? '').trim()
+      const baseUrl = normalizeHttpUrlInput(integracao.base_url)
       const token = (integracao.api_token ?? '').trim()
       const instanceName = normalizeWhatsAppInstanceName(integracao.instance_name)
       if (!baseUrl || !token || !instanceName) {
@@ -4589,10 +4596,12 @@ type FiscalProviderTestResult = {
 
 const NFSE_GATILHO_LABELS: Record<NfseEmissionTrigger, string> = {
   manual: 'Somente manual',
+  antes_pagamento: 'Antes do pagamento',
   apos_pagamento: 'Após pagamento compensado',
   apos_agendamento: 'Após agendamento confirmado',
   apos_validacao: 'Após validação realizada',
   apos_protocolo: 'Após protocolo gerado',
+  apos_emissao_certificado: 'Após emissão do certificado',
 }
 
 const NFSE_PROVIDER_LABELS: Record<ProvedorNfse, string> = {
@@ -5999,5 +6008,9 @@ function AbaPrivacidade() {
     </div>
   )
 }
+
+
+
+
 
 

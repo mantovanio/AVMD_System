@@ -17,6 +17,7 @@ import type {
   CreateCheckoutScheduleInput,
   PaymentOptionRow,
   PaymentRuntimeSetting,
+  CheckoutPaymentMethodConfig,
 } from './checkoutRepository.js'
 import {
   generateAgendaSlots,
@@ -110,7 +111,7 @@ export class AivenCheckoutRepository implements CheckoutRepository {
 
   async findActivePaymentMethods(): Promise<PaymentOptionRow[]> {
     const sql = `
-      select id, nome, codigo, tipo
+      select id, nome, codigo, tipo, gateway
       from formas_pagamento_v2
       where ativo = true
       order by nome asc
@@ -132,6 +133,58 @@ export class AivenCheckoutRepository implements CheckoutRepository {
       modo_teste_geral: Boolean(value.modo_teste_geral),
       bloquear_integracoes_reais: Boolean(value.bloquear_integracoes_reais),
       aviso_checkout: String(value.aviso_checkout || 'O atendimento sera liberado apos a confirmacao do pagamento.'),
+    }
+  }
+
+
+  async getCheckoutPaymentMethodConfig(formaPagamentoId: string): Promise<CheckoutPaymentMethodConfig | null> {
+    const [methodsResult, paymentMethodResult, integrationResult, runtime] = await Promise.all([
+      this.db.query<{ value: { methods?: Array<Record<string, unknown>> } | null }>(
+        `select value from app_settings where key = 'payment_methods' limit 1`,
+      ),
+      this.db.query<PaymentOptionRow>(
+        `select id, nome, codigo, tipo, gateway
+         from formas_pagamento_v2
+         where id = $1 and ativo = true
+         limit 1`,
+        [formaPagamentoId],
+      ),
+      this.db.query<{
+        base_url: string | null
+        webhook_url: string | null
+        api_token: string | null
+        metadata: Record<string, unknown> | null
+        status: string
+      }>(
+        `select base_url, webhook_url, api_token, metadata, status
+         from external_integrations
+         where provider = 'safe2pay'
+         limit 1`,
+      ),
+      this.getPaymentRuntime(),
+    ])
+
+    const catalogMethod = paymentMethodResult.rows[0]
+    if (!catalogMethod) return null
+
+    const methods = methodsResult.rows[0]?.value?.methods ?? []
+    const appMethod = methods.find(item => String(item.id ?? '') === formaPagamentoId) ?? null
+    const integration = integrationResult.rows[0] ?? null
+
+    return {
+      id: catalogMethod.id,
+      nome: catalogMethod.nome,
+      codigo: catalogMethod.codigo ?? null,
+      tipo: catalogMethod.tipo ?? null,
+      gateway: String(appMethod?.gateway ?? catalogMethod.gateway ?? 'safe2pay') || null,
+      ambiente: String(appMethod?.ambiente ?? (integration?.metadata?.is_sandbox === true ? 'sandbox' : 'producao')) === 'sandbox' ? 'sandbox' : 'producao',
+      client_id: appMethod ? String(appMethod.client_id ?? '') || null : null,
+      secret_key: appMethod ? String(appMethod.secret_key ?? '') || null : null,
+      webhook_url: appMethod ? String(appMethod.webhook_url ?? integration?.webhook_url ?? '') || null : (integration?.webhook_url ?? null),
+      provider_base_url: integration?.base_url ?? null,
+      provider_api_token: integration?.api_token ?? null,
+      provider_metadata: integration?.metadata ?? {},
+      runtime,
     }
   }
 
@@ -394,6 +447,78 @@ export class AivenCheckoutRepository implements CheckoutRepository {
       ])
       return result.rows[0] ?? { id: saleId, protocolo_numero: null }
     })
+  }
+
+
+  async attachPaymentChargeToSale(input: {
+    vendaId: string
+    gateway: string
+    externalId?: string | null
+    chargeUrl?: string | null
+    status: string
+    payload?: Record<string, unknown> | null
+  }): Promise<void> {
+    await this.db.query(
+      `update vendas_certificados
+       set metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+         'payment_charge', jsonb_build_object(
+           'gateway', $2,
+           'external_id', $3,
+           'charge_url', $4,
+           'status', $5,
+           'payload', $6::jsonb,
+           'updated_at', now()
+         )
+       ),
+           updated_at = now()
+       where id = $1::uuid`,
+      [input.vendaId, input.gateway, input.externalId ?? null, input.chargeUrl ?? null, input.status, JSON.stringify(input.payload ?? {})],
+    )
+  }
+
+  async applyPaymentWebhook(input: {
+    vendaId?: string | null
+    externalId?: string | null
+    gateway: string
+    status: string
+    paid: boolean
+    payload?: Record<string, unknown> | null
+  }): Promise<void> {
+    const vendaId = input.vendaId?.trim() || await this.findVendaIdByExternalChargeId(input.externalId ?? null)
+    if (!vendaId) return
+
+    await this.db.query(
+      `update vendas_certificados
+       set pago = case when $2 then true else pago end,
+           data_pagamento = case when $2 then now() else data_pagamento end,
+           status_venda = case when $2 then 'vendido' else status_venda end,
+           metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+             'payment_charge', coalesce(metadata->'payment_charge', '{}'::jsonb) || jsonb_build_object(
+               'gateway', $3,
+               'external_id', $4,
+               'status', $5,
+               'webhook_payload', $6::jsonb,
+               'paid', $2,
+               'updated_at', now()
+             )
+           ),
+           updated_at = now()
+       where id = $1::uuid`,
+      [vendaId, input.paid, input.gateway, input.externalId ?? null, input.status, JSON.stringify(input.payload ?? {})],
+    )
+  }
+
+  private async findVendaIdByExternalChargeId(externalId: string | null): Promise<string | null> {
+    if (!externalId) return null
+    const result = await this.db.query<{ id: string }>(
+      `select id
+       from vendas_certificados
+       where metadata->'payment_charge'->>'external_id' = $1
+       order by updated_at desc
+       limit 1`,
+      [externalId],
+    )
+    return result.rows[0]?.id ?? null
   }
 
   async createCheckoutSchedule(input: CreateCheckoutScheduleInput): Promise<void> {

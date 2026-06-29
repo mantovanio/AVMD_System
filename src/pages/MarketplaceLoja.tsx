@@ -818,6 +818,9 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
       }
 
       setCheckoutSuccess(result.message ?? 'Compra concluída com sucesso.')
+      if (result.redirect_url) {
+        window.open(result.redirect_url, '_blank', 'noopener,noreferrer')
+      }
       setFieldErrors({})
       setForm({
         ...INITIAL_FORM,

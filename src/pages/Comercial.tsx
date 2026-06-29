@@ -252,6 +252,12 @@ type VendaNfseModal = {
   notas: NfseEmitida[]
 } | null
 
+type VendaAutomationSnapshot = {
+  pago: boolean
+  status_venda: StatusVendaCertificado
+  protocolo_numero: string | null
+}
+
 type NfseOverrideModal = {
   vendas: VendaRow[]
   justificativa: string
@@ -555,6 +561,9 @@ export default function Comercial() {
   const [showVendaAcoesExtras, setShowVendaAcoesExtras] = useState(false)
   const [selectedIds, setSelectedIds]           = useState<Set<string>>(new Set())
   const [nfseAutomationSettings, setNfseAutomationSettings] = useState<NfseAutomationSettings>(DEFAULT_NFSE_AUTOMATION_SETTINGS)
+  const vendaAutomationSnapshotRef = useRef<Map<string, VendaAutomationSnapshot>>(new Map())
+  const agendaAutomationSnapshotRef = useRef<Record<string, StatusAgendamentoValidacao | null>>({})
+  const nfseAutoProcessingRef = useRef<Set<string>>(new Set())
   const [agendamentoStatusPorVenda, setAgendamentoStatusPorVenda] = useState<Record<string, StatusAgendamentoValidacao | null>>({})
   const [emitindoNfseLote, setEmitindoNfseLote] = useState(false)
   const [itensPorPagina, setItensPorPagina]     = useState(50)
@@ -1207,6 +1216,54 @@ export default function Comercial() {
     }
   }, [tab, fetchIndisponibilidades])
   useEffect(() => { void fetchCatalogo()  }, [fetchCatalogo])
+
+  useEffect(() => {
+    const previous = vendaAutomationSnapshotRef.current
+    if (previous.size === 0) {
+      vendaAutomationSnapshotRef.current = new Map(vendasV2.map(v => [v.id, { pago: Boolean(v.pago), status_venda: v.status_venda, protocolo_numero: v.protocolo_numero ?? null }]))
+      return
+    }
+
+    for (const venda of vendasV2) {
+      const anterior = previous.get(venda.id) ?? null
+      if (podeDispararAutomacaoPorMudanca(venda, anterior)) {
+        void tentarEmitirNfseAutomaticamente(venda, 'mudança automática da venda')
+      }
+    }
+
+    vendaAutomationSnapshotRef.current = new Map(vendasV2.map(v => [v.id, { pago: Boolean(v.pago), status_venda: v.status_venda, protocolo_numero: v.protocolo_numero ?? null }]))
+  }, [vendasV2, nfseAutomationSettings.gatilho_emissao])
+
+  useEffect(() => {
+    const previous = agendaAutomationSnapshotRef.current
+    if (!Object.keys(previous).length) {
+      agendaAutomationSnapshotRef.current = { ...agendamentoStatusPorVenda }
+      return
+    }
+
+    if (nfseAutomationSettings.gatilho_emissao === 'apos_agendamento') {
+      for (const [vendaId, status] of Object.entries(agendamentoStatusPorVenda)) {
+        const anterior = previous[vendaId] ?? null
+        const ficouElegivel = anterior !== 'confirmado' && anterior !== 'realizado' && (status === 'confirmado' || status === 'realizado')
+        if (!ficouElegivel) continue
+        const venda = vendasV2.find(item => item.id === vendaId)
+        if (venda) void tentarEmitirNfseAutomaticamente(venda, 'agendamento confirmado')
+      }
+    }
+
+    if (nfseAutomationSettings.gatilho_emissao === 'apos_validacao') {
+      for (const [vendaId, status] of Object.entries(agendamentoStatusPorVenda)) {
+        const anterior = previous[vendaId] ?? null
+        const ficouElegivel = anterior !== 'realizado' && status === 'realizado'
+        if (!ficouElegivel) continue
+        const venda = vendasV2.find(item => item.id === vendaId)
+        if (venda) void tentarEmitirNfseAutomaticamente(venda, 'validação realizada')
+      }
+    }
+
+    agendaAutomationSnapshotRef.current = { ...agendamentoStatusPorVenda }
+  }, [agendamentoStatusPorVenda, vendasV2, nfseAutomationSettings.gatilho_emissao])
+
   useEffect(() => {
     setCurrentUserId(profile?.id ?? null)
   }, [profile?.id])
@@ -1445,6 +1502,10 @@ export default function Comercial() {
       if (!agendaResp.ok) {
         showMsg('Venda salva. O agendamento automático não pôde ser criado — crie-o manualmente na aba Agenda.')
       }
+
+      if (nfseAutomationSettings.gatilho_emissao === 'antes_pagamento') {
+        void tentarEmitirNfseAutomaticamente(vendaParaLista, 'venda criada antes do pagamento')
+      }
     }
 
     fecharFormVenda()
@@ -1586,9 +1647,14 @@ export default function Comercial() {
   }
 
   async function atualizarStatusVendaV2(id: string, status: StatusVendaCertificado) {
+    const vendaAtual = vendasV2.find(v => v.id === id) ?? null
     const updated = await updateAivenCommercialSaleStatus(id, status)
     if (updated) {
+      const vendaAtualizada = vendaAtual ? { ...vendaAtual, status_venda: status } : null
       setVendasV2(prev => prev.map(v => v.id === id ? { ...v, status_venda: status } : v))
+      if (vendaAtualizada && podeDispararAutomacaoPorMudanca(vendaAtualizada as VendaRow, vendaAtual ? { pago: Boolean(vendaAtual.pago), status_venda: vendaAtual.status_venda, protocolo_numero: vendaAtual.protocolo_numero ?? null } : null)) {
+        void tentarEmitirNfseAutomaticamente(vendaAtualizada as VendaRow, 'mudança de status da venda')
+      }
     }
   }
 
@@ -1633,6 +1699,10 @@ export default function Comercial() {
     setFormAgendaV2(null)
     setErroAgendaV2(null)
     setAgendamentoStatusPorVenda(prev => ({ ...prev, [formAgendaV2.venda_certificado_id]: 'confirmado' }))
+    const vendaRelacionada = vendasV2.find(v => v.id === formAgendaV2.venda_certificado_id) ?? null
+    if (vendaRelacionada && nfseAutomationSettings.gatilho_emissao === 'apos_agendamento') {
+      void tentarEmitirNfseAutomaticamente(vendaRelacionada, 'agendamento confirmado')
+    }
     void fetchAgenda()
     void fetchVendasV2()
   }
@@ -3143,6 +3213,55 @@ export default function Comercial() {
       venda,
       agendamentoStatus: agendamentoStatusPorVenda[venda.id] ?? null,
     })
+  }
+
+  async function fetchNotasNfseVenda(vendaId: string) {
+    const response = await fetch(getApiUrl(`/nfse/venda/${vendaId}`)).catch(() => null)
+    if (!response?.ok) return [] as NfseEmitida[]
+    const data = await response.json().catch(() => ({ notas: [] }))
+    return (data.notas ?? []) as NfseEmitida[]
+  }
+
+  async function vendaPossuiNfseAtiva(vendaId: string) {
+    const notas = await fetchNotasNfseVenda(vendaId)
+    return notas.some(nota => ['pendente', 'emitida'].includes(String(nota.status_nf ?? '').toLowerCase()))
+  }
+
+  function podeDispararAutomacaoPorMudanca(venda: VendaRow, anterior: VendaAutomationSnapshot | null) {
+    switch (nfseAutomationSettings.gatilho_emissao) {
+      case 'manual':
+        return false
+      case 'antes_pagamento':
+        return !anterior && !venda.pago
+      case 'apos_pagamento':
+        return Boolean(!anterior?.pago && venda.pago)
+      case 'apos_protocolo':
+        return Boolean(!(anterior?.protocolo_numero ?? '').trim() && (venda.protocolo_numero ?? '').trim())
+      case 'apos_emissao_certificado':
+        return anterior?.status_venda !== 'emitido' && venda.status_venda === 'emitido'
+      default:
+        return false
+    }
+  }
+
+  async function tentarEmitirNfseAutomaticamente(venda: VendaRow, origem: string) {
+    if (nfseAutomationSettings.gatilho_emissao === 'manual') return
+    if (nfseAutoProcessingRef.current.has(venda.id)) return
+
+    const validacao = validarEtapaEmissaoNfse(venda)
+    if (!validacao.allowed) return
+
+    nfseAutoProcessingRef.current.add(venda.id)
+    try {
+      const jaExiste = await vendaPossuiNfseAtiva(venda.id)
+      if (jaExiste) return
+      await emitirNfseParaVenda(venda, { silent: true })
+      showMsg(`NFS-e emitida automaticamente: ${origem}.`, 'ok')
+    } catch {
+      // mantém silencioso para não poluir a operação; a emissão manual continua disponível
+    } finally {
+      nfseAutoProcessingRef.current.delete(venda.id)
+    }
   }
 
   async function emitirNfseViaGissOnline(venda: VendaRow) {

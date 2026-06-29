@@ -1,0 +1,363 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { CommunicationEventRepository } from '../repositories/communicationEventRepository.js'
+import type { ExternalIntegrationRepository } from '../repositories/externalIntegrationRepository.js'
+import type { LeadRepository } from '../repositories/leadRepository.js'
+import { readJson, writeJson } from '../utils/http.js'
+
+type JsonRecord = Record<string, unknown>
+
+type SendChatMessageInput = {
+  lead_id?: string
+  conversation_id?: string
+  content?: string
+  instance_name?: string
+  quoted_message_id?: string | null
+  quoted_content?: string | null
+}
+
+type InitChatInput = {
+  lead_id?: string
+  phone?: string
+  instance_name?: string
+}
+
+function normalizePhoneDigits(value: string | null | undefined) {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  return digits || null
+}
+
+function buildRemoteJid(phoneDigits: string | null) {
+  return phoneDigits ? `${phoneDigits}@s.whatsapp.net` : null
+}
+
+function cleanBaseUrl(value: string | null | undefined) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : ('https://' + raw.replace(/^\/+/,'') )
+  return withProtocol.replace(/\/$/, '')
+}
+
+function asString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function parseMessageId(payload: JsonRecord | null | undefined) {
+  if (!payload || typeof payload !== 'object') return null
+  const key = payload.key
+  if (key && typeof key === 'object' && !Array.isArray(key)) {
+    const value = (key as JsonRecord).id
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  const response = payload.response
+  if (response && typeof response === 'object' && !Array.isArray(response)) {
+    const candidate = (response as JsonRecord).key
+    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+      const nested = (candidate as JsonRecord).id
+      if (typeof nested === 'string' && nested.trim()) return nested.trim()
+    }
+  }
+  return asString(payload.messageId) || asString(payload.id) || null
+}
+
+async function resolveIntegration(
+  integrationRepo: ExternalIntegrationRepository,
+  preferredInstanceName?: string | null,
+) {
+  const integrations = await integrationRepo.findActiveWhatsApp()
+  if (!integrations.length) return null
+
+  const preferred = preferredInstanceName
+    ? integrations.find(item => item.instance_name === preferredInstanceName)
+    : null
+
+  return preferred ?? integrations[0] ?? null
+}
+
+async function sendEvolutionTextMessage(
+  integrationRepo: ExternalIntegrationRepository,
+  input: { instanceName?: string | null; remoteJid: string; content: string },
+) {
+  const integration = await resolveIntegration(integrationRepo, input.instanceName)
+  if (!integration?.base_url || !integration?.api_token || !integration?.instance_name) {
+    return { ok: false, error: 'Nenhuma integracao WhatsApp ativa configurada.', status: 422, payload: null as JsonRecord | null, instanceName: null as string | null }
+  }
+
+  const evolutionUrl = `${cleanBaseUrl(integration.base_url)}/message/sendText/${integration.instance_name}`
+  const response = await fetch(evolutionUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: integration.api_token,
+    },
+    body: JSON.stringify({
+      number: input.remoteJid.replace(/@.+$/, ''),
+      text: input.content,
+    }),
+  })
+
+  const payload = await response.json().catch(() => ({ status: response.status })) as JsonRecord
+  if (!response.ok) {
+    return { ok: false, error: `Evolution retornou HTTP ${response.status}`, status: 502, payload, instanceName: integration.instance_name }
+  }
+
+  return { ok: true, error: null, status: 200, payload, instanceName: integration.instance_name }
+}
+
+export async function handleChatRoutes(
+  req: IncomingMessage,
+  res: ServerResponse,
+  leadRepository: LeadRepository,
+  communicationEventRepository: CommunicationEventRepository,
+  externalIntegrationRepository: ExternalIntegrationRepository,
+  corsOrigin: string,
+): Promise<boolean> {
+  const url = req.url ?? ''
+  const method = req.method ?? ''
+
+  if (!url.startsWith('/api/chat')) return false
+
+  if (method === 'GET' && url === '/api/chat/leads') {
+    const leads = await leadRepository.findAll()
+    writeJson(res, 200, { ok: true, leads }, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && url === '/api/chat/kanban-columns') {
+    const columns = await leadRepository.getKanbanColumns()
+    writeJson(res, 200, { ok: true, columns }, corsOrigin)
+    return true
+  }
+
+  const detailsMatch = url.match(/^\/api\/chat\/leads\/([^/]+)\/details$/)
+  if (method === 'GET' && detailsMatch) {
+    const lead = await leadRepository.findById(detailsMatch[1])
+    if (!lead) {
+      writeJson(res, 404, { ok: false, error: 'Lead nao encontrado.' }, corsOrigin)
+      return true
+    }
+    writeJson(res, 200, { ok: true, lead }, corsOrigin)
+    return true
+  }
+
+  const historyMatch = url.match(/^\/api\/chat\/leads\/([^/]+)\/history(?:\?(.*))?$/)
+  if (method === 'GET' && historyMatch) {
+    const lead = await leadRepository.findById(historyMatch[1])
+    if (!lead) {
+      writeJson(res, 404, { ok: false, error: 'Lead nao encontrado.' }, corsOrigin)
+      return true
+    }
+
+    const parsedUrl = new URL(url, 'http://localhost')
+    const conversationId = parsedUrl.searchParams.get('conversation_id') || lead.evolution_remote_jid
+    if (!conversationId) {
+      writeJson(res, 200, { ok: true, messages: [], conversation_id: null }, corsOrigin)
+      return true
+    }
+
+    const messages = await communicationEventRepository.listByConversation(conversationId)
+    writeJson(res, 200, { ok: true, messages, conversation_id: conversationId }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/chat/init') {
+    const body = await readJson<InitChatInput>(req)
+    const leadId = asString(body.lead_id)
+    const lead = leadId ? await leadRepository.findById(leadId) : null
+    const phoneDigits = normalizePhoneDigits(body.phone) ?? normalizePhoneDigits(lead?.whatsapp_lead)
+
+    if (!phoneDigits) {
+      writeJson(res, 400, { ok: false, error: 'Telefone do contato nao informado.' }, corsOrigin)
+      return true
+    }
+
+    const remoteJid = lead?.evolution_remote_jid ?? buildRemoteJid(phoneDigits)
+    const preferredInstance = asString(body.instance_name) || lead?.evolution_instance || null
+
+    if (lead && remoteJid && (!lead.evolution_remote_jid || !lead.evolution_instance) && preferredInstance) {
+      await leadRepository.update(lead.id, {
+        evolution_remote_jid: remoteJid,
+        evolution_instance: preferredInstance,
+      })
+    }
+
+    const messages = remoteJid
+      ? await communicationEventRepository.listByConversation(remoteJid)
+      : []
+
+    writeJson(res, 200, { ok: true, remoteJid, messages }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/chat/send') {
+    const body = await readJson<SendChatMessageInput>(req)
+    const leadId = asString(body.lead_id)
+    const content = asString(body.content)
+    const lead = leadId ? await leadRepository.findById(leadId) : null
+    const remoteJid = asString(body.conversation_id) || lead?.evolution_remote_jid || buildRemoteJid(normalizePhoneDigits(lead?.whatsapp_lead))
+
+    if (!content || !remoteJid) {
+      writeJson(res, 400, { ok: false, error: 'content e conversation_id sao obrigatorios.' }, corsOrigin)
+      return true
+    }
+
+    const sendResult = await sendEvolutionTextMessage(externalIntegrationRepository, {
+      instanceName: asString(body.instance_name) || lead?.evolution_instance || null,
+      remoteJid,
+      content,
+    })
+
+    if (!sendResult.ok) {
+      writeJson(res, sendResult.status, { ok: false, error: sendResult.error, detail: sendResult.payload }, corsOrigin)
+      return true
+    }
+
+    const messageId = parseMessageId(sendResult.payload)
+    const payload: JsonRecord = {
+      content,
+      fromMe: true,
+      messageId,
+      messageType: 'conversation',
+      pushName: 'Operador',
+      quoted: body.quoted_message_id
+        ? {
+            messageId: body.quoted_message_id,
+            content: body.quoted_content ?? 'Mensagem respondida',
+          }
+        : null,
+      provider_payload: sendResult.payload,
+    }
+
+    await communicationEventRepository.create({
+      source: 'evolution',
+      event_type: 'message_sent',
+      external_id: messageId,
+      conversation_id: remoteJid,
+      lead_id: lead?.id ?? null,
+      contact: normalizePhoneDigits(lead?.whatsapp_lead) ?? remoteJid.replace(/@.+$/, ''),
+      payload,
+    })
+
+    if (lead?.id) {
+      await leadRepository.update(lead.id, {
+        ultima_mensagem: content,
+        resumo_conversa: content,
+        status: 'conversando',
+        evolution_remote_jid: remoteJid,
+        evolution_instance: sendResult.instanceName,
+      })
+    }
+
+    writeJson(res, 200, { ok: true, messageId, remoteJid }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/chat/internal-note') {
+    const body = await readJson<SendChatMessageInput>(req)
+    const leadId = asString(body.lead_id)
+    const content = asString(body.content)
+    const lead = leadId ? await leadRepository.findById(leadId) : null
+    const remoteJid = asString(body.conversation_id) || lead?.evolution_remote_jid || null
+
+    if (!content) {
+      writeJson(res, 400, { ok: false, error: 'content e obrigatorio.' }, corsOrigin)
+      return true
+    }
+
+    const event = await communicationEventRepository.create({
+      source: 'crm',
+      event_type: 'internal_note',
+      conversation_id: remoteJid,
+      lead_id: lead?.id ?? null,
+      contact: normalizePhoneDigits(lead?.whatsapp_lead),
+      payload: {
+        content,
+        fromMe: true,
+        messageType: 'internalNote',
+        pushName: 'Operador',
+      },
+    })
+
+    writeJson(res, 200, { ok: true, event }, corsOrigin)
+    return true
+  }
+
+  if (method !== 'POST' && method !== 'PATCH' && method !== 'DELETE') return false
+
+  if (method === 'POST' && url === '/api/chat/leads') {
+    const body = await readJson<Record<string, unknown>>(req)
+    const lead = await leadRepository.create({
+      nome_lead: (body.nome_lead as string | null) ?? null,
+      whatsapp_lead: (body.whatsapp_lead as string | null) ?? null,
+      motivo_contato: (body.motivo_contato as string | null) ?? null,
+      resumo_conversa: (body.resumo_conversa as string | null) ?? null,
+      ultima_mensagem: (body.ultima_mensagem as string | null) ?? null,
+      status: (body.status as string | null) ?? 'iniciou_conversa',
+      inicio_atendimento: (body.inicio_atendimento as string | null) ?? new Date().toISOString(),
+      anotacoes: (body.anotacoes as string | null) ?? null,
+      data_agendamento: (body.data_agendamento as string | null) ?? null,
+    })
+    writeJson(res, 200, { ok: true, lead }, corsOrigin)
+    return true
+  }
+
+  const leadMatch = url.match(/^\/api\/chat\/leads\/([^/]+)$/)
+  if (method === 'PATCH' && leadMatch) {
+    const body = await readJson<Record<string, unknown>>(req)
+    const updated = await leadRepository.update(leadMatch[1], body)
+    writeJson(res, 200, { ok: true, lead: updated }, corsOrigin)
+    return true
+  }
+
+  if (method === 'DELETE' && leadMatch) {
+    await leadRepository.deleteById(leadMatch[1])
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  if (method === 'DELETE' && url === '/api/chat/leads') {
+    const body = await readJson<{ ids?: string[] }>(req)
+    await leadRepository.deleteMany(body.ids ?? [])
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/chat/kanban-columns') {
+    const body = await readJson<Record<string, unknown>>(req)
+    const col = await leadRepository.saveKanbanColumn({
+      id: (body.id as string | undefined) ?? undefined,
+      status_key: body.status_key as string,
+      label: body.label as string,
+      color: (body.color as string) ?? 'text-gray-700',
+      bg: (body.bg as string) ?? 'bg-gray-100',
+      border: (body.border as string) ?? 'border-gray-300',
+      ordem: Number(body.ordem ?? 0),
+      ativo: body.ativo !== false,
+    })
+    writeJson(res, 200, { ok: true, column: col }, corsOrigin)
+    return true
+  }
+
+  if (method === 'PATCH' && url === '/api/chat/kanban-columns/reorder') {
+    const body = await readJson<{ items: { id: string; ordem: number }[] }>(req)
+    await leadRepository.updateKanbanOrders(body.items ?? [])
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  const colMatch = url.match(/^\/api\/chat\/kanban-columns\/([^/]+)$/)
+  if (method === 'DELETE' && colMatch) {
+    const body = await readJson<{ fallbackStatusKey?: string }>(req)
+    await leadRepository.deleteKanbanColumn(colMatch[1], body.fallbackStatusKey ?? 'iniciou_conversa')
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  if (url.startsWith('/api/chat/crm-assignments') || url.startsWith('/api/chat/communication-events')) {
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  return false
+}
+
+

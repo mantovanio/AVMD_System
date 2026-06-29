@@ -20,6 +20,23 @@ export type PaymentOptionRow = {
   nome: string
   codigo: string | null
   tipo: string | null
+  gateway?: string | null
+}
+
+export type CheckoutPaymentMethodConfig = {
+  id: string
+  nome: string
+  codigo: string | null
+  tipo: string | null
+  gateway: string | null
+  ambiente: 'sandbox' | 'producao'
+  client_id: string | null
+  secret_key: string | null
+  webhook_url: string | null
+  provider_base_url: string | null
+  provider_api_token: string | null
+  provider_metadata: Record<string, unknown>
+  runtime: PaymentRuntimeSetting
 }
 
 export type CheckoutScheduleContextInput = {
@@ -50,10 +67,27 @@ export interface CheckoutRepository {
   findMarketplaceItem(itemId: string): Promise<CheckoutProduct | null>
   findActivePaymentMethods(): Promise<PaymentOptionRow[]>
   getPaymentRuntime(): Promise<PaymentRuntimeSetting>
+  getCheckoutPaymentMethodConfig(formaPagamentoId: string): Promise<CheckoutPaymentMethodConfig | null>
   getCheckoutScheduleContext(input: CheckoutScheduleContextInput): Promise<{ agentes: AgendaAgent[]; pontos: AgendaPoint[]; slots: AgendaSlot[] }>
   findLatestActiveCustomerByDocument(documento: string): Promise<CheckoutExistingCustomerLookup | null>
   upsertCheckoutCustomer(payload: CheckoutSubmitRequest): Promise<{ id: string }>
   upsertCheckoutHolder(payload: CheckoutSubmitRequest): Promise<{ id: string | null }>
   createCheckoutSale(input: CreateCheckoutSaleInput): Promise<{ id: string; protocolo_numero: string | null }>
+  attachPaymentChargeToSale(input: {
+    vendaId: string
+    gateway: string
+    externalId?: string | null
+    chargeUrl?: string | null
+    status: string
+    payload?: Record<string, unknown> | null
+  }): Promise<void>
+  applyPaymentWebhook(input: {
+    vendaId?: string | null
+    externalId?: string | null
+    gateway: string
+    status: string
+    paid: boolean
+    payload?: Record<string, unknown> | null
+  }): Promise<void>
   createCheckoutSchedule(input: CreateCheckoutScheduleInput): Promise<void>
 }
