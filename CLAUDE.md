@@ -49,3 +49,14 @@ Toda PR deve incluir:
 
 ## Seguranca e Configuracao
 Nao versione `.env` nem chaves do Supabase. Documente variaveis obrigatorias e mantenha segredos fora do repositorio. Quando houver dependencia externa, prefira exibir erro claro na interface em vez de falha silenciosa.
+
+## Deploy Rapido
+Para qualquer tarefa de publicacao, consulte primeiro `DEPLOY-RAPIDO.md`.
+
+Esse arquivo resume:
+- repo e branch de deploy
+- VPS e caminhos reais do sistema
+- comandos curtos de push/deploy
+- regras do gate e formato do backup obrigatorio
+- armadilhas conhecidas do ambiente atual
+

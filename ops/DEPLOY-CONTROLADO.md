@@ -1,5 +1,7 @@
 # Deploy Controlado AVMD (com Snapshot ja criado)
 
+Leitura rapida obrigatoria antes de operar: DEPLOY-RAPIDO.md.
+
 Objetivo: subir AVMD em paralelo sem substituir o CRM antigo.
 
 ## Precondicoes
@@ -98,3 +100,4 @@ O gate `/root/vps-deploy-gate.sh` bloqueia deploy se qualquer regra falhar:
 - Sem backup valido em `/opt/backups/certiid`
 - Backup mais antigo que 24h (ajustavel por `BACKUP_MAX_AGE_HOURS`)
 - Deploy concorrente ja em execucao (lock em `/var/lock/avmd-deploy.lock`)
+
