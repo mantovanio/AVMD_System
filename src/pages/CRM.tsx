@@ -75,6 +75,9 @@ export default function CRM() {
           base_url: data.base_url,
           api_token: data.api_token,
           instance_name: data.instance_name,
+          status: data.status,
+          last_test_at: data.last_test_at,
+          last_error: data.last_error,
         })
       }
     } catch (error) {
@@ -278,3 +281,4 @@ function LeadCard({
     </div>
   )
 }
+

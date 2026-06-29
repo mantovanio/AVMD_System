@@ -132,6 +132,35 @@ const STATUS_CLASS: Record<IntegrationStatus, string> = {
   inativo: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 }
 
+function integrationOperationalLabel(integracao: Pick<ExternalIntegration, 'status' | 'last_error' | 'last_test_at'>) {
+  if (integracao.status === 'ativo') {
+    return {
+      title: 'Operando normalmente',
+      detail: integracao.last_test_at
+        ? `Validado em ${new Date(integracao.last_test_at).toLocaleString('pt-BR')}`
+        : 'Conexao pronta para uso.',
+      tone: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300',
+      dot: 'bg-emerald-500',
+    }
+  }
+
+  if (integracao.status === 'pendente') {
+    return {
+      title: 'Aguardando validacao',
+      detail: integracao.last_error || 'Preencha os dados e salve para conectar automaticamente.',
+      tone: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300',
+      dot: 'bg-amber-500',
+    }
+  }
+
+  return {
+    title: integracao.status === 'inativo' ? 'Canal inativo' : 'Canal com falha',
+    detail: integracao.last_error || 'A integracao nao respondeu corretamente.',
+    tone: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300',
+    dot: 'bg-red-500',
+  }
+}
+
 function providerIcon(provider: IntegrationProvider, forceWhatsApp = false) {
   if (forceWhatsApp || provider === 'evolution' || provider === 'chatwoot' || provider === 'chatwoot_disparo') return MessageCircle
   if (provider === 'email_smtp') return Mail
@@ -1379,6 +1408,47 @@ function normalizeWhatsAppInstanceName(value: string | null | undefined) {
   return (value ?? '').trim()
 }
 
+function buildEvolutionGuideState(input: Partial<ExternalIntegration> | null | undefined) {
+  const baseUrl = (input?.base_url ?? '').trim()
+  const token = (input?.api_token ?? '').trim()
+  const instanceName = normalizeWhatsAppInstanceName(input?.instance_name)
+  const rawWebhook = (input?.webhook_url ?? '').trim()
+  const recommendedWebhook = EDGE_FN_EVOLUTION
+  const webhookUrl = rawWebhook || recommendedWebhook
+  const hasCredentials = Boolean(baseUrl && token && instanceName)
+  const isConnected = input?.status === 'ativo'
+
+  return {
+    recommendedWebhook,
+    steps: [
+      {
+        id: 'dados',
+        done: hasCredentials,
+        title: '1. Preencha os dados principais',
+        detail: hasCredentials
+          ? 'URL, token e instância informados.'
+          : 'Informe URL da Evolution, token e nome exato da instância.',
+      },
+      {
+        id: 'webhook',
+        done: Boolean(webhookUrl),
+        title: '2. Confirme o webhook automático',
+        detail: rawWebhook
+          ? `Webhook configurado: ${webhookUrl}`
+          : 'O AVMD já sugere o webhook correto automaticamente.',
+      },
+      {
+        id: 'status',
+        done: isConnected,
+        title: '3. Salve para validar a conexão',
+        detail: isConnected
+          ? 'Canal ativo e pronto para uso no chat.'
+          : (input?.last_error ?? 'Ao salvar, o AVMD testa a conexão e atualiza o status sozinho.'),
+      },
+    ],
+  }
+}
+
 function createEmptyIntegrationDraft(provider: IntegrationProvider): Partial<ExternalIntegration> {
   if (provider === 'email_smtp') {
     return {
@@ -1432,6 +1502,8 @@ function AbaIntegracoes() {
   const [deletando, setDeletando] = useState(false)
   const [toastI, setToastI] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
   const [whatsAppHubOpen, setWhatsAppHubOpen] = useState(false)
+  const [showAdvancedWhatsAppEdit, setShowAdvancedWhatsAppEdit] = useState(false)
+  const [showAdvancedWhatsAppNew, setShowAdvancedWhatsAppNew] = useState(false)
   const [documentStorage, setDocumentStorage] = useState<ContactDocumentStorageConfig>(DEFAULT_CONTACT_DOCUMENT_STORAGE)
     const [savingDocumentStorage, setSavingDocumentStorage] = useState(false)
 
@@ -1588,6 +1660,7 @@ function AbaIntegracoes() {
   useEffect(() => { void load() }, [load])
 
   function startEdit(integracao: ExternalIntegration) {
+    setShowAdvancedWhatsAppEdit(false)
     setEditing(integracao)
     setForm({ ...integracao })
   }
@@ -1595,11 +1668,13 @@ function AbaIntegracoes() {
   function startEditWhatsApp(integracao: ExternalIntegration) {
     const unified = toUnifiedWhatsAppIntegration(integracao)
     setWhatsAppHubOpen(false)
+    setShowAdvancedWhatsAppEdit(false)
     setEditing(unified)
     setForm({ ...unified })
   }
 
   function closeEdit() {
+    setShowAdvancedWhatsAppEdit(false)
     setEditing(null)
     setForm({})
   }
@@ -1809,14 +1884,21 @@ function AbaIntegracoes() {
   function abrirNovaIntegracao() {
     const disponiveis = providersDisponiveis()
     if (disponiveis.length === 0) return
+    setShowAdvancedWhatsAppNew(false)
     setNovaProvider(disponiveis[0])
     setNovaForm(createEmptyIntegrationDraft(disponiveis[0]))
     setNovaModal(true)
   }
 
   function abrirNovoNumeroWhatsApp() {
+    setShowAdvancedWhatsAppNew(false)
     setNovaProvider('evolution')
-    setNovaForm(setWhatsAppEngineOnForm({ status: 'pendente' as IntegrationStatus, provider: 'evolution', name: 'WhatsApp API' }, 'evolution'))
+    setNovaForm(setWhatsAppEngineOnForm({
+      status: 'pendente' as IntegrationStatus,
+      provider: 'evolution',
+      name: 'WhatsApp API',
+      webhook_url: EDGE_FN_EVOLUTION,
+    }, 'evolution'))
     setNovaModal(true)
   }
 
@@ -1834,10 +1916,11 @@ function AbaIntegracoes() {
         description: novaForm.description ?? null,
         status: 'pendente',
         base_url: novaForm.base_url || null,
-        webhook_url: novaForm.webhook_url || null,
+        webhook_url: creatingWhatsApp ? ((novaForm.webhook_url ?? '').trim() || EDGE_FN_EVOLUTION) : (novaForm.webhook_url || null),
         api_token: novaForm.api_token || null,
         account_id: novaForm.account_id || null,
         inbox_id: novaForm.inbox_id || null,
+        instance_name: creatingWhatsApp ? normalizeWhatsAppInstanceName(novaForm.instance_name) || null : (novaForm.instance_name || null),
         sender_name: novaForm.sender_name || null,
         sender_email: novaForm.sender_email || null,
         host: novaForm.host || null,
@@ -1851,6 +1934,7 @@ function AbaIntegracoes() {
     const criarData = await criarRes.json() as { ok: boolean; error?: string }
     setCriando(false)
     if (!criarData.ok) { showMsgI('Erro ao criar: ' + (criarData.error ?? 'erro desconhecido')); return }
+    setShowAdvancedWhatsAppNew(false)
     setNovaModal(false)
     void load()
   }
@@ -1888,6 +1972,53 @@ function AbaIntegracoes() {
                 <p className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">
                   Canal WhatsApp híbrido. Você pode manter Evolution agora e trocar depois para Z-API ou outro conector sem mudar a tela de operação.
                 </p>
+                <div className={cn('rounded-xl border px-3 py-3', integrationOperationalLabel(editing).tone)}>
+                  <div className="flex items-center gap-2">
+                    <span className={cn('h-2.5 w-2.5 rounded-full', integrationOperationalLabel(editing).dot)} />
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em]">
+                      {integrationOperationalLabel(editing).title}
+                    </p>
+                  </div>
+                  <p className="mt-1 text-[11px] leading-relaxed">
+                    {integrationOperationalLabel(editing).detail}
+                  </p>
+                  <p className="mt-2 text-[11px] opacity-90">
+                    Ao salvar, o sistema testa a Evolution, tenta registrar o webhook e atualiza o marcador automaticamente.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/90 dark:bg-slate-900/60 p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Configuracao guiada da Evolution</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                      Preencha os campos abaixo e o AVMD faz o teste e o vinculo do webhook automaticamente.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {buildEvolutionGuideState({ ...editing, ...form }).steps.map(step => (
+                      <div key={step.id} className={cn(
+                        'rounded-xl border px-3 py-2.5',
+                        step.done
+                          ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/20'
+                          : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/40',
+                      )}>
+                        <div className="flex items-start gap-2">
+                          <span className={cn(
+                            'mt-0.5 h-2.5 w-2.5 rounded-full',
+                            step.done ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600',
+                          )} />
+                          <div>
+                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{step.title}</p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{step.detail}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 px-3 py-2">
+                    <p className="text-[11px] font-medium text-slate-700 dark:text-slate-200">Webhook que o AVMD vai usar</p>
+                    <p className="mt-1 break-all text-[11px] text-slate-500 dark:text-slate-400">{buildEvolutionGuideState({ ...editing, ...form }).recommendedWebhook}</p>
+                  </div>
+                </div>
                 <label className="flex flex-col gap-1">
                   <span className="text-xs text-gray-500 dark:text-gray-400">Motor WhatsApp</span>
                   <select
@@ -1917,12 +2048,14 @@ function AbaIntegracoes() {
             )}
 
             <ConfigInput
-              label={(isWhatsAppIntegration(editing) || editing.provider === 'evolution') ? 'URL base / gateway WhatsApp' : 'URL base / API'}
+              label={(isWhatsAppIntegration(editing) || editing.provider === 'evolution') ? 'URL da Evolution' : 'URL base / API'}
               value={form.base_url ?? ''}
               onChange={base_url => setForm(p => ({ ...p, base_url }))}
               placeholder={(isWhatsAppIntegration(editing) || editing.provider === 'evolution') ? whatsAppBaseUrlPlaceholder(getWhatsAppEngineFromForm({ ...editing, ...form })) : 'https://chatwoot.seudominio.com'}
             />
-            <ConfigInput label="Webhook de entrada/saída" value={form.webhook_url ?? ''} onChange={webhook_url => setForm(p => ({ ...p, webhook_url }))} placeholder="https://..." />
+            {!(isWhatsAppIntegration(editing) || editing.provider === 'evolution') && (
+              <ConfigInput label="Webhook de entrada/saída" value={form.webhook_url ?? ''} onChange={webhook_url => setForm(p => ({ ...p, webhook_url }))} placeholder="https://..." />
+            )}
 
             {(isWhatsAppIntegration(editing) || editing.provider === 'evolution') && (
               <>
@@ -1933,7 +2066,7 @@ function AbaIntegracoes() {
                   placeholder="Atendimento, Renovações, Financeiro..."
                 />
                 <ConfigInput
-                  label="Identificador da instância / conta"
+                  label="Nome da instância na Evolution"
                   value={form.instance_name ?? ''}
                   onChange={instance_name => setForm(p => ({ ...p, instance_name }))}
                   placeholder={getWhatsAppEngineFromForm({ ...editing, ...form }) === 'evolution' ? 'minha_instancia' : 'instancia_principal'}
@@ -1941,7 +2074,32 @@ function AbaIntegracoes() {
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 -mt-1">
                   Use o nome exato da instância na Evolution. No seu caso: `atendimento` e `CertiID`.
                 </p>
-                <ConfigInput label="Token / API Key" type="password" value={form.api_token ?? ''} onChange={api_token => setForm(p => ({ ...p, api_token }))} />
+                <ConfigInput label="Token da Evolution" type="password" value={form.api_token ?? ''} onChange={api_token => setForm(p => ({ ...p, api_token }))} />
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40 px-3 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Webhook automatico do AVMD</p>
+                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        Esse endereco ja e sugerido automaticamente. Normalmente voce nao precisa alterar.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedWhatsAppEdit(prev => !prev)}
+                      className="shrink-0 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                    >
+                      {showAdvancedWhatsAppEdit ? 'Ocultar avancado' : 'Mostrar configuracao avancada'}
+                    </button>
+                  </div>
+                  <p className="mt-2 break-all text-[11px] text-slate-600 dark:text-slate-300">
+                    {(form.webhook_url ?? '').trim() || EDGE_FN_EVOLUTION}
+                  </p>
+                  {showAdvancedWhatsAppEdit && (
+                    <div className="mt-3">
+                      <ConfigInput label="Webhook avancado" value={form.webhook_url ?? ''} onChange={webhook_url => setForm(p => ({ ...p, webhook_url }))} placeholder={EDGE_FN_EVOLUTION} />
+                    </div>
+                  )}
+                </div>
               </>
             )}
             {(editing.provider === 'chatwoot' || editing.provider === 'chatwoot_disparo') && (
@@ -1971,7 +2129,7 @@ function AbaIntegracoes() {
               <button type="button" onClick={salvarIntegracao} disabled={saving || !isAdmin}
                 className="flex-1 px-4 py-2.5 text-sm rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium flex items-center justify-center gap-2">
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                Salvar
+                {(isWhatsAppIntegration(editing) || editing.provider === 'evolution') ? 'Salvar e conectar' : 'Salvar'}
               </button>
             </div>
           </div>
@@ -2007,8 +2165,11 @@ function AbaIntegracoes() {
               <span className="text-xs text-gray-500 dark:text-gray-400">Tipo de integração</span>
               <select value={novaProvider} onChange={e => {
                 const provider = e.target.value as IntegrationProvider
+                setShowAdvancedWhatsAppNew(false)
                 setNovaProvider(provider)
-                setNovaForm(createEmptyIntegrationDraft(provider))
+                setNovaForm(provider === 'evolution'
+                  ? setWhatsAppEngineOnForm({ status: 'pendente' as IntegrationStatus, provider: 'evolution', name: 'WhatsApp API', webhook_url: EDGE_FN_EVOLUTION }, 'evolution')
+                  : createEmptyIntegrationDraft(provider))
               }}
                 className="border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 {providersDisponiveis().map(p => (
@@ -2023,8 +2184,42 @@ function AbaIntegracoes() {
               </p>
             </div>
             {novaProvider === 'evolution' && (
-              <label className="flex flex-col gap-1">
-                <span className="text-xs text-gray-500 dark:text-gray-400">Motor WhatsApp</span>
+              <>
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/90 dark:bg-slate-900/60 p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Configuracao guiada da Evolution</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                      Cadastre o numero, salve e o AVMD tenta validar a conexao automaticamente.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {buildEvolutionGuideState({ status: 'pendente', ...novaForm, webhook_url: novaForm.webhook_url ?? EDGE_FN_EVOLUTION }).steps.map(step => (
+                      <div key={step.id} className={cn(
+                        'rounded-xl border px-3 py-2.5',
+                        step.done
+                          ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/20'
+                          : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/40',
+                      )}>
+                        <div className="flex items-start gap-2">
+                          <span className={cn(
+                            'mt-0.5 h-2.5 w-2.5 rounded-full',
+                            step.done ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600',
+                          )} />
+                          <div>
+                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{step.title}</p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{step.detail}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 px-3 py-2">
+                    <p className="text-[11px] font-medium text-slate-700 dark:text-slate-200">Webhook que o AVMD vai usar</p>
+                    <p className="mt-1 break-all text-[11px] text-slate-500 dark:text-slate-400">{EDGE_FN_EVOLUTION}</p>
+                  </div>
+                </div>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Motor WhatsApp</span>
                 <select
                   value={getWhatsAppEngineFromForm({ provider: novaProvider, metadata: novaForm.metadata ?? {} })}
                   onChange={e => setNovaForm(f => setWhatsAppEngineOnForm({ ...f, provider: novaProvider }, e.target.value as WhatsAppEngine))}
@@ -2035,6 +2230,7 @@ function AbaIntegracoes() {
                   ))}
                 </select>
               </label>
+              </>
             )}
             {novaProvider === 'email_smtp' && (
               <div className="rounded-lg border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/70 dark:bg-emerald-950/20 px-3 py-2">
@@ -2047,24 +2243,51 @@ function AbaIntegracoes() {
             {novaProvider !== 'email_smtp' && (
               <>
                 <ConfigInput
-                  label={novaProvider === 'evolution' ? 'URL base / gateway WhatsApp' : 'URL base / API'}
+                  label={novaProvider === 'evolution' ? 'URL da Evolution' : 'URL base / API'}
                   value={novaForm.base_url ?? ''}
                   onChange={v => setNovaForm(f => ({ ...f, base_url: v }))}
                   placeholder={novaProvider === 'evolution'
                     ? whatsAppBaseUrlPlaceholder(getWhatsAppEngineFromForm({ provider: novaProvider, metadata: novaForm.metadata ?? {} }))
                     : 'https://...'}
                 />
-                <ConfigInput label="Webhook" value={novaForm.webhook_url ?? ''} onChange={v => setNovaForm(f => ({ ...f, webhook_url: v }))} placeholder="https://..." />
+                {novaProvider !== 'evolution' && (
+                  <ConfigInput label="Webhook" value={novaForm.webhook_url ?? ''} onChange={v => setNovaForm(f => ({ ...f, webhook_url: v }))} placeholder="https://..." />
+                )}
               </>
             )}
             {novaProvider === 'evolution' && (
               <>
                 <ConfigInput label="Apelido do número" value={novaForm.name ?? ''} onChange={v => setNovaForm(f => ({ ...f, name: v }))} placeholder="Atendimento, Renovações, Financeiro..." />
-                <ConfigInput label="Identificador da instância / conta" value={novaForm.instance_name ?? ''} onChange={v => setNovaForm(f => ({ ...f, instance_name: v }))} placeholder="instancia_principal" />
+                <ConfigInput label="Nome da instância na Evolution" value={novaForm.instance_name ?? ''} onChange={v => setNovaForm(f => ({ ...f, instance_name: v }))} placeholder="instancia_principal" />
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 -mt-1">
                   Use o nome exato da instância na Evolution. No seu caso: `atendimento` e `CertiID`.
                 </p>
-                <ConfigInput label="Token / API Key" type="password" value={novaForm.api_token ?? ''} onChange={v => setNovaForm(f => ({ ...f, api_token: v }))} />
+                <ConfigInput label="Token da Evolution" type="password" value={novaForm.api_token ?? ''} onChange={v => setNovaForm(f => ({ ...f, api_token: v }))} />
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40 px-3 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Webhook automatico do AVMD</p>
+                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        Esse endereco ja vem preenchido pelo sistema. So altere se voce realmente usar um webhook diferente.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedWhatsAppNew(prev => !prev)}
+                      className="shrink-0 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                    >
+                      {showAdvancedWhatsAppNew ? 'Ocultar avancado' : 'Mostrar configuracao avancada'}
+                    </button>
+                  </div>
+                  <p className="mt-2 break-all text-[11px] text-slate-600 dark:text-slate-300">
+                    {(novaForm.webhook_url ?? '').trim() || EDGE_FN_EVOLUTION}
+                  </p>
+                  {showAdvancedWhatsAppNew && (
+                    <div className="mt-3">
+                      <ConfigInput label="Webhook avancado" value={novaForm.webhook_url ?? ''} onChange={v => setNovaForm(f => ({ ...f, webhook_url: v }))} placeholder={EDGE_FN_EVOLUTION} />
+                    </div>
+                  )}
+                </div>
               </>
             )}
             {(novaProvider === 'chatwoot' || novaProvider === 'chatwoot_disparo') && (
@@ -2137,6 +2360,13 @@ function AbaIntegracoes() {
                 const engine = getWhatsAppEngine(unified)
                 return (
                   <div key={int.id} className="rounded-xl border border-gray-200 dark:border-gray-800 p-3 bg-white dark:bg-gray-900">
+                    <div className={cn('mb-3 rounded-xl border px-3 py-2 text-[11px]', integrationOperationalLabel(unified).tone)}>
+                      <div className="flex items-center gap-2">
+                        <span className={cn('h-2.5 w-2.5 rounded-full', integrationOperationalLabel(unified).dot)} />
+                        <span className="font-semibold uppercase tracking-[0.16em]">{integrationOperationalLabel(unified).title}</span>
+                      </div>
+                      <p className="mt-1">{integrationOperationalLabel(unified).detail}</p>
+                    </div>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -2233,6 +2463,13 @@ function AbaIntegracoes() {
           const Icon = providerIcon(int.provider, isWhatsAppIntegration(int))
           return (
             <div key={int.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 shadow-sm">
+              <div className={cn('mb-3 rounded-xl border px-3 py-2 text-[11px]', integrationOperationalLabel(int).tone)}>
+                <div className="flex items-center gap-2">
+                  <span className={cn('h-2.5 w-2.5 rounded-full', integrationOperationalLabel(int).dot)} />
+                  <span className="font-semibold uppercase tracking-[0.16em]">{integrationOperationalLabel(int).title}</span>
+                </div>
+                <p className="mt-1">{integrationOperationalLabel(int).detail}</p>
+              </div>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-3 flex-1 min-w-0">
                   <div className={cn(
@@ -4354,10 +4591,12 @@ type FiscalProviderTestResult = {
 
 const NFSE_GATILHO_LABELS: Record<NfseEmissionTrigger, string> = {
   manual: 'Somente manual',
+  antes_pagamento: 'Antes do pagamento',
   apos_pagamento: 'Após pagamento compensado',
   apos_agendamento: 'Após agendamento confirmado',
   apos_validacao: 'Após validação realizada',
   apos_protocolo: 'Após protocolo gerado',
+  apos_emissao_certificado: 'Após emissão do certificado',
 }
 
 const NFSE_PROVIDER_LABELS: Record<ProvedorNfse, string> = {
@@ -5764,9 +6003,4 @@ function AbaPrivacidade() {
     </div>
   )
 }
-
-
-
-
-
 

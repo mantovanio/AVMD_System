@@ -8,10 +8,13 @@ export interface ActiveWhatsAppIntegration {
   provider: IntegrationProvider
   engine: WhatsAppEngine
   name: string
+  status: ExternalIntegration['status']
   base_url: string | null
   api_token: string | null
   instance_name: string | null
   webhook_url: string | null
+  last_test_at: string | null
+  last_error: string | null
   supportsEmbeddedChat: boolean
 }
 
@@ -102,10 +105,13 @@ export async function loadActiveWhatsAppIntegration(canal?: 'atendimento' | 'ren
     provider: preferred.provider,
     engine,
     name: preferred.name,
+    status: preferred.status,
     base_url: preferred.base_url,
     api_token: preferred.api_token,
     instance_name: preferred.instance_name,
     webhook_url: preferred.webhook_url,
+    last_test_at: preferred.last_test_at,
+    last_error: preferred.last_error,
     supportsEmbeddedChat: supportsEmbeddedChat(engine),
   }
 }

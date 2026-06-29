@@ -15,6 +15,9 @@ export interface EvolutionCfg {
   base_url:      string
   api_token:     string
   instance_name: string
+  status?: 'ativo' | 'pendente' | 'erro' | 'inativo'
+  last_test_at?: string | null
+  last_error?: string | null
 }
 
 // ── Internal types ─────────────────────────────────────────────
@@ -1138,6 +1141,31 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
   const sidebarPhone = leadInfo?.whatsapp_lead ?? contact.telefone
   const sidebarName = leadInfo?.nome_lead ?? contact.nome ?? 'Sem nome'
   const sidebarStatus = formatStatusLabel(leadInfo?.status)
+  const channelState = !evolution
+    ? {
+        tone: 'border-red-200 bg-red-50 text-red-700',
+        label: 'Canal inativo',
+        description: 'Evolution nao configurada no sistema.',
+      }
+    : evolution.status === 'ativo'
+      ? {
+          tone: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+          label: 'Canal ativo',
+          description: evolution.last_test_at
+            ? `Ultimo teste em ${formatDateTime(evolution.last_test_at)}`
+            : 'Conectado e pronto para conversar.',
+        }
+      : evolution.status === 'pendente'
+        ? {
+            tone: 'border-amber-200 bg-amber-50 text-amber-700',
+            label: 'Canal em configuracao',
+            description: evolution.last_error || 'A integracao ainda precisa ser validada.',
+          }
+        : {
+            tone: 'border-red-200 bg-red-50 text-red-700',
+            label: 'Canal desconectado',
+            description: evolution.last_error || 'Falha na comunicacao com a Evolution.',
+          }
   const sidebarHighlights = [
     { label: 'Status atual', value: sidebarStatus, tone: 'border-red-200 bg-red-50 text-red-700' },
     { label: 'Produto / motivo', value: leadInfo?.motivo_contato ?? 'Nao informado', tone: 'border-blue-200 bg-blue-50 text-blue-700' },
@@ -1170,8 +1198,11 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
           <p className="text-gray-900 dark:text-gray-100 font-semibold text-sm truncate">{sidebarName}</p>
           <div className="flex items-center gap-2 min-w-0 mt-0.5">
             {sidebarPhone && <p className="text-gray-500 dark:text-gray-400 text-xs truncate">{sidebarPhone}</p>}
-            <span className="hidden sm:inline-flex items-center rounded-full border border-emerald-200/80 bg-white/70 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-emerald-700">
-              Chat ativo
+            <span className={cn(
+              'hidden sm:inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em]',
+              channelState.tone,
+            )}>
+              {channelState.label}
             </span>
           </div>
         </div>
@@ -1193,6 +1224,12 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
         >
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-2 py-3 space-y-1 bg-[#ece5dd] dark:bg-gray-950">
+            {!loading && (
+              <div className={cn('mx-2 mb-3 rounded-2xl border px-3 py-2 text-xs shadow-sm', channelState.tone)}>
+                <div className="font-semibold uppercase tracking-[0.14em]">{channelState.label}</div>
+                <div className="mt-1 normal-case tracking-normal">{channelState.description}</div>
+              </div>
+            )}
             {loading && (
               <div className="flex flex-col items-center justify-center h-full gap-2 text-gray-500 text-sm">
                 <Loader2 size={20} className="animate-spin" />
