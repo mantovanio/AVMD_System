@@ -4591,12 +4591,10 @@ type FiscalProviderTestResult = {
 
 const NFSE_GATILHO_LABELS: Record<NfseEmissionTrigger, string> = {
   manual: 'Somente manual',
-  antes_pagamento: 'Antes da confirmação do pagamento',
   apos_pagamento: 'Após pagamento compensado',
   apos_agendamento: 'Após agendamento confirmado',
   apos_validacao: 'Após validação realizada',
   apos_protocolo: 'Após protocolo gerado',
-  apos_emissao_certificado: 'Após emissão do certificado',
 }
 
 const NFSE_PROVIDER_LABELS: Record<ProvedorNfse, string> = {
