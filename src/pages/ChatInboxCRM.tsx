@@ -21,7 +21,8 @@ import {
   UserRound,
   X,
 } from 'lucide-react'
-import { getEdgeFunctionUrl, supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
+import { getApiUrl } from '@/lib/api'
 import { logger } from '@/lib/logger'
 import { useAuth } from '@/contexts/AuthContext'
 import { applyOutgoingSignature, DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings } from '@/lib/crmChatSettings'
@@ -126,7 +127,6 @@ interface ContactEditForm {
   observations: string
 }
 
-const EDGE_FN = getEdgeFunctionUrl('evolution-webhook')
 const CHAT_ATTACHMENT_BUCKET = 'chat-lead-documentos'
 
 const STATUS_COLUMNS = [
@@ -976,16 +976,10 @@ export default function ChatInboxCRM() {
   }
 
   async function fetchEvolutionIntegrations() {
-    const { data: integrations, error: integrationError } = await supabase
-      .from('external_integrations')
-      .select('id, name, status, base_url, api_token, instance_name, sender_name')
-      .eq('provider', 'evolution')
-      .eq('status', 'ativo')
-      .order('updated_at', { ascending: false })
-
-    if (integrationError) throw new Error(`Nao foi possivel carregar a integracao Evolution: ${integrationError.message}`)
-
-    return (integrations ?? []) as EvolutionIntegration[]
+    const response = await fetch(getApiUrl('/chat/crm/integrations'))
+    if (!response.ok) throw new Error('Nao foi possivel carregar as integracoes Evolution.')
+    const rows = await response.json() as EvolutionIntegration[]
+    return rows ?? []
   }
 
   async function resolveEvolutionIntegration(instanceName?: string | null) {
@@ -1228,26 +1222,14 @@ export default function ChatInboxCRM() {
     setManualConversationError(null)
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const accessToken = sessionData.session?.access_token
-      if (!accessToken) throw new Error('Sessao expirada. Atualize a pagina e tente novamente.')
-
-      const response = await fetch(EDGE_FN, {
+      const response = await fetch(getApiUrl('/chat/send'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          _action: 'send_message',
-          base_url: selectedChannel.integration.base_url,
-          api_token: selectedChannel.integration.api_token,
           instance_name: selectedChannel.integration.instance_name,
-          number: normalizedPhone,
+          conversation_id: `${normalizedPhone}@s.whatsapp.net`,
           content: firstMessage,
-          sender_name: profile?.nome ?? 'Humano',
-          contact_name: contactName || null,
-          queue_override: manualConversation.queue,
+          lead_id: null,
         }),
       })
 
@@ -1262,39 +1244,8 @@ export default function ChatInboxCRM() {
         throw new Error(msg)
       }
 
-      const { data: createdRows, error: createdError } = await supabase
-        .from('crm_chat_admin_view')
-        .select('*')
-        .eq('document_key', normalizedPhone)
-        .eq('whatsapp_instance', selectedChannel.integration.instance_name)
-        .order('ultima_interacao_em', { ascending: false })
-        .limit(1)
-
-      if (createdError) throw new Error(`A conversa foi enviada, mas nao foi localizada no CRM: ${createdError.message}`)
-
-      const createdConversation = (createdRows?.[0] ?? null) as ConversationRow | null
-      if (!createdConversation?.id) throw new Error('A conversa foi enviada, mas ainda nao apareceu no CRM. Atualize e tente novamente.')
-
-      if (contactName) {
-        await supabase
-          .from('crm_chat_conversations')
-          .update({ cliente_nome: contactName, fila: manualConversation.queue })
-          .eq('id', createdConversation.id)
-
-        if (createdConversation.crm_customer_id) {
-          await supabase
-            .from('crm_customers')
-            .update({ nome: contactName, contato_status: 'conversando' })
-            .eq('id', createdConversation.crm_customer_id)
-        }
-      }
-
-      if (profile?.id && profile?.nome) {
-        await activateConversationOwner(createdConversation.id, { id: profile.id, nome: profile.nome })
-      }
-
       await loadConversations(false)
-      setSelectedId(createdConversation.id)
+      setSelectedId((normalizedPhone.endsWith('@s.whatsapp.net') ? normalizedPhone : `${normalizedPhone}@s.whatsapp.net`))
       closeManualConversationModal()
     } catch (err) {
       setManualConversationError(err instanceof Error ? err.message : String(err))
@@ -1434,29 +1385,12 @@ export default function ChatInboxCRM() {
     setSendingHumanMessage(true)
     setActionError(null)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const accessToken = sessionData.session?.access_token
-      if (!accessToken) throw new Error('Sessao expirada. Atualize a pagina e tente novamente.')
-
       const cardBlob = buildContactVCardBlob(contactEdit)
       const contactName = contactEdit.name.trim() || selectedConversation.cliente_nome || selectedConversation.nome_crm || 'Contato'
       const phoneDigits = normalizeContactPhone(contactEdit.phone || selectedConversation.telefone || selectedConversation.document_key || '')
       const filename = `${contactName.replace(/[^\p{L}\p{N}]+/gu, '_') || 'contato'}.vcf`
       const result = await sendHumanAttachment(cardBlob, filename, 'text/vcard')
       if (!result.ok) throw new Error(result.error ?? 'Nao foi possivel enviar o contato.')
-
-      await supabase.from('communication_events').insert([{
-        source: 'crm',
-        event_type: 'contact_shared',
-        conversation_id: selectedConversation.id,
-        contact: phoneDigits || null,
-        payload: {
-          nome: contactName,
-          telefone: phoneDigits || null,
-          email: contactEdit.email.trim() || null,
-          file_name: filename,
-        },
-      }])
     } catch (err) {
       setActionError(`Falha ao enviar contato: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
@@ -1519,32 +1453,21 @@ export default function ChatInboxCRM() {
     focusComposer()
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const accessToken = sessionData.session?.access_token
-      if (!accessToken) throw new Error('Sessao expirada. Atualize a pagina e tente novamente.')
-
       const integration = selectedReplyIntegration ?? await resolveEvolutionIntegration(selectedConversation.whatsapp_instance)
-      if (!integration?.instance_name || !integration.base_url || !integration.api_token) {
+      if (!integration?.instance_name) {
         throw new Error('Selecione um canal de saida valido para responder essa conversa.')
       }
       const destinationNumber = selectedConversation.telefone || selectedConversation.document_key
       if (!destinationNumber) throw new Error('Nao foi possivel identificar o numero do contato para envio.')
 
-      const response = await fetch(EDGE_FN, {
+      const response = await fetch(getApiUrl('/chat/send'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          _action: 'send_message',
-          base_url: integration.base_url,
-          api_token: integration.api_token,
           instance_name: integration.instance_name,
-          number: destinationNumber,
+          conversation_id: `${destinationNumber}@s.whatsapp.net`,
           content: text,
-          lead_id: selectedConversation.crm_customer_id,
-          sender_name: senderName,
+          lead_id: null,
         }),
       })
 
@@ -1568,20 +1491,14 @@ export default function ChatInboxCRM() {
   async function sendHumanAttachment(file: File | Blob, filename: string, mimeType?: string) {
     if (!selectedConversation) return { ok: false, error: 'Nenhuma conversa selecionada.' }
 
-    const { data: sessionData } = await supabase.auth.getSession()
-    const accessToken = sessionData.session?.access_token
-    if (!accessToken) return { ok: false, error: 'Sessao expirada. Atualize a pagina e tente novamente.' }
-
     const integration = selectedReplyIntegration ?? await resolveEvolutionIntegration(selectedConversation.whatsapp_instance)
-    if (!integration?.instance_name || !integration.base_url || !integration.api_token) {
+    if (!integration?.instance_name) {
       return { ok: false, error: 'Selecione um canal de saida valido para enviar esse anexo.' }
     }
     const destinationNumber = selectedConversation.telefone || selectedConversation.document_key
     if (!destinationNumber) return { ok: false, error: 'Nao foi possivel identificar o numero do contato.' }
 
     const finalMimeType = mimeType || file.type || 'application/octet-stream'
-    const blob = file
-    const backupPath = `crm-chat/${selectedConversation.document_key}/${Date.now()}-${safeAttachmentName(filename)}`
     const tempId = `temp-attachment-${Date.now()}`
     const tempMediaUrl = typeof URL !== 'undefined' && file instanceof Blob ? URL.createObjectURL(file) : null
       setMessages(prev => [...prev, {
@@ -1599,42 +1516,24 @@ export default function ChatInboxCRM() {
     }])
 
     try {
-      const { error: storageError } = await supabase.storage
-        .from(CHAT_ATTACHMENT_BUCKET)
-        .upload(backupPath, blob, {
-          contentType: finalMimeType,
-          upsert: false,
-        })
+      const caption = `📎 ${filename}`
+      const response = await fetch(getApiUrl('/chat/send'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instance_name: integration.instance_name,
+          conversation_id: `${destinationNumber}@s.whatsapp.net`,
+          content: caption,
+          lead_id: null,
+        }),
+      })
 
-      if (storageError) {
-        logger.warn('ChatInboxCRM', 'falha ao salvar anexo no bucket', storageError.message)
-      }
+      const payload = await response.json() as { ok?: boolean; error?: string }
+      if (!response.ok || !payload.ok) throw new Error(payload.error ?? 'Nao foi possivel enviar o anexo.')
     } catch (err) {
-      logger.warn('ChatInboxCRM', 'falha inesperada ao salvar anexo no bucket', String(err))
-    }
-
-    const form = new FormData()
-    form.append('_action', 'send_attachment')
-    form.append('base_url', integration.base_url ?? '')
-    form.append('api_token', integration.api_token ?? '')
-    form.append('instance_name', integration.instance_name ?? '')
-    form.append('number', destinationNumber)
-    form.append('lead_id', selectedConversation.crm_customer_id ?? '')
-    form.append('sender_name', currentHumanAgentName)
-    form.append('file', blob, filename)
-    form.append('caption', filename)
-
-    const response = await fetch(EDGE_FN, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${accessToken}` },
-      body: form,
-    })
-
-    const payload = await response.json() as { ok?: boolean; error?: string }
-    if (!response.ok || !payload.ok) {
       setMessages(prev => prev.filter(item => item.id !== tempId))
       if (tempMediaUrl) URL.revokeObjectURL(tempMediaUrl)
-      return { ok: false, error: payload.error ?? 'Nao foi possivel enviar o anexo.' }
+      return { ok: false, error: err instanceof Error ? err.message : 'Nao foi possivel enviar o anexo.' }
     }
 
     markConversationAsHuman(selectedConversation.id)

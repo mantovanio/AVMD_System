@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { AivenSqlClient } from '../db/aivenClient.js'
 import type { CommunicationEventRepository } from '../repositories/communicationEventRepository.js'
 import type { ExternalIntegrationRepository } from '../repositories/externalIntegrationRepository.js'
 import type { LeadRepository } from '../repositories/leadRepository.js'
@@ -109,12 +110,74 @@ export async function handleChatRoutes(
   leadRepository: LeadRepository,
   communicationEventRepository: CommunicationEventRepository,
   externalIntegrationRepository: ExternalIntegrationRepository,
+  db: AivenSqlClient,
   corsOrigin: string,
 ): Promise<boolean> {
   const url = req.url ?? ''
   const method = req.method ?? ''
 
   if (!url.startsWith('/api/chat')) return false
+
+  if (method === 'GET' && url === '/api/chat/crm/integrations') {
+    const integrations = await externalIntegrationRepository.findActiveWhatsApp()
+    const rows = integrations.map(item => ({
+      id: item.id,
+      name: item.name,
+      status: item.status,
+      base_url: item.base_url,
+      api_token: item.api_token,
+      instance_name: item.instance_name,
+      sender_name: item.sender_name,
+    }))
+    writeJson(res, 200, rows, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && url === '/api/chat/crm/conversations') {
+    const result = await db.query<any>('SELECT * FROM crm_chat_admin_view ORDER BY ultima_interacao_em DESC NULLS LAST')
+    writeJson(res, 200, { ok: true, data: result.rows }, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && url.startsWith('/api/chat/crm/messages?')) {
+    const parsedUrl = new URL(url, 'http://localhost')
+    const conversationId = parsedUrl.searchParams.get('conversation_id') ?? ''
+    const documentKey = parsedUrl.searchParams.get('document_key') ?? ''
+    if (!conversationId && !documentKey) {
+      writeJson(res, 400, { ok: false, error: 'conversation_id ou document_key obrigatorio.' }, corsOrigin)
+      return true
+    }
+    const [crmResult, evolutionResult] = await Promise.all([
+      db.query<any>(
+        `SELECT id, conversation_id, document_key, external_message_id, direction, sender_type, sender_name, mensagem, mime_type, file_name, media_url, created_at
+         FROM crm_chat_messages
+         WHERE conversation_id = $1 OR document_key = $1
+         ORDER BY created_at ASC`,
+        [conversationId || documentKey],
+      ),
+      db.query<any>(
+        `SELECT id, event_type, payload, created_at, source
+         FROM communication_events
+         WHERE source IN ('evolution', 'chatwoot')
+           AND conversation_id IN ($1, $2, $3)
+         ORDER BY created_at ASC`,
+        [conversationId, documentKey, documentKey ? `${documentKey}@s.whatsapp.net` : ''],
+      ),
+    ])
+    writeJson(res, 200, { ok: true, crmMessages: crmResult.rows, evolutionMessages: evolutionResult.rows }, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && url === '/api/chat/crm/agents') {
+    const result = await db.query<any>(
+      `SELECT id, nome, perfil, avatar_url, email
+       FROM profiles
+       WHERE perfil IN ('admin', 'superadmin', 'atendente')
+       ORDER BY nome ASC`,
+    )
+    writeJson(res, 200, result.rows, corsOrigin)
+    return true
+  }
 
   if (method === 'GET' && url === '/api/chat/leads') {
     const leads = await leadRepository.findAll()
