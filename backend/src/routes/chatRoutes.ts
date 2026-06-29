@@ -139,7 +139,7 @@ export async function handleChatRoutes(
     return true
   }
 
-  if (method === 'GET' && url.startsWith('/api/chat/crm/messages?')) {
+  if (method === 'GET' && url.startsWith('/api/chat/crm/messages')) {
     const parsedUrl = new URL(url, 'http://localhost')
     const conversationId = parsedUrl.searchParams.get('conversation_id') ?? ''
     const documentKey = parsedUrl.searchParams.get('document_key') ?? ''
@@ -147,13 +147,15 @@ export async function handleChatRoutes(
       writeJson(res, 400, { ok: false, error: 'conversation_id ou document_key obrigatorio.' }, corsOrigin)
       return true
     }
+    const searchKey = conversationId || documentKey
+    const remoteJid = documentKey ? `${documentKey}@s.whatsapp.net` : ''
     const [crmResult, evolutionResult] = await Promise.all([
       db.query<any>(
         `SELECT id, conversation_id, document_key, external_message_id, direction, sender_type, sender_name, mensagem, mime_type, file_name, media_url, created_at
          FROM crm_chat_messages
-         WHERE conversation_id = $1 OR document_key = $1
+         WHERE (conversation_id::text = $1 OR document_key = $2 OR document_key = $3)
          ORDER BY created_at ASC`,
-        [conversationId || documentKey],
+        [searchKey, documentKey, remoteJid.replace(/@.+$/, '')],
       ),
       db.query<any>(
         `SELECT id, event_type, payload, created_at, source
@@ -161,7 +163,7 @@ export async function handleChatRoutes(
          WHERE source IN ('evolution', 'chatwoot')
            AND conversation_id IN ($1, $2, $3)
          ORDER BY created_at ASC`,
-        [conversationId, documentKey, documentKey ? `${documentKey}@s.whatsapp.net` : ''],
+        [searchKey, documentKey, remoteJid],
       ),
     ])
     writeJson(res, 200, { ok: true, crmMessages: crmResult.rows, evolutionMessages: evolutionResult.rows }, corsOrigin)
