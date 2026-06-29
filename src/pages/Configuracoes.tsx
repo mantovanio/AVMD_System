@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Loader2, MapPin, Pencil, X, Check, KeyRound, UserPlus, Eye, EyeOff, MessageCircle, Mail, Webhook, Save, Send, Trash2, Plus, ToggleLeft, ToggleRight, CreditCard, FileText, Upload, ShieldCheck, ChevronDown, ChevronRight, Users, Link, Network, Percent } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase, getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
+import { getEvolutionConnectionTestUrl, getEvolutionWebhookConfigureUrl, getEvolutionWebhookUrl } from '@/lib/evolutionApi'
 import { getApiUrl } from '@/lib/api'
 import { createAdminManagedUser, deleteAdminManagedUser, updateAdminManagedPassword } from '@/lib/adminUsers'
 import { DEFAULT_AGENCY_CONFIG, type AgencyConfig, fetchAgencyConfig } from '@/lib/agencyConfig'
@@ -1294,7 +1295,7 @@ function AbaUsuarios() {
   )
 }
 
-const EDGE_FN_EVOLUTION = getEdgeFunctionUrl('evolution-webhook')
+const EDGE_FN_EVOLUTION = getEvolutionWebhookUrl()
 
 function getWhatsAppEngineFromForm(form: Partial<ExternalIntegration> | null | undefined): WhatsAppEngine {
   return getWhatsAppEngine({ provider: form?.provider ?? 'evolution', metadata: form?.metadata ?? {} })
@@ -1352,11 +1353,10 @@ function getWhatsAppDisplayName(integration: Pick<ExternalIntegration, 'name' | 
 
 async function testarEvolution(baseUrl: string, token: string, instanceName: string): Promise<{ ok: boolean; erro: string | null }> {
   try {
-    const accessToken = await getSupabaseAccessToken()
-    const res = await fetch(EDGE_FN_EVOLUTION, {
+    const res = await fetch(getEvolutionConnectionTestUrl(), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
-      body: JSON.stringify({ _action: 'test_connection', base_url: baseUrl, api_token: token, instance_name: instanceName }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base_url: baseUrl, api_token: token, instance_name: instanceName }),
       signal: AbortSignal.timeout(12000),
     })
     const data = await res.json() as { ok: boolean; error?: string; state?: string }
@@ -1369,12 +1369,10 @@ async function testarEvolution(baseUrl: string, token: string, instanceName: str
 
 async function configurarWebhookEvolution(baseUrl: string, token: string, instanceName: string, webhookUrl: string): Promise<{ ok: boolean; erro: string | null }> {
   try {
-    const accessToken = await getSupabaseAccessToken()
-    const res = await fetch(EDGE_FN_EVOLUTION, {
+    const res = await fetch(getEvolutionWebhookConfigureUrl(), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        _action: 'configure_webhook',
         base_url: baseUrl,
         api_token: token,
         instance_name: instanceName,

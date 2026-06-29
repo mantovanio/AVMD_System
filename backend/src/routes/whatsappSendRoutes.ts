@@ -1,11 +1,364 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { loadConfig } from '../config/env.js'
+import { createAivenSqlClient } from '../db/aivenClient.js'
 import type { ExternalIntegrationRepository } from '../repositories/externalIntegrationRepository.js'
+import { CommunicationEventRepository } from '../repositories/communicationEventRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
 
 interface SendWhatsAppInput {
   phone: string
   body: string
   instance_name?: string
+}
+
+type JsonRecord = Record<string, unknown>
+
+type EvolutionControlInput = {
+  base_url?: string
+  api_token?: string
+  instance_name?: string
+  webhook_url?: string
+}
+
+type NormalizedEvolutionEvent = {
+  eventType: string | null
+  instanceName: string | null
+  conversationId: string | null
+  contactDigits: string | null
+  externalMessageId: string | null
+  pushName: string | null
+  fromMe: boolean
+  messageType: string
+  content: string | null
+  mimeType: string | null
+  fileName: string | null
+  mediaUrl: string | null
+  quoted: { messageId: string; content: string } | null
+  raw: JsonRecord
+}
+
+type LeadRow = {
+  id: string
+  nome_lead: string | null
+  whatsapp_lead: string | null
+  resumo_conversa: string | null
+  ultima_mensagem: string | null
+  status: string | null
+  evolution_remote_jid: string | null
+  evolution_instance: string | null
+}
+
+const config = loadConfig()
+const db = createAivenSqlClient()
+const communicationEventRepository = new CommunicationEventRepository(db)
+
+function asRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : null
+}
+
+function asString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function pickString(source: JsonRecord | null, ...keys: string[]) {
+  if (!source) return ''
+  for (const key of keys) {
+    const value = source[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return ''
+}
+
+function cleanBaseUrl(value: string) {
+  return value.replace(/\/$/, '')
+}
+
+function normalizePhoneDigits(value: string | null | undefined) {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  return digits || null
+}
+
+function buildRemoteJid(phoneDigits: string | null) {
+  return phoneDigits ? `${phoneDigits}@s.whatsapp.net` : null
+}
+
+function extractMessageContent(message: JsonRecord | null) {
+  if (!message) {
+    return {
+      content: null,
+      messageType: 'conversation',
+      mimeType: null,
+      fileName: null,
+      mediaUrl: null,
+      quoted: null as { messageId: string; content: string } | null,
+    }
+  }
+
+  const entry = Object.entries(message).find(([, value]) => value !== null && value !== undefined)
+  const messageType = entry?.[0] ?? 'conversation'
+  const payload = asRecord(entry?.[1])
+  const context = asRecord(payload?.contextInfo)
+  const quotedMessage = asRecord(context?.quotedMessage)
+  const quotedEntry = quotedMessage ? Object.entries(quotedMessage).find(([, value]) => value !== null && value !== undefined) : null
+  const quotedPayload = asRecord(quotedEntry?.[1])
+  const quotedContent = pickString(quotedPayload, 'text', 'caption') || (typeof quotedEntry?.[1] === 'string' ? quotedEntry[1] : '')
+  const fallbackContent = typeof entry?.[1] === 'string' ? entry[1] : ''
+
+  return {
+    content: pickString(payload, 'text', 'caption', 'conversation') || fallbackContent || null,
+    messageType,
+    mimeType: pickString(payload, 'mimetype') || null,
+    fileName: pickString(payload, 'fileName', 'title') || null,
+    mediaUrl: pickString(payload, 'url', 'mediaUrl') || null,
+    quoted: pickString(context, 'stanzaId')
+      ? { messageId: pickString(context, 'stanzaId'), content: quotedContent || 'Mensagem respondida' }
+      : null,
+  }
+}
+
+function normalizeEvolutionEvent(body: JsonRecord): NormalizedEvolutionEvent {
+  const data = asRecord(body.data)
+  const key = asRecord(data?.key) ?? asRecord(body.key)
+  const message = asRecord(data?.message) ?? asRecord(body.message)
+  const extracted = extractMessageContent(message)
+
+  const rawConversationId =
+    pickString(body, 'conversationId', 'remoteJid', 'chatId')
+    || pickString(data, 'remoteJid', 'chatId', 'conversationId')
+    || pickString(key, 'remoteJid')
+    || ''
+
+  const contactDigits = normalizePhoneDigits(
+    pickString(body, 'contact', 'phone', 'number')
+    || pickString(data, 'contact', 'phone', 'number')
+    || (rawConversationId ? rawConversationId.split('@')[0] : ''),
+  )
+
+  return {
+    eventType: pickString(body, 'event', 'eventType', 'type') || pickString(data, 'eventType', 'type') || null,
+    instanceName: pickString(body, 'instance', 'instanceName') || pickString(data, 'instance', 'instanceName') || null,
+    conversationId: rawConversationId || buildRemoteJid(contactDigits),
+    contactDigits,
+    externalMessageId: pickString(body, 'messageId', 'externalId') || pickString(data, 'id', 'messageId') || pickString(key, 'id') || null,
+    pushName: pickString(body, 'pushName') || pickString(data, 'pushName') || pickString(key, 'pushName') || null,
+    fromMe: Boolean(body.fromMe ?? data?.fromMe ?? key?.fromMe ?? false),
+    messageType: pickString(body, 'messageType') || pickString(data, 'messageType') || extracted.messageType,
+    content: pickString(body, 'content') || pickString(data, 'content') || extracted.content,
+    mimeType: pickString(body, 'mimeType') || pickString(data, 'mimeType') || extracted.mimeType,
+    fileName: pickString(body, 'fileName') || pickString(data, 'fileName') || extracted.fileName,
+    mediaUrl: pickString(body, 'mediaUrl') || pickString(data, 'mediaUrl') || extracted.mediaUrl,
+    quoted: extracted.quoted,
+    raw: body,
+  }
+}
+
+async function findLeadByPhone(phoneDigits: string) {
+  const result = await db.query<LeadRow>(
+    `SELECT id, nome_lead, whatsapp_lead, resumo_conversa, ultima_mensagem, status, evolution_remote_jid, evolution_instance
+       FROM leads_contabilidade
+      WHERE regexp_replace(coalesce(whatsapp_lead, ''), '\\D', '', 'g') = $1
+      ORDER BY updated_at DESC, created_at DESC
+      LIMIT 1`,
+    [phoneDigits],
+  )
+
+  return result.rows[0] ?? null
+}
+
+async function upsertLeadFromEvolutionEvent(event: NormalizedEvolutionEvent) {
+  const phoneDigits = event.contactDigits
+  if (!phoneDigits) return null
+
+  const summary = event.content || (event.fileName ? `Arquivo: ${event.fileName}` : null)
+  const existing = await findLeadByPhone(phoneDigits)
+
+  if (existing) {
+    const result = await db.query<LeadRow>(
+      `UPDATE leads_contabilidade
+          SET nome_lead = coalesce(nome_lead, $2),
+              whatsapp_lead = coalesce($3, whatsapp_lead),
+              resumo_conversa = CASE WHEN $4::text IS NULL OR $6::boolean THEN resumo_conversa ELSE $4 END,
+              ultima_mensagem = coalesce($4, ultima_mensagem),
+              status = CASE WHEN $6::boolean THEN coalesce(status, 'conversando') ELSE 'conversando' END,
+              evolution_remote_jid = coalesce($5, evolution_remote_jid),
+              evolution_instance = coalesce($7, evolution_instance),
+              updated_at = now()
+        WHERE id = $1::uuid
+      RETURNING id, nome_lead, whatsapp_lead, resumo_conversa, ultima_mensagem, status, evolution_remote_jid, evolution_instance`,
+      [
+        existing.id,
+        event.pushName ?? null,
+        phoneDigits,
+        summary,
+        event.conversationId ?? null,
+        event.fromMe,
+        event.instanceName ?? null,
+      ],
+    )
+
+    return result.rows[0] ?? existing
+  }
+
+  if (event.fromMe) return null
+
+  const created = await db.query<LeadRow>(
+    `INSERT INTO leads_contabilidade
+       (
+         nome_lead,
+         whatsapp_lead,
+         motivo_contato,
+         resumo_conversa,
+         ultima_mensagem,
+         status,
+         evolution_remote_jid,
+         evolution_instance,
+         inicio_atendimento
+       )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     RETURNING id, nome_lead, whatsapp_lead, resumo_conversa, ultima_mensagem, status, evolution_remote_jid, evolution_instance`,
+    [
+      event.pushName ?? null,
+      phoneDigits,
+      'whatsapp_evolution',
+      summary,
+      summary,
+      'iniciou_conversa',
+      event.conversationId ?? null,
+      event.instanceName ?? null,
+      new Date().toISOString(),
+    ],
+  )
+
+  return created.rows[0] ?? null
+}
+
+async function testEvolutionConnection(input: EvolutionControlInput) {
+  const baseUrl = cleanBaseUrl(asString(input.base_url))
+  const apiToken = asString(input.api_token)
+  const instanceName = asString(input.instance_name)
+
+  if (!baseUrl || !apiToken || !instanceName) {
+    return { status: 400, payload: { ok: false, error: 'base_url, api_token e instance_name sao obrigatorios.' } }
+  }
+
+  const response = await fetch(`${baseUrl}/instance/connectionState/${instanceName}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: apiToken,
+    },
+  })
+
+  const payload = await response.json().catch(() => ({})) as JsonRecord
+  const state = pickString(asRecord(payload.instance), 'state') || pickString(payload, 'state') || pickString(asRecord(payload.response), 'state') || 'desconhecido'
+  const normalizedState = state.toLowerCase()
+  const connectedStates = new Set(['open', 'opened', 'connected', 'online'])
+
+  if (!response.ok) {
+    return { status: 502, payload: { ok: false, error: `Evolution retornou HTTP ${response.status}`, state, detail: payload } }
+  }
+
+  if (!connectedStates.has(normalizedState)) {
+    return { status: 200, payload: { ok: false, state, error: `Estado da instância: ${state}` } }
+  }
+
+  return { status: 200, payload: { ok: true, state } }
+}
+
+async function configureEvolutionWebhook(input: EvolutionControlInput) {
+  const baseUrl = cleanBaseUrl(asString(input.base_url))
+  const apiToken = asString(input.api_token)
+  const instanceName = asString(input.instance_name)
+  const webhookUrl = asString(input.webhook_url)
+
+  if (!baseUrl || !apiToken || !instanceName || !webhookUrl) {
+    return { status: 400, payload: { ok: false, error: 'base_url, api_token, instance_name e webhook_url sao obrigatorios.' } }
+  }
+
+  const endpoint = `${baseUrl}/webhook/set/${instanceName}`
+  const attempts: JsonRecord[] = [
+    {
+      enabled: true,
+      url: webhookUrl,
+      webhookByEvents: false,
+      webhookBase64: true,
+      events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE'],
+    },
+    {
+      enabled: true,
+      webhook: {
+        url: webhookUrl,
+        byEvents: false,
+        base64: true,
+        events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE'],
+      },
+    },
+    {
+      url: webhookUrl,
+      enabled: true,
+    },
+  ]
+
+  const errors: string[] = []
+
+  for (const body of attempts) {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: apiToken,
+      },
+      body: JSON.stringify(body),
+    })
+
+    const payload = await response.json().catch(() => ({})) as JsonRecord
+    if (response.ok) {
+      return { status: 200, payload: { ok: true, webhook_url: webhookUrl, detail: payload } }
+    }
+
+    errors.push(`HTTP ${response.status}`)
+  }
+
+  return { status: 502, payload: { ok: false, error: `Falha ao configurar webhook na Evolution (${errors.join(', ') || 'sem resposta valida'}).` } }
+}
+
+async function forwardInboundToN8n(event: NormalizedEvolutionEvent, leadId: string | null) {
+  if (!config.n8nWebhookUrl || event.fromMe) return { forwarded: false, error: null as string | null }
+
+  try {
+    const response = await fetch(config.n8nWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: 'evolution',
+        event_type: event.eventType,
+        conversation_id: event.conversationId,
+        contact: event.contactDigits,
+        lead_id: leadId,
+        instance_name: event.instanceName,
+        message: {
+          id: event.externalMessageId,
+          from_me: event.fromMe,
+          type: event.messageType,
+          content: event.content,
+          mime_type: event.mimeType,
+          file_name: event.fileName,
+          media_url: event.mediaUrl,
+          quoted: event.quoted,
+          push_name: event.pushName,
+        },
+        payload: event.raw,
+      }),
+    })
+
+    if (!response.ok) {
+      return { forwarded: false, error: `N8N retornou HTTP ${response.status}` }
+    }
+
+    return { forwarded: true, error: null }
+  } catch (error) {
+    return { forwarded: false, error: error instanceof Error ? error.message : String(error) }
+  }
 }
 
 export async function handleWhatsappSendRoutes(
@@ -16,6 +369,63 @@ export async function handleWhatsappSendRoutes(
 ): Promise<boolean> {
   const url = req.url ?? ''
   const method = req.method ?? ''
+
+  if (method === 'POST' && url === '/api/evolution/connection/test') {
+    const body = await readJson<EvolutionControlInput>(req)
+    const result = await testEvolutionConnection(body)
+    writeJson(res, result.status, result.payload, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/evolution/webhook/configure') {
+    const body = await readJson<EvolutionControlInput>(req)
+    const result = await configureEvolutionWebhook(body)
+    writeJson(res, result.status, result.payload, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/webhooks/evolution') {
+    const body = await readJson<JsonRecord>(req)
+    const normalized = normalizeEvolutionEvent(body)
+    const lead = await upsertLeadFromEvolutionEvent(normalized)
+
+    const payload: JsonRecord = {
+      ...normalized.raw,
+      content: normalized.content,
+      fromMe: normalized.fromMe,
+      messageId: normalized.externalMessageId,
+      messageType: normalized.messageType,
+      pushName: normalized.pushName,
+      mimeType: normalized.mimeType,
+      fileName: normalized.fileName,
+      mediaUrl: normalized.mediaUrl,
+      quoted: normalized.quoted,
+      conversationId: normalized.conversationId,
+      documentKey: normalized.contactDigits,
+      instanceName: normalized.instanceName,
+    }
+
+    const eventRow = await communicationEventRepository.create({
+      source: 'evolution',
+      event_type: normalized.eventType ?? 'message_received',
+      external_id: normalized.externalMessageId,
+      conversation_id: normalized.conversationId,
+      lead_id: lead?.id ?? null,
+      contact: normalized.contactDigits,
+      payload,
+    })
+
+    const forwarded = await forwardInboundToN8n(normalized, lead?.id ?? null)
+
+    writeJson(res, 200, {
+      ok: true,
+      conversation_id: eventRow.conversation_id,
+      lead_id: lead?.id ?? null,
+      forwarded_to_n8n: forwarded.forwarded,
+      n8n_error: forwarded.error,
+    }, corsOrigin)
+    return true
+  }
 
   if (method !== 'POST' || url !== '/api/whatsapp/send') return false
 
