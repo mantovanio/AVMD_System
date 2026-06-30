@@ -390,6 +390,11 @@ export async function handleWhatsappSendRoutes(
       return true
     }
 
+    if (normalized.eventType === 'messages.update') {
+      writeJson(res, 200, { ok: true, skipped: 'messages.update' }, corsOrigin)
+      return true
+    }
+
     const lead = await upsertLeadFromEvolutionEvent(normalized)
 
     const payload: JsonRecord = {
@@ -406,6 +411,7 @@ export async function handleWhatsappSendRoutes(
       conversationId: normalized.conversationId,
       documentKey: normalized.contactDigits,
       instanceName: normalized.instanceName,
+      instance_name: normalized.instanceName,
     }
 
     const eventRow = await communicationEventRepository.create({
