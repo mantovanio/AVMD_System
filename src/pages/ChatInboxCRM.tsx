@@ -2654,7 +2654,7 @@ function ConversationCard({
 }) {
     const urgency = getUrgencyMeta(item, human)
     const selectedClass = selected
-      ? 'border-slate-900 bg-slate-900 text-white'
+      ? 'border-sky-200 bg-sky-50 shadow-[0_10px_24px_rgba(14,116,144,0.08)]'
       : closed
         ? 'border-slate-200 bg-slate-50 hover:border-slate-300'
         : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
@@ -2663,15 +2663,15 @@ function ConversationCard({
       <button type="button" onClick={onClick} className={`w-full rounded-2xl border px-4 py-3 text-left transition ${selectedClass}`}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">{item.cliente_nome || item.nome_crm || 'Sem nome'}</p>
-            <p className={`mt-1 truncate text-xs ${selected ? 'text-slate-300' : 'text-slate-500'}`}>{item.telefone || item.document_key}</p>
+            <p className="truncate text-sm font-semibold text-slate-900">{item.cliente_nome || item.nome_crm || 'Sem nome'}</p>
+            <p className="mt-1 truncate text-xs text-slate-500">{item.telefone || item.document_key}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${selected ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600'}`}>{queueLabel(item.fila)}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${selected ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>{queueLabel(item.fila)}</span>
             {unreadCount > 0 && (
-              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${selected ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700'}`}>{unreadCount} nova{unreadCount > 1 ? 's' : ''}</span>
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">{unreadCount}</span>
             )}
-            {human ? <UserRound size={14} /> : <Bot size={14} />}
+            <span className={selected ? 'text-sky-600' : 'text-slate-400'}>{human ? <UserRound size={14} /> : <Bot size={14} />}</span>
           </div>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -2679,42 +2679,26 @@ function ConversationCard({
           {!hasRegisteredCustomer(item) && <Badge text="Contato sem cadastro" tone="amber" />}
           {closed && <Badge text="Encerrada" tone="slate" />}
         </div>
-        <div className="mt-3 space-y-1.5">
-          {previewMessages.slice(0, 3).reverse().map(message => {
-            const previewText = (message.mensagem || message.file_name || 'Mensagem sem texto').replace(/\s+/g, ' ').trim()
-            const previewLabel = message.sender_type === 'cliente'
-              ? 'Cliente'
-              : message.sender_type === 'ia'
-                ? 'IA'
-                : 'Humano'
-            return (
-              <div
-                key={message.id}
-                className={`rounded-xl px-3 py-2 text-xs leading-relaxed ${
-                  selected
-                    ? 'bg-white/10 text-slate-100'
-                    : message.direction === 'outgoing'
-                      ? 'bg-emerald-50 text-emerald-800'
-                      : 'bg-slate-50 text-slate-700'
-                }`}
-              >
-                <p className="mb-0.5 font-semibold uppercase tracking-wide opacity-70">{previewLabel}</p>
-                <p className="line-clamp-2 break-words">{previewText}</p>
-              </div>
-            )
-          })}
-          {previewMessages.length === 0 && (
-            <p className={`line-clamp-2 text-sm ${selected ? 'text-slate-100' : 'text-slate-600'}`}>
-              {item.ultima_mensagem || 'Sem ultima mensagem gravada.'}
-            </p>
-          )}
+        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[11px] text-slate-500">
+          <div>
+            <p className="uppercase tracking-wide text-slate-400">Etapa</p>
+            <p className="mt-0.5 font-medium text-slate-700">{statusLabel(normalizeKanbanStatus(item.kanban_status))}</p>
+          </div>
+          <div>
+            <p className="uppercase tracking-wide text-slate-400">Ultima interacao</p>
+            <p className="mt-0.5 font-medium text-slate-700">{formatRelative(item.ultima_interacao_em)}</p>
+          </div>
+          <div>
+            <p className="uppercase tracking-wide text-slate-400">Modo</p>
+            <p className="mt-0.5 font-medium text-slate-700">{human ? 'Humano' : 'IA'}</p>
+          </div>
+          <div>
+            <p className="uppercase tracking-wide text-slate-400">Origem</p>
+            <p className="mt-0.5 font-medium text-slate-700">{item.document_key ? 'CRM' : 'WhatsApp'}</p>
+          </div>
         </div>
-        <div className={`mt-3 flex items-center justify-between text-xs ${selected ? 'text-slate-300' : 'text-slate-500'}`}>
-          <span>{statusLabel(item.kanban_status)}</span>
-          <span>{formatRelative(item.ultima_interacao_em)}</span>
-        </div>
-    </button>
-  )
+      </button>
+    )
 }
 
 function ConversationMiniCard({
@@ -2887,4 +2871,5 @@ function EmptyState({ text, compact = false }: { text: string; compact?: boolean
     </div>
   )
 }
+
 
