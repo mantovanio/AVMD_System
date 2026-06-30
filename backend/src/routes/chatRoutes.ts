@@ -525,6 +525,44 @@ export async function handleChatRoutes(
     return true
   }
 
+  if (method === 'DELETE' && url.startsWith('/api/chat/crm/conversations/')) {
+    const id = url.replace('/api/chat/crm/conversations/', '')
+    if (!id) {
+      writeJson(res, 400, { ok: false, error: 'ID da conversa obrigatorio.' }, corsOrigin)
+      return true
+    }
+    await db.query('DELETE FROM crm_chat_messages WHERE conversation_id = $1', [id])
+    await db.query('DELETE FROM crm_chat_assignments WHERE conversation_id::text = $1', [id])
+    await db.query('DELETE FROM crm_chat_conversations WHERE id = $1', [id])
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/chat/crm/customers') {
+    const body = await readJson<JsonRecord>(req)
+    const nome = asString(body.nome) || 'Contato sem nome'
+    const telefone = asString(body.telefone)
+    const email = asString(body.email)
+    const observacoes = asString(body.observacoes)
+    if (!telefone && !email) {
+      writeJson(res, 400, { ok: false, error: 'telefone ou email obrigatorio.' }, corsOrigin)
+      return true
+    }
+    const result = await db.query<any>(
+      `INSERT INTO crm_customers (nome, telefone_principal, email_principal, observacoes) VALUES ($1, $2, $3, $4) RETURNING id`,
+      [nome, telefone || null, email || null, observacoes || null],
+    )
+    const customerId = result.rows[0]?.id ?? null
+
+    const conversationId = asString(body.conversation_id)
+    if (conversationId && customerId) {
+      await db.query('UPDATE crm_chat_conversations SET crm_customer_id = $1 WHERE id = $2', [customerId, conversationId])
+    }
+
+    writeJson(res, 200, { ok: true, customer_id: customerId }, corsOrigin)
+    return true
+  }
+
   return false
 }
 

@@ -17,8 +17,10 @@ import {
   Smile,
   StopCircle,
   Save,
+  Trash2,
   User,
   UserCheck,
+  UserPlus,
   UserRound,
   X,
 } from 'lucide-react'
@@ -1160,6 +1162,42 @@ export default function ChatInboxCRM() {
     }
 
     setActionLoading(false)
+  }
+
+  async function deleteConversation(conversationId: string) {
+    if (!confirm('Tem certeza que deseja apagar esta conversa?')) return
+    try {
+      const response = await fetch(getApiUrl(`/chat/crm/conversations/${conversationId}`), { method: 'DELETE' })
+      const data = await response.json()
+      if (!data.ok) throw new Error(data.error || 'Falha ao apagar conversa')
+      await loadConversations(false)
+      if (selectedId === conversationId) setSelectedId(null)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function saveContactFromConversation(conversationId: string) {
+    const conv = activeConversations.find(c => c.id === conversationId) || selectedConversation
+    if (!conv) return
+    try {
+      const response = await fetch(getApiUrl('/chat/crm/customers'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: conv.cliente_nome || conv.nome_crm || 'Contato sem nome',
+          telefone: conv.telefone || conv.document_key || null,
+          email: null,
+          observacoes: null,
+          conversation_id: conversationId,
+        }),
+      })
+      const data = await response.json()
+      if (!data.ok) throw new Error(data.error || 'Falha ao salvar contato')
+      await loadConversations(false)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    }
   }
 
   async function createManualConversation() {
@@ -2420,6 +2458,8 @@ export default function ChatInboxCRM() {
                               event.dataTransfer.effectAllowed = 'move'
                             }}
                             onDragEnd={() => setDraggedConversationId(null)}
+                            onDelete={() => void deleteConversation(item.id)}
+                            onSaveContact={() => void saveContactFromConversation(item.id)}
                           />
                         ))}
                         {column.items.length === 0 && <EmptyState text="Sem conversas" compact />}
@@ -2562,6 +2602,8 @@ function ConversationMiniCard({
   draggable = false,
   onDragStart,
   onDragEnd,
+  onDelete,
+  onSaveContact,
 }: {
   item: ConversationRow
   selected: boolean
@@ -2571,28 +2613,42 @@ function ConversationMiniCard({
   draggable?: boolean
   onDragStart?: (event: React.DragEvent<HTMLButtonElement>) => void
   onDragEnd?: () => void
+  onDelete?: () => void
+  onSaveContact?: () => void
 }) {
     const urgency = getUrgencyMeta(item, human)
+    const hasCrmCustomer = !!item.crm_customer_id
     return (
-      <button
-        type="button"
-      onClick={onClick}
-      draggable={draggable}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      className={`w-full rounded-xl border px-3 py-3 text-left ${selected ? 'border-slate-900 bg-slate-900 text-white' : 'border-white/70 bg-white hover:border-slate-300'}`}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-sm font-semibold">{item.cliente_nome || item.nome_crm || 'Sem nome'}</p>
-          <div className="flex items-center gap-2">
-            {unreadCount > 0 && <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${selected ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700'}`}>{unreadCount}</span>}
-            {human ? <UserRound size={14} /> : <Bot size={14} />}
+      <div className={`group relative w-full rounded-xl border ${selected ? 'border-slate-900 bg-slate-900 text-white' : 'border-white/70 bg-white hover:border-slate-300'}`}>
+        <button type="button" onClick={onClick} draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd} className="w-full px-3 py-3 text-left">
+          <div className="flex items-center justify-between gap-2">
+            <p className="truncate text-sm font-semibold">{item.cliente_nome || item.nome_crm || 'Sem nome'}</p>
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${selected ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700'}`}>{unreadCount}</span>}
+              {human ? <UserRound size={14} /> : <Bot size={14} />}
+            </div>
           </div>
+          <p className={`mt-1 truncate text-xs ${selected ? 'text-slate-300' : 'text-slate-500'}`}>{item.telefone || item.document_key}</p>
+          {urgency && <div className="mt-2"><Badge text={urgency.label} tone={urgency.tone} /></div>}
+          <p className={`mt-2 line-clamp-2 text-xs ${selected ? 'text-slate-100' : 'text-slate-600'}`}>{item.ultima_mensagem || 'Sem mensagem'}</p>
+        </button>
+        <div className="absolute right-1 top-1 hidden gap-1 group-hover:flex">
+          {!hasCrmCustomer && onSaveContact && (
+            <button type="button" onClick={event => { event.stopPropagation(); onSaveContact() }}
+              className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-slate-500 shadow-sm hover:bg-sky-50 hover:text-sky-600"
+              title="Salvar contato">
+              <UserPlus size={13} />
+            </button>
+          )}
+          {onDelete && (
+            <button type="button" onClick={event => { event.stopPropagation(); onDelete() }}
+              className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-slate-500 shadow-sm hover:bg-red-50 hover:text-red-600"
+              title="Apagar conversa">
+              <Trash2 size={13} />
+            </button>
+          )}
         </div>
-        <p className={`mt-1 truncate text-xs ${selected ? 'text-slate-300' : 'text-slate-500'}`}>{item.telefone || item.document_key}</p>
-        {urgency && <div className="mt-2"><Badge text={urgency.label} tone={urgency.tone} /></div>}
-        <p className={`mt-2 line-clamp-2 text-xs ${selected ? 'text-slate-100' : 'text-slate-600'}`}>{item.ultima_mensagem || 'Sem mensagem'}</p>
-      </button>
+      </div>
     )
   }
 
