@@ -1,0 +1,66 @@
+{
+  "name": "AVMD - Email Send (SMTP)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "avmd-email-send",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-email-send",
+      "name": "Email Send Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "=contato@certifast.com.br",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "text": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "smtp-send",
+      "name": "Send Email SMTP",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [700, 300],
+      "credentials": {
+        "smtp": {
+          "id": "6e47pVwT4AGiQadz",
+          "name": "SMTP account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, sent: $json?.accepted?.length > 0, to: $json.to, subject: $json.subject } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "ack-send",
+      "name": "Ack Email Send",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [980, 300]
+    }
+  ],
+  "connections": {
+    "Email Send Webhook": {
+      "main": [[{ "node": "Send Email SMTP", "type": "main", "index": 0 }]]
+    },
+    "Send Email SMTP": {
+      "main": [[{ "node": "Ack Email Send", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "1"
+}

@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { BackendConfig } from '../config/env.js'
 import type { AivenSqlClient } from '../db/aivenClient.js'
 import type { CommunicationEventRepository } from '../repositories/communicationEventRepository.js'
 import type { ExternalIntegrationRepository } from '../repositories/externalIntegrationRepository.js'
@@ -112,6 +113,7 @@ export async function handleChatRoutes(
   externalIntegrationRepository: ExternalIntegrationRepository,
   db: AivenSqlClient,
   corsOrigin: string,
+  config: BackendConfig,
 ): Promise<boolean> {
   const url = req.url ?? ''
   const method = req.method ?? ''
@@ -344,6 +346,70 @@ export async function handleChatRoutes(
     })
 
     writeJson(res, 200, { ok: true, event }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/chat/send-email') {
+    const body = await readJson<Record<string, unknown>>(req)
+    const to = asString(body.to)
+    const subject = asString(body.subject)
+    const textBody = asString(body.body)
+    const conversationId = asString(body.conversation_id)
+    const leadId = asString(body.lead_id)
+    const fromName = asString(body.from_name) || 'Certifast'
+
+    if (!to) {
+      writeJson(res, 400, { ok: false, error: 'to (destinatario) obrigatorio.' }, corsOrigin)
+      return true
+    }
+    if (!subject) {
+      writeJson(res, 400, { ok: false, error: 'subject (assunto) obrigatorio.' }, corsOrigin)
+      return true
+    }
+    if (!textBody) {
+      writeJson(res, 400, { ok: false, error: 'body (corpo) obrigatorio.' }, corsOrigin)
+      return true
+    }
+
+    const event = await communicationEventRepository.create({
+      source: 'email',
+      event_type: 'email_sent',
+      conversation_id: conversationId || to,
+      lead_id: leadId || null,
+      contact: to,
+      payload: {
+        to,
+        subject,
+        body: textBody,
+        fromName,
+        conversation_id: conversationId || null,
+      },
+    })
+
+    // Tenta enviar via n8n webhook (nao bloqueante)
+    const n8nUrl = config.n8nEmailSendUrl
+    let n8nSent = false
+    let n8nError: string | null = null
+    if (n8nUrl) {
+      try {
+        const n8nRes = await fetch(n8nUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to, subject, body: textBody, from_name: fromName }),
+        })
+        if (n8nRes.ok) n8nSent = true
+        else n8nError = `n8n retornou HTTP ${n8nRes.status}`
+      } catch (err) {
+        n8nError = err instanceof Error ? err.message : String(err)
+      }
+    }
+
+    writeJson(res, 200, {
+      ok: true,
+      event_id: event.id,
+      n8n_sent: n8nSent,
+      n8n_error: n8nError,
+    }, corsOrigin)
     return true
   }
 

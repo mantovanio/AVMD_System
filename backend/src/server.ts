@@ -139,6 +139,7 @@ const server = createServer(async (req, res) => {
       externalIntegrationRepository,
       db,
       config.corsOrigin,
+      config,
     )
     if (handledChat) return
 
