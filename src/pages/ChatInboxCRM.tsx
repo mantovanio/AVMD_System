@@ -30,7 +30,7 @@ import { logger } from '@/lib/logger'
 import { useAuth } from '@/contexts/AuthContext'
 import { applyOutgoingSignature, DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings } from '@/lib/crmChatSettings'
 
-type QueueType = 'atendimento' | 'renovacao'
+type QueueType = 'atendimento' | 'renovacao' | 'email'
 type DirectionType = 'incoming' | 'outgoing'
 type SenderType = 'cliente' | 'ia' | 'humano'
 type RecState = 'idle' | 'recording' | 'preview'
@@ -174,6 +174,7 @@ const TONE_STYLES: Record<string, string> = {
   violet: 'border-violet-200 bg-violet-50',
   orange: 'border-orange-200 bg-orange-50',
   red: 'border-red-200 bg-red-50',
+  sky: 'border-sky-200 bg-sky-50',
   zinc: 'border-zinc-200 bg-zinc-50',
 }
 
@@ -252,7 +253,9 @@ function isDocumentMime(value: string | null | undefined) {
 }
 
 function queueLabel(fila: QueueType) {
-  return fila === 'renovacao' ? 'Renovacao' : 'Atendimento'
+  if (fila === 'renovacao') return 'Renovacao'
+  if (fila === 'email') return 'Email'
+  return 'Atendimento'
 }
 
 function hasRegisteredCustomer(item: ConversationRow | null | undefined) {
@@ -1731,6 +1734,7 @@ export default function ChatInboxCRM() {
       total: activeConversations.length,
       atendimento: activeConversations.filter(item => item.fila === 'atendimento').length,
       renovacao: activeConversations.filter(item => item.fila === 'renovacao').length,
+      email: activeConversations.filter(item => item.fila === 'email').length,
       humano: activeConversations.filter(item => item.atendimento_humano || humanOverrideIds.includes(item.id)).length,
     }), [activeConversations, humanOverrideIds])
 
@@ -1743,6 +1747,7 @@ export default function ChatInboxCRM() {
     all: queueFilter === 'todas' && humanFilter === 'todos',
     atendimento: queueFilter === 'atendimento' && humanFilter === 'todos',
     renovacao: queueFilter === 'renovacao' && humanFilter === 'todos',
+    email: queueFilter === 'email' && humanFilter === 'todos',
     humano: queueFilter === 'todas' && humanFilter === 'humano',
   }), [queueFilter, humanFilter])
 
@@ -1764,10 +1769,11 @@ export default function ChatInboxCRM() {
     }
   }, [visibleConversations, selectedId])
 
-  function applySummaryShortcut(target: 'all' | 'atendimento' | 'renovacao' | 'humano') {
+  function applySummaryShortcut(target: 'all' | 'atendimento' | 'renovacao' | 'email' | 'humano') {
     const nextQueue: 'todas' | QueueType =
       target === 'atendimento' ? 'atendimento' :
       target === 'renovacao' ? 'renovacao' :
+      target === 'email' ? 'email' :
       'todas'
 
     const nextHuman: 'todos' | 'ia' | 'humano' = target === 'humano' ? 'humano' : 'todos'
@@ -1814,10 +1820,11 @@ export default function ChatInboxCRM() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <div className="mt-4 grid gap-3 md:grid-cols-5">
           <SummaryCard label="Conversas visiveis" value={summary.total} active={activeShortcut.all} onClick={() => applySummaryShortcut('all')} />
           <SummaryCard label="Fila atendimento" value={summary.atendimento} active={activeShortcut.atendimento} onClick={() => applySummaryShortcut('atendimento')} />
           <SummaryCard label="Fila renovacao" value={summary.renovacao} active={activeShortcut.renovacao} onClick={() => applySummaryShortcut('renovacao')} />
+          <SummaryCard label="Fila email" value={summary.email} active={activeShortcut.email} onClick={() => applySummaryShortcut('email')} />
           <SummaryCard label="Atendimento humano" value={summary.humano} active={activeShortcut.humano} onClick={() => applySummaryShortcut('humano')} />
         </div>
 
@@ -1831,6 +1838,7 @@ export default function ChatInboxCRM() {
             <option value="todas">Todas as filas</option>
             <option value="atendimento">Fila atendimento</option>
             <option value="renovacao">Fila renovacao</option>
+            <option value="email">Fila email</option>
           </select>
 
           <select value={humanFilter} onChange={event => setHumanFilter(event.target.value as 'todos' | 'ia' | 'humano')} className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none">
@@ -1933,7 +1941,7 @@ export default function ChatInboxCRM() {
                         <p className="mt-1 text-sm text-slate-500">{selectedConversation.telefone || selectedConversation.document_key}</p>
                       </div>
                       <div className="flex flex-wrap gap-2 text-xs">
-                        <Badge text={queueLabel(selectedConversation.fila)} tone={selectedConversation.fila === 'renovacao' ? 'violet' : 'blue'} />
+                        <Badge text={queueLabel(selectedConversation.fila)} tone={selectedConversation.fila === 'renovacao' ? 'violet' : selectedConversation.fila === 'email' ? 'sky' : 'blue'} />
                         <Badge text={statusLabel(normalizeKanbanStatus(selectedConversation.kanban_status) || selectedConversation.kanban_status)} tone="slate" />
                         <Badge text={humanModeActive ? 'Humano' : 'IA'} tone={humanModeActive ? 'green' : 'amber'} />
                       </div>
@@ -2741,7 +2749,7 @@ function InfoRow({ icon, label, value, mono = false }: { icon: React.ReactNode; 
   )
 }
 
-function Badge({ text, tone }: { text: string; tone: 'blue' | 'violet' | 'green' | 'amber' | 'slate' | 'red' }) {
+function Badge({ text, tone }: { text: string; tone: 'blue' | 'violet' | 'green' | 'amber' | 'slate' | 'red' | 'sky' }) {
   const classes = {
     blue: 'bg-blue-100 text-blue-700',
     violet: 'bg-violet-100 text-violet-700',
@@ -2749,6 +2757,7 @@ function Badge({ text, tone }: { text: string; tone: 'blue' | 'violet' | 'green'
     amber: 'bg-amber-100 text-amber-700',
     slate: 'bg-slate-100 text-slate-700',
     red: 'bg-red-100 text-red-700',
+    sky: 'bg-sky-100 text-sky-700',
   }
 
   return <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${classes[tone]}`}>{text}</span>

@@ -72,6 +72,7 @@ DECLARE
   v_kanban_status TEXT;
   v_cliente_nome TEXT;
   v_is_email    BOOLEAN;
+  v_fila        TEXT;
 BEGIN
   v_phone     := COALESCE(NEW.payload->>'from', NEW.payload->>'remoteJid', '');
   v_instance  := COALESCE(NEW.payload->>'instance_name', '');
@@ -85,6 +86,7 @@ BEGIN
   END IF;
 
   v_is_email := NEW.source = 'email' OR (v_phone LIKE '%@%' AND v_phone NOT LIKE '%@s.whatsapp.net' AND v_phone NOT LIKE '%@g.us' AND v_phone NOT LIKE '%@broadcast%');
+  v_fila     := CASE WHEN v_is_email THEN 'email' ELSE 'geral' END;
 
   IF v_is_email THEN
     v_instance := COALESCE(v_instance, split_part(v_phone, '@', 2));
@@ -103,8 +105,8 @@ BEGIN
   v_kanban_status := NEW.payload->>'kanban_status';
   v_cliente_nome := COALESCE(NEW.payload->>'from_name', NEW.payload->>'pushName', NEW.payload->>'cliente_nome');
 
-  INSERT INTO crm_chat_conversations (document_key, telefone, whatsapp_instance, ultima_mensagem, ultima_mensagem_direcao, ultima_interacao_em, cliente_nome, kanban_status)
-  VALUES (v_phone, v_phone, v_instance, v_content, v_direction, NEW.created_at, v_cliente_nome, COALESCE(v_kanban_status, 'iniciou_conversa'))
+  INSERT INTO crm_chat_conversations (document_key, telefone, whatsapp_instance, fila, ultima_mensagem, ultima_mensagem_direcao, ultima_interacao_em, cliente_nome, kanban_status)
+  VALUES (v_phone, v_phone, v_instance, v_fila, v_content, v_direction, NEW.created_at, v_cliente_nome, COALESCE(v_kanban_status, 'iniciou_conversa'))
   ON CONFLICT (document_key, whatsapp_instance) DO UPDATE SET
     ultima_mensagem        = v_content,
     ultima_mensagem_direcao = v_direction,
