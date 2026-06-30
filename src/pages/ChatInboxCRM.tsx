@@ -31,7 +31,7 @@ import { logger } from '@/lib/logger'
 import { useAuth } from '@/contexts/AuthContext'
 import { applyOutgoingSignature, DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings } from '@/lib/crmChatSettings'
 
-type QueueType = 'atendimento' | 'renovacao' | 'email'
+type QueueType = 'atendimento' | 'renovacao' | 'email' | 'agendamento'
 type DirectionType = 'incoming' | 'outgoing'
 type SenderType = 'cliente' | 'ia' | 'humano'
 type RecState = 'idle' | 'recording' | 'preview'
@@ -1810,6 +1810,7 @@ export default function ChatInboxCRM() {
       atendimento: activeConversations.filter(item => item.fila === 'atendimento').length,
       renovacao: activeConversations.filter(item => item.fila === 'renovacao').length,
       email: activeConversations.filter(item => item.fila === 'email').length,
+      agendamento: activeConversations.filter(item => item.fila === 'agendamento').length,
       humano: activeConversations.filter(item => item.atendimento_humano || humanOverrideIds.includes(item.id)).length,
     }), [activeConversations, humanOverrideIds])
 
@@ -1823,6 +1824,7 @@ export default function ChatInboxCRM() {
     atendimento: queueFilter === 'atendimento' && humanFilter === 'todos',
     renovacao: queueFilter === 'renovacao' && humanFilter === 'todos',
     email: queueFilter === 'email' && humanFilter === 'todos',
+    agendamento: queueFilter === 'agendamento' && humanFilter === 'todos',
     humano: queueFilter === 'todas' && humanFilter === 'humano',
   }), [queueFilter, humanFilter])
 
@@ -1844,10 +1846,11 @@ export default function ChatInboxCRM() {
     }
   }, [visibleConversations, selectedId])
 
-  function applySummaryShortcut(target: 'all' | 'atendimento' | 'renovacao' | 'email' | 'humano') {
+  function applySummaryShortcut(target: 'all' | 'atendimento' | 'renovacao' | 'agendamento' | 'email' | 'humano') {
     const nextQueue: 'todas' | QueueType =
       target === 'atendimento' ? 'atendimento' :
       target === 'renovacao' ? 'renovacao' :
+      target === 'agendamento' ? 'agendamento' :
       target === 'email' ? 'email' :
       'todas'
 
@@ -1887,10 +1890,11 @@ export default function ChatInboxCRM() {
               </div>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-5 xl:self-stretch">
+            <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6 xl:self-stretch">
               <SummaryCard label="Visiveis" value={summary.total} active={activeShortcut.all} onClick={() => applySummaryShortcut('all')} />
               <SummaryCard label="Atendimento" value={summary.atendimento} active={activeShortcut.atendimento} onClick={() => applySummaryShortcut('atendimento')} />
               <SummaryCard label="Renovacao" value={summary.renovacao} active={activeShortcut.renovacao} onClick={() => applySummaryShortcut('renovacao')} />
+              <SummaryCard label="Agendamento" value={summary.agendamento} active={activeShortcut.agendamento} onClick={() => applySummaryShortcut('agendamento')} />
               <SummaryCard label="Email" value={summary.email} active={activeShortcut.email} onClick={() => applySummaryShortcut('email')} />
               <SummaryCard label="Humano" value={summary.humano} active={activeShortcut.humano} onClick={() => applySummaryShortcut('humano')} />
             </div>
@@ -1923,6 +1927,7 @@ export default function ChatInboxCRM() {
               <option value="todas">Todas as filas</option>
               <option value="atendimento">Atendimento</option>
               <option value="renovacao">Renovacao</option>
+              <option value="agendamento">Agendamento</option>
               <option value="email">Email</option>
             </select>
 
