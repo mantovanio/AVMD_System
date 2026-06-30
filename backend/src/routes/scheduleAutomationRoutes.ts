@@ -211,6 +211,7 @@ function extractFields(body: ScheduleEmailWebhookBody, source: string) {
 }
 
 function mergeParsed(body: ScheduleEmailWebhookBody, extracted: ExtractedScheduleFields) {
+  const parsedDateTime = normalizeText(body.parsed?.data_agendada)
   return {
     event_type: normalizeText(body.parsed?.event_type) ?? extracted.event_type ?? null,
     customer_name: normalizeText(body.parsed?.customer_name) ?? extracted.customer_name ?? null,
@@ -219,7 +220,7 @@ function mergeParsed(body: ScheduleEmailWebhookBody, extracted: ExtractedSchedul
     customer_document: normalizeText(body.parsed?.customer_document) ?? extracted.customer_document ?? null,
     protocolo_numero: normalizeText(body.parsed?.protocolo_numero) ?? extracted.protocolo_numero ?? null,
     pedido_numero: normalizeText(body.parsed?.pedido_numero) ?? extracted.pedido_numero ?? null,
-    data_agendada: normalizeText(body.parsed?.data_agendada) ?? extracted.data_agendada ?? null,
+    data_agendada: parsePtBrDateTime(parsedDateTime) ?? parsedDateTime ?? extracted.data_agendada ?? null,
     observacoes: normalizeText(body.parsed?.observacoes) ?? extracted.observacoes ?? null,
     product_name: normalizeText(body.parsed?.product_name) ?? extracted.product_name ?? null,
     location_name: normalizeText(body.parsed?.location_name) ?? extracted.location_name ?? null,
