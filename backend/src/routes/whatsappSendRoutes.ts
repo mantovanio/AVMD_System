@@ -283,26 +283,16 @@ async function configureEvolutionWebhook(input: EvolutionControlInput) {
   }
 
   const endpoint = `${baseUrl}/webhook/set/${instanceName}`
+  const defaultEvents = ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE']
   const attempts: JsonRecord[] = [
     {
-      enabled: true,
-      url: webhookUrl,
-      webhookByEvents: false,
-      webhookBase64: true,
-      events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE'],
-    },
-    {
-      enabled: true,
       webhook: {
         url: webhookUrl,
+        enabled: true,
         byEvents: false,
         base64: true,
-        events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE'],
+        events: defaultEvents,
       },
-    },
-    {
-      url: webhookUrl,
-      enabled: true,
     },
   ]
 
