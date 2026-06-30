@@ -91,7 +91,7 @@ BEGIN
 
   -- Limpar telefone (só dígitos)
   v_phone := regexp_replace(v_phone, '[^0-9]', '', 'g');
-  IF length(v_phone) < 10 THEN
+  IF length(v_phone) < 10 OR length(v_phone) > 15 THEN
     RETURN NEW;
   END IF;
 

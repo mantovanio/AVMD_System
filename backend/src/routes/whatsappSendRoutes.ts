@@ -384,6 +384,12 @@ export async function handleWhatsappSendRoutes(
   if (method === 'POST' && url === '/api/webhooks/evolution') {
     const body = await readJson<JsonRecord>(req)
     const normalized = normalizeEvolutionEvent(body)
+
+    if (normalized.conversationId && /@(g\.us|broadcast|newsletter)$/i.test(normalized.conversationId)) {
+      writeJson(res, 200, { ok: true, skipped: true, reason: 'non-personal chat' }, corsOrigin)
+      return true
+    }
+
     const lead = await upsertLeadFromEvolutionEvent(normalized)
 
     const payload: JsonRecord = {
