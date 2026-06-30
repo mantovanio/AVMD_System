@@ -1798,38 +1798,38 @@ export default function ChatInboxCRM() {
 
     return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 text-slate-900">
-      <div className="shrink-0 border-b border-slate-200/80 bg-white/90 px-5 py-4 backdrop-blur">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+      <div className="shrink-0 border-b border-slate-200/80 bg-white px-5 py-3 backdrop-blur">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 <span className="h-2 w-2 rounded-full bg-emerald-500" />
                 Operacao de chat
               </div>
               <div>
-                <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-slate-950">Central de Atendimento</h1>
-                <p className="mt-1 text-sm text-slate-500">Chat, Kanban e filas em uma visao mais limpa e direta.</p>
+                <h1 className="text-[24px] font-semibold tracking-[-0.03em] text-slate-950">Central de Atendimento</h1>
+                <p className="mt-1 text-[13px] text-slate-500">Chat, Kanban e filas em uma visao mais limpa e direta.</p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => void loadConversations(true)} className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900">
+              <button type="button" onClick={() => void loadConversations(true)} className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900">
                 <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} /> Atualizar
               </button>
-              <div className="inline-flex rounded-full border border-slate-200 bg-slate-100 p-1">
-                <button type="button" onClick={closeKanban} className={`inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium transition ${!kanbanOpen ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}>
+              <div className="inline-flex rounded-full border border-slate-200 bg-slate-100/80 p-1">
+                <button type="button" onClick={closeKanban} className={`inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium transition ${!kanbanOpen ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-500 hover:text-sky-700'}`}>
                   <List size={15} /> Chat
                 </button>
-                <button type="button" onClick={openKanban} className={`inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium transition ${kanbanOpen ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}>
+                <button type="button" onClick={openKanban} className={`inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium transition ${kanbanOpen ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-500 hover:text-sky-700'}`}>
                   <Columns3 size={15} /> Kanban
                 </button>
               </div>
-              <button type="button" onClick={() => void openManualConversationModal()} className="inline-flex h-10 items-center gap-2 rounded-full bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50" disabled={manualConversationLoading}>
+              <button type="button" onClick={() => void openManualConversationModal()} className="inline-flex h-9 items-center gap-2 rounded-full bg-emerald-600 px-3.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50" disabled={manualConversationLoading}>
                 <MessageCircle size={15} /> Nova conversa
               </button>
             </div>
           </div>
 
-          <div className="grid gap-2 md:grid-cols-5">
+          <div className="grid gap-2 md:grid-cols-5 xl:max-w-[1120px]">
             <SummaryCard label="Visiveis" value={summary.total} active={activeShortcut.all} onClick={() => applySummaryShortcut('all')} />
             <SummaryCard label="Atendimento" value={summary.atendimento} active={activeShortcut.atendimento} onClick={() => applySummaryShortcut('atendimento')} />
             <SummaryCard label="Renovacao" value={summary.renovacao} active={activeShortcut.renovacao} onClick={() => applySummaryShortcut('renovacao')} />
@@ -1837,7 +1837,7 @@ export default function ChatInboxCRM() {
             <SummaryCard label="Humano" value={summary.humano} active={activeShortcut.humano} onClick={() => applySummaryShortcut('humano')} />
           </div>
 
-          <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_170px_170px_220px]">
+          <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_160px_160px_210px]">
             <label className="flex h-11 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4">
               <Search size={16} className="text-slate-400" />
               <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar contato ou mensagem" className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" />
@@ -1860,8 +1860,7 @@ export default function ChatInboxCRM() {
               type="button"
               onClick={() => setShowClosedConversations(prev => !prev)}
               className={`h-11 rounded-full border px-4 text-sm font-medium transition ${
-                showClosedConversations
-                  ? 'border-slate-900 bg-slate-900 text-white'
+                showClosedConversations                  ? 'border-sky-200 bg-sky-50 text-sky-700'
                   : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
               }`}
             >
@@ -2504,19 +2503,19 @@ function SummaryCard({
   active?: boolean
   onClick?: () => void
 }) {
-  const className = `rounded-[24px] border px-4 py-3 text-left transition-all ${
+  const className = `rounded-[20px] border px-3.5 py-3 text-left transition-all ${
     active
-      ? 'border-slate-900 bg-slate-900 text-white shadow-[0_12px_30px_rgba(15,23,42,0.14)]'
-      : 'border-slate-200 bg-white hover:border-slate-300 hover:-translate-y-0.5'
+      ? 'border-sky-200 bg-sky-50 text-sky-900 shadow-[0_10px_24px_rgba(14,116,144,0.08)]'
+      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
   }`
 
   if (onClick) {
     return (
       <button type="button" onClick={onClick} className={className}>
-        <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${active ? 'text-slate-300' : 'text-slate-400'}`}>{label}</p>
+        <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${active ? 'text-sky-700' : 'text-slate-400'}`}>{label}</p>
         <div className="mt-3 flex items-end justify-between gap-3">
-          <p className={`text-3xl font-semibold tracking-[-0.04em] ${active ? 'text-white' : 'text-slate-950'}`}>{value}</p>
-          <span className="text-[11px] text-slate-400">Filtrar</span>
+          <p className={`text-[28px] font-semibold leading-none tracking-[-0.03em] ${active ? 'text-sky-950' : 'text-slate-900'}`}>{value}</p>
+          <span className={`text-[10px] ${active ? 'text-sky-600' : 'text-slate-400'}`}>Filtrar</span>
         </div>
       </button>
     )
@@ -2524,8 +2523,8 @@ function SummaryCard({
 
   return (
     <div className={className}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
-      <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{value}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <p className="mt-2.5 text-[28px] font-semibold leading-none tracking-[-0.03em] text-slate-900">{value}</p>
     </div>
   )
 }
