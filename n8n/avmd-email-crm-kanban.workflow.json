@@ -1,0 +1,260 @@
+{
+  "name": "AVMD - Email to CRM Kanban",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {
+          "forceReconnect": 5
+        }
+      },
+      "id": "email-imap-trigger",
+      "name": "Email Trigger (IMAP)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [-1280, -480],
+      "executeOnce": false,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "imap": {
+          "id": "H9oQXH9GI4DQmMlM",
+          "name": "IMAP account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.subject }}",
+                    "rightValue": "Novo pedido",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    },
+                    "id": "switch-agendado"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Agendado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "switch-cancelado",
+                    "leftValue": "={{ $json.subject }}",
+                    "rightValue": "Cancelamento",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Cancelado"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-node",
+      "name": "Switch (Agendado / Cancelado)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [-1024, -480]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nif (items.length === 0) return [];\nconst item = items[0].json;\n\nconst stripHtml = (html) =>\n  String(html || '')\n    .replace(/<[^>]*>/g, ' ')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n\nconst emailBody = stripHtml(item.textHtml || item.textPlain || '');\nconst extract = (regex) => {\n  const match = emailBody.match(regex);\n  return match ? match[1].trim() : '';\n};\n\nconst cliente = extract(/Cliente:\\s*([\\s\\S]*?)(?=CPF\\/CNPJ:|$)/i);\nconst cpfCnpj = extract(/CPF\\/CNPJ:\\s*([\\d.-]+)/i);\nconst pedido = extract(/Pedido:\\s*(\\d+)/i);\nconst produto = extract(/Produto:\\s*([\\s\\S]*?)(?=Posto:|$)/i);\nconst posto = extract(/Posto:\\s*([\\s\\S]*?)(?=Data:|$)/i);\nconst data = extract(/Data:\\s*(\\d{2}\\/\\d{2}\\/\\d{4})/i);\nconst hora = extract(/Hora:\\s*(\\d{2}:\\d{2})/i);\nconst emailCli = extract(/Email:\\s*([^\\s]+@[^\\s]+\\.[^\\s]+)/i);\n\nlet telRaw = extract(/Telefone:\\s*([\\d()\\-\\s]+)/i);\nlet telefone = telRaw.replace(/\\D/g, '');\nif (telefone.length >= 10 && telefone.length <= 11) {\n  telefone = '55' + telefone;\n}\n\nreturn [{\n  json: {\n    nomeCliente: cliente,\n    primeiroNome: cliente ? cliente.split(' ')[0] : 'Cliente',\n    cpfCnpj,\n    telefone: String(telefone),\n    email: emailCli,\n    pedido,\n    produto,\n    posto,\n    data,\n    hora\n  }\n}];\n"
+      },
+      "id": "code-extract",
+      "name": "Extrair dados do email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-720, -656]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst corpoBruto = item.textHtml || item.textPlain || '';\nconst assunto = item.subject || '';\n\nconst htmlToText = (input) =>\n  String(input || '')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/gi, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n\nconst textoCorpo = htmlToText(corpoBruto);\nconst extract = (regex) => {\n  const match = textoCorpo.match(regex);\n  return match ? match[1].trim() : null;\n};\n\nconst pedido = (assunto.match(/pedido\\s*(\\d{5,})/i) || [])[1] || extract(/Pedido:\\s*(\\d{5,})/i);\nconst cliente = extract(/Cliente:\\s*([\\s\\S]*?)(?=\\s*(CPF\\/CNPJ:|Telefone:|Email:|Pedido:|Produto:|Data:|Hora:|$))/i);\nconst telefoneBruto = extract(/Telefone:\\s*([\\d()\\-\\s]+)/i);\nconst emailCliente = extract(/Email:\\s*([^\\s]+@[^\\s]+\\.[^\\s]+)/i);\nconst produto = extract(/Produto:\\s*([\\s\\S]*?)(?=\\s*(Telefone:|Email:|Data:|Hora:|$))/i);\nconst data = extract(/Data:\\s*(\\d{2}\\/\\d{2}\\/\\d{4})/i);\nconst hora = extract(/Hora:\\s*(\\d{2}:\\d{2})/i);\n\nconst telefoneNumeros = (telefoneBruto || '').replace(/\\D/g, '');\nconst telefone = telefoneNumeros ? (telefoneNumeros.startsWith('55') ? telefoneNumeros : '55' + telefoneNumeros) : null;\n\nif (!pedido) {\n  throw new Error('Nao foi possivel identificar o numero do pedido no e-mail.');\n}\n\nreturn {\n  cliente: cliente || 'Cliente',\n  primeiroNome: (cliente || 'Cliente').split(' ')[0],\n  telefone,\n  pedido,\n  email: emailCliente,\n  produto: produto || 'Certificado Digital',\n  data,\n  hora\n};\n"
+      },
+      "id": "code-extract-cancel",
+      "name": "Extrair dados do cancelamento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-720, -80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.certiid.mantovan.com.br/api/chat/crm/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"source\": \"email\",\n  \"event_type\": \"email_received\",\n  \"conversation_id\": \"{{ $json.email }}\",\n  \"contact\": \"{{ $json.email }}\",\n  \"payload\": {\n    \"from\": \"{{ $json.email }}\",\n    \"from_name\": \"{{ $json.nomeCliente }}\",\n    \"subject\": \"Agendamento - Pedido {{ $json.pedido }}\",\n    \"body\": \"Agendamento de validacao para {{ $json.nomeCliente }} - Pedido {{ $json.pedido }} - Produto {{ $json.produto }} - {{ $json.data }} {{ $json.hora }}\",\n    \"instance_name\": \"contato@certifast.com.br\",\n    \"kanban_status\": \"agendado\",\n    \"cliente_nome\": \"{{ $json.nomeCliente }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "http-crm-events-agendado",
+      "name": "Criar conversa no Kanban (Agendado)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-416, -656],
+      "alwaysOutputData": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.certiid.mantovan.com.br/api/chat/crm/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"source\": \"email\",\n  \"event_type\": \"email_received\",\n  \"conversation_id\": \"{{ $json.email }}\",\n  \"contact\": \"{{ $json.email }}\",\n  \"payload\": {\n    \"from\": \"{{ $json.email }}\",\n    \"from_name\": \"{{ $json.cliente }}\",\n    \"subject\": \"Cancelamento - Pedido {{ $json.pedido }}\",\n    \"body\": \"Cancelamento de agendamento - {{ $json.cliente }} - Pedido {{ $json.pedido }}\",\n    \"instance_name\": \"contato@certifast.com.br\",\n    \"kanban_status\": \"cancelou_agendamento\",\n    \"cliente_nome\": \"{{ $json.cliente }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "http-crm-events-cancelado",
+      "name": "Criar conversa no Kanban (Cancelado)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-416, -80],
+      "alwaysOutputData": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://auto.mantovan.com.br/webhook/avmd-clara-inbound",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"source\": \"email\",\n  \"event_type\": \"email_received\",\n  \"channel\": \"email\",\n  \"from\": \"{{ $json.email }}\",\n  \"from_name\": \"{{ $json.nomeCliente }}\",\n  \"subject\": \"Agendamento - Pedido {{ $json.pedido }}\",\n  \"body\": \"Agendamento de validacao para {{ $json.nomeCliente }} - Pedido {{ $json.pedido }} - {{ $json.data }} {{ $json.hora }}\",\n  \"customer_name\": \"{{ $json.nomeCliente }}\",\n  \"customer_phone\": \"{{ $json.telefone }}\",\n  \"context\": {\n    \"pedido\": \"{{ $json.pedido }}\",\n    \"produto\": \"{{ $json.produto }}\",\n    \"data\": \"{{ $json.data }}\",\n    \"hora\": \"{{ $json.hora }}\",\n    \"tipo_fluxo\": \"agendamento\"\n  }\n}",
+        "options": {}
+      },
+      "id": "http-clara-inbound",
+      "name": "Enviar para Clara",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-112, -656],
+      "alwaysOutputData": false,
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Email Trigger (IMAP)": {
+      "main": [
+        [
+          {
+            "node": "Switch (Agendado / Cancelado)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch (Agendado / Cancelado)": {
+      "main": [
+        [
+          {
+            "node": "Extrair dados do email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extrair dados do cancelamento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair dados do email": {
+      "main": [
+        [
+          {
+            "node": "Criar conversa no Kanban (Agendado)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair dados do cancelamento": {
+      "main": [
+        [
+          {
+            "node": "Criar conversa no Kanban (Cancelado)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criar conversa no Kanban (Agendado)": {
+      "main": [
+        [
+          {
+            "node": "Enviar para Clara",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "",
+    "timeSavedMode": "fixed"
+  },
+  "active": false,
+  "versionId": "1"
+}
