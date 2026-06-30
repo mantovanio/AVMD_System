@@ -468,7 +468,7 @@ export async function handleChatRoutes(
       `UPDATE crm_chat_assignments SET ativo = false WHERE conversation_id = $1 AND ativo = true`,
       [conversationId],
     )
-    const insertResult = await db.query(
+    const insertResult = await db.query<any>(
       `INSERT INTO crm_chat_assignments (conversation_id, agent_id, agente_nome, ativo) VALUES ($1, $2, $3, true) RETURNING id`,
       [conversationId, agentId, agentNome || 'Atendente'],
     )
@@ -517,7 +517,7 @@ export async function handleChatRoutes(
     const leadId = body.lead_id !== undefined && body.lead_id !== null ? String(body.lead_id) : null
     const payload = (body.payload && typeof body.payload === 'object') ? JSON.stringify(body.payload) : '{}'
     const externalId = body.external_id !== undefined && body.external_id !== null ? String(body.external_id) : null
-    const result = await db.query(
+    const result = await db.query<any>(
       `INSERT INTO communication_events (source, event_type, conversation_id, contact, lead_id, payload, external_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
       [source, eventType, conversationId, contact, leadId, payload, externalId],
     )
