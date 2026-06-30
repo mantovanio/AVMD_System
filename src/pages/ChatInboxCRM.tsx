@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bot,
+  ChevronDown,
   Clock3,
   Columns3,
   List,
@@ -2659,11 +2660,15 @@ function MessageRow({
   )
 }
 
-function PanelBlock({ title, children }: { title: string; children: React.ReactNode }) {
+function PanelBlock({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen)
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h4>
-      <div className="mt-3 space-y-3">{children}</div>
+      <button type="button" onClick={() => setOpen(prev => !prev)} className="flex w-full items-center justify-between gap-2 text-left">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h4>
+        <ChevronDown size={14} className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-0' : '-rotate-90'}`} />
+      </button>
+      {open && <div className="mt-3 space-y-3">{children}</div>}
     </div>
   )
 }

@@ -1880,11 +1880,7 @@ function AbaIntegracoes() {
   }
 
   const whatsappIntegracoes = integracoes.filter(i => isWhatsAppIntegration(i) || i.provider === 'evolution' || i.provider === 'chatwoot' || i.provider === 'chatwoot_disparo')
-  const whatsappPrincipal = getPrimaryWhatsAppIntegration(integracoes)
-  const integracoesVisiveis = [
-    ...(whatsappPrincipal ? [toUnifiedWhatsAppIntegration(whatsappPrincipal)] : []),
-    ...integracoes.filter(i => !providersOcultosDaAba.includes(i.provider) && !isWhatsAppIntegration(i) && i.provider !== 'evolution'),
-  ]
+  const integracoesVisiveis = integracoes.filter(i => !providersOcultosDaAba.includes(i.provider))
 
   function abrirNovaIntegracao() {
     const disponiveis = providersDisponiveis()
@@ -2498,7 +2494,7 @@ function AbaIntegracoes() {
                     <div className="mt-2 flex flex-wrap gap-2">
                       {isWhatsAppIntegration(int) && (
                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 dark:bg-gray-800 text-[11px] text-gray-600 dark:text-gray-300">
-                          {whatsappIntegracoes.length} número(s) / instância(s)
+                          {int.instance_name || getWhatsAppDisplayName(int)}
                         </span>
                       )}
                       {(int.base_url || int.webhook_url) && (
@@ -2506,11 +2502,6 @@ function AbaIntegracoes() {
                           {int.base_url || int.webhook_url}
                         </span>
                       )}
-                      {isWhatsAppIntegration(int) && whatsappIntegracoes.slice(0, 3).map(item => (
-                        <span key={item.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 dark:bg-gray-800 text-[11px] text-gray-600 dark:text-gray-300">
-                          {getWhatsAppDisplayName(item)}
-                        </span>
-                      ))}
                       {int.host && (
                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 dark:bg-gray-800 text-[11px] text-gray-600 dark:text-gray-300">
                           SMTP {int.host}{int.port ? `:${int.port}` : ''}
@@ -2539,7 +2530,7 @@ function AbaIntegracoes() {
                         {testando === int.provider ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                       </button>
                     )}
-                    <button type="button" onClick={() => isWhatsAppIntegration(int) ? openWhatsAppHub() : startEdit(int)} title="Configurar"
+                    <button type="button" onClick={() => startEdit(int)} title="Configurar"
                       className="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-200 flex items-center justify-center">
                       <Pencil size={14} />
                     </button>
