@@ -121,7 +121,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"source\": \"email\",\n  \"event_type\": \"email_received\",\n  \"conversation_id\": \"{{ $json.email }}\",\n  \"contact\": \"{{ $json.email }}\",\n  \"payload\": {\n    \"from\": \"{{ $json.email }}\",\n    \"from_name\": \"{{ $json.nomeCliente }}\",\n    \"subject\": \"Agendamento - Pedido {{ $json.pedido }}\",\n    \"body\": \"{{ $json.corpoEmail }}\",\n    \"instance_name\": \"contato@certifast.com.br\",\n    \"kanban_status\": \"agendado\",\n    \"cliente_nome\": \"{{ $json.nomeCliente }}\"\n  }\n}",
+        "jsonBody": "={\n  \"source\": \"email\",\n  \"event_type\": \"email_received\",\n  \"conversation_id\": \"{{ $json.email }}\",\n  \"contact\": \"{{ $json.email }}\",\n  \"payload\": {\n    \"from\": \"{{ $json.email }}\",\n    \"from_name\": \"{{ $json.nomeCliente }}\",\n    \"subject\": \"Agendamento - Pedido {{ $json.pedido }}\",\n    \    \"body\": \"{{ $json.corpoEmail }}\",\n    \"instance_name\": \"contato@certifast.com.br\",\n    \"kanban_status\": \"agendado\",\n    \"cliente_nome\": \"{{ $json.nomeCliente }}\",\n    \"telefone\": \"{{ $json.telefone }}\"\n  }\n}",
         "options": {}
       },
       "id": "http-crm-events-agendado",
@@ -147,7 +147,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"source\": \"email\",\n  \"event_type\": \"email_received\",\n  \"conversation_id\": \"{{ $json.email }}\",\n  \"contact\": \"{{ $json.email }}\",\n  \"payload\": {\n    \"from\": \"{{ $json.email }}\",\n    \"from_name\": \"{{ $json.cliente }}\",\n    \"subject\": \"Cancelamento - Pedido {{ $json.pedido }}\",\n    \"body\": \"{{ $json.corpoEmail }}\",\n    \"instance_name\": \"contato@certifast.com.br\",\n    \"kanban_status\": \"cancelou_agendamento\",\n    \"cliente_nome\": \"{{ $json.cliente }}\"\n  }\n}",
+        "jsonBody": "={\n  \"source\": \"email\",\n  \"event_type\": \"email_received\",\n  \"conversation_id\": \"{{ $json.email }}\",\n  \"contact\": \"{{ $json.email }}\",\n  \"payload\": {\n    \"from\": \"{{ $json.email }}\",\n    \"from_name\": \"{{ $json.cliente }}\",\n    \"subject\": \"Cancelamento - Pedido {{ $json.pedido }}\",\n    \"body\": \"{{ $json.corpoEmail }}\",\n    \"instance_name\": \"contato@certifast.com.br\",\n    \"kanban_status\": \"cancelou_agendamento\",\n    \"cliente_nome\": \"{{ $json.cliente }}\",\n    \"telefone\": \"{{ $json.telefone }}\"\n  }\n}",
         "options": {}
       },
       "id": "http-crm-events-cancelado",

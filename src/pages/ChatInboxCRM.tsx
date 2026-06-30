@@ -260,6 +260,11 @@ function queueLabel(fila: string) {
   return 'Atendimento'
 }
 
+function contactPhone(item: ConversationRow) {
+  if (item.fila === 'email') return item.email_principal || item.document_key
+  return item.telefone || item.document_key
+}
+
 function hasRegisteredCustomer(item: ConversationRow | null | undefined) {
   if (!item) return false
   return Boolean(item.crm_customer_id || item.nome_crm || item.email_principal || item.cpf || item.cnpj)
@@ -718,8 +723,8 @@ export default function ChatInboxCRM() {
     if (!selectedConversation) return
     setContactEdit({
       name: selectedConversation.nome_crm || selectedConversation.cliente_nome || '',
-      phone: selectedConversation.telefone || selectedConversation.document_key || '',
-      email: selectedConversation.email_principal || '',
+      phone: selectedConversation.fila === 'email' ? '' : (selectedConversation.telefone || selectedConversation.document_key || ''),
+      email: selectedConversation.email_principal || (selectedConversation.fila === 'email' ? selectedConversation.document_key : ''),
       status: selectedConversation.contato_status || '',
       observations: selectedConversation.observacoes || '',
     })
@@ -2456,8 +2461,8 @@ export default function ChatInboxCRM() {
 
                     <PanelBlock title="Resumo operacional">
                       <InfoRow icon={<User size={14} />} label="Cliente" value={selectedConversation.nome_crm || selectedConversation.cliente_nome || 'Nao informado'} />
-                      <InfoRow icon={<Phone size={14} />} label="Telefone" value={selectedConversation.telefone || selectedConversation.document_key} mono />
-                      <InfoRow icon={<Mail size={14} />} label="Email" value={selectedConversation.email_principal || 'Nao informado'} />
+                      <InfoRow icon={<Phone size={14} />} label="Telefone" value={contactPhone(selectedConversation)} mono />
+                      <InfoRow icon={<Mail size={14} />} label="Email" value={selectedConversation.email_principal || (selectedConversation.fila === 'email' ? selectedConversation.document_key : 'Nao informado')} />
                       <InfoRow icon={<Clock3 size={14} />} label="Status CRM" value={selectedConversation.contato_status || 'Nao definido'} />
                       <InfoRow icon={<UserCheck size={14} />} label="Agente atual" value={selectedConversation.agente_atual || selectedConversation.agente_nome || 'Nao atribuido'} />
                     </PanelBlock>
@@ -2809,7 +2814,7 @@ function ConversationCard({
         <div className="flex items-start justify-between gap-3">
           <button type="button" onClick={onClick} className="min-w-0 flex-1 text-left">
             <p className="truncate text-sm font-semibold text-slate-900">{item.cliente_nome || item.nome_crm || 'Sem nome'}</p>
-            <p className="mt-1 truncate text-xs text-slate-500">{item.telefone || item.document_key}</p>
+            <p className="mt-1 truncate text-xs text-slate-500">{contactPhone(item)}</p>
           </button>
           <div className="flex shrink-0 items-center gap-1.5">
             {!hasCrmCustomer && onSaveContact && (
@@ -2924,7 +2929,7 @@ function ConversationMiniCard({
               {human ? <UserRound size={14} /> : <Bot size={14} />}
             </div>
           </div>
-          <p className={`mt-1 truncate text-xs ${selected ? 'text-slate-300' : 'text-slate-500'}`}>{item.telefone || item.document_key}</p>
+          <p className={`mt-1 truncate text-xs ${selected ? 'text-slate-300' : 'text-slate-500'}`}>{contactPhone(item)}</p>
           {urgency && <div className="mt-2"><Badge text={urgency.label} tone={urgency.tone} /></div>}
           <p className={`mt-2 line-clamp-2 text-xs ${selected ? 'text-slate-100' : 'text-slate-600'}`}>{item.ultima_mensagem || 'Sem mensagem'}</p>
         </button>
@@ -2964,7 +2969,7 @@ function MessageRow({
         ? 'IA Clara'
         : message.sender_name || fallbackHumanName || 'Humano'
     const detailLabel = message.sender_type === 'cliente'
-      ? conversation?.telefone || conversation?.document_key || 'Canal de entrada'
+      ? conversation ? contactPhone(conversation) : 'Canal de entrada'
       : message.sender_type === 'ia'
         ? conversation?.whatsapp_instance || 'Automacao'
         : message.sender_name || fallbackHumanName || conversation?.agente_atual || 'Humano'

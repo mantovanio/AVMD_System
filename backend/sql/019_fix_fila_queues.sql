@@ -21,6 +21,7 @@ DECLARE
   v_fila        TEXT;
   v_subject     TEXT;
   v_canal       TEXT;
+  v_telefone    TEXT;
 BEGIN
   v_phone     := COALESCE(NEW.payload->>'from', NEW.payload->>'remoteJid', '');
   v_instance  := COALESCE(NEW.payload->>'instance_name', NEW.payload->>'instanceName', '');
@@ -49,6 +50,8 @@ BEGIN
     AND v_phone NOT LIKE '%@lid'
     AND v_phone NOT LIKE '%@hosted.lid'
   );
+  v_telefone := CASE WHEN v_is_email THEN NULLIF(NEW.payload->>'telefone', '') ELSE v_phone END;
+
   v_fila     := CASE
     WHEN v_is_email AND v_kanban_status IN ('agendado', 'cancelou_agendamento') THEN 'agendamento'
     WHEN v_is_email THEN 'email'
@@ -86,7 +89,7 @@ BEGIN
   );
 
   INSERT INTO crm_chat_conversations (document_key, telefone, whatsapp_instance, fila, ultima_mensagem, ultima_mensagem_direcao, ultima_interacao_em, cliente_nome, kanban_status)
-  VALUES (v_phone, v_phone, v_instance, v_fila, v_content, v_direction, NEW.created_at, v_cliente_nome, COALESCE(v_kanban_status, 'iniciou_conversa'))
+  VALUES (v_phone, v_telefone, v_instance, v_fila, v_content, v_direction, NEW.created_at, v_cliente_nome, COALESCE(v_kanban_status, 'iniciou_conversa'))
   ON CONFLICT (document_key, whatsapp_instance) DO UPDATE SET
     ultima_mensagem        = v_content,
     ultima_mensagem_direcao = v_direction,
