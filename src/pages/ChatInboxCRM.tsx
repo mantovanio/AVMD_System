@@ -2024,8 +2024,12 @@ export default function ChatInboxCRM() {
                   <div className="shrink-0 border-b border-slate-200 px-4 py-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <h3 className="text-lg font-semibold">{selectedConversation.cliente_nome || selectedConversation.nome_crm || 'Sem nome identificado'}</h3>
-                        <p className="mt-1 text-sm text-slate-500">{selectedConversation.telefone || selectedConversation.document_key}</p>
+                        <h3 className="text-lg font-semibold">
+                          {selectedConversation.cliente_nome || selectedConversation.nome_crm || (selectedConversation.fila === 'email' ? selectedConversation.email_principal || selectedConversation.document_key : null) || 'Sem nome identificado'}
+                        </h3>
+                        <p className="mt-1 text-sm text-slate-500">
+                          {selectedConversation.fila === 'email' ? (selectedConversation.email_principal || selectedConversation.document_key) : (selectedConversation.telefone || selectedConversation.document_key)}
+                        </p>
                       </div>
                       <div className="flex flex-wrap gap-2 text-xs">
                         <Badge text={queueLabel(selectedConversation.fila)} tone={selectedConversation.fila === 'renovacao' ? 'violet' : selectedConversation.fila === 'email' ? 'sky' : 'blue'} />
