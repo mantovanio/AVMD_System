@@ -1,4 +1,5 @@
 -- Fix: extrair nome do remetente de e-mails no trigger de sync
+-- Usa o assunto do e-mail como fallback para identificacao da conversa
 CREATE OR REPLACE FUNCTION fn_sync_communication_event()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -14,6 +15,7 @@ DECLARE
   v_cliente_nome TEXT;
   v_is_email    BOOLEAN;
   v_fila        TEXT;
+  v_subject     TEXT;
 BEGIN
   v_phone     := COALESCE(NEW.payload->>'from', NEW.payload->>'remoteJid', '');
   v_instance  := COALESCE(NEW.payload->>'instance_name', '');
@@ -28,6 +30,7 @@ BEGIN
 
   v_is_email := NEW.source = 'email' OR (v_phone LIKE '%@%' AND v_phone NOT LIKE '%@s.whatsapp.net' AND v_phone NOT LIKE '%@g.us' AND v_phone NOT LIKE '%@broadcast%');
   v_fila     := CASE WHEN v_is_email THEN 'email' ELSE 'geral' END;
+  v_subject  := NEW.payload->>'subject';
 
   IF v_is_email THEN
     v_instance := COALESCE(v_instance, split_part(v_phone, '@', 2));
@@ -42,19 +45,20 @@ BEGIN
   v_content   := COALESCE(NEW.payload->>'content', NEW.payload->>'body', '');
   v_direction   := CASE WHEN v_is_from_me THEN 'outgoing' ELSE 'incoming' END;
   v_sender_type := CASE WHEN v_is_from_me THEN 'agent' ELSE 'contact' END;
-  -- Para e-mails, extrair nome do remetente do payload (from_name ou sender_name)
   v_sender_name := COALESCE(
     NEW.payload->>'sender_name',
     NEW.payload->>'from_name',
     NEW.payload->>'pushName',
-    CASE WHEN v_is_email THEN split_part(v_phone, '@', 1) ELSE NULL END
+    CASE WHEN v_is_email THEN v_subject ELSE NULL END
   );
   v_kanban_status := NEW.payload->>'kanban_status';
+  -- Para e-mails, usa o assunto como identificacao quando nao ha nome do remetente
   v_cliente_nome := COALESCE(
     NEW.payload->>'from_name',
     NEW.payload->>'cliente_nome',
     NEW.payload->>'sender_name',
     NEW.payload->>'pushName',
+    CASE WHEN v_is_email THEN v_subject ELSE NULL END,
     CASE WHEN v_is_email THEN split_part(v_phone, '@', 1) ELSE NULL END
   );
 
@@ -76,3 +80,20 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Atualizar conversas de email existentes que estao com cliente_nome = null ou com raw ID
+UPDATE crm_chat_conversations c
+SET cliente_nome = e.subject
+FROM (
+  SELECT DISTINCT ON (conversation_id)
+    conversation_id,
+    payload->>'subject' AS subject
+  FROM communication_events
+  WHERE source = 'email'
+    AND payload->>'subject' IS NOT NULL
+    AND payload->>'subject' <> ''
+  ORDER BY conversation_id, created_at DESC
+) e
+WHERE c.id::text = e.conversation_id
+  AND c.fila = 'email'
+  AND (c.cliente_nome IS NULL OR c.cliente_nome ~ '^\d+(@|:)');
