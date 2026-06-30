@@ -1959,7 +1959,9 @@ export default function ChatInboxCRM() {
                       onClick={() => setSelectedId(item.id)}
                       human={item.atendimento_humano || humanOverrideIds.includes(item.id)}
                       unreadCount={unreadCounts[item.id] ?? 0}
-                      previewMessages={conversationPreviews[item.id] ?? []}
+                      onArchive={() => void updateConversationStatusById(item.id, 'arquivado')}
+                      onDelete={() => void deleteConversation(item.id)}
+                      onSaveContact={() => void saveContactFromConversation(item.id)}
                     />
                   ))}
                   {filteredConversations.length === 0 && <EmptyState text="Nenhuma conversa encontrada com os filtros atuais." />}
@@ -1982,7 +1984,8 @@ export default function ChatInboxCRM() {
                             human={item.atendimento_humano || humanOverrideIds.includes(item.id)}
                             unreadCount={unreadCounts[item.id] ?? 0}
                             closed
-                            previewMessages={conversationPreviews[item.id] ?? []}
+                            onDelete={() => void deleteConversation(item.id)}
+                            onSaveContact={() => void saveContactFromConversation(item.id)}
                           />
                         ))}
                         {filteredClosedConversations.length === 0 && <EmptyState text="Nenhuma conversa encerrada com os filtros atuais." compact />}
@@ -2642,7 +2645,9 @@ function ConversationCard({
   human,
   unreadCount = 0,
   closed = false,
-  previewMessages = [],
+  onArchive,
+  onDelete,
+  onSaveContact,
 }: {
   item: ConversationRow
   selected: boolean
@@ -2650,9 +2655,12 @@ function ConversationCard({
   human: boolean
   unreadCount?: number
   closed?: boolean
-  previewMessages?: CrmMessage[]
+  onArchive?: () => void
+  onDelete?: () => void
+  onSaveContact?: () => void
 }) {
     const urgency = getUrgencyMeta(item, human)
+    const hasCrmCustomer = hasRegisteredCustomer(item)
     const selectedClass = selected
       ? 'border-sky-200 bg-sky-50 shadow-[0_10px_24px_rgba(14,116,144,0.08)]'
       : closed
@@ -2660,12 +2668,55 @@ function ConversationCard({
         : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
 
     return (
-      <button type="button" onClick={onClick} className={`w-full rounded-2xl border px-4 py-3 text-left transition ${selectedClass}`}>
+      <div className={`w-full rounded-2xl border px-4 py-3 text-left transition ${selectedClass}`}>
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+          <button type="button" onClick={onClick} className="min-w-0 flex-1 text-left">
             <p className="truncate text-sm font-semibold text-slate-900">{item.cliente_nome || item.nome_crm || 'Sem nome'}</p>
             <p className="mt-1 truncate text-xs text-slate-500">{item.telefone || item.document_key}</p>
+          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {!hasCrmCustomer && onSaveContact && (
+              <button
+                type="button"
+                onClick={event => {
+                  event.stopPropagation()
+                  onSaveContact()
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-600"
+                title="Salvar contato"
+              >
+                <UserPlus size={14} />
+              </button>
+            )}
+            {!closed && onArchive && (
+              <button
+                type="button"
+                onClick={event => {
+                  event.stopPropagation()
+                  onArchive()
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-600"
+                title="Arquivar conversa"
+              >
+                <Save size={14} />
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                onClick={event => {
+                  event.stopPropagation()
+                  onDelete()
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                title="Apagar conversa"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
           </div>
+        </div>
+        <button type="button" onClick={onClick} className="mt-2 w-full text-left">
           <div className="flex shrink-0 items-center gap-2">
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${selected ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>{queueLabel(item.fila)}</span>
             {unreadCount > 0 && (
@@ -2673,31 +2724,31 @@ function ConversationCard({
             )}
             <span className={selected ? 'text-sky-600' : 'text-slate-400'}>{human ? <UserRound size={14} /> : <Bot size={14} />}</span>
           </div>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {urgency && <Badge text={urgency.label} tone={urgency.tone} />}
-          {!hasRegisteredCustomer(item) && <Badge text="Contato sem cadastro" tone="amber" />}
-          {closed && <Badge text="Encerrada" tone="slate" />}
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[11px] text-slate-500">
-          <div>
-            <p className="uppercase tracking-wide text-slate-400">Etapa</p>
-            <p className="mt-0.5 font-medium text-slate-700">{statusLabel(normalizeKanbanStatus(item.kanban_status))}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {urgency && <Badge text={urgency.label} tone={urgency.tone} />}
+            {!hasCrmCustomer && <Badge text="Contato sem cadastro" tone="amber" />}
+            {closed && <Badge text="Encerrada" tone="slate" />}
           </div>
-          <div>
-            <p className="uppercase tracking-wide text-slate-400">Ultima interacao</p>
-            <p className="mt-0.5 font-medium text-slate-700">{formatRelative(item.ultima_interacao_em)}</p>
+          <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[11px] text-slate-500">
+            <div>
+              <p className="uppercase tracking-wide text-slate-400">Etapa</p>
+              <p className="mt-0.5 font-medium text-slate-700">{statusLabel(normalizeKanbanStatus(item.kanban_status))}</p>
+            </div>
+            <div>
+              <p className="uppercase tracking-wide text-slate-400">Ultima interacao</p>
+              <p className="mt-0.5 font-medium text-slate-700">{formatRelative(item.ultima_interacao_em)}</p>
+            </div>
+            <div>
+              <p className="uppercase tracking-wide text-slate-400">Modo</p>
+              <p className="mt-0.5 font-medium text-slate-700">{human ? 'Humano' : 'IA'}</p>
+            </div>
+            <div>
+              <p className="uppercase tracking-wide text-slate-400">Origem</p>
+              <p className="mt-0.5 font-medium text-slate-700">{item.document_key ? 'CRM' : 'WhatsApp'}</p>
+            </div>
           </div>
-          <div>
-            <p className="uppercase tracking-wide text-slate-400">Modo</p>
-            <p className="mt-0.5 font-medium text-slate-700">{human ? 'Humano' : 'IA'}</p>
-          </div>
-          <div>
-            <p className="uppercase tracking-wide text-slate-400">Origem</p>
-            <p className="mt-0.5 font-medium text-slate-700">{item.document_key ? 'CRM' : 'WhatsApp'}</p>
-          </div>
-        </div>
-      </button>
+        </button>
+      </div>
     )
 }
 
