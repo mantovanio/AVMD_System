@@ -604,6 +604,21 @@ export default function ChatInboxCRM() {
     return integrationChannelLabel(selectedReplyIntegration)
   }, [selectedReplyIntegration])
 
+  const selectedReplyQueue = useMemo(() => {
+    const selectedOption = replyChannelOptions.find(item => item.id === selectedReplyIntegrationId)
+    return selectedOption?.queue ?? selectedConversation?.fila ?? null
+  }, [replyChannelOptions, selectedConversation?.fila, selectedReplyIntegrationId])
+
+  const replyQueueOptions = useMemo(
+    () => Array.from(new Set(replyChannelOptions.map(item => item.queue))),
+    [replyChannelOptions],
+  )
+
+  const visibleReplyChannelOptions = useMemo(() => {
+    if (!selectedReplyQueue) return replyChannelOptions
+    return replyChannelOptions.filter(item => item.queue === selectedReplyQueue)
+  }, [replyChannelOptions, selectedReplyQueue])
+
   useEffect(() => {
     void bootstrap()
   }, [])
