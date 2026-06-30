@@ -1032,34 +1032,19 @@ export default function ChatInboxCRM() {
   }
 
   async function activateConversationOwner(conversationId: string, agent: { id: string; nome: string }) {
-    const { error: deactivateError } = await supabase
-      .from('crm_chat_assignments')
-      .update({ ativo: false })
-      .eq('conversation_id', conversationId)
-      .eq('ativo', true)
+    const response = await fetch(getApiUrl('/chat/crm/assignments'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversation_id: conversationId, agent_id: agent.id, agente_nome: agent.nome }),
+    })
+    const data = await response.json()
+    if (!data.ok) throw new Error(data.error || 'Falha ao atribuir atendimento')
 
-    if (deactivateError) throw new Error(`Nao foi possivel limpar a atribuicao anterior: ${deactivateError.message}`)
-
-    const { error: insertError } = await supabase
-      .from('crm_chat_assignments')
-      .insert([{
-        conversation_id: conversationId,
-        agent_id: agent.id,
-        agente_nome: agent.nome,
-        ativo: true,
-      }])
-
-    if (insertError) throw new Error(`Nao foi possivel atribuir o atendimento: ${insertError.message}`)
-
-    const { error: updateError } = await supabase
-      .from('crm_chat_conversations')
-      .update({
-        atendimento_humano: true,
-        agente_nome: agent.nome,
-      })
-      .eq('id', conversationId)
-
-    if (updateError) throw new Error(`A atribuicao foi criada, mas a conversa nao foi atualizada: ${updateError.message}`)
+    await fetch(getApiUrl(`/chat/crm/conversations/${conversationId}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ atendimento_humano: true, agente_nome: agent.nome }),
+    })
 
     markConversationAsHuman(conversationId)
   }
@@ -1070,13 +1055,15 @@ export default function ChatInboxCRM() {
     setActionError(null)
     const shouldExitView = isClosedConversationStatus(status)
     const currentConversationId = selectedConversation.id
-    const { error: queryError } = await supabase
-      .from('crm_chat_conversations')
-      .update({ kanban_status: status })
-      .eq('id', currentConversationId)
+    const response = await fetch(getApiUrl(`/chat/crm/conversations/${currentConversationId}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kanban_status: status }),
+    })
+    const data = await response.json()
 
-    if (queryError) {
-      setActionError(`Nao foi possivel atualizar a etapa: ${queryError.message}`)
+    if (!data.ok) {
+      setActionError(`Nao foi possivel atualizar a etapa: ${data.error || 'Erro desconhecido'}`)
     } else {
       await loadConversations(false)
       if (shouldExitView) {
@@ -1089,13 +1076,15 @@ export default function ChatInboxCRM() {
 
   async function updateConversationStatusById(conversationId: string, status: string) {
     const shouldExitView = isClosedConversationStatus(status) && conversationId === selectedId
-    const { error: queryError } = await supabase
-      .from('crm_chat_conversations')
-      .update({ kanban_status: status })
-      .eq('id', conversationId)
+    const response = await fetch(getApiUrl(`/chat/crm/conversations/${conversationId}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kanban_status: status }),
+    })
+    const data = await response.json()
 
-    if (queryError) {
-      setActionError(`Nao foi possivel mover o card no Kanban: ${queryError.message}`)
+    if (!data.ok) {
+      setActionError(`Nao foi possivel mover o card no Kanban: ${data.error || 'Erro desconhecido'}`)
       return
     }
 
@@ -1111,28 +1100,31 @@ export default function ChatInboxCRM() {
     setActionLoading(true)
     setActionError(null)
 
-    // atualiza estado local imediatamente
     if (nextValue) {
       markConversationAsHuman(selectedConversation.id)
     } else {
       unmarkConversationAsHuman(selectedConversation.id)
     }
 
-    // tenta sincronizar com o banco (best-effort)
     try {
       const payload = nextValue
         ? { atendimento_humano: true, agente_nome: selectedConversation.agente_atual ?? profile?.nome ?? selectedConversation.agente_nome }
         : { atendimento_humano: false, agente_nome: null }
 
-      const { error: queryError } = await supabase
-        .from('crm_chat_conversations')
-        .update(payload)
-        .eq('id', selectedConversation.id)
+      await fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
 
-      if (queryError) {
-        console.warn('toggleHumanMode: falha ao sincronizar com banco', queryError.message)
-      } else if (!nextValue) {
-        try { await supabase.from('crm_chat_assignments').update({ ativo: false }).eq('conversation_id', selectedConversation.id).eq('ativo', true) } catch {}
+      if (!nextValue) {
+        try {
+          await fetch(getApiUrl('/chat/crm/assignments'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conversation_id: selectedConversation.id, deactivate_only: true }),
+          })
+        } catch {}
       }
     } catch (err) {
       console.warn('toggleHumanMode: erro na sincronizacao', err)
@@ -1295,31 +1287,26 @@ export default function ChatInboxCRM() {
 
     try {
       if (customerId) {
-        const { error } = await supabase
-          .from('crm_customers')
-          .update({
+        const r = await fetch(getApiUrl(`/chat/crm/customers/${customerId}`), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
             nome: resolvedName,
             telefone_principal: resolvedPhone,
             email_principal: resolvedEmail,
             contato_status: resolvedStatus,
             observacoes: resolvedObs,
-          })
-          .eq('id', customerId)
-
-        if (error) throw new Error(error.message)
+          }),
+        })
+        const d = await r.json()
+        if (!d.ok) throw new Error(d.error || 'Falha ao atualizar cliente')
       }
 
-      const conversationUpdate: Record<string, string | null> = {
-        cliente_nome: resolvedName,
-        telefone: resolvedPhone,
-      }
-
-      const { error: convError } = await supabase
-        .from('crm_chat_conversations')
-        .update(conversationUpdate)
-        .eq('id', selectedConversation.id)
-
-      if (convError) throw new Error(convError.message)
+      await fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cliente_nome: resolvedName, telefone: resolvedPhone }),
+      })
 
       const historyText = [
         'Dados do contato atualizados no painel',
@@ -1330,22 +1317,26 @@ export default function ChatInboxCRM() {
         resolvedObs ? `Observacoes: ${resolvedObs}` : null,
       ].filter(Boolean).join(' | ')
 
-      await supabase.from('communication_events').insert([{
-        source: 'crm',
-        event_type: 'contact_updated',
-        conversation_id: selectedConversation.id,
-        contact: normalizeContactPhone(resolvedPhone ?? selectedConversation.telefone ?? selectedConversation.document_key),
-        payload: {
+      await fetch(getApiUrl('/chat/crm/events'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'crm',
+          event_type: 'contact_updated',
           conversation_id: selectedConversation.id,
-          customer_id: customerId,
-          nome: resolvedName,
-          telefone: resolvedPhone,
-          email: resolvedEmail,
-          status: resolvedStatus,
-          observacoes: resolvedObs,
-          historico: historyText,
-        },
-      }])
+          contact: normalizeContactPhone(resolvedPhone ?? selectedConversation.telefone ?? selectedConversation.document_key),
+          payload: {
+            conversation_id: selectedConversation.id,
+            customer_id: customerId,
+            nome: resolvedName,
+            telefone: resolvedPhone,
+            email: resolvedEmail,
+            status: resolvedStatus,
+            observacoes: resolvedObs,
+            historico: historyText,
+          },
+        }),
+      })
 
       await loadConversations(false)
       setContactEdit(prev => ({

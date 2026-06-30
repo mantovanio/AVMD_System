@@ -418,8 +418,110 @@ export async function handleChatRoutes(
     return true
   }
 
-  if (url.startsWith('/api/chat/crm-assignments') || url.startsWith('/api/chat/communication-events')) {
+  if (method === 'PATCH' && url.startsWith('/api/chat/crm/conversations/')) {
+    const id = url.replace('/api/chat/crm/conversations/', '')
+    if (!id) {
+      writeJson(res, 400, { ok: false, error: 'ID da conversa obrigatorio.' }, corsOrigin)
+      return true
+    }
+    const body = await readJson<JsonRecord>(req)
+    const allowedFields = ['kanban_status', 'atendimento_humano', 'agente_nome', 'cliente_nome', 'telefone']
+    const updates: string[] = []
+    const values: unknown[] = []
+    let idx = 1
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        updates.push(`${field} = $${idx++}`)
+        values.push(body[field])
+      }
+    }
+    if (!updates.length) {
+      writeJson(res, 400, { ok: false, error: 'Nenhum campo valido para atualizar.' }, corsOrigin)
+      return true
+    }
+    values.push(id)
+    const sql = `UPDATE crm_chat_conversations SET ${updates.join(', ')} WHERE id = $${idx}`
+    await db.query(sql, values)
     writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/chat/crm/assignments') {
+    const body = await readJson<{ conversation_id?: string; agent_id?: string; agente_nome?: string; deactivate_only?: boolean }>(req)
+    const conversationId = asString(body.conversation_id)
+    if (!conversationId) {
+      writeJson(res, 400, { ok: false, error: 'conversation_id obrigatorio.' }, corsOrigin)
+      return true
+    }
+    if (body.deactivate_only) {
+      await db.query(`UPDATE crm_chat_assignments SET ativo = false WHERE conversation_id = $1 AND ativo = true`, [conversationId])
+      writeJson(res, 200, { ok: true }, corsOrigin)
+      return true
+    }
+    const agentId = asString(body.agent_id)
+    if (!agentId) {
+      writeJson(res, 400, { ok: false, error: 'agent_id obrigatorio.' }, corsOrigin)
+      return true
+    }
+    const agentNome = asString(body.agente_nome)
+    await db.query(
+      `UPDATE crm_chat_assignments SET ativo = false WHERE conversation_id = $1 AND ativo = true`,
+      [conversationId],
+    )
+    const insertResult = await db.query(
+      `INSERT INTO crm_chat_assignments (conversation_id, agent_id, agente_nome, ativo) VALUES ($1, $2, $3, true) RETURNING id`,
+      [conversationId, agentId, agentNome || 'Atendente'],
+    )
+    const assignmentId = insertResult.rows[0]?.id ?? null
+    writeJson(res, 200, { ok: true, assignment_id: assignmentId }, corsOrigin)
+    return true
+  }
+
+  if (method === 'PATCH' && url.startsWith('/api/chat/crm/customers/')) {
+    const id = url.replace('/api/chat/crm/customers/', '')
+    if (!id) {
+      writeJson(res, 400, { ok: false, error: 'ID do cliente obrigatorio.' }, corsOrigin)
+      return true
+    }
+    const body = await readJson<JsonRecord>(req)
+    const allowedFields = ['nome', 'telefone_principal', 'email_principal', 'contato_status', 'observacoes']
+    const updates: string[] = []
+    const values: unknown[] = []
+    let idx = 1
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        updates.push(`${field} = $${idx++}`)
+        values.push(body[field])
+      }
+    }
+    if (!updates.length) {
+      writeJson(res, 400, { ok: false, error: 'Nenhum campo valido para atualizar.' }, corsOrigin)
+      return true
+    }
+    values.push(id)
+    await db.query(`UPDATE crm_customers SET ${updates.join(', ')} WHERE id = $${idx}`, values)
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/chat/crm/events') {
+    const body = await readJson<JsonRecord>(req)
+    const source = asString(body.source) || 'crm'
+    const eventType = asString(body.event_type)
+    if (!eventType) {
+      writeJson(res, 400, { ok: false, error: 'event_type obrigatorio.' }, corsOrigin)
+      return true
+    }
+    const conversationId = body.conversation_id !== undefined && body.conversation_id !== null ? String(body.conversation_id) : null
+    const contact = body.contact !== undefined && body.contact !== null ? String(body.contact) : null
+    const leadId = body.lead_id !== undefined && body.lead_id !== null ? String(body.lead_id) : null
+    const payload = (body.payload && typeof body.payload === 'object') ? JSON.stringify(body.payload) : '{}'
+    const externalId = body.external_id !== undefined && body.external_id !== null ? String(body.external_id) : null
+    const result = await db.query(
+      `INSERT INTO communication_events (source, event_type, conversation_id, contact, lead_id, payload, external_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+      [source, eventType, conversationId, contact, leadId, payload, externalId],
+    )
+    writeJson(res, 200, { ok: true, event_id: result.rows[0]?.id ?? null }, corsOrigin)
     return true
   }
 
