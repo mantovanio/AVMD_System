@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, MapPin, Pencil, X, Check, KeyRound, UserPlus, Eye, EyeOff, MessageCircle, Mail, Webhook, Save, Send, Trash2, Plus, ToggleLeft, ToggleRight, CreditCard, FileText, Upload, ShieldCheck, ChevronDown, ChevronRight, Users, Link, Network, Percent } from 'lucide-react'
+import { Loader2, MapPin, Pencil, X, Check, KeyRound, UserPlus, Eye, EyeOff, MessageCircle, Mail, Webhook, Save, Send, Trash2, Plus, ToggleLeft, ToggleRight, CreditCard, FileText, Upload, ShieldCheck, ChevronDown, ChevronRight, Users, Link, Network, Percent, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase, getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { getEvolutionConnectionTestUrl, getEvolutionWebhookConfigureUrl, getEvolutionWebhookUrl } from '@/lib/evolutionApi'
@@ -233,21 +233,31 @@ function AbaGeral() {
   const [chatSettingsSaving, setChatSettingsSaving] = useState(false)
   const [chatSettingsOk, setChatSettingsOk] = useState(false)
   const [chatSettingsError, setChatSettingsError] = useState<string | null>(null)
+  const [timeoutEnabled, setTimeoutEnabled] = useState(true)
+  const [timeoutMinutes, setTimeoutMinutes] = useState(10)
+  const [timeoutLoading, setTimeoutLoading] = useState(true)
+  const [timeoutSaving, setTimeoutSaving] = useState(false)
+  const [timeoutOk, setTimeoutOk] = useState(false)
+  const [timeoutError, setTimeoutError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setErro(null)
     setChatSettingsLoading(true)
     setChatSettingsError(null)
-    const [{ data, error }, chatSettings] = await Promise.all([
+    setTimeoutLoading(true)
+    setTimeoutError(null)
+    const [{ data, error }, chatSettings, timeoutRes] = await Promise.all([
       fetchAgencyConfig(),
       loadCrmChatSettings(),
+      fetch(getApiUrl('/chat/crm/config')).then(r => r.json()).catch(() => null),
     ])
 
     if (error) {
       setErro(`Erro ao carregar configurações: ${error.message}. Execute sql/settings_users_permissions_migration.sql no Supabase.`)
       setLoading(false)
       setChatSettingsLoading(false)
+      setTimeoutLoading(false)
       return
     }
 
@@ -255,6 +265,11 @@ function AbaGeral() {
     setLoading(false)
     setChatSettingsSignOutgoing(chatSettings.data.sign_outgoing_messages)
     setChatSettingsLoading(false)
+    if (timeoutRes?.ok) {
+      setTimeoutEnabled(timeoutRes.enabled)
+      setTimeoutMinutes(timeoutRes.minutes)
+    }
+    setTimeoutLoading(false)
   }, [])
 
   useEffect(() => { void load() }, [load])
@@ -298,6 +313,26 @@ function AbaGeral() {
       return
     }
     setChatSettingsOk(true)
+  }
+
+  async function salvarTimeoutConfig() {
+    if (!isAdmin) return
+    setTimeoutSaving(true)
+    setTimeoutError(null)
+    setTimeoutOk(false)
+    try {
+      const res = await fetch(getApiUrl('/chat/crm/config'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: timeoutEnabled, minutes: timeoutMinutes }),
+      })
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.error ?? 'Erro ao salvar')
+      setTimeoutOk(true)
+    } catch (err) {
+      setTimeoutError(err instanceof Error ? err.message : 'Erro ao salvar')
+    }
+    setTimeoutSaving(false)
   }
 
   if (loading) {
@@ -446,6 +481,73 @@ function AbaGeral() {
           >
             {chatSettingsSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {chatSettingsSaving ? 'Salvando...' : 'Salvar preferência do chat'}
+          </button>
+
+          <hr className="border-gray-200 dark:border-gray-800" />
+
+          <div>
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+              <Clock size={16} /> Timeout de atendimento
+            </h4>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Quando um contato ficar sem resposta por mais de X minutos, a Clara tenta responder automaticamente.
+            </p>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Timeout automático</p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                {timeoutEnabled ? 'Ativado — Clara responde após inatividade' : 'Desativado — Clara não intervém'}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={!isAdmin || timeoutLoading}
+              onClick={() => {
+                setTimeoutOk(false)
+                setTimeoutError(null)
+                setTimeoutEnabled(prev => !prev)
+              }}
+              className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium disabled:opacity-60"
+            >
+              {timeoutEnabled ? <ToggleRight size={18} className="text-emerald-600" /> : <ToggleLeft size={18} className="text-slate-400" />}
+              {timeoutEnabled ? 'Ligado' : 'Desligado'}
+            </button>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">Minutos:</label>
+            <input
+              type="number"
+              min={1}
+              max={120}
+              value={timeoutMinutes}
+              onChange={e => {
+                setTimeoutOk(false)
+                setTimeoutError(null)
+                setTimeoutMinutes(Number(e.target.value) || 10)
+              }}
+              disabled={!isAdmin || timeoutLoading || !timeoutEnabled}
+              className="w-20 px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 disabled:opacity-60"
+            />
+          </div>
+          {timeoutError && (
+            <p className="text-xs text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+              {timeoutError}
+            </p>
+          )}
+          {timeoutOk && (
+            <p className="text-xs text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
+              Configuração de timeout salva.
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={salvarTimeoutConfig}
+            disabled={!isAdmin || timeoutSaving || timeoutLoading}
+            className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 disabled:opacity-60 transition-colors inline-flex items-center gap-2"
+          >
+            {timeoutSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {timeoutSaving ? 'Salvando...' : 'Salvar configuração de timeout'}
           </button>
         </div>
 

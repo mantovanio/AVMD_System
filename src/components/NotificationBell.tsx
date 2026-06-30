@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
-import { Bell } from 'lucide-react'
+import { Bell, BellOff, Volume2, VolumeX } from 'lucide-react'
 import type { SystemNotification } from '@/hooks/useNotifications'
 import type { Page } from '@/components/Sidebar'
 
@@ -14,6 +14,8 @@ const TYPE_ICON: Record<SystemNotification['type'], string> = {
   renovacao_vencendo:  '🔄',
 }
 
+const MUTE_KEY = 'notification_bell_muted'
+
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
   const min  = Math.floor(diff / 60_000)
@@ -24,8 +26,29 @@ function timeAgo(iso: string): string {
   return `${Math.floor(h / 24)}d atrás`
 }
 
+function playChime() {
+  try {
+    const ctx = new AudioContext()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(880, ctx.currentTime)
+    osc.frequency.setValueAtTime(1108.73, ctx.currentTime + 0.08)
+    gain.gain.setValueAtTime(0.08, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
+    osc.start(ctx.currentTime)
+    osc.stop(ctx.currentTime + 0.3)
+  } catch {
+    // Audio not available
+  }
+}
+
 export default function NotificationBell({ notifications, onNavigate }: Props) {
   const [open, setOpen] = useState(false)
+  const [muted, setMuted] = useState(() => localStorage.getItem(MUTE_KEY) === 'true')
+  const prevCountRef = useRef(notifications.length)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -36,6 +59,21 @@ export default function NotificationBell({ notifications, onNavigate }: Props) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
+  // Sound on new notification
+  useEffect(() => {
+    const prev = prevCountRef.current
+    prevCountRef.current = notifications.length
+    if (!muted && notifications.length > prev) {
+      playChime()
+    }
+  }, [notifications.length, muted])
+
+  function toggleMute() {
+    const next = !muted
+    setMuted(next)
+    localStorage.setItem(MUTE_KEY, String(next))
+  }
+
   const count = notifications.length
 
   return (
@@ -43,14 +81,14 @@ export default function NotificationBell({ notifications, onNavigate }: Props) {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        title="Notificações"
+        title={muted ? 'Notificações (silenciado)' : 'Notificações'}
         className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
           open
             ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
             : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
         }`}
       >
-        <Bell size={18} />
+        {muted ? <BellOff size={18} /> : <Bell size={18} />}
         {count > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-0.5 leading-none">
             {count > 9 ? '9+' : count}
@@ -62,9 +100,23 @@ export default function NotificationBell({ notifications, onNavigate }: Props) {
         <div className="absolute right-0 top-10 w-80 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
             <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">Notificações</span>
-            {count > 0 && (
-              <span className="text-xs text-white bg-red-500 rounded-full px-1.5 py-0.5 font-semibold">{count}</span>
-            )}
+            <div className="flex items-center gap-2">
+              {count > 0 && (
+                <span className="text-xs text-white bg-red-500 rounded-full px-1.5 py-0.5 font-semibold">{count}</span>
+              )}
+              <button
+                type="button"
+                onClick={toggleMute}
+                title={muted ? 'Ativar som' : 'Silenciar som'}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                  muted
+                    ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
+                    : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                }`}
+              >
+                {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+              </button>
+            </div>
           </div>
 
           {count === 0 ? (

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
-import { queueEmailMessage, renderTemplate } from '@/lib/communication'
+import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
 import { openCentralChat } from '@/lib/chatNavigation'
 import {
   fetchRenovacoes as apiFetchRenovacoes,
@@ -624,13 +624,19 @@ export default function Renovacoes() {
     const tpl     = getSelectedTpl('email')
     const body    = renderTemplate(tpl?.body ?? EMAIL_TPL_DEFAULT, tplValues(r))
     const subject = renderTemplate(tpl?.subject ?? 'Renovação do seu certificado digital', tplValues(r))
-    const { error } = await queueEmailMessage({ to: r.email, subject, body, payload: { renovacao_id: r.id, tipo: 'renovacao' } })
-    if (error) { setSendingId(null); showMsg('Erro e-mail: ' + error, 'err'); return }
+    const waTpl   = getSelectedTpl('whatsapp')
+    const waBody  = renderTemplate(waTpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
+    const [waResult, emailResult] = await Promise.all([
+      r.telefone ? queueWhatsAppMessage({ to: r.telefone, body: waBody, payload: { renovacao_id: r.id, tipo: 'renovacao' } }) : Promise.resolve({ error: null }),
+      queueEmailMessage({ to: r.email, subject, body, payload: { renovacao_id: r.id, tipo: 'renovacao' } }),
+    ])
+    if (emailResult.error) { setSendingId(null); showMsg('Erro e-mail: ' + emailResult.error, 'err'); return }
     const agora = new Date().toISOString()
     await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
     setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
     await criarLeadKanban(r)
     setSendingId(null)
+    if (waResult?.error) showMsg('E-mail enviado, mas WhatsApp falhou: ' + waResult.error, 'err')
   }
 
   // ── bulk selection helpers ───────────────────────────────────

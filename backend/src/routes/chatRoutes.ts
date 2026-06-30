@@ -3,6 +3,7 @@ import type { BackendConfig } from '../config/env.js'
 import type { AivenSqlClient } from '../db/aivenClient.js'
 import type { CommunicationEventRepository } from '../repositories/communicationEventRepository.js'
 import type { ExternalIntegrationRepository } from '../repositories/externalIntegrationRepository.js'
+import type { ConfigRepository } from '../repositories/configRepository.js'
 import type { FileRepository } from '../repositories/fileRepository.js'
 import type { LeadRepository } from '../repositories/leadRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
@@ -114,6 +115,7 @@ export async function handleChatRoutes(
   communicationEventRepository: CommunicationEventRepository,
   externalIntegrationRepository: ExternalIntegrationRepository,
   fileRepository: FileRepository,
+  configRepository: ConfigRepository,
   db: AivenSqlClient,
   corsOrigin: string,
   config: BackendConfig,
@@ -136,6 +138,23 @@ export async function handleChatRoutes(
     }))
     writeJson(res, 200, rows, corsOrigin)
     return true
+  }
+
+  if (url === '/api/chat/crm/config') {
+    if (method === 'GET') {
+      const value = await configRepository.get('timeout_automation')
+      writeJson(res, 200, { ok: true, ...value }, corsOrigin)
+      return true
+    }
+    if (method === 'PUT') {
+      const body = await readJson<Record<string, unknown>>(req)
+      const enabled = Boolean(body.enabled)
+      const minutes = Number(body.minutes) || 10
+      const clara_webhook = String(body.clara_webhook ?? 'https://auto.mantovan.com.br/webhook/avmd-clara-inbound')
+      await configRepository.set('timeout_automation', { enabled, minutes, clara_webhook })
+      writeJson(res, 200, { ok: true }, corsOrigin)
+      return true
+    }
   }
 
   if (method === 'GET' && url === '/api/chat/crm/conversations') {
