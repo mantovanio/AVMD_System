@@ -157,6 +157,48 @@ export async function handleChatRoutes(
     }
   }
 
+  if (method === 'POST' && url === '/api/chat/crm/check-timeout') {
+    const config = await configRepository.get('timeout_automation')
+    if (!config.enabled) {
+      writeJson(res, 200, { ok: true, triggered: 0, message: 'timeout desligado' }, corsOrigin)
+      return true
+    }
+    const stale = await db.query<any>(
+      `SELECT c.id, c.document_key, c.whatsapp_instance, c.cliente_nome, c.ultima_mensagem, c.ultima_interacao_em, c.fila,
+              coalesce(cust.nome, c.cliente_nome) as nome_crm, cust.email as email_principal,
+              (SELECT jsonb_agg(jsonb_build_object('role', m.direction, 'content', m.mensagem, 'sender', m.sender_name) ORDER BY m.created_at)
+               FROM (SELECT * FROM crm_chat_messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 20) m
+              ) as ultimas_mensagens
+       FROM crm_chat_conversations c
+       LEFT JOIN crm_customers cust ON cust.id = c.crm_customer_id
+       WHERE c.ultima_mensagem_direcao = 'incoming'
+         AND c.ultima_interacao_em < NOW() - ($1 || ' minutes')::INTERVAL
+         AND c.atendimento_humano = false
+       ORDER BY c.ultima_interacao_em ASC`,
+      [String(config.minutes)],
+    )
+    const triggered: string[] = []
+    for (const conv of stale.rows) {
+      try {
+        const body = JSON.stringify({
+          conversation_id: conv.id,
+          document_key: conv.document_key,
+          instance: conv.whatsapp_instance,
+          cliente_nome: conv.nome_crm ?? conv.cliente_nome,
+          fila: conv.fila,
+          ultima_mensagem: conv.ultima_mensagem,
+          historico: conv.ultimas_mensagens ?? [],
+        })
+        await fetch(config.clara_webhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+        triggered.push(conv.id)
+      } catch (err) {
+        process.stderr.write(`[check-timeout] erro clara para ${conv.id}: ${String(err)}\n`)
+      }
+    }
+    writeJson(res, 200, { ok: true, triggered: triggered.length, conversation_ids: triggered }, corsOrigin)
+    return true
+  }
+
   if (method === 'GET' && url === '/api/chat/crm/conversations') {
     const result = await db.query<any>('SELECT * FROM crm_chat_admin_view ORDER BY ultima_interacao_em DESC NULLS LAST')
     writeJson(res, 200, { ok: true, data: result.rows }, corsOrigin)

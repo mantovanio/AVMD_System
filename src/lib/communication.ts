@@ -67,8 +67,8 @@ export async function queueCommunication({
   }
 }
 
-export async function queueWhatsAppMessage(input: Omit<QueueMessageInput, 'channel' | 'provider'>) {
-  const active = await loadActiveWhatsAppIntegration().catch(() => null)
+export async function queueWhatsAppMessage(input: Omit<QueueMessageInput, 'channel' | 'provider'> & { canal?: 'atendimento' | 'renovacao' }) {
+  const active = await loadActiveWhatsAppIntegration(input.canal).catch(() => null)
   return queueCommunication({
     ...input,
     channel: 'whatsapp',

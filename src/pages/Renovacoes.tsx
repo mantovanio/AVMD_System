@@ -627,7 +627,7 @@ export default function Renovacoes() {
     const waTpl   = getSelectedTpl('whatsapp')
     const waBody  = renderTemplate(waTpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
     const [waResult, emailResult] = await Promise.all([
-      r.telefone ? queueWhatsAppMessage({ to: r.telefone, body: waBody, payload: { renovacao_id: r.id, tipo: 'renovacao' } }) : Promise.resolve({ error: null }),
+      r.telefone ? queueWhatsAppMessage({ to: r.telefone, body: waBody, canal: 'renovacao', payload: { renovacao_id: r.id, tipo: 'renovacao' } }) : Promise.resolve({ error: null }),
       queueEmailMessage({ to: r.email, subject, body, payload: { renovacao_id: r.id, tipo: 'renovacao' } }),
     ])
     if (emailResult.error) { setSendingId(null); showMsg('Erro e-mail: ' + emailResult.error, 'err'); return }
