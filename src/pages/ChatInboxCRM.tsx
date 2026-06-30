@@ -1111,27 +1111,34 @@ export default function ChatInboxCRM() {
     setActionLoading(true)
     setActionError(null)
 
-    const payload = nextValue
-      ? { atendimento_humano: true, agente_nome: selectedConversation.agente_atual ?? profile?.nome ?? selectedConversation.agente_nome }
-      : { atendimento_humano: false, agente_nome: null }
-
-    const { error: queryError } = await supabase
-      .from('crm_chat_conversations')
-      .update(payload)
-      .eq('id', selectedConversation.id)
-
-    if (queryError) {
-      setActionError(`Nao foi possivel alterar o modo de atendimento: ${queryError.message}`)
+    // atualiza estado local imediatamente
+    if (nextValue) {
+      markConversationAsHuman(selectedConversation.id)
     } else {
-      if (!nextValue) {
-        await supabase.from('crm_chat_assignments').update({ ativo: false }).eq('conversation_id', selectedConversation.id).eq('ativo', true)
-        unmarkConversationAsHuman(selectedConversation.id)
-      } else {
-        markConversationAsHuman(selectedConversation.id)
-      }
-      await loadConversations(false)
+      unmarkConversationAsHuman(selectedConversation.id)
     }
 
+    // tenta sincronizar com o banco (best-effort)
+    try {
+      const payload = nextValue
+        ? { atendimento_humano: true, agente_nome: selectedConversation.agente_atual ?? profile?.nome ?? selectedConversation.agente_nome }
+        : { atendimento_humano: false, agente_nome: null }
+
+      const { error: queryError } = await supabase
+        .from('crm_chat_conversations')
+        .update(payload)
+        .eq('id', selectedConversation.id)
+
+      if (queryError) {
+        console.warn('toggleHumanMode: falha ao sincronizar com banco', queryError.message)
+      } else if (!nextValue) {
+        try { await supabase.from('crm_chat_assignments').update({ ativo: false }).eq('conversation_id', selectedConversation.id).eq('ativo', true) } catch {}
+      }
+    } catch (err) {
+      console.warn('toggleHumanMode: erro na sincronizacao', err)
+    }
+
+    await loadConversations(false)
     setActionLoading(false)
   }
 
@@ -1933,8 +1940,7 @@ export default function ChatInboxCRM() {
                       )}
                     </div>
 
-                    {humanModeActive && (
-                      <div className="relative shrink-0 border-t border-slate-200 bg-white px-4 py-3">
+                    <div className="relative shrink-0 border-t border-slate-200 bg-white px-4 py-3">
                         <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-slate-700">Resposta humana</p>
@@ -2068,7 +2074,6 @@ export default function ChatInboxCRM() {
                         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">{actionError}</div>
                       )}
                     </div>
-                  )}
                 </div>
 
                 <div className="hidden w-2 shrink-0 cursor-col-resize rounded-full bg-slate-200/80 transition hover:bg-sky-300 xl:block" onMouseDown={() => setIsResizingRight(true)} />
