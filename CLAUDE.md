@@ -60,3 +60,11 @@ Esse arquivo resume:
 - regras do gate e formato do backup obrigatorio
 - armadilhas conhecidas do ambiente atual
 
+
+## Regra Operacional do Usuario
+Ao concluir qualquer mudanca solicitada pelo usuario, assumir como padrao operacional:
+- fazer commit das alteracoes realizadas
+- fazer push para origin main
+- executar o deploy conforme DEPLOY-RAPIDO.md
+
+So deixar de seguir esse fluxo quando o usuario disser explicitamente para nao commitar, nao publicar ou apenas preparar as alteracoes localmente.
