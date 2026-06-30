@@ -1,5 +1,65 @@
 import type { AivenSqlClient } from '../db/aivenClient.js'
 
+function normalizeText(value: unknown) {
+  const text = String(value ?? '').trim()
+  return text || null
+}
+
+function onlyDigits(value: string | null | undefined) {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  return digits || null
+}
+
+function formatDateTimeBr(value: string | null | undefined) {
+  const text = normalizeText(value)
+  if (!text) return null
+  const date = new Date(text)
+  if (Number.isNaN(date.getTime())) return text
+  return date.toLocaleString('pt-BR')
+}
+
+function buildScheduleInboxMessage(input: {
+  eventType: ScheduleEmailEventType
+  customerName?: string | null
+  customerEmail?: string | null
+  customerPhone?: string | null
+  customerDocument?: string | null
+  productName?: string | null
+  pedidoNumero?: string | null
+  protocoloNumero?: string | null
+  dataAgendada?: string | null
+  locationName?: string | null
+  sourceSender?: string | null
+  subject?: string | null
+}) {
+  const header = input.eventType === 'cancelamento'
+    ? 'Cancelamento de agendamento recebido por e-mail'
+    : input.eventType === 'reagendamento'
+      ? 'Reagendamento recebido por e-mail'
+      : 'Novo agendamento recebido por e-mail'
+
+  return [
+    header,
+    input.customerName ? `Nome: ${input.customerName}` : null,
+    input.customerPhone ? `Telefone: ${input.customerPhone}` : null,
+    input.customerDocument ? `CPF/CNPJ: ${input.customerDocument}` : null,
+    input.customerEmail ? `E-mail: ${input.customerEmail}` : null,
+    input.productName ? `Produto: ${input.productName}` : null,
+    input.pedidoNumero ? `Pedido: ${input.pedidoNumero}` : null,
+    input.protocoloNumero ? `Protocolo: ${input.protocoloNumero}` : null,
+    input.dataAgendada ? `Data agendada: ${formatDateTimeBr(input.dataAgendada)}` : null,
+    input.locationName ? `Posto: ${input.locationName}` : null,
+    input.sourceSender ? `Origem: ${input.sourceSender}` : null,
+    input.subject ? `Assunto: ${input.subject}` : null,
+  ].filter(Boolean).join('\n')
+}
+
+function splitDocument(value: string | null | undefined) {
+  const digits = onlyDigits(value)
+  if (!digits) return { cpf: null as string | null, cnpj: null as string | null }
+  if (digits.length > 11) return { cpf: null, cnpj: digits }
+  return { cpf: digits, cnpj: null }
+}
 export type ScheduleEmailEventType = 'novo_agendamento' | 'reagendamento' | 'cancelamento' | 'unknown'
 
 export type ScheduleEmailInboundInput = {
@@ -249,6 +309,168 @@ export class ScheduleAutomationRepository {
     `, [vendaId, status])
   }
 
+  async syncScheduleInbox(input: {
+    source: string
+    eventType: ScheduleEmailEventType
+    mailbox?: string | null
+    from?: string | null
+    subject?: string | null
+    bodyText?: string | null
+    bodyHtml?: string | null
+    customerName?: string | null
+    customerEmail?: string | null
+    customerPhone?: string | null
+    customerDocument?: string | null
+    productName?: string | null
+    pedidoNumero?: string | null
+    protocoloNumero?: string | null
+    dataAgendada?: string | null
+    locationName?: string | null
+    sourceSender?: string | null
+    raw?: Record<string, unknown> | null
+  }) {
+    const conversationKey = normalizeText(input.customerEmail)
+      ?? normalizeText(input.from)
+      ?? normalizeText(input.mailbox)
+
+    if (!conversationKey) {
+      return { eventId: null as string | null, customerId: null as string | null, conversationId: null as string | null }
+    }
+
+    const phoneDigits = onlyDigits(input.customerPhone)
+    const documentDigits = onlyDigits(input.customerDocument)
+    const document = splitDocument(input.customerDocument)
+    const body = buildScheduleInboxMessage({
+      eventType: input.eventType,
+      customerName: input.customerName,
+      customerEmail: input.customerEmail,
+      customerPhone: input.customerPhone,
+      customerDocument: input.customerDocument,
+      productName: input.productName,
+      pedidoNumero: input.pedidoNumero,
+      protocoloNumero: input.protocoloNumero,
+      dataAgendada: input.dataAgendada,
+      locationName: input.locationName,
+      sourceSender: input.sourceSender,
+      subject: input.subject,
+    })
+
+    const eventResult = await this.db.query<{ id: string }>(`
+      insert into communication_events
+        (source, event_type, conversation_id, contact, payload)
+      values ($1, $2, $3, $4, $5::jsonb)
+      returning id
+    `, [
+      'email',
+      'email_received',
+      conversationKey,
+      phoneDigits ?? normalizeText(input.customerEmail) ?? conversationKey,
+      JSON.stringify({
+        source: input.source,
+        from: conversationKey,
+        to: input.mailbox ?? null,
+        subject: input.subject ?? null,
+        body,
+        content: body,
+        body_text: input.bodyText ?? null,
+        body_html: input.bodyHtml ?? null,
+        from_name: input.customerName ?? input.subject ?? conversationKey,
+        cliente_nome: input.customerName ?? input.subject ?? conversationKey,
+        sender_name: input.customerName ?? input.subject ?? conversationKey,
+        telefone: normalizeText(input.customerPhone),
+        customer_email: normalizeText(input.customerEmail),
+        customer_document: documentDigits,
+        product_name: normalizeText(input.productName),
+        pedido_numero: normalizeText(input.pedidoNumero),
+        protocolo_numero: normalizeText(input.protocoloNumero),
+        data_agendada: normalizeText(input.dataAgendada),
+        kanban_status: input.eventType === 'cancelamento' ? 'cancelou_agendamento' : 'agendado',
+        raw: input.raw ?? null,
+      }),
+    ])
+
+    let customerId: string | null = null
+    if (normalizeText(input.customerEmail) || phoneDigits || documentDigits) {
+      const existing = await this.db.query<{ id: string }>(`
+        select id
+        from crm_customers
+        where ($1::text is not null and lower(coalesce(email, '')) = lower($1))
+           or ($2::text is not null and regexp_replace(coalesce(telefone, ''), '\D', '', 'g') = $2)
+           or ($3::text is not null and regexp_replace(coalesce(cpf, ''), '\D', '', 'g') = $3)
+           or ($4::text is not null and regexp_replace(coalesce(cnpj, ''), '\D', '', 'g') = $4)
+        order by updated_at desc
+        limit 1
+      `, [normalizeText(input.customerEmail), phoneDigits, document.cpf, document.cnpj])
+
+      if (existing.rows[0]?.id) {
+        customerId = existing.rows[0].id
+        await this.db.query(`
+          update crm_customers
+          set nome = coalesce($2, nome),
+              telefone = coalesce($3, telefone),
+              email = coalesce($4, email),
+              cpf = coalesce($5, cpf),
+              cnpj = coalesce($6, cnpj),
+              observacoes = concat_ws(E'\n', nullif(observacoes, ''), $7),
+              updated_at = now()
+          where id = $1::uuid
+        `, [
+          customerId,
+          normalizeText(input.customerName),
+          normalizeText(input.customerPhone),
+          normalizeText(input.customerEmail),
+          document.cpf,
+          document.cnpj,
+          body,
+        ])
+      } else {
+        const created = await this.db.query<{ id: string }>(`
+          insert into crm_customers (nome, telefone, email, cpf, cnpj, observacoes)
+          values ($1, $2, $3, $4, $5, $6)
+          returning id
+        `, [
+          normalizeText(input.customerName),
+          normalizeText(input.customerPhone),
+          normalizeText(input.customerEmail),
+          document.cpf,
+          document.cnpj,
+          body,
+        ])
+        customerId = created.rows[0]?.id ?? null
+      }
+    }
+
+    const conversationResult = await this.db.query<{ id: string }>(`
+      with target as (
+        select id
+        from crm_chat_conversations
+        where document_key = $1
+        order by updated_at desc, created_at desc
+        limit 1
+      )
+      update crm_chat_conversations c
+      set crm_customer_id = coalesce($2::uuid, c.crm_customer_id),
+          cliente_nome = coalesce($3, c.cliente_nome),
+          telefone = coalesce($4, c.telefone),
+          kanban_status = coalesce($5, c.kanban_status),
+          updated_at = now()
+      from target
+      where c.id = target.id
+      returning c.id
+    `, [
+      conversationKey,
+      customerId,
+      normalizeText(input.customerName),
+      normalizeText(input.customerPhone),
+      input.eventType === 'cancelamento' ? 'cancelou_agendamento' : 'agendado',
+    ])
+
+    return {
+      eventId: eventResult.rows[0]?.id ?? null,
+      customerId,
+      conversationId: conversationResult.rows[0]?.id ?? null,
+    }
+  }
   async syncLeadKanban(input: {
     phoneDigits?: string | null
     customerName?: string | null
@@ -288,3 +510,6 @@ export class ScheduleAutomationRepository {
     return { status: nextStatus, affected: result.rows.length }
   }
 }
+
+
+

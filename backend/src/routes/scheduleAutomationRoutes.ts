@@ -331,6 +331,27 @@ export async function handleScheduleAutomationRoutes(
     return true
   }
 
+  const inboxSync = await scheduleRepository.syncScheduleInbox({
+    source,
+    eventType,
+    mailbox: normalizeText(body.mailbox ?? body.to),
+    from: normalizeText(parsed.customer_email ?? body.from),
+    subject: normalizeText(body.subject),
+    bodyText: normalizeText(body.body_text),
+    bodyHtml: normalizeText(body.body_html),
+    customerName: parsed.customer_name ?? match?.titular_nome ?? match?.cadastro_nome,
+    customerEmail: parsed.customer_email ?? match?.titular_email ?? match?.cadastro_email,
+    customerPhone: parsed.customer_phone ?? match?.titular_telefone ?? match?.cadastro_telefone,
+    customerDocument: parsed.customer_document ?? match?.titular_documento ?? match?.cadastro_documento,
+    productName: parsed.product_name,
+    pedidoNumero: parsed.pedido_numero ?? match?.pedido_numero,
+    protocoloNumero: parsed.protocolo_numero ?? match?.protocolo_numero,
+    dataAgendada: parsed.data_agendada ?? match?.agenda_data_agendada,
+    locationName: parsed.location_name,
+    sourceSender: parsed.source_sender,
+    raw: body.raw ?? null,
+  })
+
   if (!match) {
     await scheduleRepository.markEventStatus({
       id: inboundEvent.id,
@@ -478,3 +499,4 @@ export async function handleScheduleAutomationRoutes(
   }, corsOrigin)
   return true
 }
+
