@@ -478,6 +478,7 @@ export default function ChatInboxCRM() {
   const [selectedReplyIntegrationConversationId, setSelectedReplyIntegrationConversationId] = useState<string | null>(null)
   const [signOutgoingMessages, setSignOutgoingMessages] = useState(DEFAULT_CRM_CHAT_SETTINGS.sign_outgoing_messages)
   const [chatSettingsLoading, setChatSettingsLoading] = useState(true)
+  const [showHumanResponsePanel, setShowHumanResponsePanel] = useState(false)
   const [showHumanResponseDetails, setShowHumanResponseDetails] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(420)
   const [rightPanelWidth, setRightPanelWidth] = useState(330)
@@ -686,6 +687,7 @@ export default function ChatInboxCRM() {
       lastMessageSnapshotRef.current = ''
       setHumanMessage('')
       setShowEmoji(false)
+      setShowHumanResponsePanel(false)
       setShowHumanResponseDetails(false)
       setSelectedReplyIntegrationId('')
       setSelectedReplyIntegrationConversationId(null)
@@ -707,6 +709,7 @@ export default function ChatInboxCRM() {
     })
     setHumanMessage('')
     setShowEmoji(false)
+    setShowHumanResponsePanel(false)
     setShowHumanResponseDetails(false)
     void loadMessages(selectedConversation.id)
   }, [selectedConversation?.id])
@@ -2079,95 +2082,127 @@ export default function ChatInboxCRM() {
                     </div>
 
                     <div className="relative shrink-0 border-t border-slate-200 bg-white px-4 py-3">
-                        <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50/80">
+                        {!showHumanResponsePanel ? (
                           <button
                             type="button"
-                            onClick={() => setShowHumanResponseDetails(current => !current)}
-                            className="flex w-full flex-wrap items-start justify-between gap-3 px-3 py-3 text-left"
+                            onClick={() => setShowHumanResponsePanel(true)}
+                            className="mb-2 flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left hover:border-sky-300 hover:bg-sky-50/70"
                           >
                             <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-sm font-semibold text-slate-700">Resposta humana</p>
-                                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${showHumanResponseDetails ? 'bg-sky-100 text-sky-700' : 'border border-slate-200 bg-white text-slate-500'}`}>
-                                  {showHumanResponseDetails ? 'Opcoes visiveis' : 'Opcoes ocultas'}
-                                </span>
-                              </div>
-                              <p className="mt-1 text-xs text-slate-500">Barra fixa com anexo, colagem de imagem, emoji e audio.</p>
-                              <p className="mt-1 text-[11px] text-slate-400">
-                                Canal ativo: {selectedReplyChannelLabel} · Assinatura: {chatSettingsLoading ? 'carregando...' : (signOutgoingMessages ? 'ativa' : 'desativada')}
-                              </p>
+                              <p className="text-sm font-semibold text-slate-700">Resposta humana</p>
+                              <p className="mt-0.5 truncate text-[11px] text-slate-500">Canal: {selectedReplyChannelLabel}</p>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
+                              Exibir painel
+                              <ChevronDown size={14} />
+                            </span>
+                          </button>
+                        ) : (
+                          <div className="mb-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-sm font-semibold text-slate-700">Resposta humana</p>
+                                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${showHumanResponseDetails ? 'bg-sky-100 text-sky-700' : 'border border-slate-200 bg-white text-slate-500'}`}>
+                                    {showHumanResponseDetails ? 'Opcoes abertas' : 'Modo compacto'}
+                                  </span>
+                                </div>
+                                <p className="mt-0.5 text-[11px] text-slate-400">
+                                  Canal: {selectedReplyChannelLabel} · Assinatura: {chatSettingsLoading ? 'carregando...' : (signOutgoingMessages ? 'ativa' : 'desativada')}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {selectedConversation.fila !== 'email' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowHumanResponseDetails(current => !current)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-sky-300 hover:text-sky-700"
+                                  >
+                                    {showHumanResponseDetails ? 'Fechar opcoes' : 'Abrir opcoes'}
+                                    <ChevronDown size={14} className={`transition-transform ${showHumanResponseDetails ? 'rotate-180' : ''}`} />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowHumanResponsePanel(false)
+                                    setShowHumanResponseDetails(false)
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-slate-300 hover:bg-slate-100"
+                                >
+                                  Ocultar
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
                               <Badge text={`Origem: ${selectedConversation.whatsapp_instance || 'Nao definida'}`} tone="blue" />
                               <Badge text={selectedConversation.agente_atual || profile?.nome || 'Humano'} tone="green" />
-                              <span className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600">
-                                {showHumanResponseDetails ? 'Ocultar painel' : 'Exibir painel'}
-                                <ChevronDown size={14} className={`transition-transform ${showHumanResponseDetails ? 'rotate-180' : ''}`} />
-                              </span>
                             </div>
-                          </button>
 
-                          {showHumanResponseDetails && selectedConversation.fila !== 'email' && (
-                            <div className="border-t border-slate-200 px-3 py-3">
-                              <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
-                                <div>
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Canal de resposta</p>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {replyQueueOptions.map(queue => {
-                                      const active = selectedReplyQueue === queue
-                                      return (
-                                        <button
-                                          key={queue}
-                                          type="button"
-                                          onClick={() => {
-                                            const nextOption = replyChannelOptions.find(item => item.queue === queue)
-                                            if (!nextOption) return
-                                            setSelectedReplyIntegrationId(nextOption.id)
-                                            setSelectedReplyIntegrationConversationId(selectedConversation.id)
-                                          }}
-                                          className={`rounded-xl px-3 py-2 text-sm font-medium transition ${active ? 'bg-sky-600 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:border-sky-300 hover:text-sky-700'}`}
-                                        >
-                                          {queueLabel(queue)}
-                                        </button>
-                                      )
-                                    })}
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Responder por</p>
-                                  {visibleReplyChannelOptions.length === 0 ? (
-                                    <div className="mt-2 rounded-xl border border-dashed border-slate-200 bg-white px-3 py-2 text-sm text-slate-400">
-                                      Nenhum canal disponivel para esta fila.
-                                    </div>
-                                  ) : (
+                            {showHumanResponseDetails && selectedConversation.fila !== 'email' && (
+                              <div className="mt-2 border-t border-slate-200 pt-2.5">
+                                <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+                                  <div>
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Canal de resposta</p>
                                     <div className="mt-2 flex flex-wrap gap-2">
-                                      {visibleReplyChannelOptions.map(option => {
-                                        const active = selectedReplyIntegrationId === option.id
+                                      {replyQueueOptions.map(queue => {
+                                        const active = selectedReplyQueue === queue
                                         return (
                                           <button
-                                            key={option.id}
+                                            key={queue}
                                             type="button"
                                             onClick={() => {
-                                              setSelectedReplyIntegrationId(option.id)
+                                              const nextOption = replyChannelOptions.find(item => item.queue === queue)
+                                              if (!nextOption) return
+                                              setSelectedReplyIntegrationId(nextOption.id)
                                               setSelectedReplyIntegrationConversationId(selectedConversation.id)
                                             }}
-                                            className={`min-w-[220px] rounded-xl px-3 py-2 text-left text-sm transition ${active ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-700 hover:border-sky-300 hover:bg-sky-50'}`}
+                                            className={`rounded-xl px-3 py-2 text-sm font-medium transition ${active ? 'bg-sky-600 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:border-sky-300 hover:text-sky-700'}`}
                                           >
-                                            <span className="block font-medium">{integrationDisplayName(option.integration)}</span>
-                                            <span className={`mt-0.5 block text-[11px] ${active ? 'text-slate-200' : 'text-slate-500'}`}>
-                                              {option.integration.instance_name || 'Instancia sem nome'}
-                                            </span>
+                                            {queueLabel(queue)}
                                           </button>
                                         )
                                       })}
                                     </div>
-                                  )}
+                                  </div>
+
+                                  <div>
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Responder por</p>
+                                    {visibleReplyChannelOptions.length === 0 ? (
+                                      <div className="mt-2 rounded-xl border border-dashed border-slate-200 bg-white px-3 py-2 text-sm text-slate-400">
+                                        Nenhum canal disponivel para esta fila.
+                                      </div>
+                                    ) : (
+                                      <div className="mt-2 flex flex-wrap gap-2">
+                                        {visibleReplyChannelOptions.map(option => {
+                                          const active = selectedReplyIntegrationId === option.id
+                                          return (
+                                            <button
+                                              key={option.id}
+                                              type="button"
+                                              onClick={() => {
+                                                setSelectedReplyIntegrationId(option.id)
+                                                setSelectedReplyIntegrationConversationId(selectedConversation.id)
+                                              }}
+                                              className={`min-w-[220px] rounded-xl px-3 py-2 text-left text-sm transition ${active ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-700 hover:border-sky-300 hover:bg-sky-50'}`}
+                                            >
+                                              <span className="block font-medium">{integrationDisplayName(option.integration)}</span>
+                                              <span className={`mt-0.5 block text-[11px] ${active ? 'text-slate-200' : 'text-slate-500'}`}>
+                                                {option.integration.instance_name || 'Instancia sem nome'}
+                                              </span>
+                                            </button>
+                                          )
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
+                            )}
+                          </div>
+                        )}
 
                       {pendingFile && (
                         <div className="mb-3 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
@@ -3024,6 +3059,7 @@ function EmptyState({ text, compact = false }: { text: string; compact?: boolean
     </div>
   )
 }
+
 
 
 
