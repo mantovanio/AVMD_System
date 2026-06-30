@@ -463,6 +463,9 @@ export default function ChatInboxCRM() {
   const [draggedConversationId, setDraggedConversationId] = useState<string | null>(null)
   const [humanMessage, setHumanMessage] = useState('')
   const [sendingHumanMessage, setSendingHumanMessage] = useState(false)
+  const [emailSubject, setEmailSubject] = useState('')
+  const [emailBody, setEmailBody] = useState('')
+  const [sendingEmail, setSendingEmail] = useState(false)
   const [manualConversationOpen, setManualConversationOpen] = useState(false)
   const [manualConversationLoading, setManualConversationLoading] = useState(false)
   const [manualConversationError, setManualConversationError] = useState<string | null>(null)
@@ -1504,6 +1507,61 @@ export default function ChatInboxCRM() {
     }
   }
 
+  async function sendEmailReply() {
+    if (!selectedConversation) return
+    if (sendingEmail) return
+    const subject = emailSubject.trim()
+    const body = emailBody.trim()
+    if (!body) return
+    if (!subject) return
+    const to = selectedConversation.email_principal || ''
+    if (!to) {
+      setActionError('Contato sem e-mail cadastrado.')
+      return
+    }
+
+    setSendingEmail(true)
+    setActionError(null)
+    const tempId = `temp-email-${Date.now()}`
+    const tempCreatedAt = new Date().toISOString()
+    setMessages(prev => [...prev, {
+      id: tempId,
+      conversation_id: selectedConversation.id,
+      document_key: selectedConversation.document_key,
+      direction: 'outgoing',
+      sender_type: 'humano',
+      sender_name: currentHumanAgentName,
+      mensagem: `[EMAIL] ${subject}\n\n${body}`,
+      created_at: tempCreatedAt,
+    }])
+    setEmailBody('')
+
+    try {
+      const response = await fetch(getApiUrl('/chat/send-email'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to,
+          subject,
+          body,
+          conversation_id: selectedConversation.id,
+          lead_id: null,
+        }),
+      })
+      const payload = await response.json() as { ok?: boolean; error?: string }
+      if (!response.ok || !payload.ok) throw new Error(payload.error ?? 'Falha ao enviar e-mail.')
+      await loadConversations(false)
+      await loadMessages(selectedConversation.id, { background: true })
+    } catch (err) {
+      setMessages(prev => prev.filter(item => item.id !== tempId))
+      setEmailBody(body)
+      setActionError(`Falha no envio de e-mail: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setSendingEmail(false)
+      focusComposer()
+    }
+  }
+
   async function sendHumanAttachment(file: File | Blob, filename: string, mimeType?: string) {
     if (!selectedConversation) return { ok: false, error: 'Nenhuma conversa selecionada.' }
 
@@ -1800,7 +1858,7 @@ export default function ChatInboxCRM() {
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 text-slate-900">
       <div className="shrink-0 border-b border-slate-200/80 bg-white px-5 py-3 backdrop-blur">
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="grid gap-3 xl:grid-cols-[260px_minmax(0,1fr)_auto] xl:items-center">
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 <span className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -1811,7 +1869,16 @@ export default function ChatInboxCRM() {
                 <p className="mt-1 text-[13px] text-slate-500">Chat, Kanban e filas em uma visao mais limpa e direta.</p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+
+            <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-5 xl:self-stretch">
+              <SummaryCard label="Visiveis" value={summary.total} active={activeShortcut.all} onClick={() => applySummaryShortcut('all')} />
+              <SummaryCard label="Atendimento" value={summary.atendimento} active={activeShortcut.atendimento} onClick={() => applySummaryShortcut('atendimento')} />
+              <SummaryCard label="Renovacao" value={summary.renovacao} active={activeShortcut.renovacao} onClick={() => applySummaryShortcut('renovacao')} />
+              <SummaryCard label="Email" value={summary.email} active={activeShortcut.email} onClick={() => applySummaryShortcut('email')} />
+              <SummaryCard label="Humano" value={summary.humano} active={activeShortcut.humano} onClick={() => applySummaryShortcut('humano')} />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               <button type="button" onClick={() => void loadConversations(true)} className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900">
                 <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} /> Atualizar
               </button>
@@ -1827,14 +1894,6 @@ export default function ChatInboxCRM() {
                 <MessageCircle size={15} /> Nova conversa
               </button>
             </div>
-          </div>
-
-          <div className="grid gap-2 md:grid-cols-5 xl:max-w-[1120px]">
-            <SummaryCard label="Visiveis" value={summary.total} active={activeShortcut.all} onClick={() => applySummaryShortcut('all')} />
-            <SummaryCard label="Atendimento" value={summary.atendimento} active={activeShortcut.atendimento} onClick={() => applySummaryShortcut('atendimento')} />
-            <SummaryCard label="Renovacao" value={summary.renovacao} active={activeShortcut.renovacao} onClick={() => applySummaryShortcut('renovacao')} />
-            <SummaryCard label="Email" value={summary.email} active={activeShortcut.email} onClick={() => applySummaryShortcut('email')} />
-            <SummaryCard label="Humano" value={summary.humano} active={activeShortcut.humano} onClick={() => applySummaryShortcut('humano')} />
           </div>
 
           <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_160px_160px_210px]">
@@ -2001,6 +2060,7 @@ export default function ChatInboxCRM() {
                           </div>
                         </div>
 
+                        {selectedConversation.fila !== 'email' && (
                         <div className="mb-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_220px]">
                           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Canal de resposta</p>
@@ -2025,6 +2085,7 @@ export default function ChatInboxCRM() {
                               </select>
                           </label>
                         </div>
+                        )}
 
                         {pendingFile && (
                         <div className="mb-3 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
@@ -2080,6 +2141,50 @@ export default function ChatInboxCRM() {
                         </div>
                       )}
 
+                      {selectedConversation.fila === 'email' ? (
+                        <div className="space-y-3 rounded-2xl border border-sky-200 bg-sky-50 p-3">
+                          <div className="space-y-2">
+                            <label className="block space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-sky-600">Para</span>
+                              <input
+                                value={selectedConversation.email_principal || ''}
+                                disabled
+                                className="w-full rounded-xl border border-sky-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none"
+                              />
+                            </label>
+                            <label className="block space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-sky-600">Assunto</span>
+                              <input
+                                value={emailSubject}
+                                onChange={event => setEmailSubject(event.target.value)}
+                                placeholder="Re: Assunto do e-mail original"
+                                className="w-full rounded-xl border border-sky-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                              />
+                            </label>
+                            <label className="block space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-sky-600">Mensagem</span>
+                              <textarea
+                                value={emailBody}
+                                onChange={event => setEmailBody(event.target.value)}
+                                rows={6}
+                                placeholder="Digite sua resposta de e-mail..."
+                                className="w-full resize-none rounded-xl border border-sky-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                              />
+                            </label>
+                          </div>
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => void sendEmailReply()}
+                              disabled={sendingEmail || !emailSubject.trim() || !emailBody.trim()}
+                              className="inline-flex h-11 items-center gap-2 rounded-xl bg-sky-600 px-5 text-sm font-medium text-white disabled:opacity-50"
+                            >
+                              {sendingEmail ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                              {sendingEmail ? 'Enviando...' : 'Responder e-mail'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
                       <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                         <input ref={fileInputRef} type="file" accept="image/*,.bmp,.pdf,.doc,.docx,.txt,.csv,.xls,.xlsx" className="hidden" onChange={handleFileSelect} />
                         <button type="button" onClick={() => setShowEmoji(current => !current)} className={`inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 ${showEmoji ? 'bg-amber-100 text-amber-700' : 'bg-white text-slate-500'}`}>
@@ -2115,6 +2220,7 @@ export default function ChatInboxCRM() {
                           </button>
                         )}
                       </div>
+                      )}
 
                       {actionError && (
                         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">{actionError}</div>
@@ -2503,7 +2609,7 @@ function SummaryCard({
   active?: boolean
   onClick?: () => void
 }) {
-  const className = `rounded-[20px] border px-3.5 py-3 text-left transition-all ${
+  const className = `min-h-[72px] rounded-[18px] border px-3 py-2.5 text-left transition-all ${
     active
       ? 'border-sky-200 bg-sky-50 text-sky-900 shadow-[0_10px_24px_rgba(14,116,144,0.08)]'
       : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
@@ -2513,9 +2619,9 @@ function SummaryCard({
     return (
       <button type="button" onClick={onClick} className={className}>
         <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${active ? 'text-sky-700' : 'text-slate-400'}`}>{label}</p>
-        <div className="mt-3 flex items-end justify-between gap-3">
-          <p className={`text-[28px] font-semibold leading-none tracking-[-0.03em] ${active ? 'text-sky-950' : 'text-slate-900'}`}>{value}</p>
-          <span className={`text-[10px] ${active ? 'text-sky-600' : 'text-slate-400'}`}>Filtrar</span>
+        <div className="mt-2 flex items-end justify-between gap-2">
+          <p className={`text-[22px] font-semibold leading-none tracking-[-0.02em] ${active ? 'text-sky-950' : 'text-slate-900'}`}>{value}</p>
+          <span className={`text-[10px] ${active ? 'text-sky-600' : 'text-slate-400'}`}>ver</span>
         </div>
       </button>
     )
@@ -2524,7 +2630,7 @@ function SummaryCard({
   return (
     <div className={className}>
       <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
-      <p className="mt-2.5 text-[28px] font-semibold leading-none tracking-[-0.03em] text-slate-900">{value}</p>
+      <p className="mt-2 text-[22px] font-semibold leading-none tracking-[-0.02em] text-slate-900">{value}</p>
     </div>
   )
 }
