@@ -3,8 +3,10 @@ import type { BackendConfig } from '../config/env.js'
 import type { AivenSqlClient } from '../db/aivenClient.js'
 import type { CommunicationEventRepository } from '../repositories/communicationEventRepository.js'
 import type { ExternalIntegrationRepository } from '../repositories/externalIntegrationRepository.js'
+import type { FileRepository } from '../repositories/fileRepository.js'
 import type { LeadRepository } from '../repositories/leadRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
+import { buildStoredPath, getStorageRoot, readFile, saveFile } from '../utils/storage.js'
 
 type JsonRecord = Record<string, unknown>
 
@@ -111,6 +113,7 @@ export async function handleChatRoutes(
   leadRepository: LeadRepository,
   communicationEventRepository: CommunicationEventRepository,
   externalIntegrationRepository: ExternalIntegrationRepository,
+  fileRepository: FileRepository,
   db: AivenSqlClient,
   corsOrigin: string,
   config: BackendConfig,
@@ -410,6 +413,111 @@ export async function handleChatRoutes(
       n8n_sent: n8nSent,
       n8n_error: n8nError,
     }, corsOrigin)
+    return true
+  }
+
+  // ── File upload / download ─────────────────────────────────────
+
+  if (method === 'GET' && url === '/api/chat/files') {
+    const parsedUrl = new URL(url, 'http://localhost')
+    const conversationId = parsedUrl.searchParams.get('conversation_id') || ''
+    if (!conversationId) {
+      writeJson(res, 400, { ok: false, error: 'conversation_id obrigatorio.' }, corsOrigin)
+      return true
+    }
+    const files = await fileRepository.listByConversation(conversationId)
+    writeJson(res, 200, { ok: true, files }, corsOrigin)
+    return true
+  }
+
+  {
+    const fileMatch = url.match(/^\/api\/chat\/files\/([a-f0-9-]+)$/)
+    if (method === 'GET' && fileMatch) {
+      const fileId = fileMatch[1]
+      const fileRecord = await fileRepository.findById(fileId)
+      if (!fileRecord) {
+        writeJson(res, 404, { ok: false, error: 'Arquivo nao encontrado.' }, corsOrigin)
+        return true
+      }
+      const data = readFile(fileRecord.stored_path)
+      if (!data) {
+        writeJson(res, 404, { ok: false, error: 'Arquivo nao encontrado no disco.' }, corsOrigin)
+        return true
+      }
+      const mime = fileRecord.mime_type || 'application/octet-stream'
+      const disposition = `attachment; filename="${fileRecord.original_name}"`
+      res.writeHead(200, {
+        'Content-Type': mime,
+        'Content-Disposition': disposition,
+        'Content-Length': data.length.toString(),
+        'Access-Control-Allow-Origin': corsOrigin,
+      })
+      res.end(data)
+      return true
+    }
+  }
+
+  if (method === 'POST' && url === '/api/chat/upload') {
+    const body = await readJson<Record<string, unknown>>(req)
+    const conversationId = asString(body.conversation_id)
+    const fileName = asString(body.file_name)
+    const mimeType = asString(body.mime_type) || 'application/octet-stream'
+    const fileBase64 = asString(body.file_base64)
+    const uploadedBy = asString(body.uploaded_by) || null
+
+    if (!conversationId) {
+      writeJson(res, 400, { ok: false, error: 'conversation_id obrigatorio.' }, corsOrigin)
+      return true
+    }
+    if (!fileName) {
+      writeJson(res, 400, { ok: false, error: 'file_name obrigatorio.' }, corsOrigin)
+      return true
+    }
+    if (!fileBase64) {
+      writeJson(res, 400, { ok: false, error: 'file_base64 obrigatorio.' }, corsOrigin)
+      return true
+    }
+
+    let buffer: Buffer
+    try {
+      buffer = Buffer.from(fileBase64, 'base64')
+    } catch {
+      writeJson(res, 400, { ok: false, error: 'file_base64 invalido.' }, corsOrigin)
+      return true
+    }
+
+    const maxBytes = 50 * 1024 * 1024
+    if (buffer.length > maxBytes) {
+      writeJson(res, 400, { ok: false, error: 'Arquivo excede o limite de 50MB.' }, corsOrigin)
+      return true
+    }
+
+    const storedPath = buildStoredPath(conversationId, fileName)
+    saveFile(storedPath, buffer)
+
+    const fileRecord = await fileRepository.create({
+      conversation_id: conversationId,
+      original_name: fileName,
+      stored_path: storedPath,
+      mime_type: mimeType,
+      size_bytes: buffer.length,
+      uploaded_by: uploadedBy,
+    })
+
+    // Cria mensagem no timeline da conversa
+    await db.query(
+      `INSERT INTO crm_chat_messages (conversation_id, document_key, direction, sender_type, sender_name, mensagem, mime_type, file_name, media_url)
+       VALUES ($1, $1, 'incoming', 'humano', 'Sistema', $2, $3, $4, $5)`,
+      [
+        conversationId,
+        `📎 ${fileName} (${(buffer.length / 1024).toFixed(0)} KB)`,
+        mimeType,
+        fileName,
+        `/api/chat/files/${fileRecord.id}`,
+      ],
+    )
+
+    writeJson(res, 200, { ok: true, file: fileRecord }, corsOrigin)
     return true
   }
 

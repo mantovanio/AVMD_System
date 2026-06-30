@@ -27,6 +27,7 @@ import { LinksProdutosRepository } from './repositories/linksProdutosRepository.
 import { LeadRepository } from './repositories/leadRepository.js'
 import { CommunicationOutboxRepository } from './repositories/communicationOutboxRepository.js'
 import { CommunicationEventRepository } from './repositories/communicationEventRepository.js'
+import { FileRepository } from './repositories/fileRepository.js'
 import { ScheduleAutomationRepository } from './repositories/scheduleAutomationRepository.js'
 import { handleRenovacaoRoutes } from './routes/renovacaoRoutes.js'
 import { handleCommunicationTemplateRoutes } from './routes/communicationTemplateRoutes.js'
@@ -56,6 +57,7 @@ const linksProdutosRepository = new LinksProdutosRepository(db)
 const leadRepository = new LeadRepository(db)
 const communicationOutboxRepository = new CommunicationOutboxRepository(db)
 const communicationEventRepository = new CommunicationEventRepository(db)
+const fileRepository = new FileRepository(db)
 const scheduleAutomationRepository = new ScheduleAutomationRepository(db)
 const integrationRegistry = createIntegrationRegistry(config)
 const integrationEventProcessor = new IntegrationEventProcessor(integrationEventRepository, integrationRegistry)
@@ -137,6 +139,7 @@ const server = createServer(async (req, res) => {
       leadRepository,
       communicationEventRepository,
       externalIntegrationRepository,
+      fileRepository,
       db,
       config.corsOrigin,
       config,
