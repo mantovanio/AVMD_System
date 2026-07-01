@@ -588,6 +588,11 @@ function AbaUsuarios() {
   const [saving, setSaving]         = useState(false)
   const [editErro, setEditErro]     = useState<string | null>(null)
 
+  // Acesso a conversas
+  const [convAccess, setConvAccess] = useState<{ id: string; telefone: string }[]>([])
+  const [novoTelefone, setNovoTelefone] = useState('')
+  const [savingConvAccess, setSavingConvAccess] = useState(false)
+
   // loja do vendedor (edit inline)
   const [editLojaUserId, setEditLojaUserId] = useState<string | null>(null)
   const [editLojaForm, setEditLojaForm] = useState<{ nome: string; tabela_preco_id: string } | null>(null)
@@ -728,6 +733,14 @@ function AbaUsuarios() {
       observacoes: u.observacoes ?? '',
       permissoes: u.permissoes && u.permissoes.length > 0 ? u.permissoes : DEFAULT_PERMISSIONS[u.perfil],
     })
+    setNovoTelefone('')
+    fetch(getApiUrl(`/chat/user-conversation-access?user_id=${u.id}`))
+      .then(r => r.json())
+      .then(res => {
+        if (res.ok) setConvAccess(res.data ?? [])
+        else setConvAccess([])
+      })
+      .catch(() => setConvAccess([]))
   }
 
   function updateEdit<K extends keyof UserEditForm>(key: K, value: UserEditForm[K]) {
@@ -1368,6 +1381,72 @@ function AbaUsuarios() {
                       </div>
                     )
                   })()}
+
+                  {/* Acesso a Conversas */}
+                  <div className="rounded-xl border border-purple-200 dark:border-purple-900/30 bg-purple-50/60 dark:bg-purple-950/20 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-purple-700 dark:text-purple-300">Acesso a Conversas</p>
+                        <p className="text-xs text-purple-600/70 dark:text-purple-400/70">Números que este usuário pode ver no chat independente do vínculo.</p>
+                      </div>
+                    </div>
+                    {convAccess.length === 0 && (
+                      <p className="text-xs text-purple-600/50 dark:text-purple-400/50">Nenhum número liberado manualmente.</p>
+                    )}
+                    {convAccess.length > 0 && (
+                      <div className="space-y-1">
+                        {convAccess.map(ac => (
+                          <div key={ac.id} className="flex items-center justify-between gap-2 bg-white dark:bg-gray-800 rounded-lg px-3 py-1.5 border border-purple-100 dark:border-purple-900/20">
+                            <span className="text-sm text-gray-700 dark:text-gray-300 font-mono">{ac.telefone}</span>
+                            <button type="button" title="Remover" disabled={savingConvAccess}
+                              onClick={() => {
+                                setSavingConvAccess(true)
+                                fetch(getApiUrl(`/chat/user-conversation-access/${ac.id}`), {
+                                  method: 'DELETE',
+                                })
+                                  .then(r => r.json())
+                                  .then(res => {
+                                    if (res.ok) setConvAccess(prev => prev.filter(x => x.id !== ac.id))
+                                    else showMsgU('Erro ao remover', 'err')
+                                  })
+                                  .catch(() => showMsgU('Erro ao remover', 'err'))
+                                  .finally(() => setSavingConvAccess(false))
+                              }}
+                              className="text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <input type="text" value={novoTelefone}
+                        onChange={e => setNovoTelefone(e.target.value)}
+                        placeholder="+5511999999999"
+                        className="flex-1 border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-1.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono" />
+                      <button type="button" disabled={savingConvAccess || !novoTelefone.trim()}
+                        onClick={() => {
+                          setSavingConvAccess(true)
+                          fetch(getApiUrl('/chat/user-conversation-access'), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ user_id: u.id, telefone: novoTelefone.trim() }),
+                          })
+                            .then(r => r.json())
+                            .then(res => {
+                              if (res.ok) {
+                                setConvAccess(prev => [...prev, { id: res.id, telefone: novoTelefone.trim() }])
+                                setNovoTelefone('')
+                              } else showMsgU(res.error ?? 'Erro ao adicionar', 'err')
+                            })
+                            .catch(() => showMsgU('Erro ao adicionar', 'err'))
+                            .finally(() => setSavingConvAccess(false))
+                        }}
+                        className="px-3 py-1.5 text-xs rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-medium transition-colors flex items-center gap-1.5 shrink-0">
+                        {savingConvAccess ? <Loader2 size={11} className="animate-spin" /> : <><Plus size={11} /> Adicionar</>}
+                      </button>
+                    </div>
+                  </div>
 
                   {editErro && (
                     <p className="text-xs text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">

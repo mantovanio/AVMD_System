@@ -181,6 +181,12 @@ function buildConversationVisibilitySql(conversationAlias: string, viewerAlias =
       ${viewerAlias}.perfil = 'usuario'
       AND ${assignedToViewer}
     )
+    OR EXISTS (
+      SELECT 1 FROM user_conversation_access uca
+      WHERE uca.user_id::text = ${viewerAlias}.id
+        AND (${conversationAlias}.document_key = uca.telefone
+             OR ${conversationAlias}.telefone = uca.telefone)
+    )
   )`
 }
 
@@ -815,6 +821,25 @@ export async function handleChatRoutes(
     return true
   }
 
+  // ── User conversation access grants (GET) ────────────────────────
+  if (method === 'GET' && url === '/api/chat/user-conversation-access') {
+    const accessUrl = new URL(url, 'http://localhost')
+    const userId = accessUrl.searchParams.get('user_id') ?? ''
+    if (!userId) {
+      writeJson(res, 400, { ok: false, error: 'user_id obrigatorio.' }, corsOrigin)
+      return true
+    }
+    const result = await db.query<any>(
+      `SELECT id, user_id, telefone, created_by, created_at
+       FROM user_conversation_access
+       WHERE user_id::text = $1
+       ORDER BY created_at DESC`,
+      [userId],
+    )
+    writeJson(res, 200, { ok: true, data: result.rows }, corsOrigin)
+    return true
+  }
+
   if (method !== 'POST' && method !== 'PATCH' && method !== 'DELETE') return false
 
   if (method === 'POST' && url === '/api/chat/leads') {
@@ -1028,6 +1053,41 @@ export async function handleChatRoutes(
     }
 
     writeJson(res, 200, { ok: true, customer_id: customerId }, corsOrigin)
+    return true
+  }
+
+  // ── User conversation access grants (POST/DELETE) ────────────────
+  if (method === 'POST' && url === '/api/chat/user-conversation-access') {
+    const body = await readJson<{ user_id?: string; telefone?: string }>(req)
+    if (!body?.user_id || !body.telefone?.trim()) {
+      writeJson(res, 400, { ok: false, error: 'user_id e telefone obrigatorios.' }, corsOrigin)
+      return true
+    }
+    const accessUrl = new URL(url, 'http://localhost')
+    const createdBy = accessUrl.searchParams.get('profile_id') ?? null
+    try {
+      const result = await db.query<any>(
+        `INSERT INTO user_conversation_access (user_id, telefone, created_by)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [body.user_id, body.telefone.trim(), createdBy],
+      )
+      writeJson(res, 200, { ok: true, id: result.rows[0]?.id }, corsOrigin)
+    } catch (err: unknown) {
+      const pgErr = err as { code?: string }
+      if (pgErr?.code === '23505') {
+        writeJson(res, 409, { ok: false, error: 'Este telefone ja foi adicionado para este usuario.' }, corsOrigin)
+      } else {
+        writeJson(res, 500, { ok: false, error: 'Erro ao adicionar acesso.' }, corsOrigin)
+      }
+    }
+    return true
+  }
+
+  const deleteAccessMatch = url.match(/^\/api\/chat\/user-conversation-access\/([a-f0-9-]+)$/)
+  if (method === 'DELETE' && deleteAccessMatch) {
+    const id = deleteAccessMatch[1]
+    await db.query('DELETE FROM user_conversation_access WHERE id::text = $1', [id])
+    writeJson(res, 200, { ok: true }, corsOrigin)
     return true
   }
 
