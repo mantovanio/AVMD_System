@@ -487,8 +487,11 @@ export async function handleChatRoutes(
     return true
   }
 
-  if (method === 'GET' && url === '/api/chat/leads') {
-    const leads = await leadRepository.findAll()
+  if (method === 'GET' && url.startsWith('/api/chat/leads')) {
+    const parsedUrl = new URL(url, 'http://localhost')
+    const from = parsedUrl.searchParams.get('from') ?? undefined
+    const to = parsedUrl.searchParams.get('to') ?? undefined
+    const leads = await leadRepository.findAll(from, to)
     writeJson(res, 200, { ok: true, leads }, corsOrigin)
     return true
   }

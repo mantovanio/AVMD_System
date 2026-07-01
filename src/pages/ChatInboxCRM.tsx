@@ -262,7 +262,8 @@ function queueLabel(fila: string) {
 
 function contactPhone(item: ConversationRow) {
   if (item.fila === 'email') return item.email_principal || item.document_key
-  return item.telefone || item.document_key
+  const raw = item.telefone || item.document_key
+  return raw.replace(/@.*$/, '')
 }
 
 function hasRegisteredCustomer(item: ConversationRow | null | undefined) {

@@ -219,10 +219,15 @@ export class LeadRepository {
     })
   }
 
-  async findAll(): Promise<LeadRow[]> {
-    const result = await this.db.query<LeadRow>(
-      `SELECT * FROM leads_contabilidade ORDER BY created_at DESC`,
-    )
+  async findAll(from?: string, to?: string): Promise<LeadRow[]> {
+    let sql = `SELECT * FROM leads_contabilidade`
+    const params: string[] = []
+    const clauses: string[] = []
+    if (from) { params.push(from); clauses.push(`created_at >= $${params.length}`) }
+    if (to)   { params.push(to);   clauses.push(`created_at < $${params.length}`) }
+    if (clauses.length) sql += ` WHERE ${clauses.join(' AND ')}`
+    sql += ` ORDER BY created_at DESC`
+    const result = await this.db.query<LeadRow>(sql, params)
     return result.rows
   }
 
