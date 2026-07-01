@@ -12,6 +12,7 @@ import { buildWhatsAppMetadata, getWhatsAppEngine, getWhatsAppEngineLabel, isWha
 import { DEFAULT_PERMISSIONS, PAGE_PERMISSIONS, hasPerfil, isAdminProfile } from '@/lib/security'
 import { buscarCep } from '@/lib/cep'
 import NfseDocumentPreview from '@/components/NfseDocumentPreview'
+import ModulePageShell from '@/components/ModulePageShell'
 import {
   DEFAULT_NFSE_AUTOMATION_SETTINGS,
   DEFAULT_NFSE_MODELO,
@@ -5933,21 +5934,14 @@ export default function Configuracoes() {
   }, [tab, tabsDisponiveis])
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center gap-1 px-6 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-x-auto shrink-0">
-        {tabsDisponiveis.map(t => (
-          <button key={t.id} type="button" onClick={() => setTab(t.id)}
-            className={cn('px-3 py-2 text-xs font-medium rounded-md whitespace-nowrap transition-colors',
-              tab === t.id
-                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800')}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex-1 overflow-auto p-6 space-y-6">
-
+    <ModulePageShell
+      tabs={tabsDisponiveis}
+      activeTab={tab}
+      onTabChange={setTab}
+      storageKey="module-submenu-configuracoes"
+      menuLabel="Configurações"
+    >
+      <div className="space-y-6">
         {/* GERAL */}
         {tab === 'geral' && (
           <AbaGeral />
@@ -5973,9 +5967,8 @@ export default function Configuracoes() {
 
         {/* PRIVACIDADE LGPD */}
         {tab === 'privacidade' && <AbaPrivacidade />}
-
       </div>
-    </div>
+    </ModulePageShell>
   )
 }
 

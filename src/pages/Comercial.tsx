@@ -41,6 +41,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import NfseDocumentPreview from '@/components/NfseDocumentPreview'
+import ModulePageShell from '@/components/ModulePageShell'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig, type AgencyConfig } from '@/lib/agencyConfig'
 import {
   buildNfseDiscriminacaoFromVenda,
@@ -3715,20 +3716,14 @@ export default function Comercial() {
 
   // ── render ───────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center gap-1 px-6 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-x-auto shrink-0">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button key={id} type="button" onClick={() => setTab(id)}
-            className={cn('flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md whitespace-nowrap transition-colors',
-              tab === id
-                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300')}>
-            <Icon size={13} />{label}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex-1 overflow-auto p-6">
+    <ModulePageShell
+      tabs={TABS}
+      activeTab={tab}
+      onTabChange={setTab}
+      storageKey="module-submenu-comercial"
+      menuLabel="Comercial"
+    >
+      <div>
         {/* ── VENDAS ─────────────────────────────────────────── */}
         {tab === 'vendas' && (
           <div className="space-y-4">
@@ -6385,7 +6380,7 @@ export default function Comercial() {
         </div>,
         document.body
       )}
-    </div>
+    </ModulePageShell>
   )
 }
 

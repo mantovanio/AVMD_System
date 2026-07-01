@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PlusCircle, TrendingUp, TrendingDown, DollarSign, X, Zap, FileText, ArrowDownCircle, ArrowUpCircle, Wallet, Landmark, Search, Link as LinkIcon, Receipt } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ModulePageShell from '@/components/ModulePageShell'
 import { buildNfseDiscriminacaoFromLancamento } from '@/lib/nfse'
 import { supabase } from '@/lib/supabase'
 import type {
@@ -319,7 +320,13 @@ export default function Financeiro() {
   })
 
   return (
-    <div className="flex flex-col h-full">
+    <ModulePageShell
+      tabs={TABS}
+      activeTab={tab}
+      onTabChange={setTab}
+      storageKey="module-submenu-financeiro"
+      menuLabel="Financeiro"
+    >
       {msg && (
         <div className={cn('fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white',
           msg.ok ? 'bg-green-600' : 'bg-red-600')}>
@@ -327,18 +334,7 @@ export default function Financeiro() {
         </div>
       )}
 
-      <div className="flex items-center gap-1 px-6 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-x-auto shrink-0">
-        {TABS.map(t => (
-          <button key={t.id} type="button" onClick={() => setTab(t.id)}
-            className={cn('px-3 py-2 text-xs font-medium rounded-md whitespace-nowrap transition-colors',
-              tab === t.id ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800')}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex-1 overflow-auto p-6 space-y-5">
+      <div className="space-y-5">
         {error && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 text-red-600 rounded-lg p-4 text-sm">{error}</div>}
 
         {/* PAGAR / RECEBER */}
@@ -879,7 +875,7 @@ export default function Financeiro() {
           </div>
         )}
       </div>
-    </div>
+    </ModulePageShell>
   )
 }
 
