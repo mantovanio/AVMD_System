@@ -40,6 +40,8 @@ import { handleCommunicationOutboxRoutes } from './routes/communicationOutboxRou
 import { handleScheduleAutomationRoutes } from './routes/scheduleAutomationRoutes.js'
 import { handleClaraAutomationRoutes } from './routes/claraAutomationRoutes.js'
 import { handleChatRoutes } from './routes/chatRoutes.js'
+import { PermissoesRepository } from './repositories/permissoesRepository.js'
+import { handlePermissoesRoutes } from './routes/permissoesRoutes.js'
 import { writeJson } from './utils/http.js'
 
 const config = loadConfig()
@@ -61,6 +63,7 @@ const communicationEventRepository = new CommunicationEventRepository(db)
 const configRepository = new ConfigRepository(db)
 const fileRepository = new FileRepository(db)
 const scheduleAutomationRepository = new ScheduleAutomationRepository(db)
+const permissoesRepository = new PermissoesRepository(db)
 const integrationRegistry = createIntegrationRegistry(config)
 const integrationEventProcessor = new IntegrationEventProcessor(integrationEventRepository, integrationRegistry)
 const checkoutPaymentService = new CheckoutPaymentService(checkoutRepository)
@@ -134,6 +137,9 @@ const server = createServer(async (req, res) => {
       config.corsOrigin,
     )
     if (handledClaraAutomation) return
+
+    const handledPermissoes = await handlePermissoesRoutes(req, res, permissoesRepository, config.corsOrigin)
+    if (handledPermissoes) return
 
     const handledChat = await handleChatRoutes(
       req,

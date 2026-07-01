@@ -43,20 +43,21 @@ import type {
   WhatsAppEngine,
 } from '@/types'
 
-type Tab = 'geral' | 'integracoes' | 'automacoes' | 'usuarios' | 'pontos' | 'pagamentos' | 'fiscal' | 'privacidade'
+type Tab = 'geral' | 'integracoes' | 'automacoes' | 'usuarios' | 'permissoes' | 'pontos' | 'pagamentos' | 'fiscal' | 'privacidade'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'geral',        label: 'Geral'                  },
   { id: 'integracoes',  label: 'Integrações'            },
   { id: 'automacoes',   label: 'Automações'             },
   { id: 'usuarios',     label: 'Usuários'               },
+  { id: 'permissoes',   label: 'Permissões'             },
   { id: 'pontos',       label: 'Pontos de Atendimento'  },
   { id: 'pagamentos',   label: 'Pagamentos'             },
   { id: 'fiscal',       label: 'Fiscal / NFS-e'         },
   { id: 'privacidade',  label: 'Privacidade (LGPD)'     },
 ]
 
-const ADMIN_ONLY_TABS: Tab[] = ['fiscal']
+const ADMIN_ONLY_TABS: Tab[] = ['fiscal', 'permissoes']
 
 const PERFIL_LABEL: Record<PerfilAcesso, string> = {
   admin:           'Administrador',
@@ -5921,6 +5922,557 @@ function AbaFiscal() {
   )
 }
 
+// ── Aba Permissões (Módulos, Perfis e Pacotes) ────────────────────────────
+
+type NivelAcesso = 'nenhum' | 'visualizar' | 'editar' | 'admin'
+
+const NIVEL_OPTIONS: { value: string; label: string }[] = [
+  { value: 'herdar',     label: 'Herança'    },
+  { value: 'nenhum',     label: 'Nenhum'     },
+  { value: 'visualizar', label: 'Visualizar' },
+  { value: 'editar',     label: 'Editar'     },
+  { value: 'admin',      label: 'Admin'      },
+]
+
+const NIVEL_CORES: Record<string, string> = {
+  admin:      'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  editar:     'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  visualizar: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  nenhum:     'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500',
+  herdar:     'bg-gray-50 text-gray-400 dark:bg-gray-800/50 dark:text-gray-500',
+}
+
+type ModuloData = {
+  id: string
+  chave: string
+  nome: string
+  grupo: string
+  icone: string | null
+  rota: string | null
+  ordem: number
+}
+
+type PerfilData = {
+  id: string
+  nome: string
+  descricao: string | null
+  nivel: number
+}
+
+type PerfilModuloData = {
+  modulo_id: string
+  nivel_acesso: string
+  chave: string
+  nome: string
+  grupo: string
+}
+
+function AbaPermissoes() {
+  const { profile } = useAuth()
+  const isAdmin = isAdminProfile(profile)
+
+  const [modulos, setModulos] = useState<ModuloData[]>([])
+  const [perfis, setPerfis] = useState<PerfilData[]>([])
+  const [perfilModulos, setPerfilModulos] = useState<Record<string, PerfilModuloData[]>>({})
+  const [expandedPerfil, setExpandedPerfil] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const apiOrigin = window.location.origin
+
+  async function loadData() {
+    setLoading(true)
+    try {
+      const [modRes, perfRes] = await Promise.all([
+        fetch(`${apiOrigin}/api/permissoes/modulos`).then(r => r.json()),
+        fetch(`${apiOrigin}/api/permissoes/perfis`).then(r => r.json()),
+      ])
+      if (modRes.ok) setModulos(modRes.modulos)
+      if (perfRes.ok) setPerfis(perfRes.perfis)
+    } catch { /* ignore */ }
+    setLoading(false)
+  }
+
+  async function loadPerfilModulos(perfilId: string) {
+    if (perfilModulos[perfilId]) {
+      setExpandedPerfil(expandedPerfil === perfilId ? null : perfilId)
+      return
+    }
+    try {
+      const res = await fetch(`${apiOrigin}/api/permissoes/perfis/${perfilId}/modulos`).then(r => r.json())
+      if (res.ok) {
+        setPerfilModulos(prev => ({ ...prev, [perfilId]: res.modulos }))
+        setExpandedPerfil(perfilId)
+      }
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => { void loadData() }, [])
+
+  const grupos = ['operacao', 'relacionamento', 'gestao', 'sistema', 'comercial']
+  const grupoLabels: Record<string, string> = {
+    operacao:       'Operação',
+    relacionamento: 'Relacionamento',
+    gestao:         'Gestão',
+    sistema:        'Sistema',
+    comercial:      'Comercial',
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="text-sm text-gray-500 dark:text-gray-400 p-4">
+        Apenas administradores podem gerenciar permissões.
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+          <ShieldCheck size={20} className="text-blue-500" />
+          Permissões do Sistema
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          Gerencie quais módulos cada perfil de acesso pode visualizar, editar ou administrar.
+        </p>
+      </div>
+
+      {/* Perfis de Acesso */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Perfis de Acesso</h3>
+        {perfis.map(perfil => (
+          <div key={perfil.id} className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => void loadPerfilModulos(perfil.id)}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs">
+                  {perfil.nome.charAt(0)}
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">{perfil.nome}</span>
+                  {perfil.descricao && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{perfil.descricao}</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-gray-400 dark:text-gray-500">Nível {perfil.nivel}</span>
+                {expandedPerfil === perfil.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              </div>
+            </button>
+
+            {expandedPerfil === perfil.id && (
+              <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-3 space-y-4">
+                {grupos.map(grupo => {
+                  const modulosGrupo = modulos.filter(m => m.grupo === grupo)
+                  if (modulosGrupo.length === 0) return null
+                  const modulosComPermissao = perfilModulos[perfil.id] ?? []
+                  return (
+                    <div key={grupo}>
+                      <h4 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+                        {grupoLabels[grupo] ?? grupo}
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {modulosGrupo.map(mod => {
+                          const permissao = modulosComPermissao.find(p => p.modulo_id === mod.id)
+                          const nivelAtual: string = permissao?.nivel_acesso ?? 'nenhum'
+                          return (
+                            <div key={mod.id}
+                              className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/50"
+                            >
+                              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{mod.nome}</span>
+                              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${NIVEL_CORES[nivelAtual] ?? ''}`}>
+                                {NIVEL_OPTIONS.find(o => o.value === nivelAtual)?.label ?? nivelAtual}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Legenda */}
+      <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-purple-500" /> Admin
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-blue-500" /> Editar
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-green-500" /> Visualizar
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600" /> Nenhum
+        </span>
+      </div>
+
+      {/* ── Sobrescrita por Usuário ─────────────────────────── */}
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+          <Users size={16} />
+          Sobrescrita Individual por Usuário
+        </h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Selecione um usuário para sobrescrever as permissões do perfil dele em módulos específicos.
+        </p>
+        <UserOverrideSection apiOrigin={apiOrigin} modulos={modulos} grupos={grupos} grupoLabels={grupoLabels} />
+      </div>
+
+      {/* ── Pacotes de Negócio ───────────────────────────────── */}
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+          <CreditCard size={16} />
+          Pacotes de Negócio
+        </h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Defina quais módulos cada pacote de negócio inclui. O pacote do parceiro determina os módulos disponíveis para os usuários daquela organização.
+        </p>
+        <PacotesSection apiOrigin={apiOrigin} modulos={modulos} grupos={grupos} grupoLabels={grupoLabels} />
+      </div>
+    </div>
+  )
+}
+
+function UserOverrideSection({
+  apiOrigin,
+  modulos,
+  grupos,
+  grupoLabels,
+}: {
+  apiOrigin: string
+  modulos: ModuloData[]
+  grupos: string[]
+  grupoLabels: Record<string, string>
+}) {
+  const [users, setUsers] = useState<{ id: string; nome: string; email: string | null; perfil: string }[]>([])
+  const [selectedUserId, setSelectedUserId] = useState<string>('')
+  const [overrides, setOverrides] = useState<Record<string, string>>({})
+  const [originalOverrides, setOriginalOverrides] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [loadingUsers, setLoadingUsers] = useState(true)
+
+  useEffect(() => {
+    fetch(`${apiOrigin}/api/profiles`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.ok) setUsers(data.profiles ?? [])
+        setLoadingUsers(false)
+      })
+      .catch(() => setLoadingUsers(false))
+  }, [apiOrigin])
+
+  async function loadUserOverrides(userId: string) {
+    try {
+      const [permRes, ovRes] = await Promise.all([
+        fetch(`${apiOrigin}/api/permissoes/profile/${userId}`).then(r => r.json()),
+        fetch(`${apiOrigin}/api/permissoes/profile/${userId}/overrides`).then(r => r.json()),
+      ])
+      const ovMap: Record<string, string> = {}
+      if (ovRes.ok) {
+        for (const ov of ovRes.overrides ?? []) {
+          ovMap[ov.modulo_id] = ov.nivel_acesso
+        }
+      }
+      if (permRes.ok) {
+        for (const p of permRes.permissoes ?? []) {
+          if (!(p.id in ovMap)) {
+            ovMap[p.id] = 'herdar'
+          }
+        }
+      }
+      setOverrides(ovMap)
+      setOriginalOverrides({ ...ovMap })
+    } catch { /* ignore */ }
+  }
+
+  function handleUserSelect(userId: string) {
+    setSelectedUserId(userId)
+    setSaved(false)
+    if (userId) void loadUserOverrides(userId)
+  }
+
+  function handleNivelChange(moduloId: string, nivel: string) {
+    setOverrides(prev => ({ ...prev, [moduloId]: nivel }))
+    setSaved(false)
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    setSaved(false)
+    try {
+      const ovList = Object.entries(overrides)
+        .filter(([_, nivel]) => nivel !== 'herdar')
+        .map(([modulo_id, nivel_acesso]) => ({ modulo_id, nivel_acesso }))
+      const res = await fetch(`${apiOrigin}/api/permissoes/profile/${selectedUserId}/overrides`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ overrides: ovList }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setSaved(true)
+        setOriginalOverrides({ ...overrides })
+      }
+    } catch { /* ignore */ }
+    setSaving(false)
+  }
+
+  const hasChanges = JSON.stringify(overrides) !== JSON.stringify(originalOverrides)
+
+  const selectedUser = users.find(u => u.id === selectedUserId)
+
+  return (
+    <div className="space-y-4">
+      {/* User selector */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-xs">
+          <select
+            value={selectedUserId}
+            onChange={e => handleUserSelect(e.target.value)}
+            className="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+          >
+            <option value="">Selecione um usuário...</option>
+            {users.map(u => (
+              <option key={u.id} value={u.id}>
+                {u.nome} {u.email ? `(${u.email})` : ''} — {u.perfil}
+              </option>
+            ))}
+          </select>
+        </div>
+        {loadingUsers && <Loader2 size={16} className="animate-spin text-gray-400" />}
+      </div>
+
+      {selectedUserId && selectedUser && (
+        <>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            Perfil base: <span className="font-medium text-gray-700 dark:text-gray-300">{selectedUser.perfil}</span>
+            {' · '}
+            <span className="text-gray-400">Valores marcados como "Herança" usam a permissão do perfil</span>
+          </div>
+
+          <div className="space-y-4">
+            {grupos.map(grupo => {
+              const modulosGrupo = modulos.filter(m => m.grupo === grupo)
+              if (modulosGrupo.length === 0) return null
+              return (
+                <div key={grupo}>
+                  <h4 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+                    {grupoLabels[grupo] ?? grupo}
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {modulosGrupo.map(mod => {
+                      const nivelAtual = overrides[mod.id] ?? 'herdar'
+                      return (
+                        <div key={mod.id}
+                          className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/50"
+                        >
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{mod.nome}</span>
+                          <select
+                            value={nivelAtual}
+                            onChange={e => handleNivelChange(mod.id, e.target.value)}
+                            className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border-0 cursor-pointer appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 ${NIVEL_CORES[nivelAtual] ?? ''}`}
+                          >
+                            {NIVEL_OPTIONS.map(opt => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !hasChanges}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+            >
+              <Save size={15} />
+              {saving ? 'Salvando...' : 'Salvar Sobrescritas'}
+            </button>
+            {saved && (
+              <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                <Check size={14} /> Salvo
+              </span>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+
+function PacotesSection({
+  apiOrigin,
+  modulos,
+  grupos,
+  grupoLabels,
+}: {
+  apiOrigin: string
+  modulos: ModuloData[]
+  grupos: string[]
+  grupoLabels: Record<string, string>
+}) {
+  const [pacotes, setPacotes] = useState<{ id: string; nome: string; descricao: string | null }[]>([])
+  const [pacoteModulos, setPacoteModulos] = useState<Record<string, string[]>>({})
+  const [editPacote, setEditPacote] = useState<string | null>(null)
+  const [editModulos, setEditModulos] = useState<string[]>([])
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    fetch(`${apiOrigin}/api/permissoes/pacotes`)
+      .then(r => r.json())
+      .then(data => { if (data.ok) setPacotes(data.pacotes) })
+  }, [apiOrigin])
+
+  async function loadPacoteModulos(id: string) {
+    if (pacoteModulos[id]) { setEditPacote(editPacote === id ? null : id); return }
+    try {
+      const res = await fetch(`${apiOrigin}/api/permissoes/pacotes/${id}/modulos`).then(r => r.json())
+      if (res.ok) {
+        setPacoteModulos(prev => ({ ...prev, [id]: res.modulos }))
+        setEditPacote(id)
+        setEditModulos(res.modulos)
+      }
+    } catch { /* ignore */ }
+  }
+
+  function toggleModulo(chave: string) {
+    setEditModulos(prev =>
+      prev.includes(chave) ? prev.filter(c => c !== chave) : [...prev, chave],
+    )
+    setSaved(false)
+  }
+
+  async function savePacoteModulos() {
+    if (!editPacote) return
+    setSaving(true)
+    try {
+      const res = await fetch(`${apiOrigin}/api/permissoes/pacotes/${editPacote}/modulos`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modulos: editModulos }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setPacoteModulos(prev => ({ ...prev, [editPacote]: editModulos }))
+        setSaved(true)
+      }
+    } catch { /* ignore */ }
+    setSaving(false)
+  }
+
+  return (
+    <div className="space-y-3">
+      {pacotes.map(pacote => {
+        const expanded = editPacote === pacote.id
+        const modList = pacoteModulos[pacote.id] ?? []
+        return (
+          <div key={pacote.id} className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => { void loadPacoteModulos(pacote.id) }}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-xs">
+                  {pacote.nome.charAt(0)}
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">{pacote.nome}</span>
+                  {pacote.descricao && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{pacote.descricao}</p>
+                  )}
+                </div>
+              </div>
+              {expanded ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronRight size={16} className="text-gray-400" />}
+            </button>
+
+            {expanded && (
+              <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-3 space-y-4">
+                {grupos.map(grupo => {
+                  const modulosGrupo = modulos.filter(m => m.grupo === grupo)
+                  if (modulosGrupo.length === 0) return null
+                  return (
+                    <div key={grupo}>
+                      <h4 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+                        {grupoLabels[grupo] ?? grupo}
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {modulosGrupo.map(mod => {
+                          const isSelected = editModulos.includes(mod.chave)
+                          return (
+                            <button
+                              key={mod.id}
+                              type="button"
+                              onClick={() => toggleModulo(mod.chave)}
+                              className={cn(
+                                'flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left',
+                                isSelected
+                                  ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                  : 'bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 border border-transparent hover:border-gray-200 dark:hover:border-gray-700',
+                              )}
+                            >
+                              <span>{mod.nome}</span>
+                              {isSelected ? <Check size={14} className="shrink-0 text-emerald-500" /> : <Plus size={14} className="shrink-0 text-gray-400" />}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={savePacoteModulos}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+                  >
+                    <Save size={15} />
+                    {saving ? 'Salvando...' : 'Salvar Pacote'}
+                  </button>
+                  {saved && (
+                    <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                      <Check size={14} /> Salvo
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function Configuracoes() {
   const { profile } = useAuth()
   const isAdmin = isAdminProfile(profile)
@@ -5955,6 +6507,9 @@ export default function Configuracoes() {
 
         {/* USUÁRIOS */}
         {tab === 'usuarios' && <AbaUsuarios />}
+
+        {/* PERMISSÕES */}
+        {tab === 'permissoes' && <AbaPermissoes />}
 
         {/* PONTOS DE ATENDIMENTO */}
         {tab === 'pontos' && <AbaPontos />}
