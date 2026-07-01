@@ -37,6 +37,18 @@ export default function ModulePageShell<T extends string>({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [menuOpen])
 
+  useEffect(() => {
+    function handleTabNav(e: Event) {
+      const detail = (e as CustomEvent).detail as { tab: string } | undefined
+      if (detail?.tab) {
+        const match = tabs.find(t => t.id === detail.tab)
+        if (match) onTabChange(match.id)
+      }
+    }
+    window.addEventListener('crm:navigate-tab', handleTabNav)
+    return () => window.removeEventListener('crm:navigate-tab', handleTabNav)
+  }, [tabs, onTabChange])
+
   const activeTabLabel = tabs.find(tab => tab.id === activeTab)?.label ?? 'Seção'
 
   function handleTabClick(tab: T) {

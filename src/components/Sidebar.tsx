@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -13,6 +13,25 @@ import {
   X,
   BookOpen,
   ChevronLeft,
+  TrendingUp,
+  Calendar,
+  CreditCard,
+  ShoppingBag,
+  Tag,
+  Upload,
+  Wallet,
+  Landmark,
+  SplitSquareHorizontal,
+  FileText,
+  Shield,
+  Store,
+  Receipt,
+  LineChart,
+  Globe,
+  MousePointerClick,
+  Lock,
+  Building2,
+  ScrollText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AgencyConfig } from '@/lib/agencyConfig'
@@ -28,6 +47,39 @@ export type Page =
   | 'parceiros'
   | 'configuracoes'
   | 'catalogo_ia'
+
+type SubItem = { id: string; label: string; icon?: React.ComponentType<{ size?: number; className?: string }> }
+
+const PAGE_SUB_ITEMS: Partial<Record<Page, SubItem[]>> = {
+  comercial: [
+    { id: 'vendas',       label: 'Lançar Vendas',    icon: TrendingUp  },
+    { id: 'agenda',       label: 'Agenda',           icon: Calendar    },
+    { id: 'pagamento',    label: 'Pagamentos',       icon: CreditCard  },
+    { id: 'certificados', label: 'Certificados',     icon: ShoppingBag },
+    { id: 'tabelas',      label: 'Tabelas de Preço', icon: Tag         },
+    { id: 'comissoes',    label: 'Comissões',        icon: TrendingUp  },
+    { id: 'importar',     label: 'Importações',      icon: Upload      },
+  ],
+  financeiro: [
+    { id: 'pagarReceber', label: 'Pagar / Receber',  icon: Wallet           },
+    { id: 'contas',       label: 'Contas Bancárias', icon: Landmark         },
+    { id: 'centros',      label: 'Centro de Custos', icon: Building2        },
+    { id: 'comissoes',    label: 'Comissões',        icon: TrendingUp       },
+    { id: 'split',        label: 'Extrato Split',    icon: SplitSquareHorizontal },
+    { id: 'fiscal',       label: 'Fiscal',           icon: Receipt          },
+  ],
+  configuracoes: [
+    { id: 'geral',        label: 'Geral',                  icon: Settings    },
+    { id: 'integracoes',  label: 'Integrações',            icon: Globe       },
+    { id: 'automacoes',   label: 'Automações',             icon: MousePointerClick },
+    { id: 'usuarios',     label: 'Usuários',               icon: Users       },
+    { id: 'permissoes',   label: 'Permissões',             icon: Lock        },
+    { id: 'pontos',       label: 'Pontos de Atendimento',  icon: Store       },
+    { id: 'pagamentos',   label: 'Pagamentos',             icon: CreditCard  },
+    { id: 'fiscal',       label: 'Fiscal / NFS-e',         icon: ScrollText  },
+    { id: 'privacidade',  label: 'Privacidade (LGPD)',     icon: Shield      },
+  ],
+}
 
 interface Props {
   activePage:   Page
@@ -94,8 +146,36 @@ function IconRail({
   onMobileClose?: () => void
   agencyConfig?: AgencyConfig
 }) {
+  const [hoveredPage, setHoveredPage] = useState<Page | null>(null)
+  const flyoutRef = useRef<HTMLDivElement>(null)
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  function handleFlyoutNavigate(page: Page, tab: string) {
+    setHoveredPage(null)
+    onNavigate(page)
+    window.dispatchEvent(new CustomEvent('crm:navigate-tab', { detail: { tab } }))
+  }
+
+  function handleMouseEnter(page: Page) {
+    clearTimeout(hoverTimeout.current)
+    const subs = PAGE_SUB_ITEMS[page]
+    if (subs && subs.length > 0) {
+      setHoveredPage(page)
+    }
+  }
+
+  function handleMouseLeave() {
+    hoverTimeout.current = setTimeout(() => {
+      setHoveredPage(null)
+    }, 150)
+  }
+
+  function handleFlyoutMouseEnter() {
+    clearTimeout(hoverTimeout.current)
+  }
+
   return (
-    <div className="w-16 flex flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
+    <div className="w-16 flex flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0 relative">
       <div className="flex items-center justify-center mb-4">
         {agencyConfig?.logo_interna_url?.trim() ? (
           <div className="w-9 h-9 rounded-xl bg-white border border-gray-200 dark:border-gray-800 flex items-center justify-center p-1.5 overflow-hidden">
@@ -121,22 +201,60 @@ function IconRail({
         {groups.map((group, groupIndex) => (
           <div key={group.id} className={cn(groupIndex > 0 && 'mt-3 pt-3 border-t border-gray-100 dark:border-gray-800')}>
             <div className="flex flex-col gap-1">
-              {group.items.map(({ id, icon: Icon, label }) => (
-                <button
-                  key={id}
-                  onClick={() => { onNavigate(id); onMobileClose?.() }}
-                  type="button"
-                  title={label}
-                  className={cn(
-                    'flex items-center justify-center w-12 h-12 rounded-xl transition-colors mx-auto',
-                    activePage === id
-                      ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
-                      : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300',
-                  )}
-                >
-                  <Icon size={20} />
-                </button>
-              ))}
+              {group.items.map(({ id, icon: Icon, label }) => {
+                const hasSubs = !!(PAGE_SUB_ITEMS[id] && PAGE_SUB_ITEMS[id]!.length > 0)
+                return (
+                  <div
+                    key={id}
+                    className="relative"
+                    onMouseEnter={() => handleMouseEnter(id)}
+                    onMouseLeave={handleMouseLeave}
+                  >
+                    <button
+                      onClick={() => { onNavigate(id); onMobileClose?.() }}
+                      type="button"
+                      title={label}
+                      className={cn(
+                        'flex items-center justify-center w-12 h-12 rounded-xl transition-colors mx-auto',
+                        activePage === id
+                          ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
+                          : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300',
+                      )}
+                    >
+                      <Icon size={20} />
+                    </button>
+
+                    {hoveredPage === id && hasSubs && (
+                      <>
+                        <div className="fixed inset-0 z-30" onClick={() => setHoveredPage(null)} />
+                        <div
+                          ref={flyoutRef}
+                          onMouseEnter={handleFlyoutMouseEnter}
+                          onMouseLeave={handleMouseLeave}
+                          className="absolute left-full top-0 z-40 ml-1 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl"
+                        >
+                          <div className="max-h-80 overflow-y-auto p-1.5">
+                            <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                              {label}
+                            </p>
+                            {PAGE_SUB_ITEMS[id]!.map(sub => (
+                              <button
+                                key={sub.id}
+                                type="button"
+                                onClick={() => handleFlyoutNavigate(id, sub.id)}
+                                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors"
+                              >
+                                {sub.icon && <sub.icon size={16} className="shrink-0 text-gray-400 dark:text-gray-500" />}
+                                <span>{sub.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         ))}
