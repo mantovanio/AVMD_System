@@ -197,7 +197,7 @@ function IconRail({
         )}
       </div>
 
-      <nav className="flex flex-col flex-1 px-2 overflow-y-auto">
+      <nav className="flex flex-col flex-1 px-2 overflow-y-auto sidebar-scroll">
         {groups.map((group, groupIndex) => (
           <div key={group.id} className={cn(groupIndex > 0 && 'mt-3 pt-3 border-t border-gray-100 dark:border-gray-800')}>
             <div className="flex flex-col gap-1">
