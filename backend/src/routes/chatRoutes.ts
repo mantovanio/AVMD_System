@@ -128,7 +128,6 @@ function buildConversationVisibilitySql(conversationAlias: string, viewerAlias =
       AND (
         vc.vendedor_id::text = ${viewerAlias}.id
         OR vc.agente_registro_id::text = ${viewerAlias}.id
-        OR (${viewerAlias}.parceiro_id IS NOT NULL AND vc.parceiro_id::text = ${viewerAlias}.parceiro_id)
         OR (${viewerAlias}.ponto_atendimento_id IS NOT NULL AND vc.ponto_atendimento_id::text = ${viewerAlias}.ponto_atendimento_id)
       )
   )`
