@@ -28,3 +28,8 @@ dist-ssr
 
 # File uploads
 storage/
+# Local artifacts and diagnostics
+temp/
+*.backup
+subject
+
