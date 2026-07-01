@@ -147,19 +147,22 @@ function IconRail({
   agencyConfig?: AgencyConfig
 }) {
   const [hoveredPage, setHoveredPage] = useState<Page | null>(null)
-  const flyoutRef = useRef<HTMLDivElement>(null)
+  const [flyoutStyle, setFlyoutStyle] = useState<React.CSSProperties | undefined>(undefined)
   const hoverTimeout = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   function handleFlyoutNavigate(page: Page, tab: string) {
     setHoveredPage(null)
+    setFlyoutStyle(undefined)
     onNavigate(page)
     window.dispatchEvent(new CustomEvent('crm:navigate-tab', { detail: { tab } }))
   }
 
-  function handleMouseEnter(page: Page) {
+  function handleMouseEnter(page: Page, e: React.MouseEvent) {
     clearTimeout(hoverTimeout.current)
     const subs = PAGE_SUB_ITEMS[page]
     if (subs && subs.length > 0) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      setFlyoutStyle({ left: rect.right + 4, top: rect.top })
       setHoveredPage(page)
     }
   }
@@ -167,6 +170,7 @@ function IconRail({
   function handleMouseLeave() {
     hoverTimeout.current = setTimeout(() => {
       setHoveredPage(null)
+      setFlyoutStyle(undefined)
     }, 150)
   }
 
@@ -174,8 +178,11 @@ function IconRail({
     clearTimeout(hoverTimeout.current)
   }
 
+  const hoveredSubs = hoveredPage ? (PAGE_SUB_ITEMS[hoveredPage] ?? null) : null
+  const hoveredLabel = hoveredPage ? MENU_GROUPS.flatMap(g => g.items).find(i => i.id === hoveredPage)?.label ?? '' : ''
+
   return (
-    <div className="w-16 flex flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0 relative">
+    <div className="w-16 flex flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
       <div className="flex items-center justify-center mb-4">
         {agencyConfig?.logo_interna_url?.trim() ? (
           <div className="w-9 h-9 rounded-xl bg-white border border-gray-200 dark:border-gray-800 flex items-center justify-center p-1.5 overflow-hidden">
@@ -201,60 +208,27 @@ function IconRail({
         {groups.map((group, groupIndex) => (
           <div key={group.id} className={cn(groupIndex > 0 && 'mt-3 pt-3 border-t border-gray-100 dark:border-gray-800')}>
             <div className="flex flex-col gap-1">
-              {group.items.map(({ id, icon: Icon, label }) => {
-                const hasSubs = !!(PAGE_SUB_ITEMS[id] && PAGE_SUB_ITEMS[id]!.length > 0)
-                return (
-                  <div
-                    key={id}
-                    className="relative"
-                    onMouseEnter={() => handleMouseEnter(id)}
-                    onMouseLeave={handleMouseLeave}
-                  >
-                    <button
-                      onClick={() => { onNavigate(id); onMobileClose?.() }}
-                      type="button"
-                      title={label}
-                      className={cn(
-                        'flex items-center justify-center w-12 h-12 rounded-xl transition-colors mx-auto',
-                        activePage === id
-                          ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
-                          : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300',
-                      )}
-                    >
-                      <Icon size={20} />
-                    </button>
-
-                    {hoveredPage === id && hasSubs && (
-                      <>
-                        <div className="fixed inset-0 z-30" onClick={() => setHoveredPage(null)} />
-                        <div
-                          ref={flyoutRef}
-                          onMouseEnter={handleFlyoutMouseEnter}
-                          onMouseLeave={handleMouseLeave}
-                          className="absolute left-full top-0 z-40 ml-1 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl"
-                        >
-                          <div className="max-h-80 overflow-y-auto p-1.5">
-                            <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                              {label}
-                            </p>
-                            {PAGE_SUB_ITEMS[id]!.map(sub => (
-                              <button
-                                key={sub.id}
-                                type="button"
-                                onClick={() => handleFlyoutNavigate(id, sub.id)}
-                                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors"
-                              >
-                                {sub.icon && <sub.icon size={16} className="shrink-0 text-gray-400 dark:text-gray-500" />}
-                                <span>{sub.label}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </>
+              {group.items.map(({ id, icon: Icon, label }) => (
+                <div
+                  key={id}
+                  onMouseEnter={e => handleMouseEnter(id, e)}
+                  onMouseLeave={handleMouseLeave}
+                >
+                  <button
+                    onClick={() => { onNavigate(id); onMobileClose?.() }}
+                    type="button"
+                    title={label}
+                    className={cn(
+                      'flex items-center justify-center w-12 h-12 rounded-xl transition-colors mx-auto',
+                      activePage === id
+                        ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
+                        : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300',
                     )}
-                  </div>
-                )
-              })}
+                  >
+                    <Icon size={20} />
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         ))}
@@ -270,6 +244,35 @@ function IconRail({
           <LogOut size={18} />
         </button>
       </div>
+
+      {hoveredPage && hoveredSubs && flyoutStyle && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => { setHoveredPage(null); setFlyoutStyle(undefined) }} />
+          <div
+            onMouseEnter={handleFlyoutMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            className="fixed z-50 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl"
+            style={flyoutStyle}
+          >
+            <div className="max-h-80 overflow-y-auto p-1.5">
+              <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                {hoveredLabel}
+              </p>
+              {hoveredSubs.map(sub => (
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => handleFlyoutNavigate(hoveredPage, sub.id)}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors"
+                >
+                  {sub.icon && <sub.icon size={16} className="shrink-0 text-gray-400 dark:text-gray-500" />}
+                  <span>{sub.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
