@@ -153,6 +153,7 @@ function IconRail({
   function handleFlyoutNavigate(page: Page, tab: string) {
     setHoveredPage(null)
     setFlyoutStyle(undefined)
+    clearTimeout(hoverTimeout.current)
     onNavigate(page)
     window.dispatchEvent(new CustomEvent('crm:navigate-tab', { detail: { tab } }))
   }
@@ -167,15 +168,12 @@ function IconRail({
     }
   }
 
-  function handleMouseLeave() {
+  function handleZoneLeave() {
+    clearTimeout(hoverTimeout.current)
     hoverTimeout.current = setTimeout(() => {
       setHoveredPage(null)
       setFlyoutStyle(undefined)
-    }, 150)
-  }
-
-  function handleFlyoutMouseEnter() {
-    clearTimeout(hoverTimeout.current)
+    }, 300)
   }
 
   const hoveredSubs = hoveredPage ? (PAGE_SUB_ITEMS[hoveredPage] ?? null) : null
@@ -204,35 +202,64 @@ function IconRail({
         )}
       </div>
 
-      <nav className="flex flex-col flex-1 px-2 overflow-y-auto sidebar-scroll">
-        {groups.map((group, groupIndex) => (
-          <div key={group.id} className={cn(groupIndex > 0 && 'mt-3 pt-3 border-t border-gray-100 dark:border-gray-800')}>
-            <div className="flex flex-col gap-1">
-              {group.items.map(({ id, icon: Icon, label }) => (
-                <div
-                  key={id}
-                  onMouseEnter={e => handleMouseEnter(id, e)}
-                  onMouseLeave={handleMouseLeave}
-                >
-                  <button
-                    onClick={() => { onNavigate(id); onMobileClose?.() }}
-                    type="button"
-                    title={label}
-                    className={cn(
-                      'flex items-center justify-center w-12 h-12 rounded-xl transition-colors mx-auto',
-                      activePage === id
-                        ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
-                        : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300',
-                    )}
+      <div className="flex-1 flex flex-col min-h-0" onMouseLeave={handleZoneLeave}>
+        <nav className="flex flex-col flex-1 px-2 overflow-y-auto sidebar-scroll">
+          {groups.map((group, groupIndex) => (
+            <div key={group.id} className={cn(groupIndex > 0 && 'mt-3 pt-3 border-t border-gray-100 dark:border-gray-800')}>
+              <div className="flex flex-col gap-1">
+                {group.items.map(({ id, icon: Icon, label }) => (
+                  <div
+                    key={id}
+                    onMouseEnter={e => handleMouseEnter(id, e)}
                   >
-                    <Icon size={20} />
-                  </button>
-                </div>
-              ))}
+                    <button
+                      onClick={() => { onNavigate(id); onMobileClose?.() }}
+                      type="button"
+                      title={label}
+                      className={cn(
+                        'flex items-center justify-center w-12 h-12 rounded-xl transition-colors mx-auto',
+                        activePage === id
+                          ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
+                          : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300',
+                      )}
+                    >
+                      <Icon size={20} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </nav>
+          ))}
+        </nav>
+
+        {hoveredPage && hoveredSubs && flyoutStyle && (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => { setHoveredPage(null); setFlyoutStyle(undefined); clearTimeout(hoverTimeout.current) }} />
+            <div
+              onMouseEnter={() => clearTimeout(hoverTimeout.current)}
+              className="fixed z-50 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl"
+              style={flyoutStyle}
+            >
+              <div className="max-h-80 overflow-y-auto p-1.5">
+                <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                  {hoveredLabel}
+                </p>
+                {hoveredSubs.map(sub => (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    onClick={() => handleFlyoutNavigate(hoveredPage, sub.id)}
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors"
+                  >
+                    {sub.icon && <sub.icon size={16} className="shrink-0 text-gray-400 dark:text-gray-500" />}
+                    <span>{sub.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
 
       <div className="px-2 pt-3 mt-3 border-t border-gray-100 dark:border-gray-800">
         <button
@@ -244,35 +271,6 @@ function IconRail({
           <LogOut size={18} />
         </button>
       </div>
-
-      {hoveredPage && hoveredSubs && flyoutStyle && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => { setHoveredPage(null); setFlyoutStyle(undefined) }} />
-          <div
-            onMouseEnter={handleFlyoutMouseEnter}
-            onMouseLeave={handleMouseLeave}
-            className="fixed z-50 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl"
-            style={flyoutStyle}
-          >
-            <div className="max-h-80 overflow-y-auto p-1.5">
-              <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                {hoveredLabel}
-              </p>
-              {hoveredSubs.map(sub => (
-                <button
-                  key={sub.id}
-                  type="button"
-                  onClick={() => handleFlyoutNavigate(hoveredPage, sub.id)}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors"
-                >
-                  {sub.icon && <sub.icon size={16} className="shrink-0 text-gray-400 dark:text-gray-500" />}
-                  <span>{sub.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
     </div>
   )
 }
