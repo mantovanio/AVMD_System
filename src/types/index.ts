@@ -458,6 +458,40 @@ export interface CommunicationOutbox {
 export type PerfilAcesso = 'admin' | 'usuario' | 'vendedor' | 'agente_registro'
 export type TipoVinculoUsuario = 'agente_registro' | 'parceiro' | 'vendedor' | 'contador' | 'usuario_comum'
 
+export type NivelAcesso = 'nenhum' | 'visualizar' | 'editar' | 'admin'
+
+export type ModuloSistema = {
+  id: string
+  chave: string
+  nome: string
+  descricao: string | null
+  grupo: string
+  icone: string | null
+  rota: string | null
+  ordem: number
+  ativo: boolean
+}
+
+export type PerfilAcessoRow = {
+  id: string
+  nome: string
+  descricao: string | null
+  nivel: number
+  padrao: boolean
+}
+
+export type ProfilePermissao = {
+  profile_id: string
+  perfil_nome: string
+  nivel_acesso: NivelAcesso
+  chave: string
+  nome: string
+  grupo: string
+  icone: string | null
+  rota: string | null
+  ordem: number
+}
+
 export type PermissaoPagina =
   | 'dashboard'
   | 'comercial'

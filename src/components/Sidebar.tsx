@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -11,6 +12,7 @@ import {
   LogOut,
   X,
   BookOpen,
+  ChevronLeft,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AgencyConfig } from '@/lib/agencyConfig'
@@ -77,19 +79,79 @@ const MENU_GROUPS: SidebarGroup[] = [
   },
 ]
 
-function SidebarContent({ groups, activePage, onNavigate, onLogout, agencyConfig, onMobileClose }: {
-  groups: SidebarGroup[]
+const GROUP_ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+  operacao:       LayoutDashboard,
+  relacionamento: MessageSquare,
+  gestao:         DollarSign,
+  sistema:        Settings,
+}
+
+function SubmenuPanel({
+  group,
+  activePage,
+  onNavigate,
+  onClose,
+}: {
+  group: SidebarGroup
   activePage: Page
   onNavigate: (page: Page) => void
-  onLogout?: () => void
-  agencyConfig?: AgencyConfig
-  onMobileClose?: () => void
+  onClose: () => void
 }) {
   return (
-    <>
-      <div className="flex items-center justify-between px-3 mb-3">
+    <div className="w-52 flex flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
+      <div className="flex items-center justify-between px-4 mb-3">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{group.label}</h3>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          title="Fechar"
+        >
+          <ChevronLeft size={16} />
+        </button>
+      </div>
+      <nav className="flex-1 px-2 space-y-1 overflow-y-auto">
+        {group.items.map(({ id, icon: Icon, label }) => (
+          <button
+            key={id}
+            onClick={() => { onNavigate(id) }}
+            type="button"
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm font-medium text-left',
+              activePage === id
+                ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-200',
+            )}
+          >
+            <Icon size={18} className="shrink-0" />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
+  )
+}
+
+function IconRail({
+  groups,
+  activeGroup,
+  onGroupClick,
+  onLogout,
+  onMobileClose,
+  agencyConfig,
+}: {
+  groups: SidebarGroup[]
+  activeGroup: string | null
+  onGroupClick: (id: string) => void
+  onLogout?: () => void
+  onMobileClose?: () => void
+  agencyConfig?: AgencyConfig
+}) {
+  return (
+    <div className="w-16 flex flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
+      <div className="flex items-center justify-center mb-4">
         {agencyConfig?.logo_interna_url?.trim() ? (
-          <div className="w-10 h-10 rounded-xl bg-white border border-gray-200 dark:border-gray-800 flex items-center justify-center p-1.5 overflow-hidden">
+          <div className="w-9 h-9 rounded-xl bg-white border border-gray-200 dark:border-gray-800 flex items-center justify-center p-1.5 overflow-hidden">
             <img src={agencyConfig.logo_interna_url} alt={agencyConfig.nome_agencia} className="w-full h-full object-contain" />
           </div>
         ) : (
@@ -108,51 +170,130 @@ function SidebarContent({ groups, activePage, onNavigate, onLogout, agencyConfig
         )}
       </div>
 
-      <nav className="flex flex-col flex-1 px-2 overflow-y-auto">
-        {groups.map((group, groupIndex) => (
-          <div key={group.id} className={cn(groupIndex > 0 && 'mt-4 pt-4 border-t border-gray-100 dark:border-gray-800')}>
-            <p className="px-3 mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400 md:hidden">
-              {group.label}
-            </p>
-            <div className="flex flex-col gap-1">
-              {group.items.map(({ id, icon: Icon, label }) => (
-                <button
-                  key={id}
-                  onClick={() => { onNavigate(id); onMobileClose?.() }}
-                  title={label}
-                  type="button"
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm font-medium md:justify-center md:px-0 md:py-2.5',
-                    activePage === id
-                      ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
-                      : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300',
-                  )}
-                >
-                  <Icon size={18} className="shrink-0 md:mx-auto" />
-                  <span className="md:hidden">{label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
+      <nav className="flex flex-col flex-1 px-2 overflow-y-auto space-y-1">
+        {groups.map(group => {
+          const Icon = GROUP_ICONS[group.id] ?? LayoutDashboard
+          const isActive = activeGroup === group.id
+          return (
+            <button
+              key={group.id}
+              onClick={() => onGroupClick(group.id)}
+              type="button"
+              title={group.label}
+              className={cn(
+                'flex items-center justify-center w-12 h-12 rounded-xl transition-colors mx-auto',
+                isActive
+                  ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
+                  : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300',
+              )}
+            >
+              <Icon size={20} />
+            </button>
+          )
+        })}
       </nav>
 
-      <div className="px-2 pb-2">
+      <div className="px-2">
         <button
           type="button"
           title="Sair"
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 transition-colors text-sm md:justify-center md:px-0"
+          className="flex items-center justify-center w-12 h-12 rounded-xl text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 transition-colors mx-auto"
           onClick={onLogout}
         >
-          <LogOut size={18} className="shrink-0 md:mx-auto" />
-          <span className="md:hidden">Sair</span>
+          <LogOut size={18} />
         </button>
       </div>
-    </>
+    </div>
+  )
+}
+
+function MobileDrawer({
+  groups,
+  activePage,
+  onNavigate,
+  onLogout,
+  onClose,
+  agencyConfig,
+}: {
+  groups: SidebarGroup[]
+  activePage: Page
+  onNavigate: (page: Page) => void
+  onLogout?: () => void
+  onClose: () => void
+  agencyConfig?: AgencyConfig
+}) {
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
+  return (
+    <div className="fixed inset-0 z-50 md:hidden">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <aside className="absolute left-0 top-0 bottom-0 w-64 flex flex-col bg-white dark:bg-gray-900 shadow-2xl">
+        <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100 dark:border-gray-800">
+          <span className="font-semibold text-sm text-gray-900 dark:text-white">Menu</span>
+          <button type="button" onClick={onClose}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
+            <X size={16} />
+          </button>
+        </div>
+        <nav className="flex-1 px-3 py-2 overflow-y-auto space-y-1">
+          {groups.map(group => {
+            const isExpanded = expandedGroup === group.id
+            const GroupIcon = GROUP_ICONS[group.id]
+            return (
+              <div key={group.id}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedGroup(isExpanded ? null : group.id)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                >
+                  {GroupIcon && <GroupIcon size={18} />}
+                  <span>{group.label}</span>
+                  <ChevronLeft size={14} className={cn('ml-auto transition-transform', isExpanded && '-rotate-90')} />
+                </button>
+                {isExpanded && (
+                  <div className="ml-4 mt-1 space-y-1">
+                    {group.items.map(({ id, icon: Icon, label }) => (
+                      <button
+                        key={id}
+                        onClick={() => { onNavigate(id); onClose() }}
+                        type="button"
+                        className={cn(
+                          'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                          activePage === id
+                            ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                            : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800',
+                        )}
+                      >
+                        <Icon size={16} />
+                        <span>{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </nav>
+        <div className="px-3 py-2 border-t border-gray-100 dark:border-gray-800">
+          {agencyConfig && (
+            <p className="text-xs text-gray-400 mb-2 px-3">{agencyConfig.nome_agencia}</p>
+          )}
+          <button
+            type="button"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 w-full transition-colors"
+            onClick={onLogout}
+          >
+            <LogOut size={18} />
+            <span>Sair</span>
+          </button>
+        </div>
+      </aside>
+    </div>
   )
 }
 
 export default function Sidebar({ activePage, onNavigate, allowedPages, onLogout, agencyConfig, mobileOpen, onMobileClose }: Props) {
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
+
   const groups = MENU_GROUPS
     .map(group => ({
       ...group,
@@ -162,21 +303,47 @@ export default function Sidebar({ activePage, onNavigate, allowedPages, onLogout
     }))
     .filter(group => group.items.length > 0)
 
+  const expandedGroupData = expandedGroup ? groups.find(g => g.id === expandedGroup) ?? null : null
+
+  function handleGroupClick(groupId: string) {
+    setExpandedGroup(prev => prev === groupId ? null : groupId)
+  }
+
+  function handleNavigate(page: Page) {
+    onNavigate(page)
+  }
+
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-16 flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
-        <SidebarContent groups={groups} activePage={activePage} onNavigate={onNavigate} onLogout={onLogout} agencyConfig={agencyConfig} />
-      </aside>
+      {/* Desktop sidebar layout */}
+      <div className="hidden md:flex">
+        <IconRail
+          groups={groups}
+          activeGroup={expandedGroup}
+          onGroupClick={handleGroupClick}
+          onLogout={onLogout}
+          agencyConfig={agencyConfig}
+        />
+        {expandedGroupData && (
+          <SubmenuPanel
+            group={expandedGroupData}
+            activePage={activePage}
+            onNavigate={handleNavigate}
+            onClose={() => setExpandedGroup(null)}
+          />
+        )}
+      </div>
 
-      {/* Mobile drawer overlay */}
+      {/* Mobile drawer */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={onMobileClose} />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 flex flex-col py-4 bg-white dark:bg-gray-900 shadow-2xl">
-            <SidebarContent groups={groups} activePage={activePage} onNavigate={onNavigate} onLogout={onLogout} agencyConfig={agencyConfig} onMobileClose={onMobileClose} />
-          </aside>
-        </div>
+        <MobileDrawer
+          groups={groups}
+          activePage={activePage}
+          onNavigate={handleNavigate}
+          onLogout={onLogout}
+          onClose={onMobileClose ?? (() => {})}
+          agencyConfig={agencyConfig}
+        />
       )}
     </>
   )

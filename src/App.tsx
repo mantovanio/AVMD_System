@@ -7,8 +7,8 @@ import { useNotifications } from '@/hooks/useNotifications'
 import { Menu } from 'lucide-react'
 import { APP_VERSION } from '@/lib/version'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig } from '@/lib/agencyConfig'
-import { PAGE_LABELS, PERFIL_LABEL, isAdminProfile, resolveAllowedPages, resolveDefaultPage } from '@/lib/security'
-import { supabase } from '@/lib/supabase'
+import { PAGE_LABELS, PERFIL_LABEL, isAdminProfile, resolveAllowedPages as resolveLegacyPages, resolveDefaultPage } from '@/lib/security'
+import { PermissionsProvider, usePermissions } from '@/contexts/PermissionsContext'
 import { getRuntimeConfig } from '@/lib/runtimeConfig'
 
 const Login = lazy(() => import('@/pages/Login'))
@@ -97,7 +97,10 @@ function AppContent() {
   const [debugOpen,  setDebugOpen]      = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
-  // Módulos habilitados — carregados do Supabase
+  // Permissões por módulo — carregadas do backend
+  const { loading: permLoading, resolveAllowedPages: resolveModulePages } = usePermissions()
+
+  // Módulos habilitados — fallback via Supabase
   const [enabledModules, setEnabledModules] = useState<Record<string, boolean>>({})
   const [modulesLoaded, setModulesLoaded]   = useState(false)
 
@@ -128,22 +131,23 @@ function AppContent() {
     return () => { active = false }
   }, [])
 
-  // Módulos habilitados do banco
+  // Módulos habilitados do backend
   useEffect(() => {
     if (!user) return
-    supabase
-      .from('modules_config')
-      .select('module_name, enabled')
-      .then(({ data }) => {
-        const map: Record<string, boolean> = {}
-        data?.forEach(row => { map[String(row.module_name)] = Boolean(row.enabled) })
-        setEnabledModules(map)
+    const origin = window.location.origin
+    fetch(`${origin}/api/permissoes/modules-config`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.ok) {
+          setEnabledModules(data.config ?? {})
+        }
         setModulesLoaded(true)
       })
+      .catch(() => setModulesLoaded(true))
   }, [user])
 
   // Splash de carregamento
-  if (loading || (user && !modulesLoaded)) {
+  if (loading || (user && !modulesLoaded && !permLoading)) {
     return <FullScreenLoader />
   }
 
@@ -216,10 +220,13 @@ function AppContent() {
     )
   }
 
-  // ── Páginas disponíveis = interseção de perfil + módulos ───────
-  const rolePages   = resolveAllowedPages(profile)
+  // ── Páginas disponíveis = permissões por módulo (fallback: perfil + módulos) ──
+  const moduleBasedPages = resolveModulePages()
+  const rolePages   = resolveLegacyPages(profile)
   const modulePages = getModuleEnabledPages(enabledModules)
-  const allowedPages = rolePages.filter(p => modulePages.includes(p))
+  const allowedPages = moduleBasedPages.length > 0
+    ? moduleBasedPages.filter(p => rolePages.includes(p) && modulePages.includes(p))
+    : rolePages.filter(p => modulePages.includes(p))
   const defaultPage  = resolveDefaultPage(profile)
   const activePage: Page = allowedPages.includes(page) ? page : (allowedPages[0] ?? defaultPage)
 
@@ -366,7 +373,9 @@ export default function App() {
   return (
     <ClerkProvider publishableKey={runtime.clerkPublishableKey}>
       <AuthProvider>
-        <AppContent />
+        <PermissionsProvider>
+          <AppContent />
+        </PermissionsProvider>
       </AuthProvider>
     </ClerkProvider>
   )
