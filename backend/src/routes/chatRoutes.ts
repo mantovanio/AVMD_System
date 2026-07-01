@@ -11,6 +11,17 @@ import { buildStoredPath, getStorageRoot, readFile, saveFile } from '../utils/st
 
 type JsonRecord = Record<string, unknown>
 
+type ViewerProfile = {
+  id: string
+  perfil: string
+  tipo_vinculo: string | null
+  parceiro_id: string | null
+  nome: string | null
+  vinculo_nome: string | null
+  ponto_atendimento_id: string | null
+}
+
+
 type SendChatMessageInput = {
   lead_id?: string
   conversation_id?: string
@@ -63,6 +74,178 @@ function parseMessageId(payload: JsonRecord | null | undefined) {
   }
   return asString(payload.messageId) || asString(payload.id) || null
 }
+
+
+function buildViewerNameMatchSql(columnExpression: string, viewerAlias = 'viewer') {
+  return `(
+    (${viewerAlias}.nome_norm <> '' AND lower(btrim(coalesce(${columnExpression}, ''))) = ${viewerAlias}.nome_norm)
+    OR (${viewerAlias}.vinculo_nome_norm <> '' AND lower(btrim(coalesce(${columnExpression}, ''))) = ${viewerAlias}.vinculo_nome_norm)
+  )`
+}
+
+function buildConversationDocumentMatchSql(conversationAlias: string, customerDocExpression: string, customerPhoneExpression: string) {
+  const convCpf = `regexp_replace(coalesce(${conversationAlias}.cpf, ''), '\\D', '', 'g')`
+  const convCnpj = `regexp_replace(coalesce(${conversationAlias}.cnpj, ''), '\\D', '', 'g')`
+  const convPhone = `right(regexp_replace(coalesce(${conversationAlias}.telefone, ${conversationAlias}.document_key, ''), '\\D', '', 'g'), 11)`
+  const targetDoc = `regexp_replace(coalesce(${customerDocExpression}, ''), '\\D', '', 'g')`
+  const targetPhone = `right(regexp_replace(coalesce(${customerPhoneExpression}, ''), '\\D', '', 'g'), 11)`
+
+  return `(
+    (${targetDoc} <> '' AND ${targetDoc} IN (${convCpf}, ${convCnpj}))
+    OR (${targetPhone} <> '' AND ${convPhone} <> '' AND ${targetPhone} = ${convPhone})
+  )`
+}
+
+function buildConversationRenewalMatchSql(conversationAlias: string, renewalAlias: string) {
+  const convCpf = `regexp_replace(coalesce(${conversationAlias}.cpf, ''), '\\D', '', 'g')`
+  const convCnpj = `regexp_replace(coalesce(${conversationAlias}.cnpj, ''), '\\D', '', 'g')`
+  const convPhone = `right(regexp_replace(coalesce(${conversationAlias}.telefone, ${conversationAlias}.document_key, ''), '\\D', '', 'g'), 11)`
+  const renewalCpf = `regexp_replace(coalesce(${renewalAlias}.cpf, ''), '\\D', '', 'g')`
+  const renewalCnpj = `regexp_replace(coalesce(${renewalAlias}.cnpj, ''), '\\D', '', 'g')`
+  const renewalPhone = `right(regexp_replace(coalesce(${renewalAlias}.telefone, ''), '\\D', '', 'g'), 11)`
+
+  return `(
+    (${renewalCpf} <> '' AND ${renewalCpf} IN (${convCpf}, ${convCnpj}))
+    OR (${renewalCnpj} <> '' AND ${renewalCnpj} IN (${convCpf}, ${convCnpj}))
+    OR (${renewalPhone} <> '' AND ${convPhone} <> '' AND ${renewalPhone} = ${convPhone})
+  )`
+}
+
+function buildConversationVisibilitySql(conversationAlias: string, viewerAlias = 'viewer') {
+  const assignedToViewer = `EXISTS (
+    SELECT 1
+    FROM crm_chat_assignments ca
+    WHERE ca.conversation_id = ${conversationAlias}.id::text
+      AND ca.ativo = true
+      AND ca.agent_id::text = ${viewerAlias}.id
+  )`
+
+  const vendaVinculada = `EXISTS (
+    SELECT 1
+    FROM vendas_certificados vc
+    LEFT JOIN cadastros_base cb ON cb.id = vc.cadastro_base_id
+    WHERE ${buildConversationDocumentMatchSql(conversationAlias, 'cb.cpf_cnpj', 'cb.telefone')}
+      AND (
+        vc.vendedor_id::text = ${viewerAlias}.id
+        OR vc.agente_registro_id::text = ${viewerAlias}.id
+        OR (${viewerAlias}.parceiro_id IS NOT NULL AND vc.parceiro_id::text = ${viewerAlias}.parceiro_id)
+        OR (${viewerAlias}.ponto_atendimento_id IS NOT NULL AND vc.ponto_atendimento_id::text = ${viewerAlias}.ponto_atendimento_id)
+      )
+  )`
+
+  const agendamentoVinculado = `EXISTS (
+    SELECT 1
+    FROM agendamentos_validacao av
+    LEFT JOIN cadastros_base cb ON cb.id = av.cadastro_base_id
+    WHERE ${buildConversationDocumentMatchSql(conversationAlias, 'cb.cpf_cnpj', 'cb.telefone')}
+      AND (
+        av.agente_registro_id::text = ${viewerAlias}.id
+        OR (${viewerAlias}.ponto_atendimento_id IS NOT NULL AND av.ponto_atendimento_id::text = ${viewerAlias}.ponto_atendimento_id)
+        OR av.contador_id::text = ${viewerAlias}.id
+      )
+  )`
+
+  const renovacaoVinculada = `EXISTS (
+    SELECT 1
+    FROM renovacoes r
+    WHERE ${buildConversationRenewalMatchSql(conversationAlias, 'r')}
+      AND (
+        r.vendedor_fk_id::text = ${viewerAlias}.id
+        OR r.agente_registro_fk_id::text = ${viewerAlias}.id
+        OR r.contador_fk_id::text = ${viewerAlias}.id
+        OR (${viewerAlias}.perfil = 'vendedor' AND ${buildViewerNameMatchSql('r.vendedor', viewerAlias)})
+        OR ((${viewerAlias}.perfil = 'agente_registro' OR ${viewerAlias}.tipo_vinculo = 'agente_registro') AND ${buildViewerNameMatchSql('r.agr', viewerAlias)})
+        OR (${viewerAlias}.tipo_vinculo = 'contador' AND ${buildViewerNameMatchSql('r.contador', viewerAlias)})
+      )
+  )`
+
+  return `(
+    ${viewerAlias}.perfil IN ('admin', 'superadmin')
+    OR ${assignedToViewer}
+    OR (
+      ${viewerAlias}.perfil = 'vendedor'
+      AND (${vendaVinculada} OR ${renovacaoVinculada})
+    )
+    OR (
+      (${viewerAlias}.perfil IN ('agente_registro', 'atendente') OR ${viewerAlias}.tipo_vinculo = 'agente_registro')
+      AND (${vendaVinculada} OR ${agendamentoVinculado} OR ${renovacaoVinculada})
+    )
+    OR (
+      ${viewerAlias}.tipo_vinculo = 'parceiro'
+      AND (${vendaVinculada} OR ${agendamentoVinculado})
+    )
+    OR (
+      ${viewerAlias}.tipo_vinculo = 'contador'
+      AND (${agendamentoVinculado} OR ${renovacaoVinculada})
+    )
+    OR (
+      ${viewerAlias}.perfil = 'usuario'
+      AND ${assignedToViewer}
+    )
+  )`
+}
+
+async function loadViewerProfile(db: AivenSqlClient, viewerId: string): Promise<ViewerProfile | null> {
+  const result = await db.query<ViewerProfile>(
+    `SELECT
+       id::text AS id,
+       perfil,
+       tipo_vinculo,
+       parceiro_id::text AS parceiro_id,
+       nome,
+       vinculo_nome,
+       ponto_atendimento_id::text AS ponto_atendimento_id
+     FROM profiles
+     WHERE id::text = $1 OR clerk_user_id = $1
+     LIMIT 1`,
+    [viewerId],
+  )
+  return result.rows[0] ?? null
+}
+
+async function canViewerAccessConversation(
+  db: AivenSqlClient,
+  viewerId: string,
+  conversationId: string,
+  documentKey: string,
+) {
+  const viewer = await loadViewerProfile(db, viewerId)
+  if (!viewer) return false
+
+  const result = await db.query<{ allowed: boolean }>(
+    `WITH viewer AS (
+       SELECT
+         $1::text AS id,
+         $2::text AS perfil,
+         $3::text AS tipo_vinculo,
+         $4::text AS parceiro_id,
+         lower(btrim(coalesce($5::text, ''))) AS nome_norm,
+         lower(btrim(coalesce($6::text, ''))) AS vinculo_nome_norm,
+         $7::text AS ponto_atendimento_id
+     )
+     SELECT EXISTS (
+       SELECT 1
+       FROM crm_chat_admin_view conv
+       CROSS JOIN viewer
+       WHERE (conv.id::text = $8 OR conv.document_key = $9)
+         AND ${buildConversationVisibilitySql('conv')}
+     ) AS allowed`,
+    [
+      viewer.id,
+      viewer.perfil,
+      viewer.tipo_vinculo,
+      viewer.parceiro_id,
+      viewer.nome,
+      viewer.vinculo_nome,
+      viewer.ponto_atendimento_id,
+      conversationId,
+      documentKey,
+    ],
+  )
+
+  return Boolean(result.rows[0]?.allowed)
+}
+
 
 async function resolveIntegration(
   integrationRepo: ExternalIntegrationRepository,
@@ -199,8 +382,47 @@ export async function handleChatRoutes(
     return true
   }
 
-  if (method === 'GET' && url === '/api/chat/crm/conversations') {
-    const result = await db.query<any>('SELECT * FROM crm_chat_admin_view ORDER BY ultima_interacao_em DESC NULLS LAST')
+  if (method === 'GET' && url.startsWith('/api/chat/crm/conversations')) {
+    const parsedUrl = new URL(url, 'http://localhost')
+    const viewerId = parsedUrl.searchParams.get('profile_id') ?? ''
+
+    if (!viewerId) {
+      writeJson(res, 400, { ok: false, error: 'profile_id obrigatorio.' }, corsOrigin)
+      return true
+    }
+
+    const viewer = await loadViewerProfile(db, viewerId)
+    if (!viewer) {
+      writeJson(res, 404, { ok: false, error: 'Perfil do usuario nao encontrado.' }, corsOrigin)
+      return true
+    }
+
+    const result = await db.query<any>(
+      `WITH viewer AS (
+         SELECT
+           $1::text AS id,
+           $2::text AS perfil,
+           $3::text AS tipo_vinculo,
+           $4::text AS parceiro_id,
+           lower(btrim(coalesce($5::text, ''))) AS nome_norm,
+           lower(btrim(coalesce($6::text, ''))) AS vinculo_nome_norm,
+           $7::text AS ponto_atendimento_id
+       )
+       SELECT conv.*
+       FROM crm_chat_admin_view conv
+       CROSS JOIN viewer
+       WHERE ${buildConversationVisibilitySql('conv')}
+       ORDER BY conv.ultima_interacao_em DESC NULLS LAST`,
+      [
+        viewer.id,
+        viewer.perfil,
+        viewer.tipo_vinculo,
+        viewer.parceiro_id,
+        viewer.nome,
+        viewer.vinculo_nome,
+        viewer.ponto_atendimento_id,
+      ],
+    )
     writeJson(res, 200, { ok: true, data: result.rows }, corsOrigin)
     return true
   }
@@ -209,10 +431,22 @@ export async function handleChatRoutes(
     const parsedUrl = new URL(url, 'http://localhost')
     const conversationId = parsedUrl.searchParams.get('conversation_id') ?? ''
     const documentKey = parsedUrl.searchParams.get('document_key') ?? ''
+    const viewerId = parsedUrl.searchParams.get('profile_id') ?? ''
     if (!conversationId && !documentKey) {
       writeJson(res, 400, { ok: false, error: 'conversation_id ou document_key obrigatorio.' }, corsOrigin)
       return true
     }
+    if (!viewerId) {
+      writeJson(res, 400, { ok: false, error: 'profile_id obrigatorio.' }, corsOrigin)
+      return true
+    }
+
+    const allowed = await canViewerAccessConversation(db, viewerId, conversationId, documentKey)
+    if (!allowed) {
+      writeJson(res, 403, { ok: false, error: 'Sem permissao para acessar essa conversa.' }, corsOrigin)
+      return true
+    }
+
     const searchKey = conversationId || documentKey
     const remoteJid = documentKey ? `${documentKey}@s.whatsapp.net` : ''
     const [crmResult, evolutionResult] = await Promise.all([

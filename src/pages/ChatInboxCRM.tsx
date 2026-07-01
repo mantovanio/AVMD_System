@@ -627,9 +627,17 @@ export default function ChatInboxCRM() {
     return replyChannelOptions.filter(item => item.queue === selectedReplyQueue)
   }, [replyChannelOptions, selectedReplyQueue])
 
+  const viewerQueryString = useMemo(() => {
+    const params = new URLSearchParams()
+    if (profile?.id) params.set('profile_id', profile.id)
+    if (profile?.perfil) params.set('perfil', profile.perfil)
+    return params.toString()
+  }, [profile?.id, profile?.perfil])
+
   useEffect(() => {
+    if (!profile?.id) return
     void bootstrap()
-  }, [])
+  }, [profile?.id])
 
   useEffect(() => {
     let mounted = true
@@ -879,9 +887,16 @@ export default function ChatInboxCRM() {
   }
 
   async function loadConversations(showRefreshing = true) {
+    if (!profile?.id || !viewerQueryString) {
+      setConversations([])
+      setSelectedId(null)
+      if (showRefreshing) setRefreshing(false)
+      return
+    }
+
     if (showRefreshing) setRefreshing(true)
     try {
-      const response = await fetch(getApiUrl('/chat/crm/conversations'))
+      const response = await fetch(getApiUrl(`/chat/crm/conversations?${viewerQueryString}`))
       if (!response.ok) throw new Error('Erro ao carregar conversas')
       const json = await response.json() as { ok: boolean; data: ConversationRow[] }
       const rows = json.data ?? []
@@ -922,7 +937,7 @@ export default function ChatInboxCRM() {
     try {
       const previews: Record<string, CrmMessage[]> = {}
       for (const id of ids) {
-        const response = await fetch(getApiUrl(`/chat/crm/messages?conversation_id=${encodeURIComponent(id)}`))
+        const response = await fetch(getApiUrl(`/chat/crm/messages?conversation_id=${encodeURIComponent(id)}&${viewerQueryString}`))
         if (!response.ok) continue
         const json = await response.json() as { ok: boolean; crmMessages: CrmMessage[] }
         const msgs = (json.crmMessages ?? []).slice(-3).reverse()
@@ -936,12 +951,17 @@ export default function ChatInboxCRM() {
 
   async function loadMessages(conversationId: string, options: { background?: boolean } = {}) {
     const background = options.background ?? false
+    if (!profile?.id || !viewerQueryString) {
+      if (!background) setLoadingMessages(false)
+      return
+    }
+
     if (!background) setLoadingMessages(true)
     const conversation = conversations.find(item => item.id === conversationId) ?? null
     const documentKey = conversation?.document_key ?? ''
 
     try {
-      const response = await fetch(getApiUrl(`/chat/crm/messages?conversation_id=${encodeURIComponent(conversationId)}&document_key=${encodeURIComponent(documentKey)}`))
+      const response = await fetch(getApiUrl(`/chat/crm/messages?conversation_id=${encodeURIComponent(conversationId)}&document_key=${encodeURIComponent(documentKey)}&${viewerQueryString}`))
       if (!response.ok) throw new Error('Erro ao carregar mensagens')
       const json = await response.json() as { ok: boolean; crmMessages: CrmMessage[]; evolutionMessages: EvolutionEventRow[] }
 
