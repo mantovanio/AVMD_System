@@ -27,12 +27,12 @@ export default function ModulePageShell<T extends string>({
   children,
   menuLabel = 'Submenu do módulo',
 }: ModulePageShellProps<T>) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(true)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     const saved = window.localStorage.getItem(storageKey)
-    if (saved === '1') setIsOpen(true)
+    if (saved === '0') setIsOpen(false)
   }, [storageKey])
 
   useEffect(() => {
