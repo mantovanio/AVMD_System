@@ -39,9 +39,10 @@ Resumo:
 
 ## Scripts importantes na VPS
 
-- Gate de deploy: `/root/vps-deploy-gate.sh`
-- Rollout: `/root/vps-rollout-avmd.sh`
-- Rollback: `/root/vps-rollback-avmd.sh`
+- Gate canonico: `/opt/avmd/AVMD_System/ops/scripts/vps-deploy-gate.sh`
+- Rollout canonico: `/opt/avmd/AVMD_System/ops/scripts/vps-rollout-avmd.sh`
+- Rollback canonico: `/opt/avmd/AVMD_System/ops/scripts/vps-rollback-avmd.sh`
+- Wrappers legados em `/root/*.sh`: apenas compatibilidade; devem apontar para os scripts canonicos
 
 Regra: nao rodar rollout direto. Sempre usar o gate.
 
@@ -69,7 +70,7 @@ git -C C:\projetos\AVMD_System push origin main
 Deploy:
 
 ```powershell
-& 'C:\Program Files\Git\usr\bin\ssh.exe' root@147.79.111.76 'bash /root/vps-deploy-gate.sh'
+& 'C:\Program Files\Git\usr\bin\ssh.exe' root@147.79.111.76 'bash /opt/avmd/AVMD_System/ops/scripts/vps-deploy-gate.sh'
 ```
 
 Status backend e edge:
@@ -88,8 +89,9 @@ Status backend e edge:
 
 - O workflow `.github/workflows/jekyll-docker.yml` nao faz deploy do painel React do AVMD.
 - O servidor atual responde em `80/443` via Traefik em Docker.
-- Deploy que tenta copiar arquivos para `/etc/nginx/sites-available/...` vai falhar no fim mesmo com frontend publicado.
-- Mesmo quando a etapa antiga de Nginx falha, o frontend pode ja ter sido publicado em `/var/www/crm.certiid.mantovan.com.br`.
+- Deploy via wrapper antigo desatualizado em `/root/vps-rollout-avmd.sh` pode executar etapa legada de `/etc/nginx/sites-available/...` e deixar o backend sem restart.
+- O fluxo oficial deve chamar sempre o script canonico em `/opt/avmd/AVMD_System/ops/scripts/`.
+- Os wrappers em `/root/*.sh` precisam ser sincronizados pelo instalador `ops/scripts/vps-install-root-deploy-shims.sh`.
 
 ## Arquivos para consultar primeiro
 

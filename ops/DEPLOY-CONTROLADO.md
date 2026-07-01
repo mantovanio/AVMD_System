@@ -27,26 +27,27 @@ Objetivo: publicar AVMD com a topologia real da VPS, sem depender de Nginx de ho
 
 ## Sequencia segura
 
-1. Enviar scripts atualizados para a VPS, se necessario:
+1. Fluxo normal: nao usar `scp` manual de script. O codigo da VPS deve ser atualizado pelo proprio rollout via `git pull` no repo `/opt/avmd/AVMD_System`.
+
+2. Na VPS, garantir permissao de execucao dos scripts canonicos, se necessario:
 
 ```bash
-scp ops/scripts/vps-rollout-avmd.sh root@147.79.111.76:/root/
-scp ops/scripts/vps-rollback-avmd.sh root@147.79.111.76:/root/
-scp ops/scripts/vps-deploy-gate.sh root@147.79.111.76:/root/
+chmod +x /opt/avmd/AVMD_System/ops/scripts/vps-rollout-avmd.sh
+chmod +x /opt/avmd/AVMD_System/ops/scripts/vps-rollback-avmd.sh
+chmod +x /opt/avmd/AVMD_System/ops/scripts/vps-deploy-gate.sh
+chmod +x /opt/avmd/AVMD_System/ops/scripts/vps-install-root-deploy-shims.sh
 ```
 
-2. Na VPS, garantir permissao de execucao:
+3. Sincronizar wrappers legados de /root para apontarem aos scripts canonicos, se necessario:
 
 ```bash
-chmod +x /root/vps-rollout-avmd.sh
-chmod +x /root/vps-rollback-avmd.sh
-chmod +x /root/vps-deploy-gate.sh
+/opt/avmd/AVMD_System/ops/scripts/vps-install-root-deploy-shims.sh
 ```
 
-3. Rodar deploy obrigatoriamente pelo gate:
+4. Rodar deploy obrigatoriamente pelo gate:
 
 ```bash
-/root/vps-deploy-gate.sh
+/opt/avmd/AVMD_System/ops/scripts/vps-deploy-gate.sh
 ```
 
 ## O que o rollout faz
@@ -86,7 +87,7 @@ No-go:
 ## Rollback imediato
 
 ```bash
-/root/vps-rollback-avmd.sh
+/opt/avmd/AVMD_System/ops/scripts/vps-rollback-avmd.sh
 ```
 
 O rollback:

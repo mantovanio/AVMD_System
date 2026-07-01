@@ -57,7 +57,7 @@ Observacao:
 Deploy com gate:
 
 ```bash
-/root/vps-deploy-gate.sh
+/opt/avmd/AVMD_System/ops/scripts/vps-deploy-gate.sh
 ```
 
 Recarregar edge manualmente, se necessario:
