@@ -79,70 +79,17 @@ const MENU_GROUPS: SidebarGroup[] = [
   },
 ]
 
-const GROUP_ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
-  operacao:       LayoutDashboard,
-  relacionamento: MessageSquare,
-  gestao:         DollarSign,
-  sistema:        Settings,
-}
-
-function SubmenuPanel({
-  group,
-  activePage,
-  onNavigate,
-  onClose,
-}: {
-  group: SidebarGroup
-  activePage: Page
-  onNavigate: (page: Page) => void
-  onClose: () => void
-}) {
-  return (
-    <div className="w-52 flex flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
-      <div className="flex items-center justify-between px-4 mb-3">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{group.label}</h3>
-        <button
-          type="button"
-          onClick={onClose}
-          className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          title="Fechar"
-        >
-          <ChevronLeft size={16} />
-        </button>
-      </div>
-      <nav className="flex-1 px-2 space-y-1 overflow-y-auto">
-        {group.items.map(({ id, icon: Icon, label }) => (
-          <button
-            key={id}
-            onClick={() => { onNavigate(id) }}
-            type="button"
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm font-medium text-left',
-              activePage === id
-                ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-200',
-            )}
-          >
-            <Icon size={18} className="shrink-0" />
-            <span>{label}</span>
-          </button>
-        ))}
-      </nav>
-    </div>
-  )
-}
-
 function IconRail({
   groups,
-  activeGroup,
-  onGroupClick,
+  activePage,
+  onNavigate,
   onLogout,
   onMobileClose,
   agencyConfig,
 }: {
   groups: SidebarGroup[]
-  activeGroup: string | null
-  onGroupClick: (id: string) => void
+  activePage: Page
+  onNavigate: (page: Page) => void
   onLogout?: () => void
   onMobileClose?: () => void
   agencyConfig?: AgencyConfig
@@ -170,30 +117,32 @@ function IconRail({
         )}
       </div>
 
-      <nav className="flex flex-col flex-1 px-2 overflow-y-auto space-y-1">
-        {groups.map(group => {
-          const Icon = GROUP_ICONS[group.id] ?? LayoutDashboard
-          const isActive = activeGroup === group.id
-          return (
-            <button
-              key={group.id}
-              onClick={() => onGroupClick(group.id)}
-              type="button"
-              title={group.label}
-              className={cn(
-                'flex items-center justify-center w-12 h-12 rounded-xl transition-colors mx-auto',
-                isActive
-                  ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
-                  : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300',
-              )}
-            >
-              <Icon size={20} />
-            </button>
-          )
-        })}
+      <nav className="flex flex-col flex-1 px-2 overflow-y-auto">
+        {groups.map((group, groupIndex) => (
+          <div key={group.id} className={cn(groupIndex > 0 && 'mt-3 pt-3 border-t border-gray-100 dark:border-gray-800')}>
+            <div className="flex flex-col gap-1">
+              {group.items.map(({ id, icon: Icon, label }) => (
+                <button
+                  key={id}
+                  onClick={() => { onNavigate(id); onMobileClose?.() }}
+                  type="button"
+                  title={label}
+                  className={cn(
+                    'flex items-center justify-center w-12 h-12 rounded-xl transition-colors mx-auto',
+                    activePage === id
+                      ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
+                      : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300',
+                  )}
+                >
+                  <Icon size={20} />
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </nav>
 
-      <div className="px-2">
+      <div className="px-2 pt-3 mt-3 border-t border-gray-100 dark:border-gray-800">
         <button
           type="button"
           title="Sair"
@@ -223,6 +172,22 @@ function MobileDrawer({
   agencyConfig?: AgencyConfig
 }) {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
+
+  function GroupButton({ group, isExpanded, onClick }: { group: SidebarGroup; isExpanded: boolean; onClick: () => void }) {
+    const FirstIcon = group.items[0]?.icon
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+      >
+        {FirstIcon && <FirstIcon size={18} />}
+        <span>{group.label}</span>
+        <ChevronLeft size={14} className={cn('ml-auto transition-transform', isExpanded && '-rotate-90')} />
+      </button>
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-50 md:hidden">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
@@ -237,18 +202,9 @@ function MobileDrawer({
         <nav className="flex-1 px-3 py-2 overflow-y-auto space-y-1">
           {groups.map(group => {
             const isExpanded = expandedGroup === group.id
-            const GroupIcon = GROUP_ICONS[group.id]
             return (
               <div key={group.id}>
-                <button
-                  type="button"
-                  onClick={() => setExpandedGroup(isExpanded ? null : group.id)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                >
-                  {GroupIcon && <GroupIcon size={18} />}
-                  <span>{group.label}</span>
-                  <ChevronLeft size={14} className={cn('ml-auto transition-transform', isExpanded && '-rotate-90')} />
-                </button>
+                <GroupButton group={group} isExpanded={isExpanded} onClick={() => setExpandedGroup(isExpanded ? null : group.id)} />
                 {isExpanded && (
                   <div className="ml-4 mt-1 space-y-1">
                     {group.items.map(({ id, icon: Icon, label }) => (
@@ -292,8 +248,6 @@ function MobileDrawer({
 }
 
 export default function Sidebar({ activePage, onNavigate, allowedPages, onLogout, agencyConfig, mobileOpen, onMobileClose }: Props) {
-  const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
-
   const groups = MENU_GROUPS
     .map(group => ({
       ...group,
@@ -303,43 +257,23 @@ export default function Sidebar({ activePage, onNavigate, allowedPages, onLogout
     }))
     .filter(group => group.items.length > 0)
 
-  const expandedGroupData = expandedGroup ? groups.find(g => g.id === expandedGroup) ?? null : null
-
-  function handleGroupClick(groupId: string) {
-    setExpandedGroup(prev => prev === groupId ? null : groupId)
-  }
-
-  function handleNavigate(page: Page) {
-    onNavigate(page)
-  }
-
   return (
     <>
-      {/* Desktop sidebar layout */}
-      <div className="hidden md:flex">
+      <aside className="hidden md:flex flex-col shrink-0">
         <IconRail
           groups={groups}
-          activeGroup={expandedGroup}
-          onGroupClick={handleGroupClick}
+          activePage={activePage}
+          onNavigate={onNavigate}
           onLogout={onLogout}
           agencyConfig={agencyConfig}
         />
-        {expandedGroupData && (
-          <SubmenuPanel
-            group={expandedGroupData}
-            activePage={activePage}
-            onNavigate={handleNavigate}
-            onClose={() => setExpandedGroup(null)}
-          />
-        )}
-      </div>
+      </aside>
 
-      {/* Mobile drawer */}
       {mobileOpen && (
         <MobileDrawer
           groups={groups}
           activePage={activePage}
-          onNavigate={handleNavigate}
+          onNavigate={onNavigate}
           onLogout={onLogout}
           onClose={onMobileClose ?? (() => {})}
           agencyConfig={agencyConfig}
