@@ -221,15 +221,38 @@ export class CommercialRepository {
     status?: string | null
   }>) {
     const parseDate = (value: unknown): string | null => {
-      const raw = String(value ?? '').trim()
+      const raw = String(value ?? '').trim().replace(/^"|"$/g, '')
       if (!raw) return null
-      if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10)
-      const parts = raw.split('/')
-      if (parts.length === 3) {
-        const [d, m, y] = parts
-        return `${y.padStart(4, '0')}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+
+      // ISO com ou sem hora: 2026-07-02 ou 2026-07-02 18:58:14
+      const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (isoMatch) {
+        const [, y, m, d] = isoMatch
+        return `${y}-${m}-${d}`
       }
-      return raw
+
+      // BR/legado com separador / ou - e opcional hora: 11/02/2025 18:58:14
+      const brMatch = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/)
+      if (brMatch) {
+        const [, d, m, y] = brMatch
+        return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+      }
+
+      // Formato observado em erro: 2025 18:58:14-11-02
+      const weirdMatch = raw.match(/^(\d{4})\s+\d{1,2}:\d{2}:\d{2}-(\d{1,2})-(\d{1,2})$/)
+      if (weirdMatch) {
+        const [, y, m, d] = weirdMatch
+        return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+      }
+
+      // Serial do Excel (dias desde 1899-12-30)
+      const serial = Number(raw)
+      if (!Number.isNaN(serial) && serial > 40000 && serial < 60000) {
+        return new Date(Date.UTC(1899, 11, 30) + serial * 86400000).toISOString().slice(0, 10)
+      }
+
+      // Evita quebrar INSERT/UPDATE DATE com string inválida.
+      return null
     }
 
     const parseCurrency = (value: unknown): number | null => {
