@@ -7,9 +7,7 @@ type View = 'login' | 'register' | 'forgot'
 
 function translateError(msg: string): string {
   if (msg.includes('Invalid login credentials'))      return 'Email ou senha incorretos.'
-  if (msg.includes('Email not confirmed'))            return 'Confirme seu email antes de acessar o sistema.'
-  if (msg.includes('verify your email') || msg.includes('verification'))
-                                                      return 'Seu cadastro ainda precisa da confirmação do email. Digite o código enviado para concluir.'
+  if (msg.includes('Email not confirmed'))            return 'Sua conta ainda não está pronta para acesso. Tente entrar novamente em alguns instantes.'
   if (msg.includes('User already registered'))        return 'Este email já está cadastrado.'
   if (msg.includes('Password should be at least') || msg.includes('Passwords must be 8 characters or more'))
                                                       return 'A senha deve ter pelo menos 8 caracteres.'
@@ -17,6 +15,7 @@ function translateError(msg: string): string {
   if (msg.includes('rate limit'))                     return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
   if (msg.includes('Failed to fetch'))                return 'Falha de conexão com o servidor de autenticação. Atualize a página e tente novamente.'
   if (msg.includes("Couldn't find your account"))    return 'Conta não encontrada. Verifique o email ou crie uma conta.'
+  if (msg.includes('already exists') || msg.includes('já está cadastrado')) return 'Este email já está cadastrado.'
   if (msg.includes('data breach') || msg.includes('pwned') || msg.includes('online data breach'))
                                                       return 'Esta senha foi encontrada em vazamentos de dados. Por segurança, escolha uma senha diferente.'
   if (msg.includes('password_found_in_breach') || msg.includes('found in a list')) return 'Esta senha foi encontrada em vazamentos de dados. Por segurança, escolha uma senha diferente.'
@@ -141,14 +140,7 @@ function SubmitButton({
 }
 
 export default function Login() {
-  const {
-    signIn,
-    signUp,
-    verifySignUpEmail,
-    resendSignUpVerification,
-    resetPassword,
-    confirmPasswordReset,
-  } = useAuth()
+  const { signIn, signUp, resetPassword, confirmPasswordReset } = useAuth()
   const [view, setView] = useState<View>('login')
   const [agencyConfig, setAgencyConfig] = useState(DEFAULT_AGENCY_CONFIG)
 
@@ -163,10 +155,6 @@ export default function Login() {
   const [regConfirm, setRegConfirm] = useState('')
   const [regConsent, setRegConsent] = useState(false)
   const [regLoading, setRegLoading] = useState(false)
-  const [regVerifyLoading, setRegVerifyLoading] = useState(false)
-  const [regResendLoading, setRegResendLoading] = useState(false)
-  const [regVerificationCode, setRegVerificationCode] = useState('')
-  const [regNeedsVerification, setRegNeedsVerification] = useState(false)
   const [regError, setRegError] = useState<string | null>(null)
   const [regOk, setRegOk] = useState(false)
 
@@ -197,36 +185,10 @@ export default function Login() {
     if (regPass.length < 8) { setRegError('A senha deve ter pelo menos 8 caracteres.'); return }
     if (!regConsent) { setRegError('Você precisa aceitar a Política de Privacidade para criar uma conta.'); return }
     setRegLoading(true)
-    const { error, needsEmailVerification } = await signUp({ nome: regNome, email: regEmail, password: regPass })
+    const { error } = await signUp({ nome: regNome, email: regEmail, password: regPass })
     if (error) setRegError(translateError(error))
-    else if (needsEmailVerification) setRegNeedsVerification(true)
     else setRegOk(true)
     setRegLoading(false)
-  }
-
-  async function handleRegisterVerification(e: React.FormEvent) {
-    e.preventDefault()
-    setRegError(null)
-    if (!regVerificationCode.trim()) {
-      setRegError('Digite o código de confirmação enviado para o seu email.')
-      return
-    }
-    setRegVerifyLoading(true)
-    const { error } = await verifySignUpEmail(regVerificationCode.trim())
-    if (error) setRegError(translateError(error))
-    else {
-      setRegNeedsVerification(false)
-      setRegOk(true)
-    }
-    setRegVerifyLoading(false)
-  }
-
-  async function handleResendRegisterVerification() {
-    setRegError(null)
-    setRegResendLoading(true)
-    const { error } = await resendSignUpVerification()
-    if (error) setRegError(translateError(error))
-    setRegResendLoading(false)
   }
 
   async function handleForgot(e: React.FormEvent) {
@@ -255,8 +217,6 @@ export default function Login() {
     setLoginError(null)
     setRegError(null)
     setRegOk(false)
-    setRegNeedsVerification(false)
-    setRegVerificationCode('')
     setForgotError(null)
     setForgotOk(false)
     setForgotCode('')
@@ -322,11 +282,7 @@ export default function Login() {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-medium text-white/90">Senha</span>
-                    <button
-                      type="button"
-                      onClick={() => { setLoginError(null); setView('forgot') }}
-                      className="text-xs text-white/90 hover:underline"
-                    >
+                    <button type="button" onClick={() => { setLoginError(null); setView('forgot') }} className="text-xs text-white/90 hover:underline">
                       Esqueci minha senha
                     </button>
                   </div>
@@ -341,11 +297,7 @@ export default function Login() {
               <div className="mt-6 pt-6 border-t border-white/15 text-center">
                 <p className="text-sm text-white/80">
                   Não tem conta?{' '}
-                  <button
-                    type="button"
-                    onClick={() => { setLoginError(null); setView('register') }}
-                    className="text-white font-semibold hover:underline"
-                  >
+                  <button type="button" onClick={() => { setLoginError(null); setView('register') }} className="text-white font-semibold hover:underline">
                     Criar conta
                   </button>
                 </p>
@@ -355,11 +307,7 @@ export default function Login() {
 
           {view === 'register' && (
             <div className="p-8">
-              <button
-                type="button"
-                onClick={goLogin}
-                className="flex items-center gap-1.5 text-sm text-white/85 hover:text-white mb-5 -ml-1 transition-colors mx-auto"
-              >
+              <button type="button" onClick={goLogin} className="flex items-center gap-1.5 text-sm text-white/85 hover:text-white mb-5 -ml-1 transition-colors mx-auto">
                 <ArrowLeft size={15} /> Voltar ao login
               </button>
 
@@ -372,9 +320,9 @@ export default function Login() {
                     <CheckCircle size={28} className="text-white" />
                   </div>
                   <div>
-                    <p className="font-semibold text-white text-lg">Conta confirmada!</p>
+                    <p className="font-semibold text-white text-lg">Conta criada!</p>
                     <p className="text-sm text-white/80 mt-2">
-                      Seu email foi confirmado para <strong>{regEmail}</strong>.<br />
+                      Sua conta foi criada com sucesso para <strong>{regEmail}</strong>.<br />
                       Agora o administrador precisa liberar seu primeiro acesso.
                     </p>
                   </div>
@@ -382,38 +330,6 @@ export default function Login() {
                     Voltar ao login
                   </button>
                 </div>
-              ) : regNeedsVerification ? (
-                <form onSubmit={handleRegisterVerification} className="space-y-4">
-                  <div className="text-center py-2">
-                    <p className="font-semibold text-white text-lg">Confirme seu email</p>
-                    <p className="text-sm text-white/80 mt-2">
-                      Enviamos um código para <strong>{regEmail}</strong>.<br />
-                      Digite esse código para concluir o cadastro e liberar o login.
-                    </p>
-                  </div>
-
-                  <InputField
-                    label="Código de confirmação"
-                    type="text"
-                    value={regVerificationCode}
-                    onChange={setRegVerificationCode}
-                    placeholder="000000"
-                    autoFocus
-                  />
-
-                  {regError && <ErrorBox msg={regError} />}
-
-                  <SubmitButton loading={regVerifyLoading} label="Confirmar email" loadingLabel="Confirmando..." primaryColor={agencyConfig.cor_primaria} />
-
-                  <button
-                    type="button"
-                    onClick={() => void handleResendRegisterVerification()}
-                    disabled={regResendLoading}
-                    className="w-full text-xs text-white/70 hover:text-white disabled:opacity-60 text-center"
-                  >
-                    {regResendLoading ? 'Reenviando código...' : 'Não recebeu o código? Reenviar'}
-                  </button>
-                </form>
               ) : (
                 <form onSubmit={handleRegister} className="space-y-4">
                   <InputField label="Nome completo" value={regNome} onChange={setRegNome} placeholder="Seu nome completo" />
@@ -455,11 +371,7 @@ export default function Login() {
 
           {view === 'forgot' && (
             <div className="p-8">
-              <button
-                type="button"
-                onClick={goLogin}
-                className="flex items-center gap-1.5 text-sm text-white/85 hover:text-white mb-5 -ml-1 transition-colors mx-auto"
-              >
+              <button type="button" onClick={goLogin} className="flex items-center gap-1.5 text-sm text-white/85 hover:text-white mb-5 -ml-1 transition-colors mx-auto">
                 <ArrowLeft size={15} /> Voltar ao login
               </button>
 
@@ -496,11 +408,7 @@ export default function Login() {
 
                   <SubmitButton loading={forgotResetLoading} label="Redefinir senha" loadingLabel="Verificando..." primaryColor={agencyConfig.cor_primaria} />
 
-                  <button
-                    type="button"
-                    onClick={() => { setForgotOk(false); setForgotError(null) }}
-                    className="w-full text-xs text-white/60 hover:text-white/90 text-center mt-1"
-                  >
+                  <button type="button" onClick={() => { setForgotOk(false); setForgotError(null) }} className="w-full text-xs text-white/60 hover:text-white/90 text-center mt-1">
                     Não recebeu o código? Reenviar
                   </button>
                 </form>

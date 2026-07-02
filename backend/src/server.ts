@@ -15,6 +15,7 @@ import { handleCommercialRoutes } from './routes/commercialRoutes.js'
 import { handleIntegrationRoutes } from './routes/integrationRoutes.js'
 import { handleProfileRoutes } from './routes/profileRoutes.js'
 import { handleAdminUsersRoutes } from './routes/adminUsersRoutes.js'
+import { handlePublicAuthRoutes } from './routes/publicAuthRoutes.js'
 import { HierarquiaRepository } from './repositories/hierarquiaRepository.js'
 import { handleHierarquiaRoutes } from './routes/hierarquiaRoutes.js'
 import { ProfileRepository } from './repositories/profileRepository.js'
@@ -86,6 +87,9 @@ const server = createServer(async (req, res) => {
 
     const handledAdminUsers = await handleAdminUsersRoutes(req, res, profileRepository, config.clerkSecretKey, config.corsOrigin)
     if (handledAdminUsers) return
+
+    const handledPublicAuth = await handlePublicAuthRoutes(req, res, profileRepository, config.clerkSecretKey, config.corsOrigin)
+    if (handledPublicAuth) return
 
     const handledHierarquia = await handleHierarquiaRoutes(req, res, hierarquiaRepository, config.corsOrigin)
     if (handledHierarquia) return
@@ -180,4 +184,5 @@ const server = createServer(async (req, res) => {
 server.listen(config.port, () => {
   process.stdout.write(`Backend Aiven do checkout escutando na porta ${config.port}\n`)
 })
+
 

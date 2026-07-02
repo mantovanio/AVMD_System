@@ -60,12 +60,13 @@ export class ProfileRepository {
     perfil: string
     tipo_vinculo: string
     permissoes: string[]
+    status?: string
   }): Promise<ProfileRow> {
     const result = await this.db.query<ProfileRow>(
       `INSERT INTO profiles (clerk_user_id, nome, email, perfil, tipo_vinculo, permissoes, status)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'ativo')
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
        RETURNING *`,
-      [input.clerk_user_id, input.nome, input.email, input.perfil, input.tipo_vinculo, JSON.stringify(input.permissoes ?? [])],
+      [input.clerk_user_id, input.nome, input.email, input.perfil, input.tipo_vinculo, JSON.stringify(input.permissoes ?? []), input.status ?? 'ativo'],
     )
     return result.rows[0]
   }

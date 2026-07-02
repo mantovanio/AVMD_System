@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useClerk, useSession, useSignIn, useSignUp, useUser } from '@clerk/clerk-react'
+import { useClerk, useSession, useSignIn, useUser } from '@clerk/clerk-react'
 import { supabase } from '@/lib/supabase'
 import { getApiUrl, useLegacySupabase } from '@/lib/api'
 import type { Profile } from '@/types'
@@ -16,7 +16,6 @@ interface AuthUser {
 }
 
 type AuthActionResult = { error: string | null }
-type SignUpResult = AuthActionResult & { needsEmailVerification?: boolean }
 
 interface AuthContextValue {
   user: AuthUser | null
@@ -24,9 +23,7 @@ interface AuthContextValue {
   session: unknown | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<AuthActionResult>
-  signUp: (data: SignUpData) => Promise<SignUpResult>
-  verifySignUpEmail: (code: string) => Promise<AuthActionResult>
-  resendSignUpVerification: () => Promise<AuthActionResult>
+  signUp: (data: SignUpData) => Promise<AuthActionResult>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<AuthActionResult>
   confirmPasswordReset: (code: string, newPassword: string) => Promise<AuthActionResult>
@@ -41,7 +38,6 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const clerk = useClerk()
   const { isLoaded: signInLoaded, signIn, setActive } = useSignIn()
-  const { isLoaded: signUpLoaded, signUp } = useSignUp()
   const { isLoaded: userLoaded, user } = useUser()
   const { isLoaded: sessionLoaded, isSignedIn, session } = useSession()
 
@@ -55,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { id: user.id, email }
   }, [user, userLoaded, isSignedIn])
 
-  const loading = !signInLoaded || !signUpLoaded || !userLoaded || !sessionLoaded || (currentUser !== null && profileLoading)
+  const loading = !signInLoaded || !userLoaded || !sessionLoaded || (currentUser !== null && profileLoading)
 
   function hasRecoveryUrl() {
     const params = new URLSearchParams(window.location.search)
@@ -135,60 +131,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signUpWithPassword({ nome, email, password }: SignUpData) {
-    if (!signUpLoaded || !signUp) {
-      return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
-    }
-
     try {
-      const result = await signUp.create({
-        emailAddress: email,
-        password,
-        firstName: nome,
-        legalAccepted: true,
+      const response = await fetch(getApiUrl('/auth/register'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome, email, senha: password }),
       })
-
-      if (result.status === 'complete' && result.createdSessionId && setActive) {
-        await setActive({ session: result.createdSessionId })
-        return { error: null }
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
+      if (!response.ok || !data?.ok) {
+        return { error: data?.error ?? 'Não foi possível concluir o cadastro agora.' }
       }
-
-      await result.prepareEmailAddressVerification({ strategy: 'email_code' })
-      return { error: null, needsEmailVerification: true }
-    } catch (error) {
-      if (error instanceof Error) return { error: error.message }
-      return { error: 'Falha ao criar conta. Tente novamente.' }
-    }
-  }
-
-  async function verifySignUpEmail(code: string) {
-    if (!signUpLoaded || !signUp) {
-      return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
-    }
-
-    try {
-      const result = await signUp.attemptEmailAddressVerification({ code })
-      if (result.status === 'complete' && result.createdSessionId && setActive) {
-        await setActive({ session: result.createdSessionId })
-        return { error: null }
-      }
-      return { error: 'Não foi possível confirmar o email. Solicite um novo código e tente novamente.' }
-    } catch (error) {
-      if (error instanceof Error) return { error: error.message }
-      return { error: 'Falha ao confirmar o email. Tente novamente.' }
-    }
-  }
-
-  async function resendSignUpVerification() {
-    if (!signUpLoaded || !signUp) {
-      return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
-    }
-
-    try {
-      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' })
       return { error: null }
     } catch (error) {
       if (error instanceof Error) return { error: error.message }
-      return { error: 'Falha ao reenviar o código de verificação. Tente novamente.' }
+      return { error: 'Falha ao criar conta. Tente novamente.' }
     }
   }
 
@@ -284,8 +240,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         signIn: signInWithPassword,
         signUp: signUpWithPassword,
-        verifySignUpEmail,
-        resendSignUpVerification,
         signOut,
         resetPassword,
         confirmPasswordReset,
