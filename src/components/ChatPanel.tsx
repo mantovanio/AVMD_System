@@ -6,6 +6,8 @@ import { logger } from '@/lib/logger'
 import { DEFAULT_CONTACT_DOCUMENT_STORAGE, loadContactDocumentStorageConfig, type ContactDocumentStorageConfig } from '@/lib/contactDocumentStorage'
 import type { ChatContact, Lead } from '@/types'
 import { useAuth } from '@/contexts/AuthContext'
+import MediaPreview from '@/components/MediaPreview'
+import { getMediaProxyUrl } from '@/lib/api'
 
 // ── Public types ───────────────────────────────────────────────
 
@@ -259,6 +261,7 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
   const [input, setInput]                   = useState('')
   const [sending, setSending]               = useState(false)
   const [fetchError, setFetchError]         = useState<string | null>(null)
+  const [refreshingMessages, setRefreshingMessages] = useState(false)
   const [showEmoji, setShowEmoji]           = useState(false)
   const [leadInfo, setLeadInfo]             = useState<LeadSidebarInfo | null>(null)
   const [leadLoading, setLeadLoading]       = useState(contact._table === 'leads_contabilidade')
@@ -543,6 +546,16 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
       }
     }
     setLeadLoading(false)
+  }
+
+  async function refreshMessages() {
+    if (!remoteJid) return
+    setRefreshingMessages(true)
+    try {
+      await loadHistory(remoteJid)
+    } finally {
+      setRefreshingMessages(false)
+    }
   }
 
   async function loadDocumentStorageConfig() {
@@ -1206,6 +1219,15 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
             </span>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => void refreshMessages()}
+          title="Atualizar mensagens"
+          disabled={refreshingMessages}
+          className="w-9 h-9 rounded-xl border border-white/70 bg-white/65 text-gray-600 hover:text-gray-900 dark:hover:text-gray-100 transition-colors shrink-0 flex items-center justify-center shadow-sm backdrop-blur disabled:opacity-50"
+        >
+          <RefreshCw size={16} className={refreshingMessages ? 'animate-spin' : ''} />
+        </button>
         <button
           type="button"
           onClick={onClose}
@@ -1878,14 +1900,31 @@ function MessageBubble({
   const needsResolvedMedia = isAudio || isImage || isVideo || isDoc
   const time      = new Date(message.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   const [resolvedMediaUrl, setResolvedMediaUrl] = useState<string | null>(message.mediaUrl ?? null)
+  const [mediaLoadError, setMediaLoadError] = useState(false)
   const audioLabel = message.fromMe ? 'Audio enviado' : 'Audio recebido'
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const hasDirectUrl = Boolean(message.mediaUrl)
+  const displayUrl = evolution && resolvedMediaUrl
+    ? getMediaProxyUrl(resolvedMediaUrl, evolution.instance_name)
+    : resolvedMediaUrl
 
   useEffect(() => {
+    if (!needsResolvedMedia) {
+      setResolvedMediaUrl(message.mediaUrl ?? null)
+      return
+    }
+
+    if (message.mediaUrl) {
+      setResolvedMediaUrl(message.mediaUrl)
+      setMediaLoadError(false)
+      return
+    }
+
     let active = true
     let objectUrl: string | null = null
 
     async function resolveMedia() {
-      if (!needsResolvedMedia || !evolution || !message.messageId) return
+      if (!evolution || !message.messageId) return
       try {
         objectUrl = await fetchMediaObjectUrl(evolution, message.messageId, isVideo)
         if (active) setResolvedMediaUrl(objectUrl)
@@ -1894,11 +1933,7 @@ function MessageBubble({
       }
     }
 
-    if (needsResolvedMedia) {
-      void resolveMedia()
-    } else {
-      setResolvedMediaUrl(message.mediaUrl ?? null)
-    }
+    void resolveMedia()
 
     return () => {
       active = false
@@ -1934,10 +1969,22 @@ function MessageBubble({
             )}
 
             {isImage && (
-              resolvedMediaUrl ? (
-                <a href={resolvedMediaUrl} target="_blank" rel="noreferrer" className="block mb-1">
-                  <img src={resolvedMediaUrl} alt="imagem" className="max-w-full rounded-xl" />
-                </a>
+              displayUrl ? (
+                <div className="relative group mb-1">
+                  <button type="button" onClick={() => setPreviewUrl(displayUrl)} className="block w-full text-left">
+                    <img
+                      src={displayUrl}
+                      alt="imagem"
+                      className="max-w-full rounded-xl cursor-pointer"
+                      onError={() => setMediaLoadError(true)}
+                    />
+                  </button>
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-xl bg-black/30">
+                    <span className="rounded-lg bg-white/90 px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm">
+                      Visualizar
+                    </span>
+                  </div>
+                </div>
               ) : (
                 <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-xs text-gray-500 mb-1">
                   Carregando imagem...
@@ -1950,20 +1997,40 @@ function MessageBubble({
                   <span className="text-sm">♪</span>
                   <span>{audioLabel}</span>
                 </div>
-                {resolvedMediaUrl ? (
-                  <audio src={resolvedMediaUrl} controls className="w-full min-w-0 h-10" preload="metadata" />
+                {displayUrl ? (
+                  <div className="flex items-center gap-2">
+                    <audio
+                      key={displayUrl}
+                      src={displayUrl}
+                      controls
+                      className="w-full min-w-0 flex-1"
+                      preload="metadata"
+                      onError={() => setMediaLoadError(true)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => window.open(displayUrl, '_blank')}
+                      className="shrink-0 rounded-lg bg-violet-50 px-2.5 py-1.5 text-[11px] font-medium text-violet-700 hover:bg-violet-100 transition-colors"
+                      title="Abrir audio em nova aba"
+                    >
+                      Visualizar
+                    </button>
+                  </div>
                 ) : (
                   <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-xs text-gray-500">
                     Carregando audio...
                   </div>
                 )}
+                {mediaLoadError && hasDirectUrl && (
+                  <p className="text-[11px] text-red-500">Falha ao carregar. <button type="button" onClick={() => window.open(message.mediaUrl!, '_blank')} className="underline">Abrir diretamente</button></p>
+                )}
               </div>
             )}
             {isVideo && (
-              resolvedMediaUrl ? (
+              displayUrl ? (
                 <div className="mb-1.5 space-y-2">
-                  <video src={resolvedMediaUrl} controls className="max-w-full rounded-xl" preload="metadata" />
-                  <a href={resolvedMediaUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                  <video src={displayUrl} controls className="max-w-full rounded-xl" preload="metadata" />
+                  <a href={displayUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
                     Abrir video em nova aba
                   </a>
                 </div>
@@ -1974,11 +2041,20 @@ function MessageBubble({
               )
             )}
             {isDoc && (
-              resolvedMediaUrl ? (
-                <a href={resolvedMediaUrl} target="_blank" rel="noreferrer"
-                  className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 hover:underline text-xs mb-1">
-                  📎 {message.content ?? 'arquivo'}
-                </a>
+              displayUrl ? (
+                <div className="mb-1">
+                  <button type="button" onClick={() => setPreviewUrl(displayUrl)}
+                    className="flex w-full items-center gap-1.5 text-blue-600 dark:text-blue-400 hover:underline text-xs text-left">
+                    📎 {message.content ?? 'arquivo'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewUrl(displayUrl)}
+                    className="mt-1 rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-200 transition-colors"
+                  >
+                    Visualizar
+                  </button>
+                </div>
               ) : (
                 <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-xs text-gray-500 mb-1">
                   Carregando arquivo...
@@ -2006,6 +2082,13 @@ function MessageBubble({
           {time}
         </p>
       </div>
+      {previewUrl && (
+        <MediaPreview
+          url={previewUrl}
+          fileName={message.content}
+          onClose={() => setPreviewUrl(null)}
+        />
+      )}
     </div>
   )
 }

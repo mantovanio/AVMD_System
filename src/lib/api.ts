@@ -24,6 +24,12 @@ export function getCheckoutBackendUrl(endpoint: 'context' | 'submit') {
   return getApiUrl(`/checkout/${endpoint}`)
 }
 
+export function getMediaProxyUrl(mediaUrl: string, instanceName?: string): string {
+  const params = new URLSearchParams({ url: mediaUrl })
+  if (instanceName) params.set('instance', instanceName)
+  return getApiUrl(`/chat/media-proxy?${params.toString()}`)
+}
+
 export async function postJson<T = unknown>(url: string, payload: unknown) {
   const response = await fetch(url, {
     method: 'POST',
