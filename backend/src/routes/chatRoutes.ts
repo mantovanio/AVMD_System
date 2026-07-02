@@ -297,6 +297,74 @@ async function sendEvolutionTextMessage(
   return { ok: true, error: null, status: 200, payload, instanceName: integration.instance_name }
 }
 
+type MediaCategory = 'audio' | 'image' | 'video' | 'document'
+
+function mediaCategoryFromMime(mimeType: string): MediaCategory {
+  if (mimeType.startsWith('audio/')) return 'audio'
+  if (mimeType.startsWith('image/')) return 'image'
+  if (mimeType.startsWith('video/')) return 'video'
+  return 'document'
+}
+
+function messageTypeFromCategory(category: MediaCategory): string {
+  switch (category) {
+    case 'audio': return 'audioMessage'
+    case 'image': return 'imageMessage'
+    case 'video': return 'videoMessage'
+    default: return 'documentMessage'
+  }
+}
+
+async function sendEvolutionMediaMessage(
+  integrationRepo: ExternalIntegrationRepository,
+  input: {
+    instanceName?: string | null
+    destinationNumber: string
+    category: MediaCategory
+    mimeType: string
+    fileName: string
+    mediaValue: string
+    caption?: string | null
+  },
+) {
+  const integration = await resolveIntegration(integrationRepo, input.instanceName)
+  if (!integration?.base_url || !integration?.api_token || !integration?.instance_name) {
+    return { ok: false, error: 'Nenhuma integracao WhatsApp ativa configurada.', status: 422, payload: null as JsonRecord | null, instanceName: null as string | null }
+  }
+
+  const baseUrl = cleanBaseUrl(integration.base_url)
+  let evolutionUrl: string
+  let body: JsonRecord
+
+  if (input.category === 'audio') {
+    evolutionUrl = `${baseUrl}/message/sendWhatsAppAudio/${integration.instance_name}`
+    body = { number: input.destinationNumber, audio: input.mediaValue, encoding: true }
+  } else {
+    evolutionUrl = `${baseUrl}/message/sendMedia/${integration.instance_name}`
+    body = {
+      number: input.destinationNumber,
+      mediatype: input.category,
+      mimetype: input.mimeType,
+      media: input.mediaValue,
+      fileName: input.fileName,
+      ...(input.caption ? { caption: input.caption } : {}),
+    }
+  }
+
+  const response = await fetch(evolutionUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: integration.api_token },
+    body: JSON.stringify(body),
+  })
+
+  const payload = await response.json().catch(() => ({ status: response.status })) as JsonRecord
+  if (!response.ok) {
+    return { ok: false, error: `Evolution retornou HTTP ${response.status}`, status: 502, payload, instanceName: integration.instance_name }
+  }
+
+  return { ok: true, error: null, status: 200, payload, instanceName: integration.instance_name }
+}
+
 export async function handleChatRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -823,6 +891,108 @@ export async function handleChatRoutes(
     )
 
     writeJson(res, 200, { ok: true, file: fileRecord }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/chat/send-media') {
+    const body = await readJson<Record<string, unknown>>(req)
+    const conversationId = asString(body.conversation_id)
+    const destinationNumber = normalizePhoneDigits(asString(body.destination_number))
+    const fileName = asString(body.file_name)
+    const mimeType = asString(body.mime_type) || 'application/octet-stream'
+    const fileBase64 = asString(body.file_base64)
+    const caption = typeof body.caption === 'string' && body.caption.trim() ? body.caption.trim() : null
+    const instanceName = asString(body.instance_name) || null
+    const senderName = asString(body.sender_name) || null
+
+    if (!conversationId) {
+      writeJson(res, 400, { ok: false, error: 'conversation_id obrigatorio.' }, corsOrigin)
+      return true
+    }
+    if (!destinationNumber) {
+      writeJson(res, 400, { ok: false, error: 'destination_number obrigatorio.' }, corsOrigin)
+      return true
+    }
+    if (!fileName) {
+      writeJson(res, 400, { ok: false, error: 'file_name obrigatorio.' }, corsOrigin)
+      return true
+    }
+    if (!fileBase64) {
+      writeJson(res, 400, { ok: false, error: 'file_base64 obrigatorio.' }, corsOrigin)
+      return true
+    }
+
+    let buffer: Buffer
+    try {
+      buffer = Buffer.from(fileBase64, 'base64')
+    } catch {
+      writeJson(res, 400, { ok: false, error: 'file_base64 invalido.' }, corsOrigin)
+      return true
+    }
+
+    const maxBytes = 50 * 1024 * 1024
+    if (buffer.length > maxBytes) {
+      writeJson(res, 400, { ok: false, error: 'Arquivo excede o limite de 50MB.' }, corsOrigin)
+      return true
+    }
+
+    const storedPath = buildStoredPath(conversationId, fileName)
+    saveFile(storedPath, buffer)
+    const fileRecord = await fileRepository.create({
+      conversation_id: conversationId,
+      original_name: fileName,
+      stored_path: storedPath,
+      mime_type: mimeType,
+      size_bytes: buffer.length,
+      uploaded_by: null,
+    })
+
+    const mediaUrl = `/api/chat/files/${fileRecord.id}`
+    const category = mediaCategoryFromMime(mimeType)
+    // Evolution API so aceita base64 direto ate ~3MB para imagem/video/documento;
+    // acima disso, manda a URL publica do proprio arquivo (audio nao tem opcao de URL).
+    const useUrl = category !== 'audio' && buffer.length > 3 * 1024 * 1024
+    const mediaValue = useUrl ? `${cleanBaseUrl(config.publicApiBaseUrl)}${mediaUrl}` : fileBase64
+
+    const sendResult = await sendEvolutionMediaMessage(externalIntegrationRepository, {
+      instanceName,
+      destinationNumber,
+      category,
+      mimeType,
+      fileName,
+      mediaValue,
+      caption,
+    })
+
+    if (!sendResult.ok) {
+      writeJson(res, sendResult.status, { ok: false, error: sendResult.error, detail: sendResult.payload }, corsOrigin)
+      return true
+    }
+
+    const messageId = parseMessageId(sendResult.payload)
+    const remoteJid = buildRemoteJid(destinationNumber)
+
+    await communicationEventRepository.create({
+      source: 'evolution',
+      event_type: 'message_sent',
+      external_id: messageId,
+      conversation_id: remoteJid,
+      lead_id: null,
+      contact: destinationNumber,
+      payload: {
+        content: caption ?? fileName,
+        fromMe: true,
+        messageId,
+        messageType: messageTypeFromCategory(category),
+        mimeType,
+        fileName,
+        mediaUrl,
+        pushName: senderName || 'Operador',
+        provider_payload: sendResult.payload,
+      },
+    })
+
+    writeJson(res, 200, { ok: true, messageId, mediaUrl }, corsOrigin)
     return true
   }
 
