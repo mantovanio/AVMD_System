@@ -456,7 +456,7 @@ export interface CommunicationOutbox {
 
 // ── auth / profiles ───────────────────────────────────────────
 export type PerfilAcesso = 'admin' | 'usuario' | 'vendedor' | 'agente_registro'
-export type TipoVinculoUsuario = 'agente_registro' | 'parceiro' | 'vendedor' | 'contador' | 'usuario_comum'
+export type TipoVinculoUsuario = 'agente_registro' | 'parceiro' | 'vendedor' | 'contador' | 'usuario_comum' | 'cliente_portal'
 
 export type NivelAcesso = 'nenhum' | 'visualizar' | 'editar' | 'admin'
 

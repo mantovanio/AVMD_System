@@ -91,7 +91,7 @@ const server = createServer(async (req, res) => {
     const handledAdminUsers = await handleAdminUsersRoutes(req, res, profileRepository, config.clerkSecretKey, config.corsOrigin)
     if (handledAdminUsers) return
 
-    const handledPublicAuth = await handlePublicAuthRoutes(req, res, profileRepository, config.clerkSecretKey, config.corsOrigin)
+    const handledPublicAuth = await handlePublicAuthRoutes(req, res, profileRepository, communicationOutboxRepository, config.clerkSecretKey, config.corsOrigin)
     if (handledPublicAuth) return
 
     const handledPortal = await handlePortalRoutes(req, res, portalRepository, profileRepository, config.corsOrigin)

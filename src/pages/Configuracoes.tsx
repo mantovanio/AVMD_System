@@ -79,6 +79,7 @@ const TIPO_VINCULO_LABEL: Record<TipoVinculoUsuario, string> = {
   vendedor:        'Vendedor',
   contador:        'Contador',
   usuario_comum:   'Usuário comum',
+  cliente_portal:  'Cliente do portal',
 }
 
 type UserEditForm = {
@@ -1131,7 +1132,7 @@ function AbaUsuarios() {
           <div>
             <h2 className="font-semibold text-gray-800 dark:text-gray-200">Usuários do Sistema</h2>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Novos cadastros entram como Usuário e aguardam liberação para o primeiro acesso.
+              Aqui aparecem apenas usuários internos da plataforma. Clientes do portal são gerenciados na tela de Clientes.
             </p>
           </div>
           <button type="button" onClick={abrirNovoUsuario}

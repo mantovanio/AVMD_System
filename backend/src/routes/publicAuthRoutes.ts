@@ -1,5 +1,6 @@
 import { createClerkClient } from '@clerk/backend'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
 import type { ProfileRepository } from '../repositories/profileRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
 
@@ -24,10 +25,25 @@ function getClerkErrorMessage(error: unknown) {
     ?? (error instanceof Error ? error.message : 'Falha ao processar cadastro no Clerk.')
 }
 
+function buildPendingApprovalEmail(nome: string) {
+  const firstName = nome.trim().split(/\s+/)[0] || 'cliente'
+  return {
+    subject: 'Cadastro recebido e aguardando aprovação',
+    body: `Olá, ${firstName}.
+
+Recebemos seu cadastro na plataforma.
+
+Neste momento o seu acesso está aguardando aprovação da equipe responsável. Assim que a liberação for concluída, você poderá entrar normalmente com o e-mail e a senha cadastrados.
+
+Se tiver urgência, responda este e-mail para falar com a equipe.`,
+  }
+}
+
 export async function handlePublicAuthRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   profileRepository: ProfileRepository,
+  outboxRepository: CommunicationOutboxRepository,
   clerkSecretKey: string,
   corsOrigin: string,
 ): Promise<boolean> {
@@ -79,6 +95,16 @@ export async function handlePublicAuthRoutes(
       tipo_vinculo: 'usuario_comum',
       permissoes: [],
       status: 'inativo',
+    })
+
+    const emailMessage = buildPendingApprovalEmail(nome)
+    await outboxRepository.create({
+      channel: 'email',
+      provider: 'email_smtp',
+      to_address: email,
+      subject: emailMessage.subject,
+      body: emailMessage.body,
+      payload: { context: 'public_signup_pending_approval', nome, email },
     })
 
     writeJson(res, 200, { ok: true, userId: clerkUser.id }, corsOrigin)

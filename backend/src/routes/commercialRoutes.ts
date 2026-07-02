@@ -49,6 +49,10 @@ type CommissionReportRequest = {
   target_profile_id?: string | null
 }
 
+
+type CustomerPortalAccessRequest = { customerId?: string }
+type CustomerPortalAccessStatusRequest = { customerId?: string; status?: string }
+
 export async function handleCommercialRoutes(req: IncomingMessage, res: ServerResponse, repository: CommercialRepository, corsOrigin: string) {
   const method = req.method ?? ''
   const url = req.url ?? ''
@@ -113,6 +117,33 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
     const term = body.term?.trim() ?? ''
     const clientes = term.length >= 3 ? await repository.searchCustomers(term) : []
     writeJson(res, 200, { ok: true, clientes }, corsOrigin)
+    return true
+  }
+
+
+  if (req.method === 'POST' && req.url === '/api/comercial/clientes/access') {
+    const body = await readJson<CustomerPortalAccessRequest>(req)
+    if (!body.customerId) {
+      writeJson(res, 400, { ok: false, error: 'customerId obrigatorio.' }, corsOrigin)
+      return true
+    }
+    const access = await repository.getCustomerPortalAccess(body.customerId)
+    writeJson(res, 200, { ok: true, access }, corsOrigin)
+    return true
+  }
+
+  if (req.method === 'PATCH' && req.url === '/api/comercial/clientes/access/status') {
+    const body = await readJson<CustomerPortalAccessStatusRequest>(req)
+    if (!body.customerId || !body.status) {
+      writeJson(res, 400, { ok: false, error: 'customerId e status obrigatorios.' }, corsOrigin)
+      return true
+    }
+    const access = await repository.setCustomerPortalAccessStatus(body.customerId, body.status)
+    if (!access) {
+      writeJson(res, 404, { ok: false, error: 'Acesso do cliente nao encontrado.' }, corsOrigin)
+      return true
+    }
+    writeJson(res, 200, { ok: true, access }, corsOrigin)
     return true
   }
 

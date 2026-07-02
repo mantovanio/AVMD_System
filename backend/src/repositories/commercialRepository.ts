@@ -176,11 +176,54 @@ export class CommercialRepository {
     const result = await this.db.query(`
       select *
       from cadastros_base
-      where status = 'ativo'
       order by nome asc
       limit 200
     `)
     return result.rows
+  }
+
+  async getCustomerPortalAccess(customerId: string) {
+    const result = await this.db.query<{
+      profile_id: string
+      clerk_user_id: string | null
+      nome: string
+      email: string | null
+      status: string
+      tipo_vinculo: string | null
+    }>(`
+      select
+        p.id::text as profile_id,
+        p.clerk_user_id,
+        p.nome,
+        p.email,
+        p.status,
+        p.tipo_vinculo
+      from cadastros_base cb
+      join profiles p on p.tipo_vinculo = 'cliente_portal'
+       and (
+         (cb.email is not null and lower(coalesce(p.email, '')) = lower(cb.email))
+         or regexp_replace(coalesce(p.documento, ''), '\D', '', 'g') = regexp_replace(coalesce(cb.cpf_cnpj, ''), '\D', '', 'g')
+         or right(regexp_replace(coalesce(p.telefone, ''), '\D', '', 'g'), 11) = right(regexp_replace(coalesce(cb.telefone, ''), '\D', '', 'g'), 11)
+       )
+      where cb.id = $1::uuid
+      order by
+        case when cb.email is not null and lower(coalesce(p.email, '')) = lower(cb.email) then 0 else 1 end,
+        case when regexp_replace(coalesce(p.documento, ''), '\D', '', 'g') = regexp_replace(coalesce(cb.cpf_cnpj, ''), '\D', '', 'g') then 0 else 1 end
+      limit 1
+    `, [customerId])
+    return result.rows[0] ?? null
+  }
+
+  async setCustomerPortalAccessStatus(customerId: string, status: string) {
+    const access = await this.getCustomerPortalAccess(customerId)
+    if (!access) return null
+    const result = await this.db.query<{ profile_id: string; status: string }>(`
+      update profiles
+      set status = $2, updated_at = now()
+      where id = $1::uuid
+      returning id::text as profile_id, status
+    `, [access.profile_id, status])
+    return result.rows[0] ?? null
   }
 
   async searchCustomers(term: string) {

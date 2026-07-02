@@ -170,7 +170,7 @@ export class CheckoutService {
     if (!this.profileRepository || !this.clerkSecretKey) {
       return {
         status: 'linked',
-        message: 'Pedido criado. O acesso do portal sera liberado pela equipe.',
+        message: 'Pedido criado. O acesso do portal sera confirmado pela equipe.',
       }
     }
 
@@ -187,17 +187,18 @@ export class CheckoutService {
       : await this.findOrCreateClerkUser({ email, nome, senha })
 
     if (existingProfile) {
+      const canConvertToPortal = existingProfile.tipo_vinculo === 'cliente_portal' || (existingProfile.status === 'inativo' && !(existingProfile.permissoes?.length ?? 0))
       await this.profileRepository.update(existingProfile.id, {
         clerk_user_id: clerkUserId,
         nome,
         email,
         status: 'ativo',
         perfil: existingProfile.perfil || 'usuario',
-        tipo_vinculo: existingProfile.tipo_vinculo || 'usuario_comum',
+        tipo_vinculo: canConvertToPortal ? 'cliente_portal' : (existingProfile.tipo_vinculo || 'usuario_comum'),
         documento,
         telefone,
         cidade,
-        permissoes: existingProfile.permissoes?.length ? existingProfile.permissoes : ['portal'],
+        permissoes: canConvertToPortal ? ['portal'] : (existingProfile.permissoes?.length ? existingProfile.permissoes : ['portal']),
       })
 
       return clerkUserId && !existingProfile.clerk_user_id
@@ -216,7 +217,7 @@ export class CheckoutService {
       nome,
       email,
       perfil: 'usuario',
-      tipo_vinculo: 'usuario_comum',
+      tipo_vinculo: 'cliente_portal',
       permissoes: ['portal'],
       status: 'ativo',
       documento,
@@ -226,7 +227,7 @@ export class CheckoutService {
 
     return {
       status: 'created',
-      message: 'Seu acesso ao portal foi criado com sucesso. Use o e-mail e a senha informados para acompanhar o pedido.',
+      message: 'Seu acesso ao portal foi criado com sucesso. Use o e-mail e a senha informados para acompanhar pedido, pagamento e videoconferencia.',
     }
   }
 

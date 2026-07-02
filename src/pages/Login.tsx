@@ -322,8 +322,8 @@ export default function Login() {
                   <div>
                     <p className="font-semibold text-white text-lg">Conta criada!</p>
                     <p className="text-sm text-white/80 mt-2">
-                      Sua conta foi criada com sucesso para <strong>{regEmail}</strong>.<br />
-                      Agora o administrador precisa liberar seu primeiro acesso.
+                      Recebemos seu cadastro para <strong>{regEmail}</strong>.<br />
+                      Enviamos um e-mail informando que o acesso está aguardando aprovação da equipe.
                     </p>
                   </div>
                   <button type="button" onClick={goLogin} className="text-sm text-white hover:underline font-medium">

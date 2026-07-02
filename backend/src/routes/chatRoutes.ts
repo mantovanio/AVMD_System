@@ -1094,6 +1094,118 @@ export async function handleChatRoutes(
     return true
   }
 
+  // ── Catálogo IA (produtos para agente Clara) ──────────────────────────────
+  const getAllCatalogo = req.method === 'GET' && url === '/api/chat/catalogo-ia/all'
+  const getActiveCatalogo = req.method === 'GET' && url === '/api/chat/catalogo-ia'
+
+  if (getActiveCatalogo || getAllCatalogo) {
+    const sql = getAllCatalogo
+      ? 'SELECT * FROM catalogo_ia ORDER BY tipo, modelo, periodo_uso, midia'
+      : 'SELECT * FROM catalogo_ia WHERE ativo = true ORDER BY tipo, modelo, periodo_uso, midia'
+    const result = await db.query(sql)
+    writeJson(res, 200, { ok: true, data: result.rows }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/chat/catalogo-ia') {
+    const body = await readJson<Record<string, unknown>>(req)
+    const result = await db.query<{ id: string }>(
+      `INSERT INTO catalogo_ia (produto, tipo, modelo, periodo_uso, midia, tipo_validacao, preco, gratuito, observacao, link_compra, ativo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+      [body.produto, body.tipo ?? 'e-CPF', body.modelo ?? 'A1', body.periodo_uso ?? '1 ano',
+       body.midia ?? null, body.tipo_validacao ?? 'qualquer', body.preco ?? 0,
+       body.gratuito ?? false, body.observacao ?? null, body.link_compra ?? null, body.ativo ?? true],
+    )
+    writeJson(res, 201, { ok: true, id: result.rows[0].id }, corsOrigin)
+    return true
+  }
+
+  const catalogoUpdateMatch = req.method === 'PUT' ? url.match(/^\/api\/chat\/catalogo-ia\/([a-f0-9-]+)$/i) : null
+  if (catalogoUpdateMatch) {
+    const id = catalogoUpdateMatch[1]
+    const body = await readJson<Record<string, unknown>>(req)
+    const sets: string[] = []
+    const values: unknown[] = []
+    let idx = 1
+    for (const [key, value] of Object.entries(body)) {
+      if (['id', 'created_at', 'updated_at'].includes(key)) continue
+      sets.push(`${key} = $${idx++}`)
+      values.push(value)
+    }
+    if (sets.length > 0) {
+      sets.push(`updated_at = NOW()`)
+      values.push(id)
+      await db.query(`UPDATE catalogo_ia SET ${sets.join(', ')} WHERE id = $${idx}`, values)
+    }
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  const catalogoDeleteMatch = method === 'DELETE' && url.match(/^\/api\/chat\/catalogo-ia\/([a-f0-9-]+)$/i)
+  if (catalogoDeleteMatch) {
+    const id = catalogoDeleteMatch[1]
+    await db.query('DELETE FROM catalogo_ia WHERE id::text = $1', [id])
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  // GET /api/chat/media-proxy?url=...&instance=...
+  // Proxy para Evolution API media — o browser nao pode adicionar header apikey
+  if (method === 'GET' && url.startsWith('/api/chat/media-proxy')) {
+    const parsed = new URL(url, 'http://localhost')
+    const mediaUrl = parsed.searchParams.get('url')
+    const instanceName = parsed.searchParams.get('instance')
+    if (!mediaUrl) {
+      writeJson(res, 400, { error: 'url query param required' }, corsOrigin)
+      return true
+    }
+
+    const instances = [config.evolutionAtendimento, config.evolutionCertiid].filter(Boolean)
+    const match = instanceName ? instances.find(i => i.instanceName === instanceName) : null
+    const apiToken = match?.apiToken
+    if (!apiToken) {
+      writeJson(res, 404, { error: 'instance not found or apiToken not configured' }, corsOrigin)
+      return true
+    }
+
+    try {
+      const mediaRes = await fetch(mediaUrl, { headers: { apikey: apiToken } })
+      if (!mediaRes.ok) {
+        writeJson(res, mediaRes.status, { error: `Evolution media fetch failed: HTTP ${mediaRes.status}` }, corsOrigin)
+        return true
+      }
+
+      const contentType = mediaRes.headers.get('content-type') || 'application/octet-stream'
+      const contentLength = mediaRes.headers.get('content-length')
+
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Length': contentLength ?? '',
+        'Access-Control-Allow-Origin': corsOrigin,
+        'Cache-Control': 'private, max-age=3600',
+      })
+
+      const reader = mediaRes.body?.getReader()
+      if (!reader) {
+        writeJson(res, 502, { error: 'no response body' }, corsOrigin)
+        return true
+      }
+
+      const pump = async () => {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) { res.end(); break }
+          res.write(value)
+        }
+      }
+      pump().catch(() => { res.end() })
+      return true
+    } catch (err) {
+      writeJson(res, 502, { error: String(err) }, corsOrigin)
+      return true
+    }
+  }
+
   return false
 }
 

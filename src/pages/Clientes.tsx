@@ -1,5 +1,6 @@
 import { Fragment, useState, useEffect, useCallback } from 'react'
 import { Search, X, ChevronDown, ChevronUp, Loader2, RefreshCcw, Plus, Pencil, MessageCircle, Mail, LifeBuoy, Save } from 'lucide-react'
+import { getApiUrl } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { buscarCep } from '@/lib/cep'
@@ -59,11 +60,21 @@ interface ContatoHistorico {
   created_at: string
 }
 
+interface PortalAccessSummary {
+  profile_id: string
+  clerk_user_id: string | null
+  nome: string
+  email: string | null
+  status: 'ativo' | 'inativo'
+  tipo_vinculo: string | null
+}
+
 interface ClienteDetalhe {
   vendas: VendaResumida[]
   renovacoes: RenovacaoResumo[]
   contatos: ContatoHistorico[]
   agendamentos: Agendamento[]
+  portal_access: PortalAccessSummary | null
 }
 
 interface ClienteComVendas extends Cliente {
@@ -315,18 +326,28 @@ export default function Clientes() {
     if (email) renovacaoOps.push(supabase.from('renovacoes').select('*').eq('email', email).is('deleted_at', null).order('data_vencimento', { ascending: true }).limit(20))
     if (phoneCandidates.length > 0) renovacaoOps.push(supabase.from('renovacoes').select('*').in('telefone', phoneCandidates).is('deleted_at', null).order('data_vencimento', { ascending: true }).limit(20))
 
+    const portalAccessPromise = fetch(getApiUrl('/comercial/clientes/access'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customerId: cliente.id }),
+    })
+      .then(res => res.json())
+      .catch(() => ({ ok: false, access: null }))
+
     const [
       { data: vendasData },
       { data: agendamentosData },
       { data: outboxData },
       { data: eventosData },
       renovacaoResults,
+      portalAccessResponse,
     ] = await Promise.all([
       vendasPromise,
       agendamentosPromise,
       contatosOutboxPromise,
       contatosEventosPromise,
       Promise.all(renovacaoOps),
+      portalAccessPromise,
     ])
 
     const ids: string[] = []
@@ -378,6 +399,7 @@ export default function Clientes() {
         renovacoes: [...renovacoesMap.values()].sort((a, b) => new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime()),
         contatos,
         agendamentos: (agendamentosData ?? []) as Agendamento[],
+        portal_access: (portalAccessResponse?.ok ? portalAccessResponse.access : null) as PortalAccessSummary | null,
       },
     }))
 
@@ -524,6 +546,37 @@ export default function Clientes() {
         lead_id: lead?.id ? String(lead.id) : '',
         foco: 'kanban',
       },
+    })
+  }
+
+  async function togglePortalAccess(cliente: ClienteComVendas, currentStatus: 'ativo' | 'inativo') {
+    const nextStatus = currentStatus === 'ativo' ? 'inativo' : 'ativo'
+    const response = await fetch(getApiUrl('/comercial/clientes/access/status'), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customerId: cliente.id, status: nextStatus }),
+    })
+    const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; access?: PortalAccessSummary } | null
+    if (!response.ok || !data?.ok) {
+      alert(data?.error ?? 'Nao foi possivel atualizar o acesso do cliente.')
+      return
+    }
+    setDetalhes(prev => {
+      const detalheAtual = prev[cliente.id]
+      if (!detalheAtual?.portal_access) return prev
+
+      const proximoDetalhe: ClienteDetalhe = {
+        ...detalheAtual,
+        portal_access: {
+          ...detalheAtual.portal_access,
+          status: nextStatus,
+        },
+      }
+
+      return {
+        ...prev,
+        [cliente.id]: proximoDetalhe,
+      }
     })
   }
 
@@ -716,6 +769,40 @@ export default function Clientes() {
                             </div>
 
                             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                              <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-100 dark:border-blue-900/20 overflow-hidden xl:col-span-2">
+                                <SectionTitle title="Acesso do portal" count={detalhe?.portal_access ? 1 : 0} />
+                                {!detalhe?.portal_access ? (
+                                  <EmptySection label="Este cliente ainda não possui um acesso de portal vinculado." />
+                                ) : (
+                                  <div className="px-4 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                                    <div>
+                                      <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{detalhe.portal_access.nome}</p>
+                                      <p className="text-xs text-gray-500 mt-1">{detalhe.portal_access.email ?? c.email ?? 'Sem e-mail informado'}</p>
+                                      <div className="mt-2 flex items-center gap-2">
+                                        <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full',
+                                          detalhe.portal_access.status === 'ativo'
+                                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                            : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400')}>
+                                          {detalhe.portal_access.status === 'ativo' ? 'Liberado' : 'Aguardando/liberação bloqueada'}
+                                        </span>
+                                        <span className="text-xs text-gray-400">Cliente do portal</span>
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => void togglePortalAccess(c, detalhe.portal_access!.status)}
+                                        className={cn('px-3 py-2 rounded-lg text-xs font-medium transition-colors',
+                                          detalhe.portal_access.status === 'ativo'
+                                            ? 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400'
+                                            : 'bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400')}
+                                      >
+                                        {detalhe.portal_access.status === 'ativo' ? 'Desativar acesso' : 'Liberar acesso'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                               <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-100 dark:border-blue-900/20 overflow-hidden">
                                 <SectionTitle title="Histórico de vendas" count={detalhe?.vendas.length ?? 0} />
                                 {!(detalhe?.vendas.length) ? (

@@ -33,7 +33,7 @@ export const DEFAULT_PERMISSIONS: Record<PerfilAcesso, PermissaoPagina[]> = {
   admin: PAGE_PERMISSIONS.map(p => p.id),
   agente_registro: ['dashboard', 'comercial', 'clientes', 'chat', 'renovacoes'],
   vendedor: ['dashboard', 'comercial', 'clientes', 'parceiros', 'relatorios'],
-  usuario: ['dashboard', 'relatorios', 'chat', 'portal'],
+  usuario: ['dashboard', 'relatorios', 'chat'],
 }
 
 const RESTRICTED_PAGE_PROFILES: Partial<Record<PermissaoPagina, PerfilAcesso[]>> = {
