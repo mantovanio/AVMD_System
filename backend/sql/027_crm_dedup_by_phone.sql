@@ -127,35 +127,37 @@ CREATE TRIGGER trg_sync_communication_event
   EXECUTE FUNCTION fn_sync_communication_event();
 
 -- 2) Merge conversas WhatsApp existentes com mesmo numero (instancias diferentes)
-DO $$
-DECLARE
-  r RECORD;
-  best_id UUID;
-BEGIN
-  FOR r IN (
-    SELECT document_key
+-- Primeiro: mover todas as mensagens das conversas duplicadas para a melhor conversa
+WITH ranked AS (
+  SELECT id,
+         FIRST_VALUE(id) OVER (
+           PARTITION BY document_key
+           ORDER BY ultima_interacao_em DESC NULLS LAST, created_at DESC
+         ) AS best_id
+  FROM crm_chat_conversations
+  WHERE document_key ~ '^[0-9]+$'
+)
+UPDATE crm_chat_messages m
+SET conversation_id = r.best_id
+FROM ranked r
+WHERE m.conversation_id = r.id
+  AND r.id != r.best_id;
+
+-- Depois: remover as conversas duplicatas (agora sem mensagens)
+DELETE FROM crm_chat_conversations
+WHERE id IN (
+  SELECT id
+  FROM (
+    SELECT id,
+           ROW_NUMBER() OVER (
+             PARTITION BY document_key
+             ORDER BY ultima_interacao_em DESC NULLS LAST, created_at DESC
+           ) AS rn
     FROM crm_chat_conversations
     WHERE document_key ~ '^[0-9]+$'
-    GROUP BY document_key
-    HAVING COUNT(*) > 1
-  ) LOOP
-    SELECT id INTO best_id
-    FROM crm_chat_conversations
-    WHERE document_key = r.document_key
-    ORDER BY ultima_interacao_em DESC NULLS LAST, created_at DESC
-    LIMIT 1;
-
-    UPDATE crm_chat_messages
-    SET conversation_id = best_id
-    WHERE document_key = r.document_key
-      AND conversation_id != best_id;
-
-    DELETE FROM crm_chat_conversations
-    WHERE document_key = r.document_key
-      AND id != best_id;
-  END LOOP;
-END;
-$$;
+  ) sub
+  WHERE sub.rn > 1
+);
 
 -- 3) Unique index apenas por telefone (WhatsApp numerico)
 DROP INDEX IF EXISTS idx_conv_unique_doc_instance;
