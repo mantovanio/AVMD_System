@@ -135,7 +135,11 @@ BEGIN
     ultima_mensagem_direcao = v_direction,
     ultima_interacao_em    = NEW.created_at,
     cliente_nome           = COALESCE(v_cliente_nome, crm_chat_conversations.cliente_nome),
-    kanban_status          = CASE WHEN v_kanban_status IS NOT NULL THEN v_kanban_status ELSE crm_chat_conversations.kanban_status END,
+    kanban_status          = CASE
+      WHEN v_kanban_status IS NOT NULL THEN v_kanban_status
+      WHEN crm_chat_conversations.kanban_status = 'iniciou_conversa' THEN 'conversando'
+      ELSE crm_chat_conversations.kanban_status
+    END,
     crm_customer_id        = COALESCE(v_customer_id, crm_chat_conversations.crm_customer_id),
     updated_at             = NOW()
   RETURNING id INTO v_conv_id;

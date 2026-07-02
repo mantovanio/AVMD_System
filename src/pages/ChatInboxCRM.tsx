@@ -1900,6 +1900,11 @@ export default function ChatInboxCRM() {
       email: activeConversations.filter(item => item.fila === 'email').length,
       agendamento: activeConversations.filter(item => item.fila === 'agendamento').length,
       humano: activeConversations.filter(item => item.atendimento_humano || humanOverrideIds.includes(item.id)).length,
+      aguardando: activeConversations.filter(item => {
+        if (item.ultima_mensagem_direcao !== 'incoming') return false
+        const waitingMinutes = minutesSince(item.ultima_interacao_em)
+        return waitingMinutes >= 8
+      }).length,
     }), [activeConversations, humanOverrideIds])
 
   const unreadTotal = useMemo(
@@ -1917,11 +1922,16 @@ export default function ChatInboxCRM() {
   }), [queueFilter, humanFilter])
 
   const groupedByStatus = useMemo(() => {
+      const kanbanStatuses = new Set<string>(STATUS_COLUMNS.map(c => c.key))
+      const kanbanItems = searchMatchedConversations.filter(item =>
+        kanbanStatuses.has(normalizeKanbanStatus(item.kanban_status)) &&
+        matchesOperationalFilters(item)
+      )
       return STATUS_COLUMNS.map(column => ({
         ...column,
-        items: filteredConversations.filter(item => normalizeKanbanStatus(item.kanban_status) === column.key),
+        items: kanbanItems.filter(item => normalizeKanbanStatus(item.kanban_status) === column.key),
       }))
-    }, [filteredConversations])
+    }, [searchMatchedConversations, queueFilter, humanFilter, humanOverrideIds])
 
   useEffect(() => {
     if (visibleConversations.length === 0) {
@@ -1978,13 +1988,14 @@ export default function ChatInboxCRM() {
               </div>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6 xl:self-stretch">
+            <div className="grid gap-2 sm:grid-cols-4 xl:grid-cols-7 xl:self-stretch">
               <SummaryCard label="Visiveis" value={summary.total} active={activeShortcut.all} onClick={() => applySummaryShortcut('all')} />
               <SummaryCard label="Atendimento" value={summary.atendimento} active={activeShortcut.atendimento} onClick={() => applySummaryShortcut('atendimento')} />
               <SummaryCard label="Renovacao" value={summary.renovacao} active={activeShortcut.renovacao} onClick={() => applySummaryShortcut('renovacao')} />
               <SummaryCard label="Agendamento" value={summary.agendamento} active={activeShortcut.agendamento} onClick={() => applySummaryShortcut('agendamento')} />
               <SummaryCard label="Email" value={summary.email} active={activeShortcut.email} onClick={() => applySummaryShortcut('email')} />
               <SummaryCard label="Humano" value={summary.humano} active={activeShortcut.humano} onClick={() => applySummaryShortcut('humano')} />
+              <SummaryCard label="Aguardando" value={summary.aguardando} />
             </div>
 
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
