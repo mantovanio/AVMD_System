@@ -1,6 +1,15 @@
--- Corrige eventos legados de email que ainda chegam sem payload.telefone
--- e sem customer_document. Nesses casos, extrai os dados do corpo do email
--- e prioriza o telefone como chave da conversa para evitar inbox duplicado.
+-- Corrige absorcao de contatos salvos no chat:
+-- a trigger usava ON CONFLICT (document_key, whatsapp_instance),
+-- mas a base de producao nao tem mais esse indice unico composto.
+-- Resultado: ao salvar/atualizar contato e gerar communication_events,
+-- a trigger falhava com:
+-- "there is no unique or exclusion constraint matching the ON CONFLICT specification"
+--
+-- Estrategia:
+-- - remover dependencia do ON CONFLICT composto
+-- - localizar a conversa manualmente antes do insert
+-- - para WhatsApp numerico: mesma chave document_key = mesma conversa
+-- - para email: mesma document_key + mesma whatsapp_instance
 
 CREATE OR REPLACE FUNCTION fn_sync_communication_event()
 RETURNS TRIGGER AS $$
@@ -72,7 +81,6 @@ BEGIN
   v_telefone := regexp_replace(COALESCE(NEW.payload->>'telefone', ''), '[^0-9]', '', 'g');
   v_documento := regexp_replace(COALESCE(NEW.payload->>'customer_document', ''), '[^0-9]', '', 'g');
 
-  -- Fallback para payloads legados que trazem apenas o corpo textual do e-mail.
   IF v_is_email AND v_body <> '' THEN
     v_body_phone := regexp_replace(
       COALESCE(substring(v_body FROM 'Telefone:\s*([0-9() \-]+)'), ''),
@@ -99,18 +107,18 @@ BEGIN
     END IF;
   END IF;
 
-  IF v_customer_id IS NULL AND
-     (v_email <> '' OR v_telefone <> '' OR v_documento <> '' OR (v_is_email AND v_phone LIKE '%@%'))
+  IF v_customer_id IS NULL
+     AND (v_email <> '' OR v_telefone <> '' OR v_documento <> '' OR (v_is_email AND v_phone LIKE '%@%'))
   THEN
     SELECT c.id, regexp_replace(COALESCE(c.telefone, ''), '[^0-9]', '', 'g')
-    INTO v_customer_id, v_customer_phone
-    FROM crm_customers c
-    WHERE (v_email <> '' AND LOWER(COALESCE(c.email, '')) = LOWER(v_email))
-       OR (v_telefone <> '' AND regexp_replace(COALESCE(c.telefone, ''), '[^0-9]', '', 'g') = v_telefone)
-       OR (v_documento <> '' AND regexp_replace(COALESCE(c.cpf, ''), '[^0-9]', '', 'g') = v_documento)
-       OR (v_documento <> '' AND regexp_replace(COALESCE(c.cnpj, ''), '[^0-9]', '', 'g') = v_documento)
-    ORDER BY c.updated_at DESC
-    LIMIT 1;
+      INTO v_customer_id, v_customer_phone
+      FROM crm_customers c
+     WHERE (v_email <> '' AND LOWER(COALESCE(c.email, '')) = LOWER(v_email))
+        OR (v_telefone <> '' AND regexp_replace(COALESCE(c.telefone, ''), '[^0-9]', '', 'g') = v_telefone)
+        OR (v_documento <> '' AND regexp_replace(COALESCE(c.cpf, ''), '[^0-9]', '', 'g') = v_documento)
+        OR (v_documento <> '' AND regexp_replace(COALESCE(c.cnpj, ''), '[^0-9]', '', 'g') = v_documento)
+     ORDER BY c.updated_at DESC
+     LIMIT 1;
   END IF;
 
   IF v_customer_id IS NOT NULL AND v_customer_phone IS NOT NULL AND v_customer_phone <> '' THEN
