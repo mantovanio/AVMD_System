@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bot,
+  Calendar,
   ChevronDown,
   Clock3,
   Columns3,
@@ -502,6 +503,7 @@ export default function ChatInboxCRM() {
   const [search, setSearch] = useState('')
   const [queueFilter, setQueueFilter] = useState<'todas' | QueueType>('todas')
   const [humanFilter, setHumanFilter] = useState<'todos' | 'ia' | 'humano'>('todos')
+  const [aguardandoFilter, setAguardandoFilter] = useState(false)
   const [showClosedConversations, setShowClosedConversations] = useState(false)
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
   const [viewMode, setViewMode] = useState<'lista' | 'kanban'>('lista')
@@ -1876,12 +1878,16 @@ export default function ChatInboxCRM() {
     const matchesHuman = humanFilter === 'todos'
       || (humanFilter === 'humano' && (item.atendimento_humano || humanOverrideIds.includes(item.id)))
       || (humanFilter === 'ia' && !item.atendimento_humano && !humanOverrideIds.includes(item.id))
-    return matchesQueue && matchesHuman
+    const matchesAguardando = !aguardandoFilter || (
+      item.ultima_mensagem_direcao === 'incoming'
+      && minutesSince(item.ultima_interacao_em) >= 8
+    )
+    return matchesQueue && matchesHuman && matchesAguardando
   }
 
   const filteredConversations = useMemo(() => {
     return activeConversations.filter(matchesOperationalFilters)
-  }, [activeConversations, queueFilter, humanFilter, humanOverrideIds])
+  }, [activeConversations, queueFilter, humanFilter, humanOverrideIds, aguardandoFilter])
 
   const filteredClosedConversations = useMemo(() => (
     closedConversations.filter(matchesOperationalFilters)
@@ -1913,13 +1919,14 @@ export default function ChatInboxCRM() {
   )
 
   const activeShortcut = useMemo(() => ({
-    all: queueFilter === 'todas' && humanFilter === 'todos',
-    atendimento: queueFilter === 'atendimento' && humanFilter === 'todos',
-    renovacao: queueFilter === 'renovacao' && humanFilter === 'todos',
-    email: queueFilter === 'email' && humanFilter === 'todos',
-    agendamento: queueFilter === 'agendamento' && humanFilter === 'todos',
-    humano: queueFilter === 'todas' && humanFilter === 'humano',
-  }), [queueFilter, humanFilter])
+    all: queueFilter === 'todas' && humanFilter === 'todos' && !aguardandoFilter,
+    atendimento: queueFilter === 'atendimento' && humanFilter === 'todos' && !aguardandoFilter,
+    renovacao: queueFilter === 'renovacao' && humanFilter === 'todos' && !aguardandoFilter,
+    email: queueFilter === 'email' && humanFilter === 'todos' && !aguardandoFilter,
+    agendamento: queueFilter === 'agendamento' && humanFilter === 'todos' && !aguardandoFilter,
+    humano: queueFilter === 'todas' && humanFilter === 'humano' && !aguardandoFilter,
+    aguardando: aguardandoFilter,
+  }), [queueFilter, humanFilter, aguardandoFilter])
 
   const groupedByStatus = useMemo(() => {
       const kanbanStatuses = new Set<string>(STATUS_COLUMNS.map(c => c.key))
@@ -1944,7 +1951,16 @@ export default function ChatInboxCRM() {
     }
   }, [visibleConversations, selectedId])
 
-  function applySummaryShortcut(target: 'all' | 'atendimento' | 'renovacao' | 'agendamento' | 'email' | 'humano') {
+  function applySummaryShortcut(target: 'all' | 'atendimento' | 'renovacao' | 'agendamento' | 'email' | 'humano' | 'aguardando') {
+    if (target === 'aguardando') {
+      setAguardandoFilter(prev => !prev)
+      setQueueFilter('todas')
+      setHumanFilter('todos')
+      setSelectedId(null)
+      return
+    }
+
+    setAguardandoFilter(false)
     const nextQueue: 'todas' | QueueType =
       target === 'atendimento' ? 'atendimento' :
       target === 'renovacao' ? 'renovacao' :
@@ -1989,13 +2005,12 @@ export default function ChatInboxCRM() {
             </div>
 
             <div className="grid gap-2 sm:grid-cols-4 xl:grid-cols-7 xl:self-stretch">
-              <SummaryCard label="Visiveis" value={summary.total} active={activeShortcut.all} onClick={() => applySummaryShortcut('all')} />
-              <SummaryCard label="Atendimento" value={summary.atendimento} active={activeShortcut.atendimento} onClick={() => applySummaryShortcut('atendimento')} />
-              <SummaryCard label="Renovacao" value={summary.renovacao} active={activeShortcut.renovacao} onClick={() => applySummaryShortcut('renovacao')} />
-              <SummaryCard label="Agendamento" value={summary.agendamento} active={activeShortcut.agendamento} onClick={() => applySummaryShortcut('agendamento')} />
-              <SummaryCard label="Email" value={summary.email} active={activeShortcut.email} onClick={() => applySummaryShortcut('email')} />
-              <SummaryCard label="Humano" value={summary.humano} active={activeShortcut.humano} onClick={() => applySummaryShortcut('humano')} />
-              <SummaryCard label="Aguardando" value={summary.aguardando} />
+              <SummaryCard icon={MessageCircle} label="Atendimento" value={summary.atendimento} active={activeShortcut.atendimento} onClick={() => applySummaryShortcut('atendimento')} />
+              <SummaryCard icon={RefreshCw} label="Renovacao" value={summary.renovacao} active={activeShortcut.renovacao} onClick={() => applySummaryShortcut('renovacao')} />
+              <SummaryCard icon={Calendar} label="Agendamento" value={summary.agendamento} active={activeShortcut.agendamento} onClick={() => applySummaryShortcut('agendamento')} />
+              <SummaryCard icon={Mail} label="Email" value={summary.email} active={activeShortcut.email} onClick={() => applySummaryShortcut('email')} />
+              <SummaryCard icon={User} label="Humano" value={summary.humano} active={activeShortcut.humano} onClick={() => applySummaryShortcut('humano')} />
+              <SummaryCard icon={Clock3} label="Aguardando" value={summary.aguardando} active={activeShortcut.aguardando} onClick={() => applySummaryShortcut('aguardando')} />
             </div>
 
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
@@ -2831,11 +2846,13 @@ export default function ChatInboxCRM() {
 }
 
 function SummaryCard({
+  icon: Icon,
   label,
   value,
   active = false,
   onClick,
 }: {
+  icon: React.ComponentType<{ size?: number; className?: string }>
   label: string
   value: number
   active?: boolean
@@ -2850,7 +2867,10 @@ function SummaryCard({
   if (onClick) {
     return (
       <button type="button" onClick={onClick} className={className}>
-        <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${active ? 'text-sky-700' : 'text-slate-400'}`}>{label}</p>
+        <div className="flex items-center gap-1.5">
+          <Icon size={14} className={active ? 'text-sky-700' : 'text-slate-400'} />
+          <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${active ? 'text-sky-700' : 'text-slate-400'}`}>{label}</p>
+        </div>
         <div className="mt-2 flex items-end justify-between gap-2">
           <p className={`text-[22px] font-semibold leading-none tracking-[-0.02em] ${active ? 'text-sky-950' : 'text-slate-900'}`}>{value}</p>
           <span className={`text-[10px] ${active ? 'text-sky-600' : 'text-slate-400'}`}>ver</span>
@@ -2861,7 +2881,10 @@ function SummaryCard({
 
   return (
     <div className={className}>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <div className="flex items-center gap-1.5">
+        <Icon size={14} className="text-slate-400" />
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      </div>
       <p className="mt-2 text-[22px] font-semibold leading-none tracking-[-0.02em] text-slate-900">{value}</p>
     </div>
   )
