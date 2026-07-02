@@ -191,12 +191,32 @@ export async function handleRenovacaoRoutes(
       }
     }
 
+    const cadastroBatch: Record<string, unknown>[] = []
+    for (const r of rows) {
+      const doc = (r.cpf || r.cnpj || '').replace(/\D/g, '')
+      if (!doc) continue
+      cadastroBatch.push({
+        tipo_cliente: r.cnpj ? 'pj' : 'pf',
+        tipo_cadastro: 'cliente',
+        cpf_cnpj: doc,
+        nome: r.razao_social || r.cliente,
+        nome_fantasia: r.cliente || null,
+        email: r.email || null,
+        telefone: r.telefone ? r.telefone.replace(/\D/g, '') : null,
+        status: 'ativo',
+      })
+    }
+    if (cadastroBatch.length > 0) {
+      await catalogRepo.batchInsertCadastros(cadastroBatch)
+    }
+    const baseInserted = cadastroBatch.length
+
     writeJson(res, 200, {
       ok: true,
       criados: criados.length,
       jaExistem: jaExistem.length,
       erros: erros.length,
-      detalhes: { criados, jaExistem, erros },
+      detalhes: { criados, jaExistem, erros, baseInserted },
     }, corsOrigin)
     return true
   }
