@@ -471,9 +471,67 @@ export class CommercialRepository {
     const criados = payloads.filter(p => !existingSet.has(p.cpf_cnpj)).length
     const atualizados = payloads.length - criados
 
+    const existingPayloads = payloads.filter(p => existingSet.has(p.cpf_cnpj))
+    const newPayloads = payloads.filter(p => !existingSet.has(p.cpf_cnpj))
+
+    for (const item of existingPayloads) {
+      await this.db.query(
+        `update cadastros_base
+         set tipo_cliente = $2,
+             tipo_cadastro = $3,
+             nome = $5,
+             nome_fantasia = $6,
+             email = $7,
+             telefone = $8,
+             cidade = $9,
+             logradouro = $10,
+             numero = $11,
+             complemento = $12,
+             bairro = $13,
+             uf = $14,
+             cep = $15,
+             inscricao_municipal = $16,
+             inscricao_estadual = $17,
+             iss_retido = $18,
+             status = $19,
+             metadata =
+               (coalesce(metadata, '{}'::jsonb) - 'compras_historico')
+               || ($20::jsonb - 'compras_historico')
+               || jsonb_build_object(
+                 'compras_historico',
+                 coalesce(metadata -> 'compras_historico', '[]'::jsonb)
+                 || coalesce($20::jsonb -> 'compras_historico', '[]'::jsonb)
+               ),
+             updated_at = now()
+         where cpf_cnpj = $4`,
+        [
+          randomUUID(),
+          item.tipo_cliente,
+          item.tipo_cadastro,
+          item.cpf_cnpj,
+          item.nome,
+          item.nome_fantasia,
+          item.email,
+          item.telefone,
+          item.cidade,
+          item.logradouro,
+          item.numero,
+          item.complemento,
+          item.bairro,
+          item.uf,
+          item.cep,
+          item.inscricao_municipal,
+          item.inscricao_estadual,
+          item.iss_retido,
+          item.status,
+          item.metadata,
+        ],
+      )
+    }
+
     const chunkSize = 300
-    for (let start = 0; start < payloads.length; start += chunkSize) {
-      const chunk = payloads.slice(start, start + chunkSize)
+    for (let start = 0; start < newPayloads.length; start += chunkSize) {
+      const chunk = newPayloads.slice(start, start + chunkSize)
       const params: unknown[] = []
       const valuesSql: string[] = []
 
@@ -510,34 +568,7 @@ export class CommercialRepository {
           id, tipo_cliente, tipo_cadastro, cpf_cnpj, nome, nome_fantasia, email, telefone,
           cidade, logradouro, numero, complemento, bairro, uf, cep,
           inscricao_municipal, inscricao_estadual, iss_retido, status, metadata
-        ) values ${valuesSql.join(', ')}
-        on conflict (cpf_cnpj) do update set
-          tipo_cliente = excluded.tipo_cliente,
-          tipo_cadastro = excluded.tipo_cadastro,
-          nome = excluded.nome,
-          nome_fantasia = excluded.nome_fantasia,
-          email = excluded.email,
-          telefone = excluded.telefone,
-          cidade = excluded.cidade,
-          logradouro = excluded.logradouro,
-          numero = excluded.numero,
-          complemento = excluded.complemento,
-          bairro = excluded.bairro,
-          uf = excluded.uf,
-          cep = excluded.cep,
-          inscricao_municipal = excluded.inscricao_municipal,
-          inscricao_estadual = excluded.inscricao_estadual,
-          iss_retido = excluded.iss_retido,
-          status = excluded.status,
-          metadata =
-            (coalesce(cadastros_base.metadata, '{}'::jsonb) - 'compras_historico')
-            || (excluded.metadata - 'compras_historico')
-            || jsonb_build_object(
-              'compras_historico',
-              coalesce(cadastros_base.metadata -> 'compras_historico', '[]'::jsonb)
-              || coalesce(excluded.metadata -> 'compras_historico', '[]'::jsonb)
-            ),
-          updated_at = now()`,
+        ) values ${valuesSql.join(', ')}`,
         params,
       )
     }
