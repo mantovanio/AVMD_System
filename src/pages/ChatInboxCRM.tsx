@@ -408,9 +408,17 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] 
       const fileName = (payload.fileName as string | undefined)
         ?? (data?.fileName as string | undefined)
         ?? null
-      const mediaUrl = (payload.mediaUrl as string | undefined)
-        ?? (data?.mediaUrl as string | undefined)
-        ?? null
+      // A url do WhatsApp (mmg.whatsapp.net/...enc) e criptografada e nao pode
+      // ser tocada/exibida direto. A Evolution API (webhook com base64: true)
+      // ja manda o conteudo decifrado em data.message.base64 -- usa isso
+      // quando disponivel em vez da url crua.
+      const rawMessage = data?.message as Record<string, unknown> | undefined
+      const inlineBase64 = (payload.base64 as string | undefined) ?? (rawMessage?.base64 as string | undefined) ?? null
+      const mediaUrl = inlineBase64
+        ? `data:${mimeType || 'application/octet-stream'};base64,${inlineBase64}`
+        : (payload.mediaUrl as string | undefined)
+          ?? (data?.mediaUrl as string | undefined)
+          ?? null
       const externalMessageId = (payload.messageId as string | undefined)
         ?? (payload.externalId as string | undefined)
         ?? (data?.messageId as string | undefined)
