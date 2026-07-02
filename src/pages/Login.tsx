@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Shield, Eye, EyeOff, ArrowLeft, CheckCircle, Loader2, Mail } from 'lucide-react'
+import { Shield, Eye, EyeOff, ArrowLeft, CheckCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { DEFAULT_AGENCY_CONFIG, buildAuthBackground, fetchAgencyConfig } from '@/lib/agencyConfig'
 
@@ -8,13 +8,15 @@ type View = 'login' | 'register' | 'forgot'
 function translateError(msg: string): string {
   if (msg.includes('Invalid login credentials'))      return 'Email ou senha incorretos.'
   if (msg.includes('Email not confirmed'))            return 'Confirme seu email antes de acessar o sistema.'
+  if (msg.includes('verify your email') || msg.includes('verification'))
+                                                      return 'Seu cadastro ainda precisa da confirmação do email. Digite o código enviado para concluir.'
   if (msg.includes('User already registered'))        return 'Este email já está cadastrado.'
   if (msg.includes('Password should be at least') || msg.includes('Passwords must be 8 characters or more'))
                                                       return 'A senha deve ter pelo menos 8 caracteres.'
   if (msg.includes('signup is disabled'))             return 'Novos cadastros estão desabilitados. Contate o administrador.'
   if (msg.includes('rate limit'))                     return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
   if (msg.includes('Failed to fetch'))                return 'Falha de conexão com o servidor de autenticação. Atualize a página e tente novamente.'
-  if (msg.includes('Couldn\'t find your account'))   return 'Conta não encontrada. Verifique o email ou crie uma conta.'
+  if (msg.includes("Couldn't find your account"))    return 'Conta não encontrada. Verifique o email ou crie uma conta.'
   if (msg.includes('data breach') || msg.includes('pwned') || msg.includes('online data breach'))
                                                       return 'Esta senha foi encontrada em vazamentos de dados. Por segurança, escolha uma senha diferente.'
   if (msg.includes('password_found_in_breach') || msg.includes('found in a list')) return 'Esta senha foi encontrada em vazamentos de dados. Por segurança, escolha uma senha diferente.'
@@ -139,37 +141,45 @@ function SubmitButton({
 }
 
 export default function Login() {
-  const { signIn, signUp, resetPassword, confirmPasswordReset } = useAuth()
+  const {
+    signIn,
+    signUp,
+    verifySignUpEmail,
+    resendSignUpVerification,
+    resetPassword,
+    confirmPasswordReset,
+  } = useAuth()
   const [view, setView] = useState<View>('login')
   const [agencyConfig, setAgencyConfig] = useState(DEFAULT_AGENCY_CONFIG)
 
-  // login
-  const [loginEmail,    setLoginEmail]    = useState('')
+  const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
-  const [loginLoading,  setLoginLoading]  = useState(false)
-  const [loginError,    setLoginError]    = useState<string | null>(null)
+  const [loginLoading, setLoginLoading] = useState(false)
+  const [loginError, setLoginError] = useState<string | null>(null)
 
-  // register
-  const [regNome,      setRegNome]      = useState('')
-  const [regEmail,     setRegEmail]     = useState('')
-  const [regPass,      setRegPass]      = useState('')
-  const [regConfirm,   setRegConfirm]   = useState('')
-  const [regConsent,   setRegConsent]   = useState(false)
-  const [regLoading,   setRegLoading]   = useState(false)
-  const [regError,     setRegError]     = useState<string | null>(null)
-  const [regOk,        setRegOk]        = useState(false)
+  const [regNome, setRegNome] = useState('')
+  const [regEmail, setRegEmail] = useState('')
+  const [regPass, setRegPass] = useState('')
+  const [regConfirm, setRegConfirm] = useState('')
+  const [regConsent, setRegConsent] = useState(false)
+  const [regLoading, setRegLoading] = useState(false)
+  const [regVerifyLoading, setRegVerifyLoading] = useState(false)
+  const [regResendLoading, setRegResendLoading] = useState(false)
+  const [regVerificationCode, setRegVerificationCode] = useState('')
+  const [regNeedsVerification, setRegNeedsVerification] = useState(false)
+  const [regError, setRegError] = useState<string | null>(null)
+  const [regOk, setRegOk] = useState(false)
 
-  // forgot
-  const [forgotEmail,       setForgotEmail]       = useState('')
-  const [forgotLoading,     setForgotLoading]     = useState(false)
-  const [forgotError,       setForgotError]       = useState<string | null>(null)
-  const [forgotOk,          setForgotOk]          = useState(false)
-  const [forgotCode,        setForgotCode]        = useState('')
-  const [forgotNewPass,     setForgotNewPass]     = useState('')
-  const [forgotNewConfirm,  setForgotNewConfirm]  = useState('')
-  const [forgotResetLoading,setForgotResetLoading]= useState(false)
-  const [forgotResetError,  setForgotResetError]  = useState<string | null>(null)
-  const [forgotDone,        setForgotDone]        = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotLoading, setForgotLoading] = useState(false)
+  const [forgotError, setForgotError] = useState<string | null>(null)
+  const [forgotOk, setForgotOk] = useState(false)
+  const [forgotCode, setForgotCode] = useState('')
+  const [forgotNewPass, setForgotNewPass] = useState('')
+  const [forgotNewConfirm, setForgotNewConfirm] = useState('')
+  const [forgotResetLoading, setForgotResetLoading] = useState(false)
+  const [forgotResetError, setForgotResetError] = useState<string | null>(null)
+  const [forgotDone, setForgotDone] = useState(false)
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -184,13 +194,39 @@ export default function Login() {
     e.preventDefault()
     setRegError(null)
     if (regPass !== regConfirm) { setRegError('As senhas não coincidem.'); return }
-    if (regPass.length < 8)     { setRegError('A senha deve ter pelo menos 8 caracteres.'); return }
-    if (!regConsent)            { setRegError('Você precisa aceitar a Política de Privacidade para criar uma conta.'); return }
+    if (regPass.length < 8) { setRegError('A senha deve ter pelo menos 8 caracteres.'); return }
+    if (!regConsent) { setRegError('Você precisa aceitar a Política de Privacidade para criar uma conta.'); return }
     setRegLoading(true)
-    const { error } = await signUp({ nome: regNome, email: regEmail, password: regPass })
+    const { error, needsEmailVerification } = await signUp({ nome: regNome, email: regEmail, password: regPass })
     if (error) setRegError(translateError(error))
+    else if (needsEmailVerification) setRegNeedsVerification(true)
     else setRegOk(true)
     setRegLoading(false)
+  }
+
+  async function handleRegisterVerification(e: React.FormEvent) {
+    e.preventDefault()
+    setRegError(null)
+    if (!regVerificationCode.trim()) {
+      setRegError('Digite o código de confirmação enviado para o seu email.')
+      return
+    }
+    setRegVerifyLoading(true)
+    const { error } = await verifySignUpEmail(regVerificationCode.trim())
+    if (error) setRegError(translateError(error))
+    else {
+      setRegNeedsVerification(false)
+      setRegOk(true)
+    }
+    setRegVerifyLoading(false)
+  }
+
+  async function handleResendRegisterVerification() {
+    setRegError(null)
+    setRegResendLoading(true)
+    const { error } = await resendSignUpVerification()
+    if (error) setRegError(translateError(error))
+    setRegResendLoading(false)
   }
 
   async function handleForgot(e: React.FormEvent) {
@@ -217,10 +253,17 @@ export default function Login() {
 
   function goLogin() {
     setLoginError(null)
-    setRegError(null); setRegOk(false)
-    setForgotError(null); setForgotOk(false)
-    setForgotCode(''); setForgotNewPass(''); setForgotNewConfirm('')
-    setForgotResetError(null); setForgotDone(false)
+    setRegError(null)
+    setRegOk(false)
+    setRegNeedsVerification(false)
+    setRegVerificationCode('')
+    setForgotError(null)
+    setForgotOk(false)
+    setForgotCode('')
+    setForgotNewPass('')
+    setForgotNewConfirm('')
+    setForgotResetError(null)
+    setForgotDone(false)
     setView('login')
   }
 
@@ -242,8 +285,6 @@ export default function Login() {
       style={{ background: buildAuthBackground(agencyConfig.fundo_inicio, agencyConfig.fundo_fim) }}
     >
       <div className="w-full max-w-md text-center">
-
-        {/* Logo */}
         <div className="text-center mb-5 px-8">
           {agencyConfig.logo_login_url.trim() ? (
             <div className="relative w-full h-24 sm:h-28 mb-3 overflow-visible">
@@ -269,26 +310,23 @@ export default function Login() {
           <p className="text-white/80 text-sm mt-1">{agencyConfig.login_subtitulo}</p>
         </div>
 
-        {/* Card */}
         <div className="bg-black/30 border border-white/20 rounded-2xl shadow-2xl shadow-black/40 backdrop-blur-md overflow-hidden text-white">
-
-          {/* ── LOGIN ── */}
           {view === 'login' && (
             <div className="p-8">
               <h2 className="text-xl font-bold text-white mb-1">Bem-vindo!</h2>
-              <p className="text-sm text-white/80 mb-6">
-                Entre com sua conta para acessar o sistema
-              </p>
+              <p className="text-sm text-white/80 mb-6">Entre com sua conta para acessar o sistema</p>
 
               <form onSubmit={handleLogin} className="space-y-4">
-                <InputField label="Email" type="email" value={loginEmail} onChange={setLoginEmail}
-                  placeholder="seu@email.com" autoFocus />
+                <InputField label="Email" type="email" value={loginEmail} onChange={setLoginEmail} placeholder="seu@email.com" autoFocus />
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-medium text-white/90">Senha</span>
-                    <button type="button" onClick={() => { setLoginError(null); setView('forgot') }}
-                      className="text-xs text-white/90 hover:underline">
+                    <button
+                      type="button"
+                      onClick={() => { setLoginError(null); setView('forgot') }}
+                      className="text-xs text-white/90 hover:underline"
+                    >
                       Esqueci minha senha
                     </button>
                   </div>
@@ -303,8 +341,11 @@ export default function Login() {
               <div className="mt-6 pt-6 border-t border-white/15 text-center">
                 <p className="text-sm text-white/80">
                   Não tem conta?{' '}
-                  <button type="button" onClick={() => { setLoginError(null); setView('register') }}
-                    className="text-white font-semibold hover:underline">
+                  <button
+                    type="button"
+                    onClick={() => { setLoginError(null); setView('register') }}
+                    className="text-white font-semibold hover:underline"
+                  >
                     Criar conta
                   </button>
                 </p>
@@ -312,18 +353,18 @@ export default function Login() {
             </div>
           )}
 
-          {/* ── CRIAR CONTA ── */}
           {view === 'register' && (
             <div className="p-8">
-              <button type="button" onClick={goLogin}
-                className="flex items-center gap-1.5 text-sm text-white/85 hover:text-white mb-5 -ml-1 transition-colors mx-auto">
+              <button
+                type="button"
+                onClick={goLogin}
+                className="flex items-center gap-1.5 text-sm text-white/85 hover:text-white mb-5 -ml-1 transition-colors mx-auto"
+              >
                 <ArrowLeft size={15} /> Voltar ao login
               </button>
 
               <h2 className="text-xl font-bold text-white mb-1">Criar conta</h2>
-              <p className="text-sm text-white/80 mb-6">
-                Preencha os dados para solicitar acesso ao sistema
-              </p>
+              <p className="text-sm text-white/80 mb-6">Preencha os dados para solicitar acesso ao sistema</p>
 
               {regOk ? (
                 <div className="text-center py-6 space-y-4">
@@ -331,17 +372,48 @@ export default function Login() {
                     <CheckCircle size={28} className="text-white" />
                   </div>
                   <div>
-                    <p className="font-semibold text-white text-lg">Conta criada!</p>
+                    <p className="font-semibold text-white text-lg">Conta confirmada!</p>
                     <p className="text-sm text-white/80 mt-2">
-                      Enviamos um email de confirmação para <strong>{regEmail}</strong>.<br />
-                      Depois da confirmação, o administrador precisa liberar seu primeiro acesso.
+                      Seu email foi confirmado para <strong>{regEmail}</strong>.<br />
+                      Agora o administrador precisa liberar seu primeiro acesso.
                     </p>
                   </div>
-                  <button type="button" onClick={goLogin}
-                    className="text-sm text-white hover:underline font-medium">
+                  <button type="button" onClick={goLogin} className="text-sm text-white hover:underline font-medium">
                     Voltar ao login
                   </button>
                 </div>
+              ) : regNeedsVerification ? (
+                <form onSubmit={handleRegisterVerification} className="space-y-4">
+                  <div className="text-center py-2">
+                    <p className="font-semibold text-white text-lg">Confirme seu email</p>
+                    <p className="text-sm text-white/80 mt-2">
+                      Enviamos um código para <strong>{regEmail}</strong>.<br />
+                      Digite esse código para concluir o cadastro e liberar o login.
+                    </p>
+                  </div>
+
+                  <InputField
+                    label="Código de confirmação"
+                    type="text"
+                    value={regVerificationCode}
+                    onChange={setRegVerificationCode}
+                    placeholder="000000"
+                    autoFocus
+                  />
+
+                  {regError && <ErrorBox msg={regError} />}
+
+                  <SubmitButton loading={regVerifyLoading} label="Confirmar email" loadingLabel="Confirmando..." primaryColor={agencyConfig.cor_primaria} />
+
+                  <button
+                    type="button"
+                    onClick={() => void handleResendRegisterVerification()}
+                    disabled={regResendLoading}
+                    className="w-full text-xs text-white/70 hover:text-white disabled:opacity-60 text-center"
+                  >
+                    {regResendLoading ? 'Reenviando código...' : 'Não recebeu o código? Reenviar'}
+                  </button>
+                </form>
               ) : (
                 <form onSubmit={handleRegister} className="space-y-4">
                   <InputField label="Nome completo" value={regNome} onChange={setRegNome} placeholder="Seu nome completo" />
@@ -356,7 +428,6 @@ export default function Login() {
                     O tipo de acesso será definido pelo administrador em Configurações.
                   </p>
 
-                  {/* Consentimento LGPD — Art. 7, I e Art. 8 */}
                   <label className="flex items-start gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"
@@ -382,18 +453,18 @@ export default function Login() {
             </div>
           )}
 
-          {/* ── RECUPERAR SENHA ── */}
           {view === 'forgot' && (
             <div className="p-8">
-              <button type="button" onClick={goLogin}
-                className="flex items-center gap-1.5 text-sm text-white/85 hover:text-white mb-5 -ml-1 transition-colors mx-auto">
+              <button
+                type="button"
+                onClick={goLogin}
+                className="flex items-center gap-1.5 text-sm text-white/85 hover:text-white mb-5 -ml-1 transition-colors mx-auto"
+              >
                 <ArrowLeft size={15} /> Voltar ao login
               </button>
 
               <h2 className="text-xl font-bold text-white mb-1">Recuperar senha</h2>
-              <p className="text-sm text-white/80 mb-6">
-                Informe seu email e enviaremos um link para redefinir sua senha.
-              </p>
+              <p className="text-sm text-white/80 mb-6">Informe seu email e enviaremos um link para redefinir sua senha.</p>
 
               {forgotDone ? (
                 <div className="text-center py-6 space-y-4">
@@ -417,25 +488,25 @@ export default function Login() {
                     </p>
                   </div>
 
-                  <InputField label="Código recebido no email" type="text" value={forgotCode}
-                    onChange={setForgotCode} placeholder="000000" autoFocus />
-                  <PasswordInput label="Nova senha" value={forgotNewPass} onChange={setForgotNewPass}
-                    placeholder="Mínimo 8 caracteres" />
+                  <InputField label="Código recebido no email" type="text" value={forgotCode} onChange={setForgotCode} placeholder="000000" autoFocus />
+                  <PasswordInput label="Nova senha" value={forgotNewPass} onChange={setForgotNewPass} placeholder="Mínimo 8 caracteres" />
                   <PasswordInput label="Confirmar nova senha" value={forgotNewConfirm} onChange={setForgotNewConfirm} />
 
                   {forgotResetError && <ErrorBox msg={forgotResetError} />}
 
                   <SubmitButton loading={forgotResetLoading} label="Redefinir senha" loadingLabel="Verificando..." primaryColor={agencyConfig.cor_primaria} />
 
-                  <button type="button" onClick={() => { setForgotOk(false); setForgotError(null) }}
-                    className="w-full text-xs text-white/60 hover:text-white/90 text-center mt-1">
+                  <button
+                    type="button"
+                    onClick={() => { setForgotOk(false); setForgotError(null) }}
+                    className="w-full text-xs text-white/60 hover:text-white/90 text-center mt-1"
+                  >
                     Não recebeu o código? Reenviar
                   </button>
                 </form>
               ) : (
                 <form onSubmit={handleForgot} className="space-y-4">
-                  <InputField label="Email cadastrado" type="email" value={forgotEmail} onChange={setForgotEmail}
-                    placeholder="seu@email.com" autoFocus />
+                  <InputField label="Email cadastrado" type="email" value={forgotEmail} onChange={setForgotEmail} placeholder="seu@email.com" autoFocus />
 
                   {forgotError && <ErrorBox msg={forgotError} />}
 
@@ -446,9 +517,7 @@ export default function Login() {
           )}
         </div>
 
-        <p className="text-center text-white/60 text-xs mt-6">
-          © 2026 {agencyConfig.nome_agencia}
-        </p>
+        <p className="text-center text-white/60 text-xs mt-6">© 2026 {agencyConfig.nome_agencia}</p>
       </div>
     </div>
   )

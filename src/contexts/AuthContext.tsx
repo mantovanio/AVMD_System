@@ -15,17 +15,22 @@ interface AuthUser {
   email: string | null
 }
 
+type AuthActionResult = { error: string | null }
+type SignUpResult = AuthActionResult & { needsEmailVerification?: boolean }
+
 interface AuthContextValue {
   user: AuthUser | null
   profile: Profile | null
   session: unknown | null
   loading: boolean
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>
-  signUp: (data: SignUpData) => Promise<{ error: string | null }>
+  signIn: (email: string, password: string) => Promise<AuthActionResult>
+  signUp: (data: SignUpData) => Promise<SignUpResult>
+  verifySignUpEmail: (code: string) => Promise<AuthActionResult>
+  resendSignUpVerification: () => Promise<AuthActionResult>
   signOut: () => Promise<void>
-  resetPassword: (email: string) => Promise<{ error: string | null }>
-  confirmPasswordReset: (code: string, newPassword: string) => Promise<{ error: string | null }>
-  updatePassword: (password: string) => Promise<{ error: string | null }>
+  resetPassword: (email: string) => Promise<AuthActionResult>
+  confirmPasswordReset: (code: string, newPassword: string) => Promise<AuthActionResult>
+  updatePassword: (password: string) => Promise<AuthActionResult>
   isPasswordRecovery: boolean
   finishPasswordRecovery: () => void
   refreshProfile: () => Promise<void>
@@ -147,16 +152,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: null }
       }
 
-      // Clerk pode retornar status intermediário aguardando verificação de email.
-      // Nesse caso a conta foi criada e o próximo passo é confirmar o email.
-      if (result.status === 'missing_requirements') {
-        return { error: null }
-      }
-
-      return { error: 'Não foi possível finalizar o cadastro agora. Tente novamente em instantes.' }
+      await result.prepareEmailAddressVerification({ strategy: 'email_code' })
+      return { error: null, needsEmailVerification: true }
     } catch (error) {
       if (error instanceof Error) return { error: error.message }
       return { error: 'Falha ao criar conta. Tente novamente.' }
+    }
+  }
+
+  async function verifySignUpEmail(code: string) {
+    if (!signUpLoaded || !signUp) {
+      return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
+    }
+
+    try {
+      const result = await signUp.attemptEmailAddressVerification({ code })
+      if (result.status === 'complete' && result.createdSessionId && setActive) {
+        await setActive({ session: result.createdSessionId })
+        return { error: null }
+      }
+      return { error: 'Não foi possível confirmar o email. Solicite um novo código e tente novamente.' }
+    } catch (error) {
+      if (error instanceof Error) return { error: error.message }
+      return { error: 'Falha ao confirmar o email. Tente novamente.' }
+    }
+  }
+
+  async function resendSignUpVerification() {
+    if (!signUpLoaded || !signUp) {
+      return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
+    }
+
+    try {
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' })
+      return { error: null }
+    } catch (error) {
+      if (error instanceof Error) return { error: error.message }
+      return { error: 'Falha ao reenviar o código de verificação. Tente novamente.' }
     }
   }
 
@@ -252,6 +284,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         signIn: signInWithPassword,
         signUp: signUpWithPassword,
+        verifySignUpEmail,
+        resendSignUpVerification,
         signOut,
         resetPassword,
         confirmPasswordReset,
