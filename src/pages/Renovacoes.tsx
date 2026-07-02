@@ -30,6 +30,7 @@ import {
   cancelarFollowUps as apiCancelarFollowUps,
   sendWhatsApp as apiSendWhatsApp,
   importRenovacoesToBase as apiImportToBase,
+  importRenovacoesToCrm as apiImportToCrm,
   enrichRenovacao,
 } from '@/lib/renovacoesApi'
 import { useAuth } from '@/contexts/AuthContext'
@@ -142,6 +143,8 @@ const TEMPLATE_VARS = [
   { key: '{{link_renovacao}}',   label: 'Link Renovação'   },
   { key: '{{link_nova_emissao}}',label: 'Link Nova Emissão'},
 ]
+
+const RENOVACOES_PAGE_SIZE = 200
 
 function parseBrDate(s: string): string {
   const trimmed = s.trim()
@@ -352,8 +355,11 @@ export default function Renovacoes() {
   // ── list state ──────────────────────────────────────────────
   const [lista, setLista]           = useState<RenovacaoV2[]>([])
   const [loading, setLoading]       = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore]       = useState(false)
   const [error, setError]           = useState<string | null>(null)
   const [filtro, setFiltro]         = useState<PrioridadeRenovacao | 'todos'>('todos')
+  const [visao, setVisao]           = useState<'operacional' | 'historico'>('operacional')
   const [busca, setBusca]           = useState('')
   const [sendingId, setSendingId]   = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
@@ -376,6 +382,11 @@ export default function Renovacoes() {
     detalhes: { criados: { cpf_cnpj: string; nome: string }[]; jaExistem: { cpf_cnpj: string; nome: string }[]; erros: { cliente: string; motivo: string }[] }
   } | null>(null)
   const [importingToBase, setImportingToBase] = useState(false)
+  const [importToCrm, setImportToCrm] = useState<{
+    criados: number; jaExistem: number; erros: number
+    detalhes: { criados: { doc: string; nome: string }[]; jaExistem: { doc: string; nome: string }[]; erros: { cliente: string; motivo: string }[] }
+  } | null>(null)
+  const [importingToCrm, setImportingToCrm] = useState(false)
   const [editingContato, setEditingContato] = useState<RenovacaoV2 | null>(null)
   const [contatoForm, setContatoForm] = useState<ContatoForm>(EMPTY_CONTATO)
   const [savingContato, setSavingContato] = useState(false)
@@ -427,15 +438,33 @@ export default function Renovacoes() {
   const fetchRenovacoes = useCallback(async () => {
     setLoading(true)
     try {
-      const rows = await apiFetchRenovacoes()
+      const rows = await apiFetchRenovacoes(visao, 30, RENOVACOES_PAGE_SIZE, 0)
       setLista(rows.map(enrichRenovacao))
+      setHasMore(rows.length >= RENOVACOES_PAGE_SIZE)
+      setSelectedIds(new Set())
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar renovações')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [visao])
+
+  const carregarMaisRenovacoes = useCallback(async () => {
+    if (loading || loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const rows = await apiFetchRenovacoes(visao, 30, RENOVACOES_PAGE_SIZE, lista.length)
+      const enriched = rows.map(enrichRenovacao)
+      setLista(prev => [...prev, ...enriched])
+      if (rows.length < RENOVACOES_PAGE_SIZE) setHasMore(false)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar mais renovações')
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [hasMore, lista.length, loading, loadingMore, visao])
 
   const fetchAutoRules = useCallback(async () => {
     setLoadingRules(true)
@@ -1122,6 +1151,26 @@ export default function Renovacoes() {
     }
   }
 
+  async function handleImportToCrm() {
+    setImportingToCrm(true)
+    setImportToCrm(null)
+    try {
+      const ids = [...selectedIds]
+      const result = await apiImportToCrm(ids.length ? ids : undefined)
+      setImportToCrm({
+        criados: result.criados,
+        jaExistem: result.jaExistem,
+        erros: result.erros,
+        detalhes: result.detalhes,
+      })
+      showMsg(`${result.criados} contato(s) salvos no CRM!`)
+    } catch (err) {
+      showMsg('Erro ao salvar no CRM: ' + String(err), 'err')
+    } finally {
+      setImportingToCrm(false)
+    }
+  }
+
   // ── derived state ────────────────────────────────────────────
 
   const listagem = lista.filter(r => {
@@ -1140,6 +1189,8 @@ export default function Renovacoes() {
     urgentes:   lista.filter(r => r.prioridade === 'urgente').length,
     contatados: lista.filter(r => r.status === 'contatado').length,
   }
+  const operacionais = visao === 'operacional'
+  const janelaLabel = operacionais ? 'Janela operacional (30 dias)' : 'Arquivo de históricos'
 
   const waTemplates    = templates.filter(t => t.channel === 'whatsapp')
   const emailTemplates = templates.filter(t => t.channel === 'email')
@@ -1301,6 +1352,51 @@ export default function Renovacoes() {
         </div>
       )}
 
+      {/* Import-to-CRM Result Modal */}
+      {importToCrm && (
+        <div className="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-800 shrink-0">
+              <h3 className="font-semibold text-gray-800 dark:text-gray-200">Resultado — Salvar no CRM</h3>
+              <button type="button" title="Fechar" onClick={() => setImportToCrm(null)}>
+                <X size={18} className="text-gray-400" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 overflow-auto">
+              <div className="flex gap-4">
+                <div className="flex-1 bg-green-50 dark:bg-green-900/20 rounded-xl px-4 py-3 text-center">
+                  <p className="text-2xl font-bold text-green-600">{importToCrm.criados}</p>
+                  <p className="text-xs text-green-600 dark:text-green-400">Criados</p>
+                </div>
+                <div className="flex-1 bg-blue-50 dark:bg-blue-900/20 rounded-xl px-4 py-3 text-center">
+                  <p className="text-2xl font-bold text-blue-600">{importToCrm.jaExistem}</p>
+                  <p className="text-xs text-blue-600 dark:text-blue-400">Atualizados</p>
+                </div>
+                <div className="flex-1 bg-red-50 dark:bg-red-900/20 rounded-xl px-4 py-3 text-center">
+                  <p className="text-2xl font-bold text-red-600">{importToCrm.erros}</p>
+                  <p className="text-xs text-red-600 dark:text-red-400">Erros</p>
+                </div>
+              </div>
+
+              {importToCrm.detalhes.erros.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-red-600 mb-1">Registros com erro</p>
+                  <div className="max-h-28 overflow-y-auto space-y-1">
+                    {importToCrm.detalhes.erros.map((e, i) => (
+                      <div key={i} className="text-xs text-red-500 bg-red-50 dark:bg-red-900/10 px-3 py-1 rounded-lg">{e.cliente} — {e.motivo}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end p-5 border-t border-gray-200 dark:border-gray-800 shrink-0">
+              <button type="button" onClick={() => setImportToCrm(null)}
+                className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Contact Modal */}
       {editingContato && (
         <div className="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4">
@@ -1350,7 +1446,7 @@ export default function Renovacoes() {
         {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Renovações Pendentes', value: loading ? '…' : String(kpis.total),           color: 'bg-red-500',    sub: 'certificados'        },
+            { label: visao === 'operacional' ? 'Renovações Operacionais' : 'Histórico de renovações', value: loading ? '…' : String(kpis.total), color: 'bg-red-500', sub: visao === 'operacional' ? 'janela atual' : 'registros antigos' },
             { label: 'Valor Potencial',       value: loading ? '…' : fmtCurrency(kpis.potencial), color: 'bg-green-500',  sub: 'receita estimada'    },
             { label: 'Urgentes (≤ 7 dias)',   value: loading ? '…' : String(kpis.urgentes),       color: 'bg-orange-500', sub: 'ação imediata'       },
             { label: 'Já Contatados',         value: loading ? '…' : String(kpis.contatados),     color: 'bg-blue-500',   sub: 'aguardando resposta' },
@@ -1385,6 +1481,28 @@ export default function Renovacoes() {
         </div>
 
         {/* Toolbar */}
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { key: 'operacional' as const, label: 'Operacional (30 dias)' },
+            { key: 'historico' as const, label: 'Histórico' },
+          ].map(item => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setVisao(item.key)}
+              className={cn(
+                'px-3 py-2 text-sm font-medium rounded-lg border transition-colors',
+                visao === item.key
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800',
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+          <span className="text-xs text-gray-400 ml-1">{janelaLabel}</span>
+        </div>
+
         <div className="flex flex-wrap items-center gap-2">
           <input type="text" placeholder="Buscar por cliente, CPF, CNPJ, pedido…"
             value={busca} onChange={e => setBusca(e.target.value)}
@@ -1959,6 +2077,11 @@ export default function Renovacoes() {
               {importingToBase ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
               {importingToBase ? 'Importando…' : 'Importar p/ Base'}
             </button>
+            <button type="button" disabled={importingToCrm} onClick={() => void handleImportToCrm()}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
+              {importingToCrm ? <Loader2 size={12} className="animate-spin" /> : <Users size={12} />}
+              {importingToCrm ? 'Salvando…' : 'Salvar no CRM'}
+            </button>
             <button type="button" disabled={bulkSending} onClick={() => void bulkExcluirRenovacoes()}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500 hover:bg-rose-400 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
               <Trash2 size={12} /> Excluir
@@ -2109,6 +2232,23 @@ export default function Renovacoes() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-gray-500">
+              Mostrando {listagem.length} registro(s) nesta visão{hasMore ? ' (carregamento em lotes)' : ''}.
+            </p>
+            {hasMore && (
+              <button
+                type="button"
+                onClick={() => void carregarMaisRenovacoes()}
+                disabled={loadingMore || loading}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+              >
+                {loadingMore ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                {loadingMore ? 'Carregando...' : 'Carregar mais'}
+              </button>
+            )}
           </div>
         </div>
 

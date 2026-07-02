@@ -3,6 +3,7 @@ import type { RenovacaoRepository, CreateRenovacaoInput, UpdateRenovacaoInput } 
 import type { LeadRepository, CreateLeadInput } from '../repositories/leadRepository.js'
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
 import type { CatalogRepository } from '../repositories/catalogRepository.js'
+import type { AivenSqlClient } from '../db/aivenClient.js'
 import { readJson, writeJson } from '../utils/http.js'
 
 export async function handleRenovacaoRoutes(
@@ -13,13 +14,26 @@ export async function handleRenovacaoRoutes(
   outboxRepo: CommunicationOutboxRepository,
   catalogRepo: CatalogRepository,
   corsOrigin: string,
+  db: AivenSqlClient,
 ): Promise<boolean> {
   const url = req.url ?? ''
   const method = req.method ?? ''
+  const parsedUrl = new URL(url, 'http://localhost')
+  const scope = parsedUrl.searchParams.get('scope') ?? 'operacional'
+  const windowDays = Number(parsedUrl.searchParams.get('days') ?? '30')
+  const safeDays = Number.isFinite(windowDays) && windowDays > 0 ? Math.min(windowDays, 180) : 30
+  const limit = Number(parsedUrl.searchParams.get('limit') ?? '200')
+  const offset = Number(parsedUrl.searchParams.get('offset') ?? '0')
+  const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 2000) : 200
+  const safeOffset = Number.isFinite(offset) && offset >= 0 ? offset : 0
 
   // GET /api/renovacoes — lista todos (ativos)
-  if (method === 'GET' && url === '/api/renovacoes') {
-    const rows = await renovacaoRepo.findAll()
+  if (method === 'GET' && parsedUrl.pathname === '/api/renovacoes') {
+    const rows = scope === 'historico'
+      ? await renovacaoRepo.findHistorico(safeDays, safeLimit, safeOffset)
+      : scope === 'todos'
+        ? await renovacaoRepo.findAll(safeLimit, safeOffset)
+        : await renovacaoRepo.findOperacionais(safeDays, safeLimit, safeOffset)
     writeJson(res, 200, { ok: true, renovacoes: rows }, corsOrigin)
     return true
   }
@@ -96,6 +110,94 @@ export async function handleRenovacaoRoutes(
     criados.push(...toInsert.map(t => ({ cpf_cnpj: String(t.cpf_cnpj ?? ''), nome: String(t.nome ?? '') })))
 
     writeJson(res, 200, { ok: true, criados: criados.length, jaExistem: jaExistem.length, erros: erros.length, detalhes: { criados, jaExistem, erros } }, corsOrigin)
+    return true
+  }
+
+  // POST /api/renovacoes/import-to-crm — upsert contatos em crm_customers
+  if (method === 'POST' && url === '/api/renovacoes/import-to-crm') {
+    const body = await readJson<{ ids?: string[] }>(req)
+    const rows = body?.ids?.length
+      ? await renovacaoRepo.findByIds(body.ids)
+      : await renovacaoRepo.findAll()
+    const criados: { doc: string; nome: string }[] = []
+    const jaExistem: { doc: string; nome: string }[] = []
+    const erros: { cliente: string; motivo: string }[] = []
+
+    for (const r of rows) {
+      const doc = (r.cpf || r.cnpj || '').replace(/\D/g, '')
+      const telefone = r.telefone ? r.telefone.replace(/\D/g, '') : null
+      const email = r.email || null
+      if (!doc && !telefone && !email) {
+        erros.push({ cliente: r.cliente, motivo: 'Sem CPF, CNPJ, telefone nem email' })
+        continue
+      }
+
+      try {
+        const existing = await db.query<{ id: string }>(
+          `SELECT id FROM crm_customers
+            WHERE ($1::text is not null and regexp_replace(coalesce(cpf, ''), '\D', '', 'g') = $1)
+               OR ($2::text is not null and regexp_replace(coalesce(cnpj, ''), '\D', '', 'g') = $2)
+               OR ($3::text is not null and regexp_replace(coalesce(telefone, ''), '\D', '', 'g') = $3)
+               OR ($4::text is not null and lower(coalesce(email, '')) = lower($4))
+            ORDER BY updated_at DESC, created_at DESC
+            LIMIT 1`,
+          [
+            r.cpf?.replace(/\D/g, '') || null,
+            r.cnpj?.replace(/\D/g, '') || null,
+            telefone,
+            email,
+          ],
+        )
+
+        if (existing.rows[0]?.id) {
+          await db.query(
+            `UPDATE crm_customers
+                SET nome = coalesce($2, nome),
+                    telefone = coalesce($3, telefone),
+                    email = coalesce($4, email),
+                    cpf = coalesce($5, cpf),
+                    cnpj = coalesce($6, cnpj),
+                    observacoes = coalesce($7, observacoes),
+                    updated_at = now()
+              WHERE id = $1::uuid`,
+            [
+              existing.rows[0].id,
+              r.razao_social || r.cliente,
+              telefone,
+              email,
+              r.cpf?.replace(/\D/g, '') || null,
+              r.cnpj?.replace(/\D/g, '') || null,
+              r.observacoes || null,
+            ],
+          )
+          jaExistem.push({ doc: doc || telefone || email || '', nome: r.razao_social || r.cliente })
+        } else {
+          await db.query(
+            `INSERT INTO crm_customers (nome, telefone, email, cpf, cnpj, observacoes)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              r.razao_social || r.cliente,
+              telefone,
+              email,
+              r.cpf?.replace(/\D/g, '') || null,
+              r.cnpj?.replace(/\D/g, '') || null,
+              r.observacoes || null,
+            ],
+          )
+          criados.push({ doc: doc || telefone || email || '', nome: r.razao_social || r.cliente })
+        }
+      } catch (err) {
+        erros.push({ cliente: r.cliente, motivo: String(err) })
+      }
+    }
+
+    writeJson(res, 200, {
+      ok: true,
+      criados: criados.length,
+      jaExistem: jaExistem.length,
+      erros: erros.length,
+      detalhes: { criados, jaExistem, erros },
+    }, corsOrigin)
     return true
   }
 

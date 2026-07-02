@@ -18,8 +18,19 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
 // ── Renovações ────────────────────────────────────────────────
 
-export async function fetchRenovacoes(): Promise<RenovacaoV2[]> {
-  const data = await apiFetch<{ ok: boolean; renovacoes: RenovacaoV2[] }>('/renovacoes')
+export async function fetchRenovacoes(
+  scope: 'operacional' | 'historico' | 'todos' = 'operacional',
+  days = 30,
+  limit = 500,
+  offset = 0,
+): Promise<RenovacaoV2[]> {
+  const params = new URLSearchParams({
+    scope,
+    days: String(days),
+    limit: String(limit),
+    offset: String(offset),
+  })
+  const data = await apiFetch<{ ok: boolean; renovacoes: RenovacaoV2[] }>(`/renovacoes?${params.toString()}`)
   return data.renovacoes ?? []
 }
 
@@ -106,6 +117,22 @@ export async function importRenovacoesToBase(ids?: string[]): Promise<{
     ok: boolean; criados: number; jaExistem: number; erros: number
     detalhes: { criados: { cpf_cnpj: string; nome: string }[]; jaExistem: { cpf_cnpj: string; nome: string }[]; erros: { cliente: string; motivo: string }[] }
   }>('/renovacoes/import-to-base', {
+    method: 'POST',
+    body: JSON.stringify(ids?.length ? { ids } : {}),
+  })
+  return data
+}
+
+// ── Importar para crm_customers ───────────────────────────────
+
+export async function importRenovacoesToCrm(ids?: string[]): Promise<{
+  criados: number; jaExistem: number; erros: number
+  detalhes: { criados: { doc: string; nome: string }[]; jaExistem: { doc: string; nome: string }[]; erros: { cliente: string; motivo: string }[] }
+}> {
+  const data = await apiFetch<{
+    ok: boolean; criados: number; jaExistem: number; erros: number
+    detalhes: { criados: { doc: string; nome: string }[]; jaExistem: { doc: string; nome: string }[]; erros: { cliente: string; motivo: string }[] }
+  }>('/renovacoes/import-to-crm', {
     method: 'POST',
     body: JSON.stringify(ids?.length ? { ids } : {}),
   })

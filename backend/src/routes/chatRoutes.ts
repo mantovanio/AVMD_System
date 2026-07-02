@@ -1216,21 +1216,27 @@ export async function handleChatRoutes(
     const nome = asString(body.nome) || 'Contato sem nome'
     const telefone = asString(body.telefone)
     const email = asString(body.email)
+    const cpf = asString(body.cpf)
+    const cnpj = asString(body.cnpj)
     const observacoes = asString(body.observacoes)
-    if (!telefone && !email) {
-      writeJson(res, 400, { ok: false, error: 'telefone ou email obrigatorio.' }, corsOrigin)
+    if (!telefone && !email && !cpf && !cnpj) {
+      writeJson(res, 400, { ok: false, error: 'telefone, email, cpf ou cnpj obrigatorio.' }, corsOrigin)
       return true
     }
 
     const telefoneDigits = normalizePhoneDigits(telefone)
+    const cleanCpf = cpf?.replace(/\D/g, '') || null
+    const cleanCnpj = cnpj?.replace(/\D/g, '') || null
     const existing = await db.query<{ id: string }>(
       `SELECT id
          FROM crm_customers
         WHERE ($1::text is not null and regexp_replace(coalesce(telefone, ''), '\D', '', 'g') = $1)
            OR ($2::text is not null and lower(coalesce(email, '')) = lower($2))
+           OR ($3::text is not null and regexp_replace(coalesce(cpf, ''), '\D', '', 'g') = $3)
+           OR ($4::text is not null and regexp_replace(coalesce(cnpj, ''), '\D', '', 'g') = $4)
         ORDER BY updated_at DESC, created_at DESC
         LIMIT 1`,
-      [telefoneDigits, email || null],
+      [telefoneDigits, email || null, cleanCpf, cleanCnpj],
     )
 
     let customerId = existing.rows[0]?.id ?? null
@@ -1240,17 +1246,19 @@ export async function handleChatRoutes(
             SET nome = coalesce($2, nome),
                 telefone = coalesce($3, telefone),
                 email = coalesce($4, email),
-                observacoes = coalesce($5, observacoes),
+                cpf = coalesce($5, cpf),
+                cnpj = coalesce($6, cnpj),
+                observacoes = coalesce($7, observacoes),
                 updated_at = now()
           WHERE id = $1::uuid`,
-        [customerId, nome || null, telefone || null, email || null, observacoes || null],
+        [customerId, nome || null, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null],
       )
     } else {
       const result = await db.query<{ id: string }>(
-        `INSERT INTO crm_customers (nome, telefone, email, observacoes)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO crm_customers (nome, telefone, email, cpf, cnpj, observacoes)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id`,
-        [nome, telefone || null, email || null, observacoes || null],
+        [nome, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null],
       )
       customerId = result.rows[0]?.id ?? null
     }
