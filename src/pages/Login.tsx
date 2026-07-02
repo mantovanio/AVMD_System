@@ -9,7 +9,8 @@ function translateError(msg: string): string {
   if (msg.includes('Invalid login credentials'))      return 'Email ou senha incorretos.'
   if (msg.includes('Email not confirmed'))            return 'Confirme seu email antes de acessar o sistema.'
   if (msg.includes('User already registered'))        return 'Este email já está cadastrado.'
-  if (msg.includes('Password should be at least'))   return 'A senha deve ter pelo menos 6 caracteres.'
+  if (msg.includes('Password should be at least') || msg.includes('Passwords must be 8 characters or more'))
+                                                      return 'A senha deve ter pelo menos 8 caracteres.'
   if (msg.includes('signup is disabled'))             return 'Novos cadastros estão desabilitados. Contate o administrador.'
   if (msg.includes('rate limit'))                     return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
   if (msg.includes('Failed to fetch'))                return 'Falha de conexão com o servidor de autenticação. Atualize a página e tente novamente.'
@@ -183,7 +184,7 @@ export default function Login() {
     e.preventDefault()
     setRegError(null)
     if (regPass !== regConfirm) { setRegError('As senhas não coincidem.'); return }
-    if (regPass.length < 6)     { setRegError('A senha deve ter pelo menos 6 caracteres.'); return }
+    if (regPass.length < 8)     { setRegError('A senha deve ter pelo menos 8 caracteres.'); return }
     if (!regConsent)            { setRegError('Você precisa aceitar a Política de Privacidade para criar uma conta.'); return }
     setRegLoading(true)
     const { error } = await signUp({ nome: regNome, email: regEmail, password: regPass })
@@ -347,7 +348,7 @@ export default function Login() {
                   <InputField label="Email" type="email" value={regEmail} onChange={setRegEmail} placeholder="seu@email.com" />
 
                   <div className="grid grid-cols-2 gap-3">
-                    <PasswordInput label="Senha" value={regPass} onChange={setRegPass} placeholder="Mín. 6 caracteres" />
+                    <PasswordInput label="Senha" value={regPass} onChange={setRegPass} placeholder="Mín. 8 caracteres" />
                     <PasswordInput label="Confirmar senha" value={regConfirm} onChange={setRegConfirm} />
                   </div>
 

@@ -4,7 +4,9 @@ import { useAuth } from '@/contexts/AuthContext'
 import { DEFAULT_AGENCY_CONFIG, buildAuthBackground, fetchAgencyConfig } from '@/lib/agencyConfig'
 
 function translatePasswordError(msg: string) {
-  if (msg.includes('Password should be at least')) return 'A senha deve ter pelo menos 6 caracteres.'
+  if (msg.includes('Password should be at least') || msg.includes('Passwords must be 8 characters or more')) {
+    return 'A senha deve ter pelo menos 8 caracteres.'
+  }
   if (msg.includes('New password should be different')) return 'A nova senha precisa ser diferente da senha atual.'
   if (msg.includes('Auth session missing')) return 'Sessão de recuperação expirada. Solicite um novo link.'
   return msg
@@ -33,7 +35,7 @@ function PasswordInput({
           onChange={e => onChange(e.target.value)}
           autoFocus={autoFocus}
           required
-          placeholder="Mínimo 6 caracteres"
+          placeholder="Mínimo 8 caracteres"
           className="w-full border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 pr-10 text-sm
             bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
             focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
@@ -76,8 +78,8 @@ export default function UpdatePassword() {
     e.preventDefault()
     setError(null)
 
-    if (password.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres.')
+    if (password.length < 8) {
+      setError('A senha deve ter pelo menos 8 caracteres.')
       return
     }
 

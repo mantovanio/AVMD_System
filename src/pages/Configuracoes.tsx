@@ -210,7 +210,7 @@ function CampoSenha({ label, value, onChange, autoFocus }: { label: string; valu
           onChange={e => onChange(e.target.value)}
           autoFocus={autoFocus}
           className="w-full border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 pr-9 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Mínimo 6 caracteres"
+          placeholder="Mínimo 8 caracteres"
         />
         <button type="button" onClick={() => setShow(s => !s)}
           title={show ? 'Ocultar senha' : 'Mostrar senha'}
@@ -787,7 +787,7 @@ function AbaUsuarios() {
 
   async function salvarSenha() {
     setSenhaErro(null)
-    if (novaSenha.length < 6) { setSenhaErro('A senha deve ter pelo menos 6 caracteres.'); return }
+    if (novaSenha.length < 8) { setSenhaErro('A senha deve ter pelo menos 8 caracteres.'); return }
     if (novaSenha !== confirmSenha) { setSenhaErro('As senhas não coincidem.'); return }
     setSalvandoSenha(true)
     try {
