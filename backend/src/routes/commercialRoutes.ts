@@ -44,9 +44,13 @@ type SearchCustomerRequest = { term?: string }
 type ImportCustomersRequest = {
   items?: Array<{
     tipo_cliente?: string | null
+    data_nascimento?: string | null
     tipo_cadastro?: string | null
     cpf_cnpj?: string | null
+    cpf?: string | null
+    cnpj?: string | null
     nome?: string | null
+    razao_social?: string | null
     nome_fantasia?: string | null
     email?: string | null
     telefone?: string | null
@@ -59,6 +63,18 @@ type ImportCustomersRequest = {
     cep?: string | null
     inscricao_municipal?: string | null
     inscricao_estadual?: string | null
+    pedido?: string | null
+    protocolo?: string | null
+    produto?: string | null
+    tipo?: string | null
+    validade?: string | null
+    vencimento?: string | null
+    atendente?: string | null
+    ponto?: string | null
+    vendedor?: string | null
+    status_pedido?: string | null
+    valor_compra?: string | number | null
+    ar?: string | null
     iss_retido?: boolean | null
     status?: string | null
   }>

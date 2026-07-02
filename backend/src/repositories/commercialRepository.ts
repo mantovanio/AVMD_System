@@ -184,9 +184,13 @@ export class CommercialRepository {
 
   async importCustomers(items: Array<{
     tipo_cliente?: string | null
+    data_nascimento?: string | null
     tipo_cadastro?: string | null
     cpf_cnpj?: string | null
+    cpf?: string | null
+    cnpj?: string | null
     nome?: string | null
+    razao_social?: string | null
     nome_fantasia?: string | null
     email?: string | null
     telefone?: string | null
@@ -199,15 +203,55 @@ export class CommercialRepository {
     cep?: string | null
     inscricao_municipal?: string | null
     inscricao_estadual?: string | null
+    pedido?: string | null
+    protocolo?: string | null
+    produto?: string | null
+    tipo?: string | null
+    validade?: string | null
+    vencimento?: string | null
+    atendente?: string | null
+    ponto?: string | null
+    vendedor?: string | null
+    status_pedido?: string | null
+    valor_compra?: string | number | null
+    ar?: string | null
     iss_retido?: boolean | null
     status?: string | null
   }>) {
+    const parseDate = (value: unknown): string | null => {
+      const raw = String(value ?? '').trim()
+      if (!raw) return null
+      if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10)
+      const parts = raw.split('/')
+      if (parts.length === 3) {
+        const [d, m, y] = parts
+        return `${y.padStart(4, '0')}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+      }
+      return raw
+    }
+
+    const parseCurrency = (value: unknown): number | null => {
+      if (value === null || value === undefined || value === '') return null
+      if (typeof value === 'number') return Number.isFinite(value) ? value : null
+      const raw = String(value).trim()
+      if (!raw) return null
+      const normalized = raw.includes(',')
+        ? raw.replace(/\./g, '').replace(',', '.')
+        : raw
+      const parsed = Number(normalized)
+      return Number.isFinite(parsed) ? parsed : null
+    }
+
+    const pick = (current: string | null, next: string | null) => next ?? current
+
     const erros: { linha: number; motivo: string; cpf_cnpj?: string; nome?: string }[] = []
     const byDoc = new Map<string, {
       tipo_cliente: string
       tipo_cadastro: string
       cpf_cnpj: string
       nome: string
+      data_nascimento: string | null
+      razao_social: string | null
       nome_fantasia: string | null
       email: string | null
       telefone: string | null
@@ -223,12 +267,39 @@ export class CommercialRepository {
       iss_retido: boolean
       status: string
       metadata: string
+      pedido: string | null
+      protocolo: string | null
+      produto: string | null
+      tipo: string | null
+      validade: string | null
+      vencimento: string | null
+      atendente: string | null
+      ponto: string | null
+      vendedor: string | null
+      status_pedido: string | null
+      valor_compra: number | null
+      ar: string | null
+      compras_historico: Array<{
+        imported_at: string
+        pedido: string | null
+        protocolo: string | null
+        produto: string | null
+        tipo: string | null
+        validade: string | null
+        vencimento: string | null
+        atendente: string | null
+        ponto: string | null
+        vendedor: string | null
+        status_pedido: string | null
+        valor_compra: number | null
+        ar: string | null
+      }>
     }>()
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i] ?? {}
-      const doc = String(item.cpf_cnpj ?? '').replace(/\D/g, '')
-      const nome = String(item.nome ?? '').trim()
+      const doc = String(item.cpf_cnpj ?? item.cpf ?? item.cnpj ?? '').replace(/\D/g, '')
+      const nome = String(item.nome ?? item.razao_social ?? '').trim()
       if (!doc) {
         erros.push({ linha: i + 1, motivo: 'CPF/CNPJ ausente', nome: nome || undefined })
         continue
@@ -242,12 +313,79 @@ export class CommercialRepository {
       const tipo_cliente = tipoClienteRaw.includes('jur') || tipoClienteRaw === 'pj' || doc.length === 14
         ? 'pessoa_juridica'
         : 'pessoa_fisica'
+      const data_nascimento = parseDate(item.data_nascimento)
+
+      const pedido = String(item.pedido ?? '').trim() || null
+      const protocolo = String(item.protocolo ?? '').trim() || null
+      const produto = String(item.produto ?? '').trim() || null
+      const tipo = String(item.tipo ?? '').trim() || null
+      const validade = parseDate(item.validade)
+      const vencimento = parseDate(item.vencimento)
+      const atendente = String(item.atendente ?? '').trim() || null
+      const ponto = String(item.ponto ?? '').trim() || null
+      const vendedor = String(item.vendedor ?? '').trim() || null
+      const status_pedido = String(item.status_pedido ?? '').trim() || null
+      const valor_compra = parseCurrency(item.valor_compra)
+      const ar = String(item.ar ?? '').trim() || null
+
+      const compraEvento = {
+        imported_at: new Date().toISOString(),
+        pedido,
+        protocolo,
+        produto,
+        tipo,
+        validade,
+        vencimento,
+        atendente,
+        ponto,
+        vendedor,
+        status_pedido,
+        valor_compra,
+        ar,
+      }
+
+      const existente = byDoc.get(doc)
+      if (existente) {
+        existente.nome = pick(existente.nome, nome) ?? existente.nome
+        existente.data_nascimento = pick(existente.data_nascimento, data_nascimento)
+        existente.razao_social = pick(existente.razao_social, String(item.razao_social ?? '').trim() || null)
+        existente.nome_fantasia = pick(existente.nome_fantasia, String(item.nome_fantasia ?? '').trim() || null)
+        existente.email = pick(existente.email, String(item.email ?? '').trim() || null)
+        existente.telefone = pick(existente.telefone, String(item.telefone ?? '').trim() || null)
+        existente.cidade = pick(existente.cidade, String(item.cidade ?? '').trim() || null)
+        existente.logradouro = pick(existente.logradouro, String(item.logradouro ?? '').trim() || null)
+        existente.numero = pick(existente.numero, String(item.numero ?? '').trim() || null)
+        existente.complemento = pick(existente.complemento, String(item.complemento ?? '').trim() || null)
+        existente.bairro = pick(existente.bairro, String(item.bairro ?? '').trim() || null)
+        existente.uf = pick(existente.uf, String(item.uf ?? '').trim().toUpperCase() || null)
+        existente.cep = pick(existente.cep, String(item.cep ?? '').trim() || null)
+        existente.inscricao_municipal = pick(existente.inscricao_municipal, String(item.inscricao_municipal ?? '').trim() || null)
+        existente.inscricao_estadual = pick(existente.inscricao_estadual, String(item.inscricao_estadual ?? '').trim() || null)
+        existente.status = pick(existente.status, String(item.status ?? '').trim() || null) ?? existente.status
+        existente.pedido = pick(existente.pedido, pedido)
+        existente.protocolo = pick(existente.protocolo, protocolo)
+        existente.produto = pick(existente.produto, produto)
+        existente.tipo = pick(existente.tipo, tipo)
+        existente.validade = pick(existente.validade, validade)
+        existente.vencimento = pick(existente.vencimento, vencimento)
+        existente.atendente = pick(existente.atendente, atendente)
+        existente.ponto = pick(existente.ponto, ponto)
+        existente.vendedor = pick(existente.vendedor, vendedor)
+        existente.status_pedido = pick(existente.status_pedido, status_pedido)
+        existente.valor_compra = valor_compra ?? existente.valor_compra
+        existente.ar = pick(existente.ar, ar)
+        const hasData = compraEvento.pedido || compraEvento.protocolo || compraEvento.produto || compraEvento.vencimento || compraEvento.valor_compra !== null
+        if (hasData) existente.compras_historico.push(compraEvento)
+        continue
+      }
 
       byDoc.set(doc, {
         tipo_cliente,
         tipo_cadastro: String(item.tipo_cadastro ?? 'cliente').trim() || 'cliente',
         cpf_cnpj: doc,
         nome,
+        data_nascimento,
+        razao_social: String(item.razao_social ?? '').trim() || null,
         nome_fantasia: String(item.nome_fantasia ?? '').trim() || null,
         email: String(item.email ?? '').trim() || null,
         telefone: String(item.telefone ?? '').trim() || null,
@@ -262,7 +400,60 @@ export class CommercialRepository {
         inscricao_estadual: String(item.inscricao_estadual ?? '').trim() || null,
         iss_retido: Boolean(item.iss_retido),
         status: String(item.status ?? 'ativo').trim() || 'ativo',
-        metadata: JSON.stringify({ imported_via: 'clientes.import', imported_at: new Date().toISOString() }),
+        metadata: JSON.stringify({
+          imported_via: 'clientes.import',
+          imported_at: new Date().toISOString(),
+          data_nascimento,
+          pedido,
+          protocolo,
+          produto,
+          tipo,
+          validade,
+          vencimento,
+          atendente,
+          ponto,
+          vendedor,
+          status_pedido,
+          valor_compra,
+          ar,
+          compras_historico: [compraEvento],
+        }),
+        pedido,
+        protocolo,
+        produto,
+        tipo,
+        validade,
+        vencimento,
+        atendente,
+        ponto,
+        vendedor,
+        status_pedido,
+        valor_compra,
+        ar,
+        compras_historico: (compraEvento.pedido || compraEvento.protocolo || compraEvento.produto || compraEvento.vencimento || compraEvento.valor_compra !== null)
+          ? [compraEvento]
+          : [],
+      })
+    }
+
+    for (const payload of byDoc.values()) {
+      payload.metadata = JSON.stringify({
+        imported_via: 'clientes.import',
+        imported_at: new Date().toISOString(),
+        data_nascimento: payload.data_nascimento,
+        pedido: payload.pedido,
+        protocolo: payload.protocolo,
+        produto: payload.produto,
+        tipo: payload.tipo,
+        validade: payload.validade,
+        vencimento: payload.vencimento,
+        atendente: payload.atendente,
+        ponto: payload.ponto,
+        vendedor: payload.vendedor,
+        status_pedido: payload.status_pedido,
+        valor_compra: payload.valor_compra,
+        ar: payload.ar,
+        compras_historico: payload.compras_historico,
       })
     }
 
@@ -338,16 +529,120 @@ export class CommercialRepository {
           inscricao_estadual = excluded.inscricao_estadual,
           iss_retido = excluded.iss_retido,
           status = excluded.status,
-          metadata = coalesce(cadastros_base.metadata, '{}'::jsonb) || excluded.metadata,
+          metadata =
+            (coalesce(cadastros_base.metadata, '{}'::jsonb) - 'compras_historico')
+            || (excluded.metadata - 'compras_historico')
+            || jsonb_build_object(
+              'compras_historico',
+              coalesce(cadastros_base.metadata -> 'compras_historico', '[]'::jsonb)
+              || coalesce(excluded.metadata -> 'compras_historico', '[]'::jsonb)
+            ),
           updated_at = now()`,
         params,
       )
     }
 
+    for (const item of payloads) {
+      const dataVencimento = item.vencimento ?? item.validade
+      const tipoCertificado = item.produto ?? item.tipo ?? 'Não especificado'
+      const precisaUpsertRenovacao = Boolean(item.protocolo || item.pedido || dataVencimento || item.produto || item.valor_compra)
+      if (!precisaUpsertRenovacao || !dataVencimento) continue
+
+      const existingRenovacao = await this.db.query<{ id: string }>(
+        `select id
+         from renovacoes
+         where deleted_at is null
+           and (
+             ($1::text is not null and protocolo = $1)
+             or ($2::text is not null and pedido = $2)
+             or (($1::text is null and $2::text is null) and ((cpf = $3 and $3 <> '') or (cnpj = $3 and $3 <> '')) and data_vencimento = $4::date)
+           )
+         order by updated_at desc
+         limit 1`,
+        [item.protocolo, item.pedido, item.cpf_cnpj, dataVencimento],
+      )
+
+      const snapshot = JSON.stringify({
+        status_pedido: item.status_pedido,
+        atendente: item.atendente,
+        ponto: item.ponto,
+        ar: item.ar,
+      })
+
+      if (existingRenovacao.rows[0]?.id) {
+        await this.db.query(
+          `update renovacoes
+           set pedido = $2,
+               protocolo = $3,
+               data_vencimento = $4::date,
+               cliente = $5,
+               email = $6,
+               telefone = $7,
+               tipo_certificado = $8,
+               valor = $9,
+               cpf = case when length($10) = 11 then $10 else cpf end,
+               cnpj = case when length($10) = 14 then $10 else cnpj end,
+               razao_social = $11,
+               agr = coalesce($12, $13),
+               vendedor = $14,
+               snapshot_json = coalesce(snapshot_json, '{}'::jsonb) || $15::jsonb,
+               updated_at = now()
+           where id = $1::uuid`,
+          [
+            existingRenovacao.rows[0].id,
+            item.pedido,
+            item.protocolo,
+            dataVencimento,
+            item.nome,
+            item.email,
+            item.telefone,
+            tipoCertificado,
+            item.valor_compra,
+            item.cpf_cnpj,
+            item.razao_social,
+            item.ar,
+            item.ponto,
+            item.vendedor,
+            snapshot,
+          ],
+        )
+      } else {
+        await this.db.query(
+          `insert into renovacoes (
+            id, pedido, protocolo, data_vencimento, cliente, email, telefone,
+            tipo_certificado, valor, status, renovado, observacoes,
+            cpf, cnpj, razao_social, agr, vendedor, contador, snapshot_json
+          ) values (
+            $1::uuid, $2, $3, $4::date, $5, $6, $7,
+            $8, $9, 'pendente', false, null,
+            $10, $11, $12, $13, $14, $15, $16::jsonb
+          )`,
+          [
+            randomUUID(),
+            item.pedido,
+            item.protocolo,
+            dataVencimento,
+            item.nome,
+            item.email,
+            item.telefone,
+            tipoCertificado,
+            item.valor_compra,
+            item.cpf_cnpj.length === 11 ? item.cpf_cnpj : null,
+            item.cpf_cnpj.length === 14 ? item.cpf_cnpj : null,
+            item.razao_social,
+            item.ar ?? item.ponto,
+            item.vendedor,
+            item.atendente,
+            snapshot,
+          ],
+        )
+      }
+    }
+
     return {
       criados,
       atualizados,
-      ignorados: items.length - payloads.length,
+      ignorados: erros.length,
       erros,
     }
   }

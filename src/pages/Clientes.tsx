@@ -31,6 +31,7 @@ interface Cliente {
   inscricao_estadual: string | null
   iss_retido: boolean | null
   status: 'ativo' | 'inativo'
+  metadata: Record<string, unknown> | null
   created_at: string
 }
 
@@ -112,8 +113,12 @@ const PAGE_SIZE_OPTIONS = [25, 50, 100, 200]
 
 type ClienteImportField =
   | 'tipo_cliente'
+  | 'data_nascimento'
   | 'cpf_cnpj'
+  | 'cnpj'
+  | 'cpf'
   | 'nome'
+  | 'razao_social'
   | 'nome_fantasia'
   | 'email'
   | 'telefone'
@@ -126,12 +131,28 @@ type ClienteImportField =
   | 'uf'
   | 'inscricao_municipal'
   | 'inscricao_estadual'
+  | 'pedido'
+  | 'protocolo'
+  | 'produto'
+  | 'tipo'
+  | 'validade'
+  | 'vencimento'
+  | 'atendente'
+  | 'ponto'
+  | 'vendedor'
+  | 'status_pedido'
+  | 'valor_compra'
+  | 'ar'
   | 'status'
 
 const CLIENT_IMPORT_FIELDS: Array<{ key: ClienteImportField; label: string; required?: boolean }> = [
   { key: 'tipo_cliente', label: 'Tipo cliente (PF/PJ)' },
+  { key: 'data_nascimento', label: 'Data de nascimento' },
   { key: 'cpf_cnpj', label: 'CPF/CNPJ', required: true },
+  { key: 'cpf', label: 'CPF' },
+  { key: 'cnpj', label: 'CNPJ' },
   { key: 'nome', label: 'Nome / Razão social', required: true },
+  { key: 'razao_social', label: 'Razão social' },
   { key: 'nome_fantasia', label: 'Nome fantasia' },
   { key: 'email', label: 'E-mail' },
   { key: 'telefone', label: 'Telefone' },
@@ -144,19 +165,36 @@ const CLIENT_IMPORT_FIELDS: Array<{ key: ClienteImportField; label: string; requ
   { key: 'uf', label: 'UF' },
   { key: 'inscricao_municipal', label: 'Inscrição municipal' },
   { key: 'inscricao_estadual', label: 'Inscrição estadual' },
+  { key: 'pedido', label: 'Pedido' },
+  { key: 'protocolo', label: 'Protocolo' },
+  { key: 'produto', label: 'Produto' },
+  { key: 'tipo', label: 'Tipo' },
+  { key: 'validade', label: 'Validade' },
+  { key: 'vencimento', label: 'Vencimento' },
+  { key: 'atendente', label: 'Atendente' },
+  { key: 'ponto', label: 'Ponto' },
+  { key: 'vendedor', label: 'Vendedor' },
+  { key: 'status_pedido', label: 'Status do pedido' },
+  { key: 'valor_compra', label: 'Valor da compra' },
+  { key: 'ar', label: 'AR' },
   { key: 'status', label: 'Status' },
 ]
 
 const CLIENT_IMPORT_ALIASES: Record<string, ClienteImportField> = {
-  tipo: 'tipo_cliente',
   tipo_cliente: 'tipo_cliente',
   tipo_de_cliente: 'tipo_cliente',
+  tipo_pessoa: 'tipo_cliente',
+  data_de_nascimento: 'data_nascimento',
+  nascimento: 'data_nascimento',
+  data_nascimento: 'data_nascimento',
   documento: 'cpf_cnpj',
   cpf: 'cpf_cnpj',
   cnpj: 'cpf_cnpj',
   cpf_cnpj: 'cpf_cnpj',
+  doc: 'cpf_cnpj',
   nome: 'nome',
-  razao_social: 'nome',
+  razao_social: 'razao_social',
+  nome_cliente: 'nome',
   razao: 'nome',
   nome_fantasia: 'nome_fantasia',
   fantasia: 'nome_fantasia',
@@ -175,6 +213,29 @@ const CLIENT_IMPORT_ALIASES: Record<string, ClienteImportField> = {
   inscricao_municipal: 'inscricao_municipal',
   inscricao_estadual: 'inscricao_estadual',
   ie: 'inscricao_estadual',
+  pedido: 'pedido',
+  numero_pedido: 'pedido',
+  protocolo: 'protocolo',
+  numero_protocolo: 'protocolo',
+  produto: 'produto',
+  tipo_produto: 'produto',
+  tipo_certificado: 'produto',
+  tipo: 'tipo',
+  validade: 'validade',
+  data_validade: 'validade',
+  vencimento: 'vencimento',
+  data_vencimento: 'vencimento',
+  atendente: 'atendente',
+  ponto: 'ponto',
+  ponto_atendimento: 'ponto',
+  vendedor: 'vendedor',
+  status_pedido: 'status_pedido',
+  situacao_pedido: 'status_pedido',
+  valor_compra: 'valor_compra',
+  valor_da_compra: 'valor_compra',
+  valor: 'valor_compra',
+  ar: 'ar',
+  agr: 'ar',
   status: 'status',
 }
 
@@ -410,7 +471,11 @@ export default function Clientes() {
     [importRawRows, importColumnMap],
   )
   const validImportRows = useMemo(
-    () => mappedImportRows.filter(r => r.cpf_cnpj?.trim() && r.nome?.trim()),
+    () => mappedImportRows.filter(r => {
+      const doc = (r.cpf_cnpj || r.cpf || r.cnpj || '').trim()
+      const nome = (r.nome || r.razao_social || '').trim()
+      return !!(doc && nome)
+    }),
     [mappedImportRows],
   )
 
@@ -457,9 +522,13 @@ export default function Clientes() {
     setImportResult(null)
 
     const payload = validImportRows.map(row => ({
-      tipo_cliente: row.tipo_cliente || null,
-      cpf_cnpj: row.cpf_cnpj || null,
-      nome: row.nome || null,
+      tipo_cliente: row.tipo_cliente || row.tipo || null,
+      data_nascimento: row.data_nascimento || null,
+      cpf_cnpj: row.cpf_cnpj || row.cpf || row.cnpj || null,
+      cpf: row.cpf || null,
+      cnpj: row.cnpj || null,
+      nome: row.nome || row.razao_social || null,
+      razao_social: row.razao_social || null,
       nome_fantasia: row.nome_fantasia || null,
       email: row.email || null,
       telefone: row.telefone || null,
@@ -472,6 +541,18 @@ export default function Clientes() {
       uf: row.uf || null,
       inscricao_municipal: row.inscricao_municipal || null,
       inscricao_estadual: row.inscricao_estadual || null,
+      pedido: row.pedido || null,
+      protocolo: row.protocolo || null,
+      produto: row.produto || null,
+      tipo: row.tipo || null,
+      validade: row.validade || null,
+      vencimento: row.vencimento || null,
+      atendente: row.atendente || null,
+      ponto: row.ponto || null,
+      vendedor: row.vendedor || null,
+      status_pedido: row.status_pedido || null,
+      valor_compra: row.valor_compra || null,
+      ar: row.ar || null,
       status: row.status || null,
     }))
 
@@ -539,7 +620,7 @@ export default function Clientes() {
     try {
       let q = supabase
         .from('cadastros_base')
-        .select('id, tipo_cliente, cpf_cnpj, nome, nome_fantasia, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, uf, inscricao_municipal, inscricao_estadual, iss_retido, status, created_at', { count: 'exact' })
+        .select('id, tipo_cliente, cpf_cnpj, nome, nome_fantasia, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, uf, inscricao_municipal, inscricao_estadual, iss_retido, status, metadata, created_at', { count: 'exact' })
         .order('nome')
         .range(page * pageSize, page * pageSize + pageSize - 1)
 
@@ -1018,6 +1099,9 @@ export default function Clientes() {
                 const contatoMaisRecente = detalhe?.contatos[0] ?? null
                 const renovacoesAbertas = detalhe?.renovacoes.filter(r => r.status !== 'convertido' && r.status !== 'perdido').length ?? 0
                 const agendamentosPendentes = detalhe?.agendamentos.filter(a => a.status === 'aguardando' || a.status === 'confirmado').length ?? 0
+                const comprasHistorico = Array.isArray((c.metadata as { compras_historico?: unknown[] } | null)?.compras_historico)
+                  ? (((c.metadata as { compras_historico?: unknown[] }).compras_historico ?? []) as Array<Record<string, unknown>>)
+                  : []
 
                 return (
                 <Fragment key={c.id}>
@@ -1231,6 +1315,30 @@ export default function Clientes() {
                               </div>
 
                               <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-100 dark:border-blue-900/20 overflow-hidden">
+                                <SectionTitle title="Histórico de compras (importação)" count={comprasHistorico.length} />
+                                {!comprasHistorico.length ? (
+                                  <EmptySection label="Nenhum histórico de compras importado para este cliente." />
+                                ) : (
+                                  <div className="divide-y divide-blue-100 dark:divide-blue-900/20">
+                                    {comprasHistorico.slice(-8).reverse().map((item, idx) => (
+                                      <div key={`${c.id}-hist-${idx}`} className="px-4 py-3">
+                                        <div className="flex items-center justify-between gap-3">
+                                          <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{String(item.produto ?? item.tipo ?? 'Compra importada')}</p>
+                                          <span className="text-xs text-gray-400">{formatDateTime(String(item.imported_at ?? ''))}</span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                          Pedido: {String(item.pedido ?? '—')} · Protocolo: {String(item.protocolo ?? '—')} · Vencimento: {String(item.vencimento ?? item.validade ?? '—')}
+                                        </p>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                          Status: {String(item.status_pedido ?? '—')} · Vendedor: {String(item.vendedor ?? '—')} · AR: {String(item.ar ?? item.ponto ?? '—')}
+                                        </p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-100 dark:border-blue-900/20 overflow-hidden">
                                 <SectionTitle title="Agendamentos" count={detalhe?.agendamentos.length ?? 0} />
                                 {!(detalhe?.agendamentos.length) ? (
                                   <EmptySection label="Nenhum agendamento encontrado para este cliente." />
@@ -1353,7 +1461,7 @@ export default function Clientes() {
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                     {mappedImportRows.slice(0, 12).map((row, idx) => {
-                      const ok = !!(row.cpf_cnpj?.trim() && row.nome?.trim())
+                      const ok = !!((row.cpf_cnpj || row.cpf || row.cnpj || '').trim() && (row.nome || row.razao_social || '').trim())
                       return (
                         <tr key={idx} className={cn(!ok && 'opacity-50')}>
                           {CLIENT_IMPORT_FIELDS.map(field => (
