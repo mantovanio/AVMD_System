@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Edit3, PlusCircle, RefreshCw, Search, Trash2, X, Link, Package } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { supabase } from '@/lib/supabase'
+import { getApiUrl } from '@/lib/api'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -70,16 +70,16 @@ export default function CatalogoIA() {
   async function fetchLista() {
     setLoading(true)
     setErro(null)
-    const { data, error } = await supabase
-      .from('catalogo_ia')
-      .select('*')
-      .order('tipo')
-      .order('modelo')
-      .order('periodo_uso')
-      .order('midia')
-    if (error) { setErro(error.message); setLoading(false); return }
-    setLista(data ?? [])
-    setLoading(false)
+    try {
+      const res = await fetch(getApiUrl('/chat/catalogo-ia/all'))
+      const data = await res.json() as { ok: boolean; data?: CatalogoItem[]; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Falha ao carregar catalogo')
+      setLista(data.data ?? [])
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : 'Falha ao carregar catalogo')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { void fetchLista() }, [])
@@ -145,26 +145,47 @@ export default function CatalogoIA() {
       link_compra: form.link_compra?.trim() || null,
       preco: form.gratuito ? 0 : form.preco,
     }
-    const { error } = editingId
-      ? await supabase.from('catalogo_ia').update(payload).eq('id', editingId)
-      : await supabase.from('catalogo_ia').insert([payload])
-    if (error) { setErro(error.message); setSaving(false); return }
-    setSaving(false)
-    fecharForm()
-    void fetchLista()
+    try {
+      const res = editingId
+        ? await fetch(getApiUrl(`/chat/catalogo-ia/${editingId}`), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+        : await fetch(getApiUrl('/chat/catalogo-ia'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+      const data = await res.json() as { ok: boolean; error?: string }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Falha ao salvar produto')
+      fecharForm()
+      void fetchLista()
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : 'Falha ao salvar produto')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function confirmarDelete() {
     if (!confirmDeleteId) return
     setDeleting(true)
-    await supabase.from('catalogo_ia').delete().eq('id', confirmDeleteId)
-    setDeleting(false)
-    setConfirmDeleteId(null)
-    void fetchLista()
+    try {
+      await fetch(getApiUrl(`/chat/catalogo-ia/${confirmDeleteId}`), { method: 'DELETE' })
+    } finally {
+      setDeleting(false)
+      setConfirmDeleteId(null)
+      void fetchLista()
+    }
   }
 
   async function toggleAtivo(item: CatalogoItem) {
-    await supabase.from('catalogo_ia').update({ ativo: !item.ativo }).eq('id', item.id)
+    await fetch(getApiUrl(`/chat/catalogo-ia/${item.id}`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ativo: !item.ativo }),
+    })
     void fetchLista()
   }
 
