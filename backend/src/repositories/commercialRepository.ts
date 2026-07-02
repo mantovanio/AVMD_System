@@ -186,6 +186,8 @@ export class CommercialRepository {
     tipo_cliente?: string | null
     data_nascimento?: string | null
     tipo_cadastro?: string | null
+    documento?: string | null
+    documento_titular?: string | null
     cpf_cnpj?: string | null
     cpf?: string | null
     cnpj?: string | null
@@ -279,8 +281,10 @@ export class CommercialRepository {
       status_pedido: string | null
       valor_compra: number | null
       ar: string | null
+      documento_titular: string | null
       compras_historico: Array<{
         imported_at: string
+        documento_titular: string | null
         pedido: string | null
         protocolo: string | null
         produto: string | null
@@ -298,7 +302,9 @@ export class CommercialRepository {
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i] ?? {}
-      const doc = String(item.cpf_cnpj ?? item.cpf ?? item.cnpj ?? '').replace(/\D/g, '')
+      const docPrincipal = String(item.documento ?? item.cpf_cnpj ?? item.cpf ?? item.cnpj ?? '').replace(/\D/g, '')
+      const docTitular = String(item.documento_titular ?? '').replace(/\D/g, '')
+      const doc = docPrincipal
       const nome = String(item.nome ?? item.razao_social ?? '').trim()
       if (!doc) {
         erros.push({ linha: i + 1, motivo: 'CPF/CNPJ ausente', nome: nome || undefined })
@@ -330,6 +336,7 @@ export class CommercialRepository {
 
       const compraEvento = {
         imported_at: new Date().toISOString(),
+        documento_titular: docTitular || (doc.length === 11 ? doc : null),
         pedido,
         protocolo,
         produto,
@@ -374,6 +381,7 @@ export class CommercialRepository {
         existente.status_pedido = pick(existente.status_pedido, status_pedido)
         existente.valor_compra = valor_compra ?? existente.valor_compra
         existente.ar = pick(existente.ar, ar)
+        existente.documento_titular = pick(existente.documento_titular, docTitular || null)
         const hasData = compraEvento.pedido || compraEvento.protocolo || compraEvento.produto || compraEvento.vencimento || compraEvento.valor_compra !== null
         if (hasData) existente.compras_historico.push(compraEvento)
         continue
@@ -404,6 +412,8 @@ export class CommercialRepository {
           imported_via: 'clientes.import',
           imported_at: new Date().toISOString(),
           data_nascimento,
+          documento_principal: doc,
+          documento_titular: docTitular || (doc.length === 11 ? doc : null),
           pedido,
           protocolo,
           produto,
@@ -430,6 +440,7 @@ export class CommercialRepository {
         status_pedido,
         valor_compra,
         ar,
+        documento_titular: docTitular || (doc.length === 11 ? doc : null),
         compras_historico: (compraEvento.pedido || compraEvento.protocolo || compraEvento.produto || compraEvento.vencimento || compraEvento.valor_compra !== null)
           ? [compraEvento]
           : [],
@@ -441,6 +452,8 @@ export class CommercialRepository {
         imported_via: 'clientes.import',
         imported_at: new Date().toISOString(),
         data_nascimento: payload.data_nascimento,
+        documento_principal: payload.cpf_cnpj,
+        documento_titular: payload.documento_titular,
         pedido: payload.pedido,
         protocolo: payload.protocolo,
         produto: payload.produto,
@@ -598,6 +611,7 @@ export class CommercialRepository {
         atendente: item.atendente,
         ponto: item.ponto,
         ar: item.ar,
+          documento_titular: item.documento_titular,
       })
 
       if (existingRenovacao.rows[0]?.id) {
@@ -611,7 +625,7 @@ export class CommercialRepository {
                telefone = $7,
                tipo_certificado = $8,
                valor = $9,
-               cpf = case when length($10) = 11 then $10 else cpf end,
+               cpf = case when length($16) = 11 then $16 when length($10) = 11 then $10 else cpf end,
                cnpj = case when length($10) = 14 then $10 else cnpj end,
                razao_social = $11,
                agr = coalesce($12, $13),
@@ -635,6 +649,7 @@ export class CommercialRepository {
             item.ponto,
             item.vendedor,
             snapshot,
+            item.documento_titular,
           ],
         )
       } else {
@@ -658,7 +673,7 @@ export class CommercialRepository {
             item.telefone,
             tipoCertificado,
             item.valor_compra,
-            item.cpf_cnpj.length === 11 ? item.cpf_cnpj : null,
+            item.documento_titular?.length === 11 ? item.documento_titular : (item.cpf_cnpj.length === 11 ? item.cpf_cnpj : null),
             item.cpf_cnpj.length === 14 ? item.cpf_cnpj : null,
             item.razao_social,
             item.ar ?? item.ponto,

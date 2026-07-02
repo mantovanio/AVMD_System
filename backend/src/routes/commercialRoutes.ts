@@ -46,6 +46,8 @@ type ImportCustomersRequest = {
     tipo_cliente?: string | null
     data_nascimento?: string | null
     tipo_cadastro?: string | null
+    documento?: string | null
+    documento_titular?: string | null
     cpf_cnpj?: string | null
     cpf?: string | null
     cnpj?: string | null

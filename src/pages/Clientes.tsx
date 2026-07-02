@@ -114,6 +114,8 @@ const PAGE_SIZE_OPTIONS = [25, 50, 100, 200]
 type ClienteImportField =
   | 'tipo_cliente'
   | 'data_nascimento'
+  | 'documento'
+  | 'documento_titular'
   | 'cpf_cnpj'
   | 'cnpj'
   | 'cpf'
@@ -148,6 +150,8 @@ type ClienteImportField =
 const CLIENT_IMPORT_FIELDS: Array<{ key: ClienteImportField; label: string; required?: boolean }> = [
   { key: 'tipo_cliente', label: 'Tipo cliente (PF/PJ)' },
   { key: 'data_nascimento', label: 'Data de nascimento' },
+  { key: 'documento', label: 'Documento (Safeweb)' },
+  { key: 'documento_titular', label: 'Documento titular (CPF)' },
   { key: 'cpf_cnpj', label: 'CPF/CNPJ', required: true },
   { key: 'cpf', label: 'CPF' },
   { key: 'cnpj', label: 'CNPJ' },
@@ -187,11 +191,16 @@ const CLIENT_IMPORT_ALIASES: Record<string, ClienteImportField> = {
   data_de_nascimento: 'data_nascimento',
   nascimento: 'data_nascimento',
   data_nascimento: 'data_nascimento',
-  documento: 'cpf_cnpj',
-  cpf: 'cpf_cnpj',
-  cnpj: 'cpf_cnpj',
+  documento: 'documento',
+  doc: 'documento',
+  documento_cliente: 'documento',
+  documento_safeweb: 'documento',
+  documento_titular: 'documento_titular',
+  doc_titular: 'documento_titular',
+  cpf_titular: 'documento_titular',
+  cpf: 'cpf',
+  cnpj: 'cnpj',
   cpf_cnpj: 'cpf_cnpj',
-  doc: 'cpf_cnpj',
   nome: 'nome',
   razao_social: 'razao_social',
   nome_cliente: 'nome',
@@ -472,7 +481,7 @@ export default function Clientes() {
   )
   const validImportRows = useMemo(
     () => mappedImportRows.filter(r => {
-      const doc = (r.cpf_cnpj || r.cpf || r.cnpj || '').trim()
+      const doc = (r.documento || r.cpf_cnpj || r.cpf || r.cnpj || '').trim()
       const nome = (r.nome || r.razao_social || '').trim()
       return !!(doc && nome)
     }),
@@ -524,7 +533,9 @@ export default function Clientes() {
     const payload = validImportRows.map(row => ({
       tipo_cliente: row.tipo_cliente || row.tipo || null,
       data_nascimento: row.data_nascimento || null,
-      cpf_cnpj: row.cpf_cnpj || row.cpf || row.cnpj || null,
+      documento: row.documento || null,
+      documento_titular: row.documento_titular || null,
+      cpf_cnpj: row.cpf_cnpj || row.documento || row.cpf || row.cnpj || null,
       cpf: row.cpf || null,
       cnpj: row.cnpj || null,
       nome: row.nome || row.razao_social || null,
@@ -1461,7 +1472,7 @@ export default function Clientes() {
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                     {mappedImportRows.slice(0, 12).map((row, idx) => {
-                      const ok = !!((row.cpf_cnpj || row.cpf || row.cnpj || '').trim() && (row.nome || row.razao_social || '').trim())
+                      const ok = !!((row.documento || row.cpf_cnpj || row.cpf || row.cnpj || '').trim() && (row.nome || row.razao_social || '').trim())
                       return (
                         <tr key={idx} className={cn(!ok && 'opacity-50')}>
                           {CLIENT_IMPORT_FIELDS.map(field => (
