@@ -1611,6 +1611,11 @@ export default function ChatInboxCRM() {
 
       setMessages(prev => prev.map(item => item.id === tempId ? { ...item, id: payload.messageId ?? tempId } : item))
       markConversationAsHuman(selectedConversation.id)
+      fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ atendimento_humano: true, agente_nome: currentHumanAgentName }),
+      }).catch(() => {})
       await loadConversations(false)
       await loadMessages(selectedConversation.id, { background: true })
     } catch (err) {
@@ -1727,6 +1732,11 @@ export default function ChatInboxCRM() {
     }
 
     markConversationAsHuman(selectedConversation.id)
+    fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ atendimento_humano: true, agente_nome: currentHumanAgentName }),
+    }).catch(() => {})
     await loadConversations(false)
     await loadMessages(selectedConversation.id, { background: true })
     if (tempMediaUrl) URL.revokeObjectURL(tempMediaUrl)
