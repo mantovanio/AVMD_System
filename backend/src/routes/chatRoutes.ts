@@ -481,13 +481,20 @@ export async function handleChatRoutes(
            lower(btrim(coalesce($5::text, ''))) AS nome_norm,
            lower(btrim(coalesce($6::text, ''))) AS vinculo_nome_norm,
            $7::text AS ponto_atendimento_id
+       ),
+       ranked AS (
+         SELECT conv.*,
+                EXISTS (SELECT 1 FROM crm_chat_messages WHERE conversation_id = conv.id AND direction = 'outgoing') AS tem_resposta,
+                ROW_NUMBER() OVER (
+                  PARTITION BY CASE WHEN conv.document_key ~ '^[0-9]+$' THEN conv.document_key ELSE conv.id::text END
+                  ORDER BY conv.ultima_interacao_em DESC NULLS LAST
+                ) AS rn
+         FROM crm_chat_admin_view conv
+         CROSS JOIN viewer
+         WHERE ${buildConversationVisibilitySql('conv')}
        )
-        SELECT conv.*,
-               EXISTS (SELECT 1 FROM crm_chat_messages WHERE conversation_id = conv.id AND direction = 'outgoing') AS tem_resposta
-        FROM crm_chat_admin_view conv
-        CROSS JOIN viewer
-        WHERE ${buildConversationVisibilitySql('conv')}
-        ORDER BY conv.ultima_interacao_em DESC NULLS LAST`,
+        SELECT ranked.* FROM ranked WHERE rn = 1
+        ORDER BY ranked.ultima_interacao_em DESC NULLS LAST`,
       [
         viewer.id,
         viewer.perfil,

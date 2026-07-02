@@ -2180,7 +2180,7 @@ export default function ChatInboxCRM() {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <h3 className="text-lg font-semibold">
-                          {normalizeDisplaySenderName(selectedConversation.cliente_nome || selectedConversation.nome_crm) || (selectedConversation.fila === 'email' ? selectedConversation.email_principal || selectedConversation.document_key : null) || 'Sem nome identificado'}
+                          {normalizeDisplaySenderName(selectedConversation.cliente_nome || selectedConversation.nome_crm) || (selectedConversation.fila === 'email' ? selectedConversation.email_principal || selectedConversation.document_key : null) || contactPhone(selectedConversation) || 'Sem nome identificado'}
                         </h3>
                         <p className="mt-1 text-sm text-slate-500">
                           {contactPhone(selectedConversation)}
@@ -2950,7 +2950,7 @@ function ConversationCard({
       <div className={`w-full rounded-2xl border px-4 py-3 text-left transition ${selectedClass}`}>
         <div className="flex items-start justify-between gap-3">
           <button type="button" onClick={onClick} className="min-w-0 flex-1 text-left">
-            <p className="truncate text-sm font-semibold text-slate-900">{item.cliente_nome || item.nome_crm || 'Sem nome'}</p>
+            <p className="truncate text-sm font-semibold text-slate-900">{normalizeDisplaySenderName(item.cliente_nome || item.nome_crm) || contactPhone(item)}</p>
             <p className="mt-1 truncate text-xs text-slate-500">{contactPhone(item)}</p>
           </button>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -3060,7 +3060,7 @@ function ConversationMiniCard({
       <div className={`group relative w-full rounded-xl border ${selected ? 'border-slate-900 bg-slate-900 text-white' : 'border-white/70 bg-white hover:border-slate-300'}`}>
         <button type="button" onClick={onClick} draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd} className="w-full px-3 py-3 text-left">
           <div className="flex items-center justify-between gap-2">
-            <p className="truncate text-sm font-semibold">{item.cliente_nome || item.nome_crm || 'Sem nome'}</p>
+            <p className="truncate text-sm font-semibold">{normalizeDisplaySenderName(item.cliente_nome || item.nome_crm) || contactPhone(item)}</p>
             <div className="flex items-center gap-2">
               {unreadCount > 0 && <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${selected ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700'}`}>{unreadCount}</span>}
               {human ? <UserRound size={14} /> : <Bot size={14} />}
@@ -3104,7 +3104,7 @@ function MessageRow({
     const isContactMsg = message.sender_type === 'cliente' || message.sender_type === 'contact' || !isOutgoing
     const isIaMsg = message.sender_type === 'ia'
     const senderLabel = isContactMsg
-      ? normalizeDisplaySenderName(conversation?.nome_crm || conversation?.cliente_nome) || 'Cliente'
+      ? normalizeDisplaySenderName(conversation?.nome_crm || conversation?.cliente_nome) || (conversation ? contactPhone(conversation) : 'Cliente')
       : isIaMsg
         ? 'IA Clara'
         : normalizedSenderName || fallbackHumanName || 'Humano'
