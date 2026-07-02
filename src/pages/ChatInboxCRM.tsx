@@ -28,6 +28,8 @@ import {
 import { supabase } from '@/lib/supabase'
 import { getApiUrl } from '@/lib/api'
 import { logger } from '@/lib/logger'
+import MediaPreview from '@/components/MediaPreview'
+import { getMediaProxyUrl } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { applyOutgoingSignature, DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings } from '@/lib/crmChatSettings'
 
@@ -314,6 +316,46 @@ function phoneMatchesQuery(item: ConversationRow, queryDigits: string) {
   })
 }
 
+function normalizeDisplaySenderName(value: string | null | undefined) {
+  const text = (value ?? '').trim()
+  if (!text) return null
+  const normalized = text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+  if (normalized === 'voce' || normalized === 'you' || normalized === 'me') return null
+  return text
+}
+
+function dedupeConversations(rows: ConversationRow[]) {
+  const bestByKey = new Map<string, ConversationRow>()
+
+  for (const item of rows) {
+    const phoneKey = normalizeDigits(item.telefone || item.document_key)
+    const emailKey = (item.email_principal || item.document_key || '').includes('@')
+      ? (item.email_principal || item.document_key || '').trim().toLowerCase()
+      : ''
+    const identity = item.crm_customer_id
+      ? `customer:${item.crm_customer_id}`
+      : phoneKey
+        ? `phone:${phoneKey}`
+        : emailKey
+          ? `email:${emailKey}`
+          : `row:${item.id}`
+    const key = `${item.fila}:${identity}`
+    const current = bestByKey.get(key)
+    if (!current) {
+      bestByKey.set(key, item)
+      continue
+    }
+    const currentTime = new Date(current.ultima_interacao_em || current.created_at).getTime()
+    const nextTime = new Date(item.ultima_interacao_em || item.created_at).getTime()
+    if (nextTime >= currentTime) bestByKey.set(key, item)
+  }
+
+  return [...bestByKey.values()].sort((a, b) => new Date(b.ultima_interacao_em || b.created_at).getTime() - new Date(a.ultima_interacao_em || a.created_at).getTime())
+}
+
 function inferQueueFromIntegration(integration: Pick<EvolutionIntegration, 'name' | 'instance_name' | 'sender_name'>) {
   const instance = (integration.instance_name ?? '').toLowerCase()
   const label = `${integration.name ?? ''} ${integration.sender_name ?? ''}`.toLowerCase()
@@ -409,7 +451,6 @@ function mergeConversationMessages(messages: CrmMessage[]) {
 
     const signature = [
       message.direction,
-      message.sender_type,
       message.mime_type ?? '',
       message.file_name ?? '',
       content.toLowerCase(),
@@ -900,7 +941,7 @@ export default function ChatInboxCRM() {
       const response = await fetch(getApiUrl(`/chat/crm/conversations?${viewerQueryString}`))
       if (!response.ok) throw new Error('Erro ao carregar conversas')
       const json = await response.json() as { ok: boolean; data: ConversationRow[] }
-      const rows = json.data ?? []
+      const rows = dedupeConversations(json.data ?? [])
 
       const snapshot = rows
         .map(item => [
@@ -1381,20 +1422,36 @@ export default function ChatInboxCRM() {
     const resolvedObs = cleanedObs || null
 
     try {
+      let nextCustomerId = customerId
       if (customerId) {
         const r = await fetch(getApiUrl(`/chat/crm/customers/${customerId}`), {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             nome: resolvedName,
-            telefone_principal: resolvedPhone,
-            email_principal: resolvedEmail,
+            telefone: resolvedPhone,
+            email: resolvedEmail,
             contato_status: resolvedStatus,
             observacoes: resolvedObs,
           }),
         })
         const d = await r.json()
         if (!d.ok) throw new Error(d.error || 'Falha ao atualizar cliente')
+      } else {
+        const r = await fetch(getApiUrl('/chat/crm/customers'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nome: resolvedName,
+            telefone: resolvedPhone,
+            email: resolvedEmail,
+            observacoes: resolvedObs,
+            conversation_id: selectedConversation.id,
+          }),
+        })
+        const d = await r.json()
+        if (!d.ok) throw new Error(d.error || 'Falha ao criar contato leve no CRM')
+        nextCustomerId = typeof d.customer_id === 'string' ? d.customer_id : null
       }
 
       await fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}`), {
@@ -1422,7 +1479,7 @@ export default function ChatInboxCRM() {
           contact: normalizeContactPhone(resolvedPhone ?? selectedConversation.telefone ?? selectedConversation.document_key),
           payload: {
             conversation_id: selectedConversation.id,
-            customer_id: customerId,
+            customer_id: nextCustomerId,
             nome: resolvedName,
             telefone: resolvedPhone,
             email: resolvedEmail,
@@ -2082,7 +2139,7 @@ export default function ChatInboxCRM() {
                       </div>
                       {!hasRegisteredCustomer(selectedConversation) && (
                         <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                          Esse numero ainda nao tem cadastro completo no CRM. Cadastre o contato antes de resolver ou encerrar a conversa.
+                          Este atendimento ainda está como lead. Você pode salvar nome, telefone e e-mail parciais agora e complementar o cadastro depois.
                         </div>
                       )}
                     </div>
@@ -2984,21 +3041,24 @@ function MessageRow({
   conversation?: ConversationRow | null
 }) {
   const isOutgoing = message.direction === 'outgoing'
+    const normalizedSenderName = normalizeDisplaySenderName(message.sender_name)
     const senderLabel = message.sender_type === 'cliente'
       ? 'Cliente'
       : message.sender_type === 'ia'
         ? 'IA Clara'
-        : message.sender_name || fallbackHumanName || 'Humano'
+        : normalizedSenderName || fallbackHumanName || 'Humano'
     const detailLabel = message.sender_type === 'cliente'
       ? conversation ? contactPhone(conversation) : 'Canal de entrada'
       : message.sender_type === 'ia'
         ? conversation?.whatsapp_instance || 'Automacao'
-        : message.sender_name || fallbackHumanName || conversation?.agente_atual || 'Humano'
+        : normalizedSenderName || fallbackHumanName || conversation?.agente_atual || 'Humano'
     const isImage = isImageMime(message.mime_type)
     const isAudio = isAudioMime(message.mime_type)
     const isVideo = isVideoMime(message.mime_type)
     const isDocument = isDocumentMime(message.mime_type)
     const mediaLabel = message.file_name || message.mensagem || (isAudio ? 'Audio' : isImage ? 'Imagem' : isVideo ? 'Video' : 'Arquivo')
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+    const displayUrl = message.media_url ? getMediaProxyUrl(message.media_url, conversation?.whatsapp_instance ?? undefined) : null
   
     return (
       <div className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'}`}>
@@ -3010,30 +3070,62 @@ function MessageRow({
             <span>•</span>
             <span>{formatDateTime(message.created_at)}</span>
           </div>
-          {isImage && message.media_url ? (
-            <a href={message.media_url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl">
-              <img src={message.media_url} alt={mediaLabel} className="max-w-full rounded-xl" />
-            </a>
-          ) : isAudio && message.media_url ? (
+          {isImage && displayUrl ? (
+            <div className="relative group">
+              <button type="button" onClick={() => setPreviewUrl(displayUrl)} className="block w-full overflow-hidden rounded-xl text-left">
+                <img src={displayUrl} alt={mediaLabel} className="max-w-full rounded-xl cursor-pointer" />
+              </button>
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-xl bg-black/30">
+                <span className="rounded-lg bg-white/90 px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm">
+                  Visualizar
+                </span>
+              </div>
+            </div>
+          ) : isAudio && displayUrl ? (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-violet-700">Audio anexado</p>
-              <audio src={message.media_url} controls className="w-full min-w-0" preload="metadata" />
+              <div className="flex items-center gap-2">
+                <audio src={displayUrl} controls className="w-full min-w-0 flex-1" preload="metadata" />
+                <button
+                  type="button"
+                  onClick={() => window.open(displayUrl, '_blank')}
+                  className="shrink-0 rounded-lg bg-violet-50 px-2.5 py-1.5 text-[11px] font-medium text-violet-700 hover:bg-violet-100 transition-colors"
+                >
+                  Visualizar
+                </button>
+              </div>
             </div>
-          ) : isVideo && message.media_url ? (
+          ) : isVideo && displayUrl ? (
             <div className="space-y-2">
-              <video src={message.media_url} controls className="max-w-full rounded-xl" preload="metadata" />
-              <a href={message.media_url} target="_blank" rel="noreferrer" className="text-xs text-sky-600 hover:underline">
+              <video src={displayUrl} controls className="max-w-full rounded-xl" preload="metadata" />
+              <a href={displayUrl} target="_blank" rel="noreferrer" className="text-xs text-sky-600 hover:underline">
                 Abrir video em nova aba
               </a>
             </div>
-          ) : isDocument && message.media_url ? (
-            <a href={message.media_url} target="_blank" rel="noreferrer" className="block rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-sky-700 hover:underline">
-              📎 {mediaLabel}
-            </a>
+          ) : isDocument && displayUrl ? (
+            <div className="space-y-1">
+              <button type="button" onClick={() => setPreviewUrl(displayUrl)} className="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-sky-700 hover:underline text-left">
+                📎 {mediaLabel}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewUrl(displayUrl)}
+                className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-200 transition-colors"
+              >
+                Visualizar
+              </button>
+            </div>
           ) : (
             <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.mensagem || mediaLabel || 'Mensagem sem texto'}</p>
           )}
         </div>
+        {previewUrl && (
+          <MediaPreview
+            url={previewUrl}
+            fileName={mediaLabel}
+            onClose={() => setPreviewUrl(null)}
+          />
+        )}
     </div>
   )
 }

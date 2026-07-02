@@ -980,7 +980,7 @@ export async function handleChatRoutes(
       return true
     }
     const body = await readJson<JsonRecord>(req)
-    const allowedFields = ['nome', 'telefone_principal', 'email_principal', 'contato_status', 'observacoes']
+    const allowedFields = ['nome', 'telefone', 'email', 'contato_status', 'observacoes']
     const updates: string[] = []
     const values: unknown[] = []
     let idx = 1
@@ -1044,15 +1044,51 @@ export async function handleChatRoutes(
       writeJson(res, 400, { ok: false, error: 'telefone ou email obrigatorio.' }, corsOrigin)
       return true
     }
-    const result = await db.query<any>(
-      `INSERT INTO crm_customers (nome, telefone_principal, email_principal, observacoes) VALUES ($1, $2, $3, $4) RETURNING id`,
-      [nome, telefone || null, email || null, observacoes || null],
+
+    const telefoneDigits = normalizePhoneDigits(telefone)
+    const existing = await db.query<{ id: string }>(
+      `SELECT id
+         FROM crm_customers
+        WHERE ($1::text is not null and regexp_replace(coalesce(telefone, ''), '\D', '', 'g') = $1)
+           OR ($2::text is not null and lower(coalesce(email, '')) = lower($2))
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT 1`,
+      [telefoneDigits, email || null],
     )
-    const customerId = result.rows[0]?.id ?? null
+
+    let customerId = existing.rows[0]?.id ?? null
+    if (customerId) {
+      await db.query(
+        `UPDATE crm_customers
+            SET nome = coalesce($2, nome),
+                telefone = coalesce($3, telefone),
+                email = coalesce($4, email),
+                observacoes = coalesce($5, observacoes),
+                updated_at = now()
+          WHERE id = $1::uuid`,
+        [customerId, nome || null, telefone || null, email || null, observacoes || null],
+      )
+    } else {
+      const result = await db.query<{ id: string }>(
+        `INSERT INTO crm_customers (nome, telefone, email, observacoes)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id`,
+        [nome, telefone || null, email || null, observacoes || null],
+      )
+      customerId = result.rows[0]?.id ?? null
+    }
 
     const conversationId = asString(body.conversation_id)
     if (conversationId && customerId) {
-      await db.query('UPDATE crm_chat_conversations SET crm_customer_id = $1 WHERE id = $2', [customerId, conversationId])
+      await db.query(
+        `UPDATE crm_chat_conversations
+            SET crm_customer_id = $1,
+                cliente_nome = coalesce($3, cliente_nome),
+                telefone = coalesce($4, telefone),
+                updated_at = now()
+          WHERE id = $2`,
+        [customerId, conversationId, nome || null, telefone || null],
+      )
     }
 
     writeJson(res, 200, { ok: true, customer_id: customerId }, corsOrigin)

@@ -30,6 +30,29 @@ export class CommunicationOutboxRepository {
   constructor(private readonly db: AivenSqlClient) {}
 
   async create(input: CreateOutboxInput): Promise<OutboxRow> {
+    const payload = input.payload ?? {}
+    const scheduledFor = input.scheduled_for ?? new Date().toISOString()
+    const renovacaoId = typeof payload.renovacao_id === 'string' ? payload.renovacao_id : null
+    const tipo = typeof payload.tipo === 'string' ? payload.tipo : null
+
+    if (renovacaoId && tipo && tipo.startsWith('renovacao')) {
+      const existing = await this.db.query<OutboxRow>(
+        `SELECT *
+           FROM communication_outbox
+          WHERE channel = $1
+            AND to_address = $2
+            AND body = $3
+            AND payload->>'renovacao_id' = $4
+            AND payload->>'tipo' = $5
+            AND status IN ('pending', 'sent')
+            AND scheduled_for >= NOW() - INTERVAL '2 hours'
+          ORDER BY created_at DESC
+          LIMIT 1`,
+        [input.channel, input.to_address, input.body, renovacaoId, tipo],
+      )
+      if (existing.rows[0]) return existing.rows[0]
+    }
+
     const result = await this.db.query<OutboxRow>(
       `INSERT INTO communication_outbox
          (channel, provider, to_address, subject, body, payload, scheduled_for)
@@ -41,8 +64,8 @@ export class CommunicationOutboxRepository {
         input.to_address,
         input.subject ?? null,
         input.body,
-        JSON.stringify(input.payload ?? {}),
-        input.scheduled_for ?? new Date().toISOString(),
+        JSON.stringify(payload),
+        scheduledFor,
       ],
     )
     return result.rows[0]

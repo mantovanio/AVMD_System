@@ -329,17 +329,14 @@ export class ScheduleAutomationRepository {
     sourceSender?: string | null
     raw?: Record<string, unknown> | null
   }) {
-    const conversationKey = normalizeText(input.customerEmail)
-      ?? normalizeText(input.from)
-      ?? normalizeText(input.mailbox)
-
-    if (!conversationKey) {
-      return { eventId: null as string | null, customerId: null as string | null, conversationId: null as string | null }
-    }
-
     const phoneDigits = onlyDigits(input.customerPhone)
     const documentDigits = onlyDigits(input.customerDocument)
     const document = splitDocument(input.customerDocument)
+    const normalizedCustomerName = normalizeText(input.customerName)
+    const normalizedCustomerEmail = normalizeText(input.customerEmail)
+    const normalizedCustomerPhone = normalizeText(input.customerPhone)
+    const normalizedFrom = normalizeText(input.from)
+    const normalizedMailbox = normalizeText(input.mailbox)
     const body = buildScheduleInboxMessage({
       eventType: input.eventType,
       customerName: input.customerName,
@@ -355,42 +352,8 @@ export class ScheduleAutomationRepository {
       subject: input.subject,
     })
 
-    const eventResult = await this.db.query<{ id: string }>(`
-      insert into communication_events
-        (source, event_type, conversation_id, contact, payload)
-      values ($1, $2, $3, $4, $5::jsonb)
-      returning id
-    `, [
-      'email',
-      'email_received',
-      conversationKey,
-      phoneDigits ?? normalizeText(input.customerEmail) ?? conversationKey,
-      JSON.stringify({
-        source: input.source,
-        from: conversationKey,
-        to: input.mailbox ?? null,
-        subject: input.subject ?? null,
-        body,
-        content: body,
-        body_text: input.bodyText ?? null,
-        body_html: input.bodyHtml ?? null,
-        from_name: input.customerName ?? input.subject ?? conversationKey,
-        cliente_nome: input.customerName ?? input.subject ?? conversationKey,
-        sender_name: input.customerName ?? input.subject ?? conversationKey,
-        telefone: normalizeText(input.customerPhone),
-        customer_email: normalizeText(input.customerEmail),
-        customer_document: documentDigits,
-        product_name: normalizeText(input.productName),
-        pedido_numero: normalizeText(input.pedidoNumero),
-        protocolo_numero: normalizeText(input.protocoloNumero),
-        data_agendada: normalizeText(input.dataAgendada),
-        kanban_status: input.eventType === 'cancelamento' ? 'cancelou_agendamento' : 'agendado',
-        raw: input.raw ?? null,
-      }),
-    ])
-
     let customerId: string | null = null
-    if (normalizeText(input.customerEmail) || phoneDigits || documentDigits) {
+    if (normalizedCustomerEmail || phoneDigits || documentDigits) {
       const existing = await this.db.query<{ id: string }>(`
         select id
         from crm_customers
@@ -400,7 +363,7 @@ export class ScheduleAutomationRepository {
            or ($4::text is not null and regexp_replace(coalesce(cnpj, ''), '\D', '', 'g') = $4)
         order by updated_at desc
         limit 1
-      `, [normalizeText(input.customerEmail), phoneDigits, document.cpf, document.cnpj])
+      `, [normalizedCustomerEmail, phoneDigits, document.cpf, document.cnpj])
 
       if (existing.rows[0]?.id) {
         customerId = existing.rows[0].id
@@ -416,9 +379,9 @@ export class ScheduleAutomationRepository {
           where id = $1::uuid
         `, [
           customerId,
-          normalizeText(input.customerName),
-          normalizeText(input.customerPhone),
-          normalizeText(input.customerEmail),
+          normalizedCustomerName,
+          normalizedCustomerPhone,
+          normalizedCustomerEmail,
           document.cpf,
           document.cnpj,
           body,
@@ -429,9 +392,9 @@ export class ScheduleAutomationRepository {
           values ($1, $2, $3, $4, $5, $6)
           returning id
         `, [
-          normalizeText(input.customerName),
-          normalizeText(input.customerPhone),
-          normalizeText(input.customerEmail),
+          normalizedCustomerName,
+          normalizedCustomerPhone,
+          normalizedCustomerEmail,
           document.cpf,
           document.cnpj,
           body,
@@ -440,30 +403,112 @@ export class ScheduleAutomationRepository {
       }
     }
 
-    const conversationResult = await this.db.query<{ id: string }>(`
-      with target as (
-        select id
-        from crm_chat_conversations
-        where document_key = $1
-        order by updated_at desc, created_at desc
-        limit 1
-      )
-      update crm_chat_conversations c
-      set crm_customer_id = coalesce($2::uuid, c.crm_customer_id),
-          cliente_nome = coalesce($3, c.cliente_nome),
-          telefone = coalesce($4, c.telefone),
-          kanban_status = coalesce($5, c.kanban_status),
-          updated_at = now()
-      from target
-      where c.id = target.id
-      returning c.id
+    const existingConversation = await this.db.query<{ id: string; document_key: string }>(`
+      select c.id, c.document_key
+      from crm_chat_conversations c
+      left join crm_customers cust on cust.id = c.crm_customer_id
+      where ($1::uuid is not null and c.crm_customer_id = $1::uuid)
+         or ($2::text is not null and regexp_replace(coalesce(c.telefone, ''), '\D', '', 'g') = $2)
+         or ($2::text is not null and regexp_replace(coalesce(c.document_key, ''), '\D', '', 'g') = $2)
+         or ($3::text is not null and lower(coalesce(c.document_key, '')) = lower($3))
+         or ($3::text is not null and lower(coalesce(cust.email, '')) = lower($3))
+         or ($4::text is not null and regexp_replace(coalesce(cust.cpf, ''), '\D', '', 'g') = $4)
+         or ($5::text is not null and regexp_replace(coalesce(cust.cnpj, ''), '\D', '', 'g') = $5)
+      order by c.updated_at desc, c.created_at desc
+      limit 1
     `, [
-      conversationKey,
       customerId,
-      normalizeText(input.customerName),
-      normalizeText(input.customerPhone),
-      input.eventType === 'cancelamento' ? 'cancelou_agendamento' : 'agendado',
+      phoneDigits,
+      normalizedCustomerEmail ?? normalizedFrom ?? normalizedMailbox,
+      document.cpf,
+      document.cnpj,
     ])
+
+    const conversationKey = existingConversation.rows[0]?.document_key
+      ?? phoneDigits
+      ?? normalizedCustomerEmail
+      ?? normalizedFrom
+      ?? normalizedMailbox
+
+    if (!conversationKey) {
+      return { eventId: null as string | null, customerId: customerId ?? null, conversationId: null as string | null }
+    }
+
+    const eventResult = await this.db.query<{ id: string }>(`
+      insert into communication_events
+        (source, event_type, conversation_id, contact, payload)
+      values ($1, $2, $3, $4, $5::jsonb)
+      returning id
+    `, [
+      'email',
+      'email_received',
+      conversationKey,
+      phoneDigits ?? normalizedCustomerEmail ?? conversationKey,
+      JSON.stringify({
+        source: input.source,
+        from: normalizedCustomerEmail ?? normalizedFrom ?? conversationKey,
+        to: normalizedMailbox ?? null,
+        subject: input.subject ?? null,
+        body,
+        content: body,
+        body_text: input.bodyText ?? null,
+        body_html: input.bodyHtml ?? null,
+        from_name: normalizedCustomerName ?? input.subject ?? conversationKey,
+        cliente_nome: normalizedCustomerName ?? input.subject ?? conversationKey,
+        sender_name: normalizedCustomerName ?? input.subject ?? conversationKey,
+        telefone: normalizedCustomerPhone,
+        customer_email: normalizedCustomerEmail,
+        customer_document: documentDigits,
+        product_name: normalizeText(input.productName),
+        pedido_numero: normalizeText(input.pedidoNumero),
+        protocolo_numero: normalizeText(input.protocoloNumero),
+        data_agendada: normalizeText(input.dataAgendada),
+        kanban_status: input.eventType === 'cancelamento' ? 'cancelou_agendamento' : 'agendado',
+        raw: input.raw ?? null,
+      }),
+    ])
+
+    const conversationResult = existingConversation.rows[0]?.id
+      ? await this.db.query<{ id: string }>(`
+          update crm_chat_conversations
+          set crm_customer_id = coalesce($2::uuid, crm_customer_id),
+              cliente_nome = coalesce($3, cliente_nome),
+              telefone = coalesce($4, telefone),
+              kanban_status = coalesce($5, kanban_status),
+              updated_at = now()
+          where id = $1::uuid
+          returning id
+        `, [
+          existingConversation.rows[0].id,
+          customerId,
+          normalizedCustomerName,
+          normalizedCustomerPhone,
+          input.eventType === 'cancelamento' ? 'cancelou_agendamento' : 'agendado',
+        ])
+      : await this.db.query<{ id: string }>(`
+          with target as (
+            select id
+            from crm_chat_conversations
+            where document_key = $1
+            order by updated_at desc, created_at desc
+            limit 1
+          )
+          update crm_chat_conversations c
+          set crm_customer_id = coalesce($2::uuid, c.crm_customer_id),
+              cliente_nome = coalesce($3, c.cliente_nome),
+              telefone = coalesce($4, c.telefone),
+              kanban_status = coalesce($5, c.kanban_status),
+              updated_at = now()
+          from target
+          where c.id = target.id
+          returning c.id
+        `, [
+          conversationKey,
+          customerId,
+          normalizedCustomerName,
+          normalizedCustomerPhone,
+          input.eventType === 'cancelamento' ? 'cancelou_agendamento' : 'agendado',
+        ])
 
     return {
       eventId: eventResult.rows[0]?.id ?? null,
