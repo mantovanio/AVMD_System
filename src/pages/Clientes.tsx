@@ -221,21 +221,59 @@ function applyClientColumnMap(
   })
 }
 
-function parseClientCsv(raw: string) {
-  const lines = raw.replace(/^﻿/, '').trim().split(/\r?\n/)
-  if (lines.length < 2) return [] as Record<string, string>[]
-  const headers = lines[0].split(',').map(cleanImportHeader)
-  return lines.slice(1).filter(line => line.trim()).map(line => {
-    const values: string[] = []
-    let cur = ''
-    let inQuotes = false
-    for (const ch of line) {
-      if (ch === '"') inQuotes = !inQuotes
-      else if (ch === ',' && !inQuotes) { values.push(cur); cur = '' }
-      else cur += ch
+function detectCsvDelimiter(headerLine: string) {
+  const candidates = [',', ';', '\t'] as const
+  let best: string = candidates[0]
+  let bestCount = -1
+  for (const delimiter of candidates) {
+    const count = headerLine.split(delimiter).length
+    if (count > bestCount) {
+      best = delimiter
+      bestCount = count
     }
-    values.push(cur)
-    return Object.fromEntries(headers.map((header, i) => [header, String(values[i] ?? '').replace(/"/g, '').trim()]))
+  }
+  return best
+}
+
+function parseCsvLine(line: string, delimiter: string) {
+  const values: string[] = []
+  let current = ''
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"'
+        i++
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+    if (ch === delimiter && !inQuotes) {
+      values.push(current)
+      current = ''
+      continue
+    }
+    current += ch
+  }
+
+  values.push(current)
+  return values.map(value => value.trim())
+}
+
+function parseClientCsv(raw: string) {
+  const normalized = raw.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
+  const lines = normalized.split('\n')
+  if (lines.length < 2) return [] as Record<string, string>[]
+
+  const delimiter = detectCsvDelimiter(lines[0])
+  const headers = parseCsvLine(lines[0], delimiter).map(cleanImportHeader)
+
+  return lines.slice(1).filter(line => line.trim()).map(line => {
+    const values = parseCsvLine(line, delimiter)
+    return Object.fromEntries(headers.map((header, i) => [header, String(values[i] ?? '').replace(/^"|"$/g, '').trim()]))
   })
 }
 
@@ -244,7 +282,9 @@ function parseClientSpreadsheet(buffer: ArrayBuffer, fileName: string) {
     throw new Error('Arquivo muito grande. Limite de 8 MB.')
   }
   if (fileName.toLowerCase().endsWith('.csv')) {
-    return parseClientCsv(new TextDecoder('utf-8').decode(buffer))
+    const utf8 = new TextDecoder('utf-8').decode(buffer)
+    const text = utf8.includes('\uFFFD') ? new TextDecoder('latin1').decode(buffer) : utf8
+    return parseClientCsv(text)
   }
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
   const firstSheet = workbook.SheetNames[0]
