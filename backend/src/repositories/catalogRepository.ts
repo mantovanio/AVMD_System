@@ -394,6 +394,7 @@ export class CatalogRepository {
   async batchInsertCadastros(payloads: Record<string, unknown>[]) {
     const fields = ['tipo_cliente','tipo_cadastro','cpf_cnpj','nome','nome_fantasia','email','telefone','status']
     const cols = fields.join(', ')
+    const valueCols = ['id', ...fields]
     const chunkSize = 500
     let inserted = 0
 
@@ -412,11 +413,18 @@ export class CatalogRepository {
         valuesSql.push(`(${placeholders})`)
       }
 
-      await this.db.query(
-        `insert into cadastros_base (id, ${cols}) values ${valuesSql.join(', ')} on conflict (cpf_cnpj) do nothing`,
+      const result = await this.db.query(
+        `insert into cadastros_base (id, ${cols})
+         select ${valueCols.map(c => `v.${c}`).join(', ')}
+         from (values ${valuesSql.join(', ')}) as v(${valueCols.join(', ')})
+         where not exists (
+           select 1
+           from cadastros_base cb
+           where cb.cpf_cnpj = v.cpf_cnpj
+         )`,
         params,
       )
-      inserted += chunk.length
+      inserted += (result as unknown as { rowCount: number }).rowCount ?? 0
     }
 
     return { inserted }

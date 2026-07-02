@@ -45,9 +45,60 @@ export type UpdateRenovacaoInput = Partial<Omit<RenovacaoRow, 'id' | 'created_at
 export class RenovacaoRepository {
   constructor(private readonly db: AivenSqlClient) {}
 
-  async findAll(): Promise<RenovacaoRow[]> {
+  private readonly listColumns = [
+    'id',
+    'pedido',
+    'protocolo',
+    'data_vencimento',
+    'cliente',
+    'email',
+    'telefone',
+    'tipo_certificado',
+    'valor',
+    'status',
+    'renovado',
+    'observacoes',
+    'cpf',
+    'cnpj',
+    'razao_social',
+    'agr',
+    'vendedor',
+    'contador',
+    'ultimo_lembrete',
+    'created_at',
+    'updated_at',
+  ].join(', ')
+
+  async findAll(limit = 500, offset = 0): Promise<RenovacaoRow[]> {
     const result = await this.db.query<RenovacaoRow>(
-      `SELECT * FROM renovacoes WHERE deleted_at IS NULL ORDER BY data_vencimento ASC`,
+      `SELECT ${this.listColumns} FROM renovacoes
+       WHERE deleted_at IS NULL
+       ORDER BY data_vencimento ASC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset],
+    )
+    return result.rows
+  }
+  async findOperacionais(janelaDias = 30, limit = 500, offset = 0): Promise<RenovacaoRow[]> {
+    const result = await this.db.query<RenovacaoRow>(
+      `SELECT ${this.listColumns} FROM renovacoes
+       WHERE deleted_at IS NULL
+         AND data_vencimento >= (CURRENT_DATE - ($1 || ' days')::interval)
+       ORDER BY data_vencimento ASC
+       LIMIT $2 OFFSET $3`,
+      [janelaDias, limit, offset],
+    )
+    return result.rows
+  }
+
+  async findHistorico(janelaDias = 30, limit = 500, offset = 0): Promise<RenovacaoRow[]> {
+    const result = await this.db.query<RenovacaoRow>(
+      `SELECT ${this.listColumns} FROM renovacoes
+       WHERE deleted_at IS NULL
+         AND data_vencimento < (CURRENT_DATE - ($1 || ' days')::interval)
+       ORDER BY data_vencimento DESC
+       LIMIT $2 OFFSET $3`,
+      [janelaDias, limit, offset],
     )
     return result.rows
   }
