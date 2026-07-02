@@ -255,6 +255,17 @@ function isDocumentMime(value: string | null | undefined) {
   return Boolean(normalized && !isImageMime(normalized) && !isAudioMime(normalized) && !isVideoMime(normalized))
 }
 
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buffer = await blob.arrayBuffer()
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+  }
+  return btoa(binary)
+}
+
 function queueLabel(fila: string) {
   if (fila === 'renovacao') return 'Renovacao'
   if (fila === 'email') return 'Email'
@@ -1712,15 +1723,17 @@ export default function ChatInboxCRM() {
     }])
 
     try {
-      const caption = `📎 ${filename}`
-      const response = await fetch(getApiUrl('/chat/send'), {
+      const fileBase64 = await blobToBase64(file)
+      const response = await fetch(getApiUrl('/chat/send-media'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           instance_name: integration.instance_name,
-          conversation_id: `${destinationNumber}@s.whatsapp.net`,
-          content: caption,
-          lead_id: null,
+          conversation_id: selectedConversation.id,
+          destination_number: destinationNumber,
+          file_base64: fileBase64,
+          file_name: filename,
+          mime_type: finalMimeType,
           sender_name: currentHumanAgentName,
         }),
       })
