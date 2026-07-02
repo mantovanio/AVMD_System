@@ -34,7 +34,7 @@ import { applyOutgoingSignature, DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings 
 
 type QueueType = 'atendimento' | 'renovacao' | 'email' | 'agendamento'
 type DirectionType = 'incoming' | 'outgoing'
-type SenderType = 'cliente' | 'ia' | 'humano'
+type SenderType = 'cliente' | 'ia' | 'humano' | 'contact' | 'agent'
 type RecState = 'idle' | 'recording' | 'preview'
 
 interface ConversationRow {
@@ -2165,10 +2165,10 @@ export default function ChatInboxCRM() {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <h3 className="text-lg font-semibold">
-                          {selectedConversation.cliente_nome || selectedConversation.nome_crm || (selectedConversation.fila === 'email' ? selectedConversation.email_principal || selectedConversation.document_key : null) || 'Sem nome identificado'}
+                          {normalizeDisplaySenderName(selectedConversation.cliente_nome || selectedConversation.nome_crm) || (selectedConversation.fila === 'email' ? selectedConversation.email_principal || selectedConversation.document_key : null) || 'Sem nome identificado'}
                         </h3>
                         <p className="mt-1 text-sm text-slate-500">
-                          {selectedConversation.fila === 'email' ? (selectedConversation.email_principal || selectedConversation.document_key) : (selectedConversation.telefone || selectedConversation.document_key)}
+                          {contactPhone(selectedConversation)}
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2 text-xs">
@@ -3086,14 +3086,16 @@ function MessageRow({
 }) {
   const isOutgoing = message.direction === 'outgoing'
     const normalizedSenderName = normalizeDisplaySenderName(message.sender_name)
-    const senderLabel = message.sender_type === 'cliente'
-      ? 'Cliente'
-      : message.sender_type === 'ia'
+    const isContactMsg = message.sender_type === 'cliente' || message.sender_type === 'contact' || !isOutgoing
+    const isIaMsg = message.sender_type === 'ia'
+    const senderLabel = isContactMsg
+      ? normalizeDisplaySenderName(conversation?.nome_crm || conversation?.cliente_nome) || 'Cliente'
+      : isIaMsg
         ? 'IA Clara'
         : normalizedSenderName || fallbackHumanName || 'Humano'
-    const detailLabel = message.sender_type === 'cliente'
+    const detailLabel = isContactMsg
       ? conversation ? contactPhone(conversation) : 'Canal de entrada'
-      : message.sender_type === 'ia'
+      : isIaMsg
         ? conversation?.whatsapp_instance || 'Automacao'
         : normalizedSenderName || fallbackHumanName || conversation?.agente_atual || 'Humano'
     const isImage = isImageMime(message.mime_type)
