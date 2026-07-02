@@ -413,11 +413,12 @@ export async function handleChatRoutes(
            lower(btrim(coalesce($6::text, ''))) AS vinculo_nome_norm,
            $7::text AS ponto_atendimento_id
        )
-       SELECT conv.*
-       FROM crm_chat_admin_view conv
-       CROSS JOIN viewer
-       WHERE ${buildConversationVisibilitySql('conv')}
-       ORDER BY conv.ultima_interacao_em DESC NULLS LAST`,
+        SELECT conv.*,
+               EXISTS (SELECT 1 FROM crm_chat_messages WHERE conversation_id = conv.id AND direction = 'outgoing') AS tem_resposta
+        FROM crm_chat_admin_view conv
+        CROSS JOIN viewer
+        WHERE ${buildConversationVisibilitySql('conv')}
+        ORDER BY conv.ultima_interacao_em DESC NULLS LAST`,
       [
         viewer.id,
         viewer.perfil,

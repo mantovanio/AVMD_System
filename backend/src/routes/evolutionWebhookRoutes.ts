@@ -83,11 +83,21 @@ function extractMessageContent(message: JsonRecord | null): { content: string | 
   const quotedContent = pickString(quotedPayload, 'text', 'caption') || (typeof quotedEntry?.[1] === 'string' ? quotedEntry[1] : '')
 
   const fallbackContent = typeof entry?.[1] === 'string' ? entry[1] : ''
-  const content = pickString(payload, 'text', 'caption', 'conversation') || fallbackContent || null
+  let content = pickString(payload, 'text', 'caption', 'conversation') || fallbackContent || null
   const mimeType = pickString(payload, 'mimetype') || null
   const fileName = pickString(payload, 'fileName', 'title') || null
   const mediaUrl = pickString(payload, 'url', 'mediaUrl') || null
   const quotedId = pickString(context, 'stanzaId') || null
+
+  if (!content && message) {
+    for (const [, value] of Object.entries(message)) {
+      const record = asRecord(value)
+      if (record) {
+        const text = pickString(record, 'text', 'caption', 'conversation')
+        if (text) { content = text; break }
+      }
+    }
+  }
 
   return {
     content,

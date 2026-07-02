@@ -51,6 +51,7 @@ interface ConversationRow {
   ultima_mensagem: string | null
   ultima_mensagem_direcao: DirectionType | null
   ultima_interacao_em: string
+  tem_resposta?: boolean
   created_at: string
   crm_customer_id: string | null
   nome_crm: string | null
@@ -1888,6 +1889,7 @@ export default function ChatInboxCRM() {
       || (humanFilter === 'ia' && !item.atendimento_humano && !humanOverrideIds.includes(item.id))
     const matchesAguardando = !aguardandoFilter || (
       item.ultima_mensagem_direcao === 'incoming'
+      && !item.tem_resposta
       && minutesSince(item.ultima_interacao_em) >= 8
     )
     return matchesQueue && matchesHuman && matchesAguardando
@@ -1916,6 +1918,7 @@ export default function ChatInboxCRM() {
       humano: activeConversations.filter(item => item.atendimento_humano || humanOverrideIds.includes(item.id)).length,
       aguardando: activeConversations.filter(item => {
         if (item.ultima_mensagem_direcao !== 'incoming') return false
+        if (item.tem_resposta) return false
         const waitingMinutes = minutesSince(item.ultima_interacao_em)
         return waitingMinutes >= 8
       }).length,
@@ -3087,7 +3090,8 @@ function MessageRow({
     const isAudio = isAudioMime(message.mime_type)
     const isVideo = isVideoMime(message.mime_type)
     const isDocument = isDocumentMime(message.mime_type)
-    const mediaLabel = message.file_name || message.mensagem || (isAudio ? 'Audio' : isImage ? 'Imagem' : isVideo ? 'Video' : 'Arquivo')
+    const hasMedia = isImage || isAudio || isVideo || isDocument
+    const mediaLabel = message.file_name || message.mensagem || (isAudio ? 'Audio' : isImage ? 'Imagem' : isVideo ? 'Video' : isDocument ? 'Arquivo' : '')
     const resolvedMediaUrl = resolveChatMediaUrl(message.media_url, conversation?.whatsapp_instance)
   
     return (
