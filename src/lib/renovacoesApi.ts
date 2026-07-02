@@ -96,6 +96,22 @@ export async function cancelarFollowUps(renovacaoId: string): Promise<void> {
   await apiFetch(`/renovacoes/${renovacaoId}/followups`, { method: 'DELETE' })
 }
 
+// ── Importar para cadastros_base ─────────────────────────────
+
+export async function importRenovacoesToBase(ids?: string[]): Promise<{
+  criados: number; jaExistem: number; erros: number
+  detalhes: { criados: { cpf_cnpj: string; nome: string }[]; jaExistem: { cpf_cnpj: string; nome: string }[]; erros: { cliente: string; motivo: string }[] }
+}> {
+  const data = await apiFetch<{
+    ok: boolean; criados: number; jaExistem: number; erros: number
+    detalhes: { criados: { cpf_cnpj: string; nome: string }[]; jaExistem: { cpf_cnpj: string; nome: string }[]; erros: { cliente: string; motivo: string }[] }
+  }>('/renovacoes/import-to-base', {
+    method: 'POST',
+    body: JSON.stringify(ids?.length ? { ids } : {}),
+  })
+  return data
+}
+
 // ── WhatsApp ──────────────────────────────────────────────────
 
 export async function sendWhatsApp(phone: string, body: string): Promise<{ ok: boolean; error?: string }> {

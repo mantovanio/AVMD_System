@@ -103,7 +103,7 @@ const server = createServer(async (req, res) => {
     const handledIntegrations = await handleExternalIntegrationRoutes(req, res, externalIntegrationRepository, config.corsOrigin)
     if (handledIntegrations) return
 
-    const handledRenovacoes = await handleRenovacaoRoutes(req, res, renovacaoRepository, leadRepository, communicationOutboxRepository, config.corsOrigin)
+    const handledRenovacoes = await handleRenovacaoRoutes(req, res, renovacaoRepository, leadRepository, communicationOutboxRepository, catalogRepository, config.corsOrigin)
     if (handledRenovacoes) return
 
     const handledTemplates = await handleCommunicationTemplateRoutes(req, res, communicationTemplateRepository, config.corsOrigin)

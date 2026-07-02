@@ -29,6 +29,7 @@ import {
   criarLeadKanban as apiCriarLead,
   cancelarFollowUps as apiCancelarFollowUps,
   sendWhatsApp as apiSendWhatsApp,
+  importRenovacoesToBase as apiImportToBase,
   enrichRenovacao,
 } from '@/lib/renovacoesApi'
 import { useAuth } from '@/contexts/AuthContext'
@@ -342,6 +343,11 @@ export default function Renovacoes() {
   const [csvRows, setCsvRows]       = useState<Record<string, string>[]>([])
   const [showImport, setShowImport] = useState(false)
   const [importing, setImporting]   = useState(false)
+  const [importToBase, setImportToBase] = useState<{
+    criados: number; jaExistem: number; erros: number
+    detalhes: { criados: { cpf_cnpj: string; nome: string }[]; jaExistem: { cpf_cnpj: string; nome: string }[]; erros: { cliente: string; motivo: string }[] }
+  } | null>(null)
+  const [importingToBase, setImportingToBase] = useState(false)
   const [editingContato, setEditingContato] = useState<RenovacaoV2 | null>(null)
   const [contatoForm, setContatoForm] = useState<ContatoForm>(EMPTY_CONTATO)
   const [savingContato, setSavingContato] = useState(false)
@@ -1048,6 +1054,26 @@ export default function Renovacoes() {
     }
   }
 
+  async function handleImportToBase() {
+    setImportingToBase(true)
+    setImportToBase(null)
+    try {
+      const ids = [...selectedIds]
+      const result = await apiImportToBase(ids.length ? ids : undefined)
+      setImportToBase({
+        criados: result.criados,
+        jaExistem: result.jaExistem,
+        erros: result.erros,
+        detalhes: result.detalhes,
+      })
+      showMsg(`${result.criados} cliente(s) importado(s) para a base!`)
+    } catch (err) {
+      showMsg('Erro ao importar para base: ' + String(err), 'err')
+    } finally {
+      setImportingToBase(false)
+    }
+  }
+
   // ── derived state ────────────────────────────────────────────
 
   const listagem = lista.filter(r => {
@@ -1138,6 +1164,51 @@ export default function Renovacoes() {
               </button>
               <button type="button" onClick={() => { setShowImport(false); setCsvRows([]) }}
                 className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import-to-Base Result Modal */}
+      {importToBase && (
+        <div className="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-800 shrink-0">
+              <h3 className="font-semibold text-gray-800 dark:text-gray-200">Resultado da Importação para Base</h3>
+              <button type="button" title="Fechar" onClick={() => setImportToBase(null)}>
+                <X size={18} className="text-gray-400" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 overflow-auto">
+              <div className="flex gap-4">
+                <div className="flex-1 bg-green-50 dark:bg-green-900/20 rounded-xl px-4 py-3 text-center">
+                  <p className="text-2xl font-bold text-green-600">{importToBase.criados}</p>
+                  <p className="text-xs text-green-600 dark:text-green-400">Criados</p>
+                </div>
+                <div className="flex-1 bg-blue-50 dark:bg-blue-900/20 rounded-xl px-4 py-3 text-center">
+                  <p className="text-2xl font-bold text-blue-600">{importToBase.jaExistem}</p>
+                  <p className="text-xs text-blue-600 dark:text-blue-400">Já existentes</p>
+                </div>
+                <div className="flex-1 bg-red-50 dark:bg-red-900/20 rounded-xl px-4 py-3 text-center">
+                  <p className="text-2xl font-bold text-red-600">{importToBase.erros}</p>
+                  <p className="text-xs text-red-600 dark:text-red-400">Erros</p>
+                </div>
+              </div>
+
+              {importToBase.detalhes.erros.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-red-600 mb-1">Registros ignorados (sem CPF/CNPJ)</p>
+                  <div className="max-h-28 overflow-y-auto space-y-1">
+                    {importToBase.detalhes.erros.map((e, i) => (
+                      <div key={i} className="text-xs text-red-500 bg-red-50 dark:bg-red-900/10 px-3 py-1 rounded-lg">{e.cliente} — {e.motivo}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end p-5 border-t border-gray-200 dark:border-gray-800 shrink-0">
+              <button type="button" onClick={() => setImportToBase(null)}
+                className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Fechar</button>
             </div>
           </div>
         </div>
@@ -1795,6 +1866,11 @@ export default function Renovacoes() {
             <button type="button" disabled={bulkSending} onClick={() => void bulkKanban()}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500 hover:bg-purple-400 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
               <Users size={12} /> → Kanban
+            </button>
+            <button type="button" disabled={importingToBase} onClick={() => void handleImportToBase()}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
+              {importingToBase ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+              {importingToBase ? 'Importando…' : 'Importar p/ Base'}
             </button>
             <button type="button" disabled={bulkSending} onClick={() => void bulkExcluirRenovacoes()}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500 hover:bg-rose-400 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">

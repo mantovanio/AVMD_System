@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { RenovacaoRepository, CreateRenovacaoInput, UpdateRenovacaoInput } from '../repositories/renovacaoRepository.js'
 import type { LeadRepository, CreateLeadInput } from '../repositories/leadRepository.js'
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
+import type { CatalogRepository } from '../repositories/catalogRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
 
 export async function handleRenovacaoRoutes(
@@ -10,6 +11,7 @@ export async function handleRenovacaoRoutes(
   renovacaoRepo: RenovacaoRepository,
   leadRepo: LeadRepository,
   outboxRepo: CommunicationOutboxRepository,
+  catalogRepo: CatalogRepository,
   corsOrigin: string,
 ): Promise<boolean> {
   const url = req.url ?? ''
@@ -50,6 +52,49 @@ export async function handleRenovacaoRoutes(
     }
     const count = await renovacaoRepo.bulkCreate(body.records)
     writeJson(res, 201, { ok: true, inserted: count }, corsOrigin)
+    return true
+  }
+
+  // POST /api/renovacoes/import-to-base — upsert registros selecionados em cadastros_base
+  if (method === 'POST' && url === '/api/renovacoes/import-to-base') {
+    const body = await readJson<{ ids?: string[] }>(req)
+    const rows = body?.ids?.length
+      ? await renovacaoRepo.findByIds(body.ids)
+      : await renovacaoRepo.findAll()
+    const criados: { cpf_cnpj: string; nome: string }[] = []
+    const jaExistem: { cpf_cnpj: string; nome: string }[] = []
+    const erros: { cliente: string; motivo: string }[] = []
+
+    const cpfs = rows.map(r => (r.cpf || r.cnpj || '').replace(/\D/g, '')).filter(Boolean)
+    const uniqCpfs = [...new Set(cpfs)]
+    const existentes = await catalogRepo.getExistingCpfs(uniqCpfs)
+    const existSet = new Set(existentes)
+
+    const toInsert: Record<string, unknown>[] = []
+    for (const r of rows) {
+      const doc = (r.cpf || r.cnpj || '').replace(/\D/g, '')
+      if (!doc) { erros.push({ cliente: r.cliente, motivo: 'Sem CPF nem CNPJ' }); continue }
+      const nomeBase = r.razao_social || r.cliente
+      if (existSet.has(doc)) { jaExistem.push({ cpf_cnpj: doc, nome: nomeBase }); continue }
+      toInsert.push({
+        tipo_cliente: r.cnpj ? 'pj' : 'pf',
+        tipo_cadastro: 'cliente',
+        cpf_cnpj: doc,
+        nome: nomeBase,
+        nome_fantasia: r.cliente || null,
+        email: r.email || null,
+        telefone: r.telefone ? r.telefone.replace(/\D/g, '') : null,
+        status: 'ativo',
+      })
+    }
+
+    if (toInsert.length > 0) {
+      await catalogRepo.batchUpsertCadastros(toInsert)
+    }
+
+    criados.push(...toInsert.map(t => ({ cpf_cnpj: String(t.cpf_cnpj ?? ''), nome: String(t.nome ?? '') })))
+
+    writeJson(res, 200, { ok: true, criados: criados.length, jaExistem: jaExistem.length, erros: erros.length, detalhes: { criados, jaExistem, erros } }, corsOrigin)
     return true
   }
 

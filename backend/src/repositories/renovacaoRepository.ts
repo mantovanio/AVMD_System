@@ -52,6 +52,16 @@ export class RenovacaoRepository {
     return result.rows
   }
 
+  async findByIds(ids: string[]): Promise<RenovacaoRow[]> {
+    if (!ids.length) return []
+    const phs = ids.map((_, i) => `$${i + 1}`).join(', ')
+    const result = await this.db.query<RenovacaoRow>(
+      `SELECT * FROM renovacoes WHERE id IN (${phs}) AND deleted_at IS NULL`,
+      ids,
+    )
+    return result.rows
+  }
+
   async findPendentesN8n(): Promise<RenovacaoRow[]> {
     const result = await this.db.query<RenovacaoRow>(
       `SELECT * FROM renovacoes
