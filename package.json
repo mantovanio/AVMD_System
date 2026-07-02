@@ -10,6 +10,8 @@
     "start:backend": "node backend/dist/server.js",
     "lint": "eslint .",
     "preview": "vite preview",
+    "db:apply-sql": "node scripts/apply-sql-file.mjs",
+    "db:apply-sql:dry-run": "node scripts/apply-sql-file.mjs --dry-run",
     "n8n:import": "node scripts/import-n8n-workflows.mjs"
   },
   "dependencies": {

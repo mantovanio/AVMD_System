@@ -79,6 +79,30 @@ Status backend e edge:
 & 'C:\Program Files\Git\usr\bin\ssh.exe' root@147.79.111.76 'systemctl status avmd-backend --no-pager; curl -fsS http://127.0.0.1:8787/healthz; curl -fsS -H "Host: api.certiid.mantovan.com.br" http://127.0.0.1/healthz'
 ```
 
+Aplicar migracao SQL versionada no banco do backend:
+
+```powershell
+npm run db:apply-sql -- backend/sql/026_fix_legacy_email_schedule_phone.sql
+```
+
+Preview sem aplicar:
+
+```powershell
+npm run db:apply-sql:dry-run -- backend/sql/026_fix_legacy_email_schedule_phone.sql
+```
+
+## Padrao para migracoes SQL
+
+- Toda migracao nova deve ficar versionada em `backend/sql/`.
+- O fluxo padrao nao e mais `psql` manual colado no terminal.
+- Use sempre `npm run db:apply-sql -- <arquivo.sql>`.
+- Para validar antes, use `npm run db:apply-sql:dry-run -- <arquivo.sql>`.
+- O script le `DATABASE_URL` de `backend/.env.local`.
+- O script registra aplicacoes na tabela `avmd_sql_migrations`.
+- Se a mesma migracao ja tiver sido aplicada com o mesmo checksum, ele ignora com seguranca.
+- Se o nome do arquivo ja existir com checksum diferente, ele bloqueia por seguranca.
+- `--force` so deve ser usado em caso excepcional e consciente.
+
 ## Publicacao e rotas reais
 
 - Dominio do frontend: `https://crm.certiid.mantovan.com.br`

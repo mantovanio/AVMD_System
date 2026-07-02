@@ -25,6 +25,8 @@ Outras pastas relevantes:
 - `npm run lint`: executa o ESLint no projeto
 - `npm run build:backend`: compila o backend (`backend/`) via `tsc -p backend/tsconfig.json`
 - `npm run start:backend`: roda o backend compilado (`backend/dist/server.js`)
+- `npm run db:apply-sql -- backend/sql/026_fix_legacy_email_schedule_phone.sql`: aplica uma migracao SQL versionada no banco configurado em `backend/.env.local`
+- `npm run db:apply-sql:dry-run -- backend/sql/026_fix_legacy_email_schedule_phone.sql`: valida uma migracao sem aplicar nada no banco
 - `npm run n8n:import`: importa/atualiza workflows n8n a partir de `n8n/` (`scripts/import-n8n-workflows.mjs`)
 
 Antes de subir alteracoes, rode pelo menos `npm run lint` e `npm run build`.
