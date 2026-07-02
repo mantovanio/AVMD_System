@@ -12,6 +12,7 @@ import { PermissionsProvider, usePermissions } from '@/contexts/PermissionsConte
 import { getRuntimeConfig } from '@/lib/runtimeConfig'
 
 const Login = lazy(() => import('@/pages/Login'))
+const PortalCliente = lazy(() => import('@/pages/PortalCliente'))
 const UpdatePassword = lazy(() => import('@/pages/UpdatePassword'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const Comercial = lazy(() => import('@/pages/Comercial'))
@@ -35,7 +36,7 @@ const MODULE_PAGE_MAP: Partial<Record<string, Page[]>> = {
 }
 
 // Páginas não controladas por módulo (visíveis se o perfil permitir)
-const UNMODULATED_PAGES: Page[] = ['configuracoes']
+const UNMODULATED_PAGES: Page[] = ['portal', 'configuracoes']
 
 function getModuleEnabledPages(enabledModules: Record<string, boolean>): Page[] {
   const pages: Page[] = [...UNMODULATED_PAGES]
@@ -291,6 +292,7 @@ function AppContent() {
 
         <main className="flex-1 overflow-auto">
           <Suspense fallback={<PageLoader />}>
+            {activePage === 'portal'        && <PortalCliente />}
             {activePage === 'dashboard'     && <Dashboard />}
             {activePage === 'comercial'     && <Comercial />}
             {activePage === 'clientes'      && <Clientes />}

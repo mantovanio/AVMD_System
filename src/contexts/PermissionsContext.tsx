@@ -26,6 +26,7 @@ type PermissionsContextValue = {
 }
 
 const MODULO_TO_PAGE: Record<string, Page> = {
+  portal: 'portal',
   dashboard: 'dashboard',
   comercial: 'comercial',
   clientes: 'clientes',
@@ -39,6 +40,7 @@ const MODULO_TO_PAGE: Record<string, Page> = {
 }
 
 const PAGE_TO_MODULO: Record<Page, string> = {
+  portal: 'portal',
   dashboard: 'dashboard',
   comercial: 'comercial',
   clientes: 'clientes',

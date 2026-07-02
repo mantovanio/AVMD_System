@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   CreditCard,
   Loader2,
+  Lock,
   Mail,
   MapPin,
   Phone,
@@ -70,6 +71,10 @@ type FormState = {
     telefone: string
   }
   titularMesmoFaturamento: boolean
+  acesso: {
+    senha: string
+    confirmar_senha: string
+  }
   forma_pagamento_id: string
   observacoes: string
 }
@@ -105,6 +110,10 @@ const INITIAL_FORM: FormState = {
     telefone: '',
   },
   titularMesmoFaturamento: true,
+  acesso: {
+    senha: '',
+    confirmar_senha: '',
+  },
   forma_pagamento_id: '',
   observacoes: '',
 }
@@ -161,6 +170,8 @@ function requiredFieldOrder(form: FormState) {
     'comprador.nome',
     'comprador.email',
     'comprador.telefone',
+    'acesso.senha',
+    'acesso.confirmar_senha',
     'comprador.cep',
     'comprador.logradouro',
     'comprador.numero',
@@ -186,6 +197,8 @@ function getValueByFieldId(form: FormState, id: string, titularEfetivo: ReturnTy
     case 'comprador.nome': return form.comprador.nome
     case 'comprador.email': return form.comprador.email
     case 'comprador.telefone': return form.comprador.telefone
+    case 'acesso.senha': return form.acesso.senha
+    case 'acesso.confirmar_senha': return form.acesso.confirmar_senha
     case 'comprador.cep': return form.comprador.cep
     case 'comprador.logradouro': return form.comprador.logradouro
     case 'comprador.numero': return form.comprador.numero
@@ -216,6 +229,10 @@ function validateForm(form: FormState, itemSelecionado: LojaItemRow | null) {
   if (!form.comprador.email.trim()) errors['comprador.email'] = 'Informe o e-mail.'
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.comprador.email.trim())) errors['comprador.email'] = 'Informe um e-mail válido.'
   if (phoneDigits.length < 10) errors['comprador.telefone'] = 'Informe um telefone com WhatsApp válido.'
+  if (!form.acesso.senha.trim()) errors['acesso.senha'] = 'Crie uma senha para o portal do cliente.'
+  else if (form.acesso.senha.trim().length < 8) errors['acesso.senha'] = 'A senha precisa ter pelo menos 8 caracteres.'
+  if (!form.acesso.confirmar_senha.trim()) errors['acesso.confirmar_senha'] = 'Confirme a senha de acesso.'
+  else if (form.acesso.senha !== form.acesso.confirmar_senha) errors['acesso.confirmar_senha'] = 'As senhas informadas não conferem.'
   if (cepDigits.length !== 8) errors['comprador.cep'] = 'Informe um CEP válido.'
   if (!form.comprador.logradouro.trim()) errors['comprador.logradouro'] = 'Informe o endereço.'
   if (!form.comprador.numero.trim()) errors['comprador.numero'] = 'Informe o número.'
@@ -748,6 +765,9 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
         pagamento: {
           forma_pagamento_id: form.forma_pagamento_id,
         },
+        acesso: {
+          senha: form.acesso.senha,
+        },
         agendamento: selectedSlot ? {
           agente_registro_id: selectedSlot.agente_registro_id,
           ponto_atendimento_id: selectedSlot.ponto_atendimento_id,
@@ -756,7 +776,8 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
         observacoes: form.observacoes.trim() || null,
       })
 
-      setCheckoutSuccess(result.message ?? 'Compra concluída com sucesso.')
+      const mensagens = [result.message, result.access_message].filter(Boolean)
+      setCheckoutSuccess(mensagens.join(' ') || 'Compra concluída com sucesso.')
       if (result.redirect_url) {
         window.open(result.redirect_url, '_blank', 'noopener,noreferrer')
       }
@@ -1031,6 +1052,34 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     highlight={nextFieldId === 'comprador.telefone'}
                     icon={Phone}
                     onFocus={() => setFocusedField('comprador.telefone')}
+                    onBlurField={() => setFocusedField(null)}
+                  />
+                  <GuidedField
+                    id="acesso.senha"
+                    label="Senha de acesso *"
+                    value={form.acesso.senha}
+                    onChange={value => setForm(prev => ({ ...prev, acesso: { ...prev.acesso, senha: value } }))}
+                    type="password"
+                    helper="Esta senha será usada pelo cliente para entrar e acompanhar pedido, pagamento e videoconferência."
+                    error={fieldErrors['acesso.senha']}
+                    focused={focusedField === 'acesso.senha'}
+                    highlight={nextFieldId === 'acesso.senha'}
+                    icon={Lock}
+                    onFocus={() => setFocusedField('acesso.senha')}
+                    onBlurField={() => setFocusedField(null)}
+                  />
+                  <GuidedField
+                    id="acesso.confirmar_senha"
+                    label="Confirmar senha *"
+                    value={form.acesso.confirmar_senha}
+                    onChange={value => setForm(prev => ({ ...prev, acesso: { ...prev.acesso, confirmar_senha: value } }))}
+                    type="password"
+                    helper="Repita a mesma senha para concluir a criação automática do acesso."
+                    error={fieldErrors['acesso.confirmar_senha']}
+                    focused={focusedField === 'acesso.confirmar_senha'}
+                    highlight={nextFieldId === 'acesso.confirmar_senha'}
+                    icon={Lock}
+                    onFocus={() => setFocusedField('acesso.confirmar_senha')}
                     onBlurField={() => setFocusedField(null)}
                   />
                 </div>
@@ -1437,7 +1486,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
             >
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <WarningCard text={paymentRuntime.aviso_checkout} />
-                <WarningCard text="Se você não agendar agora, será necessário voltar depois para escolher um horário antes do atendimento." />
+                <WarningCard text="Se você não agendar agora, será necessário voltar depois ao portal do cliente para escolher um horário antes do atendimento." />
                 <WarningCard text="Informe e-mail e telefone com WhatsApp válidos para a equipe entrar em contato no momento da validação." />
               </div>
 
@@ -1604,6 +1653,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     </div>
   )
 }
+
 
 
 

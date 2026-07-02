@@ -1,3 +1,4 @@
+import { createClerkClient } from '@clerk/backend'
 import type {
   CheckoutContextApiResponse,
   CheckoutContextApiRequest,
@@ -6,13 +7,21 @@ import type {
   CheckoutSubmitResponse,
 } from '../contracts/checkoutContract.js'
 import type { CheckoutRepository } from '../repositories/checkoutRepository.js'
+import type { ProfileRepository } from '../repositories/profileRepository.js'
 import { CheckoutPaymentService } from './checkoutPaymentService.js'
 import { isValidCpf, isValidCpfCnpj, isValidEmail, isValidPhone, isValidUf } from '../utils/validation.js'
+
+type PortalAccessResult = {
+  status: 'created' | 'existing' | 'linked'
+  message: string
+}
 
 export class CheckoutService {
   constructor(
     private readonly repository: CheckoutRepository,
     private readonly paymentService: CheckoutPaymentService = new CheckoutPaymentService(repository),
+    private readonly profileRepository?: ProfileRepository,
+    private readonly clerkSecretKey?: string,
   ) {}
 
   async handleContext(body: CheckoutContextApiRequest): Promise<CheckoutContextApiResponse | CheckoutLookupCustomerApiResponse> {
@@ -76,6 +85,7 @@ export class CheckoutService {
     const tabela = await this.repository.findPriceTable(loja.tabela_preco_id)
     const cadastro = await this.repository.upsertCheckoutCustomer(body)
     const titular = await this.repository.upsertCheckoutHolder(body)
+    const access = await this.ensurePortalAccess(body)
     const venda = await this.repository.createCheckoutSale({
       payload: body,
       loja,
@@ -110,11 +120,11 @@ export class CheckoutService {
     const chargeLink = charge.chargeUrl ?? null
     const message = charge.ok
       ? (charge.mocked
-          ? 'Pedido criado com sucesso. Cobrança gerada em modo de testes.'
+          ? 'Pedido criado com sucesso. Cobranca gerada em modo de testes.'
           : chargeLink
             ? 'Pedido criado com sucesso. Abra o link para concluir o pagamento.'
-            : 'Pedido criado com sucesso. A cobrança foi registrada e aguarda retorno do gateway.')
-      : 'Pedido criado, mas a cobrança não pôde ser gerada automaticamente. Nossa equipe enviará o link de pagamento.'
+            : 'Pedido criado com sucesso. A cobranca foi registrada e aguarda retorno do gateway.')
+      : 'Pedido criado, mas a cobranca nao pode ser gerada automaticamente. Nossa equipe enviara o link de pagamento.'
 
     return {
       ok: true,
@@ -123,6 +133,8 @@ export class CheckoutService {
       protocolo_numero: venda.protocolo_numero,
       redirect_url: chargeLink,
       payment_status: charge.status,
+      access_status: access.status,
+      access_message: access.message,
     }
   }
 
@@ -137,6 +149,8 @@ export class CheckoutService {
     if (!isValidEmail(body.titular.email)) return 'Email do titular invalido.'
     if (!isValidPhone(body.titular.telefone)) return 'Telefone do titular invalido.'
     if (!body.pagamento.forma_pagamento_id.trim()) return 'Forma de pagamento obrigatoria.'
+    if (!body.acesso?.senha?.trim()) return 'Defina a senha de acesso do cliente.'
+    if (body.acesso.senha.trim().length < 8) return 'A senha de acesso precisa ter pelo menos 8 caracteres.'
     if (!body.fiscal.logradouro.trim()) return 'Logradouro obrigatorio.'
     if (!body.fiscal.numero.trim()) return 'Numero obrigatorio.'
     if (!body.fiscal.bairro.trim()) return 'Bairro obrigatorio.'
@@ -151,4 +165,95 @@ export class CheckoutService {
 
     return null
   }
+
+  private async ensurePortalAccess(body: CheckoutSubmitRequest): Promise<PortalAccessResult> {
+    if (!this.profileRepository || !this.clerkSecretKey) {
+      return {
+        status: 'linked',
+        message: 'Pedido criado. O acesso do portal sera liberado pela equipe.',
+      }
+    }
+
+    const email = String(body.comprador.email ?? '').trim().toLowerCase()
+    const nome = String(body.comprador.nome ?? '').trim()
+    const senha = String(body.acesso?.senha ?? '')
+    const documento = onlyDigits(body.comprador.cpf_cnpj)
+    const telefone = onlyDigits(body.comprador.telefone)
+    const cidade = String(body.fiscal.cidade ?? '').trim() || null
+
+    const existingProfile = await this.profileRepository.findByEmail(email)
+    const clerkUserId = existingProfile?.clerk_user_id
+      ? existingProfile.clerk_user_id
+      : await this.findOrCreateClerkUser({ email, nome, senha })
+
+    if (existingProfile) {
+      await this.profileRepository.update(existingProfile.id, {
+        clerk_user_id: clerkUserId,
+        nome,
+        email,
+        status: 'ativo',
+        perfil: existingProfile.perfil || 'usuario',
+        tipo_vinculo: existingProfile.tipo_vinculo || 'usuario_comum',
+        documento,
+        telefone,
+        cidade,
+        permissoes: existingProfile.permissoes?.length ? existingProfile.permissoes : ['portal'],
+      })
+
+      return clerkUserId && !existingProfile.clerk_user_id
+        ? {
+            status: 'linked',
+            message: 'Seu acesso ao portal foi vinculado automaticamente a esta compra.',
+          }
+        : {
+            status: 'existing',
+            message: 'Seu acesso ja existia. Depois da compra, entre com o mesmo e-mail e senha para acompanhar o pedido.',
+          }
+    }
+
+    await this.profileRepository.createProfile({
+      clerk_user_id: clerkUserId,
+      nome,
+      email,
+      perfil: 'usuario',
+      tipo_vinculo: 'usuario_comum',
+      permissoes: ['portal'],
+      status: 'ativo',
+      documento,
+      telefone,
+      cidade,
+    })
+
+    return {
+      status: 'created',
+      message: 'Seu acesso ao portal foi criado com sucesso. Use o e-mail e a senha informados para acompanhar o pedido.',
+    }
+  }
+
+  private async findOrCreateClerkUser(input: { email: string; nome: string; senha: string }) {
+    const clerkClient = createClerkClient({ secretKey: this.clerkSecretKey })
+    const existing = await clerkClient.users.getUserList({ emailAddress: [input.email], limit: 1 })
+    const existingUser = existing.data[0]
+    if (existingUser?.id) return existingUser.id
+
+    const [firstNameRaw, ...rest] = input.nome.split(/\s+/)
+    const firstName = firstNameRaw || 'Usuario'
+    const lastName = rest.join(' ').trim() || undefined
+    const usernameBase = input.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '')
+    const username = ((usernameBase || 'usuario') + Date.now().toString(36)).slice(0, 24)
+
+    const clerkUser = await clerkClient.users.createUser({
+      emailAddress: [input.email],
+      username,
+      password: input.senha,
+      firstName,
+      lastName,
+    })
+
+    return clerkUser.id
+  }
+}
+
+function onlyDigits(value: string) {
+  return String(value ?? '').replace(/\D/g, '')
 }

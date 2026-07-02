@@ -61,17 +61,32 @@ export class ProfileRepository {
     tipo_vinculo: string
     permissoes: string[]
     status?: string
+    documento?: string | null
+    telefone?: string | null
+    cidade?: string | null
   }): Promise<ProfileRow> {
     const result = await this.db.query<ProfileRow>(
-      `INSERT INTO profiles (clerk_user_id, nome, email, perfil, tipo_vinculo, permissoes, status)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+      `INSERT INTO profiles (clerk_user_id, nome, email, perfil, tipo_vinculo, permissoes, status, documento, telefone, cidade)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10)
        RETURNING *`,
-      [input.clerk_user_id, input.nome, input.email, input.perfil, input.tipo_vinculo, JSON.stringify(input.permissoes ?? []), input.status ?? 'ativo'],
+      [
+        input.clerk_user_id,
+        input.nome,
+        input.email,
+        input.perfil,
+        input.tipo_vinculo,
+        JSON.stringify(input.permissoes ?? []),
+        input.status ?? 'ativo',
+        input.documento ?? null,
+        input.telefone ?? null,
+        input.cidade ?? null,
+      ],
     )
     return result.rows[0]
   }
 
   async update(id: string, input: Partial<{
+    clerk_user_id: string | null
     nome: string
     email: string | null
     perfil: string
@@ -94,6 +109,7 @@ export class ProfileRepository {
       params.push(val)
     }
 
+    if (input.clerk_user_id !== undefined) field('clerk_user_id', input.clerk_user_id)
     if (input.nome !== undefined) field('nome', input.nome)
     if (input.email !== undefined) field('email', input.email)
     if (input.perfil !== undefined) field('perfil', input.perfil)

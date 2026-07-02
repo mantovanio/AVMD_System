@@ -493,6 +493,7 @@ export type ProfilePermissao = {
 }
 
 export type PermissaoPagina =
+  | 'portal'
   | 'dashboard'
   | 'comercial'
   | 'clientes'

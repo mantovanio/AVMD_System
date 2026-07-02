@@ -37,6 +37,7 @@ import { cn } from '@/lib/utils'
 import type { AgencyConfig } from '@/lib/agencyConfig'
 
 export type Page =
+  | 'portal'
   | 'dashboard'
   | 'comercial'
   | 'clientes'
@@ -99,6 +100,7 @@ const MENU_GROUPS: SidebarGroup[] = [
     id: 'operacao',
     label: 'Operação',
     items: [
+      { id: 'portal',     icon: UserSearch,      label: 'Meu Portal' },
       { id: 'dashboard',  icon: LayoutDashboard, label: 'Dashboard'  },
       { id: 'comercial',  icon: ShoppingCart,    label: 'Comercial'  },
       { id: 'renovacoes', icon: RefreshCw,       label: 'Renovações' },

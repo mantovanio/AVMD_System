@@ -2,6 +2,7 @@ import type { Page } from '@/components/Sidebar'
 import type { PerfilAcesso, PermissaoPagina, Profile } from '@/types'
 
 export const PAGE_LABELS: Record<Page, string> = {
+  portal: 'Meu Portal',
   dashboard: 'Dashboard',
   comercial: 'Comercial',
   clientes: 'Clientes',
@@ -15,6 +16,7 @@ export const PAGE_LABELS: Record<Page, string> = {
 }
 
 export const PAGE_PERMISSIONS: { id: PermissaoPagina; label: string; description: string }[] = [
+  { id: 'portal', label: 'Meu Portal', description: 'Acompanhar pedidos, pagamentos e agendamentos' },
   { id: 'dashboard', label: 'Dashboard', description: 'Ver indicadores principais' },
   { id: 'comercial', label: 'Comercial', description: 'Clientes, vendas, agenda e certificados' },
   { id: 'clientes', label: 'Clientes', description: 'Consultar base de clientes e histórico comercial' },
@@ -31,7 +33,7 @@ export const DEFAULT_PERMISSIONS: Record<PerfilAcesso, PermissaoPagina[]> = {
   admin: PAGE_PERMISSIONS.map(p => p.id),
   agente_registro: ['dashboard', 'comercial', 'clientes', 'chat', 'renovacoes'],
   vendedor: ['dashboard', 'comercial', 'clientes', 'parceiros', 'relatorios'],
-  usuario: ['dashboard', 'relatorios', 'chat'],
+  usuario: ['dashboard', 'relatorios', 'chat', 'portal'],
 }
 
 const RESTRICTED_PAGE_PROFILES: Partial<Record<PermissaoPagina, PerfilAcesso[]>> = {

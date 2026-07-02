@@ -64,6 +64,9 @@ export type CheckoutSubmitRequest = {
   pagamento: {
     forma_pagamento_id: string
   }
+  acesso: {
+    senha: string
+  }
   agendamento: {
     agente_registro_id: string
     ponto_atendimento_id: string
@@ -80,4 +83,6 @@ export type CheckoutSubmitResponse = {
   protocolo_numero?: string | null
   redirect_url?: string | null
   payment_status?: string | null
+  access_status?: 'created' | 'existing' | 'linked'
+  access_message?: string | null
 }

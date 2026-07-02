@@ -15,6 +15,8 @@ import { handleCommercialRoutes } from './routes/commercialRoutes.js'
 import { handleIntegrationRoutes } from './routes/integrationRoutes.js'
 import { handleProfileRoutes } from './routes/profileRoutes.js'
 import { handleAdminUsersRoutes } from './routes/adminUsersRoutes.js'
+import { PortalRepository } from './repositories/portalRepository.js'
+import { handlePortalRoutes } from './routes/portalRoutes.js'
 import { handlePublicAuthRoutes } from './routes/publicAuthRoutes.js'
 import { HierarquiaRepository } from './repositories/hierarquiaRepository.js'
 import { handleHierarquiaRoutes } from './routes/hierarquiaRoutes.js'
@@ -68,7 +70,8 @@ const permissoesRepository = new PermissoesRepository(db)
 const integrationRegistry = createIntegrationRegistry(config)
 const integrationEventProcessor = new IntegrationEventProcessor(integrationEventRepository, integrationRegistry)
 const checkoutPaymentService = new CheckoutPaymentService(checkoutRepository)
-const service = new CheckoutService(checkoutRepository, checkoutPaymentService)
+const portalRepository = new PortalRepository(db, checkoutRepository, commercialRepository)
+const service = new CheckoutService(checkoutRepository, checkoutPaymentService, profileRepository, config.clerkSecretKey)
 
 const server = createServer(async (req, res) => {
   try {
@@ -90,6 +93,9 @@ const server = createServer(async (req, res) => {
 
     const handledPublicAuth = await handlePublicAuthRoutes(req, res, profileRepository, config.clerkSecretKey, config.corsOrigin)
     if (handledPublicAuth) return
+
+    const handledPortal = await handlePortalRoutes(req, res, portalRepository, profileRepository, config.corsOrigin)
+    if (handledPortal) return
 
     const handledHierarquia = await handleHierarquiaRoutes(req, res, hierarquiaRepository, config.corsOrigin)
     if (handledHierarquia) return
@@ -184,5 +190,6 @@ const server = createServer(async (req, res) => {
 server.listen(config.port, () => {
   process.stdout.write(`Backend Aiven do checkout escutando na porta ${config.port}\n`)
 })
+
 
 
