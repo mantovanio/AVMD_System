@@ -1,0 +1,435 @@
+{
+  "name": "4- suporteCertiID | CertiID",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "NomeLead"
+            },
+            {
+              "name": "Duvida"
+            },
+            {
+              "name": "whatsaapp_lead"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        1376
+      ],
+      "id": "a78fa42f-c75d-485e-9bda-39d754f58b73",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "const days = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];\nconst now = new Date();\nconst pad = (n) => String(n).padStart(2, '0');\nlet result = `Hoje é ${days[now.getDay()]} ${pad(now.getDate())}/${pad(now.getMonth()+1)}/${String(now.getFullYear()).slice(2)} às ${pad(now.getHours())}:${pad(now.getMinutes())}\\n`;\nfor (let i = 1; i <= 6; i++) {\n  const future = new Date(now);\n  future.setDate(now.getDate() + i);\n  let label = '';\n  if (i === 1) label = `Amanhã é ${days[future.getDay()]} ${pad(future.getDate())}/${pad(future.getMonth()+1)}/${String(future.getFullYear()).slice(2)}`;\n  else if (i === 2) label = `Depois de amanhã é ${days[future.getDay()]} ${pad(future.getDate())}/${pad(future.getMonth()+1)}/${String(future.getFullYear()).slice(2)}`;\n  else label = `A próxima ${days[future.getDay()]} será dia ${pad(future.getDate())}/${pad(future.getMonth()+1)}/${String(future.getFullYear()).slice(2)}`;\n  result += `${label}\\n`;\n}\nreturn [{ json: { resultado: result.trim() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        1376
+      ],
+      "id": "7b369aee-5b62-4c11-91a1-958f5b979140",
+      "name": "proximos_dias"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "sup-assign-nome",
+              "name": "NomeLead",
+              "value": "=Nome do lead: {{ $('When Executed by Another Workflow').item.json.NomeLead }}",
+              "type": "string"
+            },
+            {
+              "id": "sup-assign-msg",
+              "name": "msgLead",
+              "value": "={{ $('When Executed by Another Workflow').item.json.Duvida }}",
+              "type": "string"
+            },
+            {
+              "id": "sup-assign-wpp",
+              "name": "whatsaapp_lead",
+              "value": "={{ $('When Executed by Another Workflow').item.json.whatsaapp_lead }}",
+              "type": "string"
+            },
+            {
+              "id": "sup-assign-dias",
+              "name": "proximosDias",
+              "value": "={{ $json.resultado }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1168,
+        1376
+      ],
+      "id": "287135ba-d984-44e4-8340-53921f898340",
+      "name": "setarInfo"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('setarInfo').item.json.msgLead }}\n\n{{ $('setarInfo').item.json.NomeLead }}",
+        "options": {
+          "systemMessage": "# IDENTIDADE\nVocê é o agente de suporte técnico especializado da CertiID. Atua nos bastidores para resolver problemas técnicos dos clientes.\n\n# FUNÇÃO\n- Diagnosticar e orientar sobre problemas técnicos com certificados digitais.\n- Saber quando escalar para atendimento humano.\n\n# BASE DE CONHECIMENTO\n\n## E-MAIL NÃO RECEBIDO\n- Solicite: CPF e nome completo do titular\n- Oriente a verificar pasta de spam/lixo eletrônico\n\n## VIDEOCONFERÊNCIA — FLUXO OBRIGATÓRIO (uma pergunta por vez)\n\nPASSO 1: Já teve certificado digital antes?\n- SIM (renovação): vídeo liberado. Perguntar certificadora anterior. Documentos: RG ou CNH + câmera + internet.\n- NÃO (primeiro certificado): ir para PASSO 2\n\nPASSO 2: Tem CNH atual e válida?\n- SIM: tem app CNH Digital instalado? Se sim → vídeo liberado. Se não → orientar a baixar e exportar a versão digital.\n- CNH vencida ou sem CNH → ir para PASSO 3\n\nPASSO 3: Verificar biometria PS Bio da Certisign (equipe CertiID consulta pelo CPF)\n- TEM biometria → vídeo liberado\n- NÃO tem biometria → SOMENTE PRESENCIAL\n\nREGRA ABSOLUTA: NUNCA confirme vídeo sem percorrer este fluxo. Primeiro certificado + sem CNH + sem biometria = PRESENCIAL OBRIGATÓRIO.\n\n### RENOVAÇÃO (já teve certificado antes)\n- Pode validar por videoconferência normalmente com RG ou CNH\n\n## INSTALAÇÃO TOKEN A3\n- Driver SafeSign Standard; conecte token APENAS após instalar driver\n\n## eCAC\n- Precisa certificado A1 ou A3 válido instalado. Senha CertiID: Certiid1106\n\n## QUANDO ESCALAR: Revogação, situações não cobertas, cliente pede humano\nNesses casos responda APENAS: \"Vou transferir você para nosso time de suporte especializado que vai resolver isso diretamente.\"\n\n# FORMATO: técnico, objetivo, sem markdown, sem saudações"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.8,
+      "position": [
+        1520,
+        1392
+      ],
+      "id": "1f883f5a-4a1b-4d09-8807-88cc56ca06a8",
+      "name": "SuporteCertiID_GPT",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1456,
+        1568
+      ],
+      "id": "1786ff76-5007-4557-87e8-794318c03ad2",
+      "name": "GPT_LLM",
+      "credentials": {
+        "openAiApi": {
+          "id": "RYxuxbSIGjvz8FoO",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('setarInfo').item.json.whatsaapp_lead }}",
+        "contextWindowLength": 20
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        1584,
+        1568
+      ],
+      "id": "5dd534a4-cff4-4d3b-beb7-d3844252e63a",
+      "name": "Memoria_GPT",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "if2-check",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1744,
+        1392
+      ],
+      "id": "454ef7a8-b14f-4df6-9547-adfa1744d517",
+      "name": "GPT_OK?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r2",
+              "name": "response",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1936,
+        1280
+      ],
+      "id": "ea60e178-aeec-455d-bea9-69d2944169ff",
+      "name": "Resp_GPT"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('setarInfo').item.json.msgLead }}\n\n{{ $('setarInfo').item.json.NomeLead }}",
+        "options": {
+          "systemMessage": "# SUPORTE CERTID\nVocê é agente de suporte técnico da CertiID. Resolva problemas técnicos com certificados digitais.\n\nVIDEOCONFERÊNCIA — FLUXO OBRIGATÓRIO (uma pergunta por vez)\n\nPASSO 1: Já teve certificado digital antes?\n- SIM (renovação): vídeo liberado. Perguntar certificadora anterior. Documentos: RG ou CNH + câmera + internet.\n- NÃO (primeiro certificado): ir para PASSO 2\n\nPASSO 2: Tem CNH atual e válida?\n- SIM: tem app CNH Digital instalado? Se sim → vídeo liberado. Se não → orientar a baixar e exportar a versão digital.\n- CNH vencida ou sem CNH → ir para PASSO 3\n\nPASSO 3: Verificar biometria PS Bio da Certisign (equipe CertiID consulta pelo CPF)\n- TEM biometria → vídeo liberado\n- NÃO tem biometria → SOMENTE PRESENCIAL\n\nREGRA ABSOLUTA: NUNCA confirme vídeo sem percorrer este fluxo. Primeiro certificado + sem CNH + sem biometria = PRESENCIAL OBRIGATÓRIO.\n\n\nRENOVAÇÃO: videoconferência normal com RG ou CNH.\n\nTOKEN A3: instale driver SafeSign antes de conectar o token.\n\neCAC: precisa certificado válido instalado. Senha CertiID: Certiid1106.\n\nESCALAR PARA HUMANO: revogação, situações não cobertas, cliente pede humano → responda APENAS: 'Vou transferir você para nosso time de suporte especializado que vai resolver isso diretamente.'\n\nFORMATO: técnico, sem markdown, sem saudações."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.8,
+      "position": [
+        1936,
+        1488
+      ],
+      "id": "2289b067-4c4b-4c0a-8ea9-833ec78068d7",
+      "name": "SuporteCertiID_OpenRouter"
+    },
+    {
+      "parameters": {
+        "model": "anthropic/claude-opus-4.5",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1872,
+        1664
+      ],
+      "id": "d6d7bc2f-8b08-4a8c-91f4-2143e5c57675",
+      "name": "OpenRouter_LLM",
+      "credentials": {
+        "openRouterApi": {
+          "id": "cUGfQ5LWuMpSbI3V",
+          "name": "OpenRouter | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('setarInfo').item.json.whatsaapp_lead }}",
+        "contextWindowLength": 20
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        2048,
+        1664
+      ],
+      "id": "388cebc2-cb88-48e0-9597-06654fedb61c",
+      "name": "Memoria_OpenRouter",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r3",
+              "name": "response",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2208,
+        1488
+      ],
+      "id": "b6d5c0c7-1b6a-4a44-93ac-186aad7fcc1a",
+      "name": "Resp_OpenRouter"
+    },
+    {
+      "parameters": {
+        "content": "# SUPORTE CERTID\nFallback: Gemini → GPT → OpenRouter",
+        "height": 852,
+        "width": 1800,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        704,
+        1120
+      ],
+      "typeVersion": 1,
+      "id": "02148f4f-aa1e-4fc7-aa27-c8de8a2e71a2",
+      "name": "Sticky SuporteCertiID1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "proximos_dias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "proximos_dias": {
+      "main": [
+        [
+          {
+            "node": "setarInfo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "setarInfo": {
+      "main": [
+        [
+          {
+            "node": "SuporteCertiID_GPT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT_LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "SuporteCertiID_GPT",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoria_GPT": {
+      "ai_memory": [
+        [
+          {
+            "node": "SuporteCertiID_GPT",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SuporteCertiID_GPT": {
+      "main": [
+        [
+          {
+            "node": "GPT_OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT_OK?": {
+      "main": [
+        [
+          {
+            "node": "Resp_GPT",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SuporteCertiID_OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter_LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "SuporteCertiID_OpenRouter",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoria_OpenRouter": {
+      "ai_memory": [
+        [
+          {
+            "node": "SuporteCertiID_OpenRouter",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SuporteCertiID_OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Resp_OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "7abf1bdd-eb27-4494-ab2b-5474edbc0632",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2c7c80362368f5797d33ff9abfd48f4da88cc2118b57c4bbe52975d23ba68e85"
+  },
+  "nodeGroups": [],
+  "id": "rkDZlzDiCwnRUniv",
+  "tags": []
+}

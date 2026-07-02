@@ -1,0 +1,147 @@
+{
+  "name": "6- consultaCRM | CertiID",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "# CONSULTA CRM CERTID\nBusca dados do cliente pelo número de WhatsApp.\nRetorna nome, status e histórico de observações do lead.",
+        "height": 468,
+        "width": 596,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        784,
+        592
+      ],
+      "typeVersion": 1,
+      "id": "56c3d5c7-472d-4c8a-b141-bf68aa6b4016",
+      "name": "Sticky ConsultaCRM"
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "whatsapp_lead"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        528,
+        832
+      ],
+      "id": "5c3dd429-a5fc-48f7-ab51-f67f30455cf2",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM crm_customers WHERE document_key = {{ $json.whatsapp_lead }} LIMIT 1",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        880,
+        832
+      ],
+      "id": "fcccf28e-2561-4c4a-96ac-3372fdbffc89",
+      "name": "BuscarCliente",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nif (!data || !data.document_key) {\n  return [{ json: { encontrado: false, response: 'Cliente não encontrado no CRM. Este é possivelmente o primeiro contato.' } }];\n}\n\nconst nome = data.nome || 'não informado';\nconst status = data.contato_status || 'desconhecido';\nconst obs = data.observacoes || '';\n\nlet response = `Cliente encontrado no CRM.\\nNome: ${nome}\\nStatus atual: ${status}`;\nif (obs) {\n  response += `\\nHistórico: ${obs}`;\n} else {\n  response += '\\nSem histórico de observações registrado.';\n}\n\nreturn [{ json: { encontrado: true, nome, status, observacoes: obs, response } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        832
+      ],
+      "id": "60549210-620f-4979-97de-01aaaf3e9d35",
+      "name": "FormatarResposta"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "crm-resp-001",
+              "name": "response",
+              "value": "={{ $json.response }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1504,
+        832
+      ],
+      "id": "00dcd7b4-4dbd-43ff-aa75-a2745fe24491",
+      "name": "response"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "BuscarCliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BuscarCliente": {
+      "main": [
+        [
+          {
+            "node": "FormatarResposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FormatarResposta": {
+      "main": [
+        [
+          {
+            "node": "response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0813f60c-1c81-44f1-a782-19ca54bcad40",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2c7c80362368f5797d33ff9abfd48f4da88cc2118b57c4bbe52975d23ba68e85"
+  },
+  "nodeGroups": [],
+  "id": "ToJS0Kpr756Hqf9L",
+  "tags": []
+}

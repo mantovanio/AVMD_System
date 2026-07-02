@@ -1,0 +1,435 @@
+{
+  "name": "3- renovaCertiID | CertiID",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "NomeLead"
+            },
+            {
+              "name": "Duvida"
+            },
+            {
+              "name": "whatsaapp_lead"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        1104,
+        1376
+      ],
+      "id": "306cf37f-fa11-44bf-9494-8c510aa43d38",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "content": "# RENOVA CERTID\nFallback: Gemini → GPT → OpenRouter\nConsulta catalogo_ia no Supabase.",
+        "height": 868,
+        "width": 1568,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1536,
+        1152
+      ],
+      "typeVersion": 1,
+      "id": "44e50810-ad0e-4a55-9109-3f748bd5e9a3",
+      "name": "Sticky RenovaCertiID"
+    },
+    {
+      "parameters": {
+        "jsCode": "const days = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];\nconst now = new Date();\nconst pad = (n) => String(n).padStart(2, '0');\nlet result = `Hoje é ${days[now.getDay()]} ${pad(now.getDate())}/${pad(now.getMonth()+1)}/${String(now.getFullYear()).slice(2)} às ${pad(now.getHours())}:${pad(now.getMinutes())}\\n`;\nfor (let i = 1; i <= 6; i++) {\n  const future = new Date(now);\n  future.setDate(now.getDate() + i);\n  let label = '';\n  if (i === 1) label = `Amanhã é ${days[future.getDay()]} ${pad(future.getDate())}/${pad(future.getMonth()+1)}/${String(future.getFullYear()).slice(2)}`;\n  else if (i === 2) label = `Depois de amanhã é ${days[future.getDay()]} ${pad(future.getDate())}/${pad(future.getMonth()+1)}/${String(future.getFullYear()).slice(2)}`;\n  else label = `A próxima ${days[future.getDay()]} será dia ${pad(future.getDate())}/${pad(future.getMonth()+1)}/${String(future.getFullYear()).slice(2)}`;\n  result += `${label}\\n`;\n}\nreturn [{ json: { resultado: result.trim() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1616,
+        1376
+      ],
+      "id": "856dec47-55f5-4b4c-bb6a-357125a46abc",
+      "name": "proximos_dias"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ren-assign-nome",
+              "name": "NomeLead",
+              "value": "=Nome do lead: {{ $('When Executed by Another Workflow').item.json.NomeLead }}",
+              "type": "string"
+            },
+            {
+              "id": "ren-assign-msg",
+              "name": "msgLead",
+              "value": "={{ $('When Executed by Another Workflow').item.json.Duvida }}",
+              "type": "string"
+            },
+            {
+              "id": "ren-assign-wpp",
+              "name": "whatsaapp_lead",
+              "value": "={{ $('When Executed by Another Workflow').item.json.whatsaapp_lead }}",
+              "type": "string"
+            },
+            {
+              "id": "ren-assign-dias",
+              "name": "proximosDias",
+              "value": "={{ $json.resultado }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1824,
+        1376
+      ],
+      "id": "ab554eb8-1adc-474c-a3f4-1894af54e3bb",
+      "name": "setarInfo"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('setarInfo').item.json.msgLead }}\n\n{{ $('setarInfo').item.json.NomeLead }}",
+        "options": {
+          "systemMessage": "# AGENTE DE VENDAS CERTID\nSem markdown, sem saudações."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.8,
+      "position": [
+        2096,
+        1392
+      ],
+      "id": "455aed56-5a92-47ad-a3bf-03c145cee6f5",
+      "name": "RenovaCertiID_GPT",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2048,
+        1600
+      ],
+      "id": "e0878cfc-0b14-4778-83d0-bf97ae0306ed",
+      "name": "GPT_LLM",
+      "credentials": {
+        "openAiApi": {
+          "id": "RYxuxbSIGjvz8FoO",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('setarInfo').item.json.whatsaapp_lead }}",
+        "contextWindowLength": 50
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        2160,
+        1568
+      ],
+      "id": "ec697e0b-24af-40e3-a1a5-0d6f63164e5e",
+      "name": "Memoria_GPT",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "if2-ren",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2352,
+        1392
+      ],
+      "id": "0064d2c0-a127-42e4-a6df-bc35d8db9660",
+      "name": "GPT_OK?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r2",
+              "name": "response",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2624,
+        1312
+      ],
+      "id": "8a56da73-ea3f-4732-bf58-d61afbb9e11f",
+      "name": "Resp_GPT"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('setarInfo').item.json.msgLead }}\n\n{{ $('setarInfo').item.json.NomeLead }}",
+        "options": {
+          "systemMessage": "# AGENTE DE VENDAS CERTID\nSem markdown, sem saudações."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.8,
+      "position": [
+        2512,
+        1488
+      ],
+      "id": "02c2a459-6877-4df2-a178-b09d265ef44c",
+      "name": "RenovaCertiID_OpenRouter"
+    },
+    {
+      "parameters": {
+        "model": "anthropic/claude-3.5-haiku",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        2432,
+        1712
+      ],
+      "id": "935e2960-dd28-444b-a419-e867b77b34e5",
+      "name": "OpenRouter_LLM",
+      "credentials": {
+        "openRouterApi": {
+          "id": "cUGfQ5LWuMpSbI3V",
+          "name": "OpenRouter | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('setarInfo').item.json.whatsaapp_lead }}",
+        "contextWindowLength": 50
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        2576,
+        1664
+      ],
+      "id": "024ff8e8-954a-428b-93ce-7bb5edb1758d",
+      "name": "Memoria_OpenRouter",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r3",
+              "name": "response",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2816,
+        1488
+      ],
+      "id": "c63db340-19d1-4dbd-ad8c-339ec122b565",
+      "name": "Resp_OpenRouter"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "proximos_dias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "proximos_dias": {
+      "main": [
+        [
+          {
+            "node": "setarInfo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "setarInfo": {
+      "main": [
+        [
+          {
+            "node": "RenovaCertiID_GPT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT_LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "RenovaCertiID_GPT",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoria_GPT": {
+      "ai_memory": [
+        [
+          {
+            "node": "RenovaCertiID_GPT",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RenovaCertiID_GPT": {
+      "main": [
+        [
+          {
+            "node": "GPT_OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT_OK?": {
+      "main": [
+        [
+          {
+            "node": "Resp_GPT",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "RenovaCertiID_OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter_LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "RenovaCertiID_OpenRouter",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoria_OpenRouter": {
+      "ai_memory": [
+        [
+          {
+            "node": "RenovaCertiID_OpenRouter",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RenovaCertiID_OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Resp_OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "faef454c-9148-4090-a8d4-e68f9cdf85bf",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2c7c80362368f5797d33ff9abfd48f4da88cc2118b57c4bbe52975d23ba68e85"
+  },
+  "nodeGroups": [],
+  "id": "aN0eUHkjrLcwrLTy",
+  "tags": []
+}

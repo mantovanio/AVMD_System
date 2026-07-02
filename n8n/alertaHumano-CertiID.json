@@ -1,0 +1,269 @@
+{
+  "name": "5- alertaHumano | CertiID",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "# ALERTA HUMANO - CERTID\nDisparado quando Clara transfere para atendimento humano.\nEnvia alerta + 2 reforços a cada 10 min para o número da empresa.",
+        "height": 436,
+        "width": 1768,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        0,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "b20aeb57-d9b9-4a95-894e-8c9d0c680ebc",
+      "name": "Sticky Alerta"
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "NomeLead"
+            },
+            {
+              "name": "whatsapp_lead"
+            },
+            {
+              "name": "assunto"
+            },
+            {
+              "name": "canal"
+            },
+            {
+              "name": "urgencia"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        128,
+        240
+      ],
+      "id": "2ed05393-084e-439c-8a35-2e529460f9a2",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "const nome     = $input.first().json.NomeLead    || 'Não identificado';\nconst numero   = $input.first().json.whatsapp_lead || 'Não informado';\nconst assunto  = $input.first().json.assunto       || 'Não especificado';\nconst canal    = $input.first().json.canal         || 'WhatsApp CertiID';\nconst urgRaw   = ($input.first().json.urgencia || '').toLowerCase();\n\nconst urgente  = urgRaw.includes('alta') || urgRaw.includes('urgent');\nconst icone    = urgente ? '🚨' : '⚠️';\nconst tag      = urgente ? 'ALTA' : 'NORMAL';\n\nconst formatNum = (n) => {\n  const d = String(n).replace(/\\D/g, '');\n  return d.startsWith('55') ? d : '55' + d;\n};\n\nconst alerta1 = `${icone} TRANSFERÊNCIA PARA SUPORTE\\n\\n` +\n  `👤 Cliente: ${nome}\\n` +\n  `📱 Número: +${formatNum(numero)}\\n` +\n  `📲 Canal: ${canal}\\n` +\n  `📋 Assunto: ${assunto}\\n` +\n  `⚡ Urgência: ${tag}\\n\\n` +\n  `Retorne o contato o quanto antes.\\n` +\n  `⏰ Sem resposta? Reforço em 10 minutos.`;\n\nconst alerta2 = `⚠️ 1º REFORÇO — SEM RETORNO\\n\\n` +\n  `👤 ${nome}\\n` +\n  `📱 +${formatNum(numero)}\\n` +\n  `📋 ${assunto}\\n\\n` +\n  `O cliente ainda aguarda atendimento!\\n` +\n  `⏰ Novo reforço em 10 minutos se não houver retorno.`;\n\nconst alerta3 = `🚨 2º REFORÇO — URGENTE\\n\\n` +\n  `👤 ${nome}\\n` +\n  `📱 +${formatNum(numero)}\\n` +\n  `📋 ${assunto}\\n\\n` +\n  `Cliente há 20 minutos aguardando atendimento.\\n` +\n  `Por favor, entre em contato imediatamente!`;\n\nreturn [{ json: {\n  numero_empresa: '551132800484',\n  alerta1, alerta2, alerta3\n}}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        240
+      ],
+      "id": "9d0d6a85-2aef-4af1-b873-92d878be730b",
+      "name": "montarMensagens"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mantovan.com.br/message/sendText/atendimento",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "9BBBEF7E35A5-45F2-9749-E44FAB6EF5E2"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.numero_empresa }}\",\n  \"text\": \"{{ $json.alerta1 }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        608,
+        240
+      ],
+      "id": "35c0d1f0-4c39-4d75-9285-2222ac8d737f",
+      "name": "enviarAlerta1"
+    },
+    {
+      "parameters": {
+        "amount": 10,
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        848,
+        240
+      ],
+      "id": "a68e1517-fb4b-4051-8294-157094b18928",
+      "name": "aguardar10min_1",
+      "webhookId": "alerta-wait1-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mantovan.com.br/message/sendText/atendimento",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "9BBBEF7E35A5-45F2-9749-E44FAB6EF5E2"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $('montarMensagens').item.json.numero_empresa }}\",\n  \"text\": \"{{ $('montarMensagens').item.json.alerta2 }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1088,
+        240
+      ],
+      "id": "0a4ccb67-ecb3-4588-86c5-62431cc4372c",
+      "name": "enviarAlerta2"
+    },
+    {
+      "parameters": {
+        "amount": 10,
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1328,
+        240
+      ],
+      "id": "57bbb28b-d1bc-416e-a712-714db223b9b8",
+      "name": "aguardar10min_2",
+      "webhookId": "alerta-wait2-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mantovan.com.br/message/sendText/atendimento",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "9BBBEF7E35A5-45F2-9749-E44FAB6EF5E2"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $('montarMensagens').item.json.numero_empresa }}\",\n  \"text\": \"{{ $('montarMensagens').item.json.alerta3 }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1568,
+        240
+      ],
+      "id": "b287c5c6-e57b-4230-9871-553ce02f3284",
+      "name": "enviarAlerta3"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "montarMensagens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "montarMensagens": {
+      "main": [
+        [
+          {
+            "node": "enviarAlerta1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "enviarAlerta1": {
+      "main": [
+        [
+          {
+            "node": "aguardar10min_1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "aguardar10min_1": {
+      "main": [
+        [
+          {
+            "node": "enviarAlerta2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "enviarAlerta2": {
+      "main": [
+        [
+          {
+            "node": "aguardar10min_2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "aguardar10min_2": {
+      "main": [
+        [
+          {
+            "node": "enviarAlerta3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "1aa3424d-1034-4301-b8a3-ec5b45d2e9ad",
+  "meta": {
+    "instanceId": "2c7c80362368f5797d33ff9abfd48f4da88cc2118b57c4bbe52975d23ba68e85"
+  },
+  "nodeGroups": [],
+  "id": "uR5bajJTM5RicJyd",
+  "tags": []
+}

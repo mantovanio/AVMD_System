@@ -1,0 +1,977 @@
+{
+  "name": "3- CRM | CertiID",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "mensagem_lead"
+            },
+            {
+              "name": "whatsapp_lead"
+            },
+            {
+              "name": "crm_conversation_id"
+            },
+            {
+              "name": "crm_contact_id"
+            },
+            {
+              "name": "instance"
+            },
+            {
+              "name": "numero_receptor"
+            },
+            {
+              "name": "cliente_nome"
+            },
+            {
+              "name": "resposta_ia"
+            },
+            {
+              "name": "atendimento_humano",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -48,
+        944
+      ],
+      "id": "3ccf290d-d9d5-4d64-900b-6e4f41eb0434",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "content": "# Puxar Histórico da conversa",
+        "height": 580,
+        "width": 460,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        3088,
+        944
+      ],
+      "typeVersion": 1,
+      "id": "63ffe3cc-30d6-44ed-8387-113a94a75435",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "content": "# Zera os campos do Follow up e muda o Status para \"conversando\"",
+        "height": 788,
+        "width": 1672,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1408,
+        736
+      ],
+      "typeVersion": 1,
+      "id": "24320569-e2f5-41e6-84c7-d08042e9c9fd",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "# Gatilho vem do SDR / Chatwoot",
+        "height": 500,
+        "width": 360,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -240,
+        784
+      ],
+      "typeVersion": 1,
+      "id": "76057a07-6de2-4c88-bab2-98d8a8e4365c",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "# Setar ID e Whatsapp do lead",
+        "height": 500,
+        "width": 300,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        128,
+        768
+      ],
+      "typeVersion": 1,
+      "id": "77a8e85d-309a-4fea-848c-91a29d3e95a7",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "# Resumo da Conversa",
+        "height": 660,
+        "width": 564,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        3568,
+        864
+      ],
+      "typeVersion": 1,
+      "id": "d12da55d-e84a-4efd-a4fd-699d4d3b9ef0",
+      "name": "Sticky Note10"
+    },
+    {
+      "parameters": {
+        "content": "# Verifica se o usuário existe no Banco de dados.",
+        "height": 520,
+        "width": 400,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        448,
+        784
+      ],
+      "typeVersion": 1,
+      "id": "dc52e101-54d7-49f7-baad-b10217791ec3",
+      "name": "Sticky Note23"
+    },
+    {
+      "parameters": {
+        "content": "# Atualiza tabela CRM",
+        "height": 496,
+        "width": 608
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        4160,
+        864
+      ],
+      "typeVersion": 1,
+      "id": "777848a8-a913-474f-bfea-a07cc3d520cc",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "# Cadastra ele no banco de dados e coloca o status como \"conversando\"",
+        "height": 568,
+        "width": 512,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        864,
+        784
+      ],
+      "typeVersion": 1,
+      "id": "37601686-9f3f-4b12-902b-5c6e79abb04e",
+      "name": "Sticky Note24"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "sw-existe",
+                    "leftValue": "={{ $json.document_key }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEmpty",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Existe"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "sw-naoexi",
+                    "leftValue": "={{ $json.document_key }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "empty",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Não existe"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        704,
+        992
+      ],
+      "id": "9721d22f-e9ae-4914-86e8-2b2eced7d5bb",
+      "name": "Switch_Cliente"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE crm_customers SET contato_status = 'conversando', follow_up_1 = NULL, follow_up_2 = NULL, follow_up_3 = NULL, updated_at = NOW() WHERE document_key = {{ $('setar_informacoes1').item.json.whatsapp_lead }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1472,
+        912
+      ],
+      "id": "503bb4a3-664c-49e4-a9ec-4052fb0b258b",
+      "name": "AtualizarStatusCliente",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_customers (document_key, telefone_principal, nome, contato_status, created_at) VALUES ({{ $('setar_informacoes1').item.json.whatsapp_lead }}, {{ $('setar_informacoes1').item.json.whatsapp_lead }}, {{ $('setar_informacoes1').item.json.cliente_nome }}, 'conversando', {{ $now }}) RETURNING id",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1072,
+        1072
+      ],
+      "id": "ba4d48af-6ee8-41cc-9581-f394e9ceb532",
+      "name": "CriarCliente",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1664,
+        1072
+      ],
+      "id": "c33465c4-4611-4ee0-b92b-e23469e55c35",
+      "name": "Merge_Cliente"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM crm_chat_conversations WHERE document_key = {{ $('setar_informacoes1').item.json.whatsapp_lead }} LIMIT 1",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1824,
+        1072
+      ],
+      "id": "06219e76-32f5-44cc-88f1-c1094130898b",
+      "name": "PuxarConversa",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "sw-conv-existe",
+                    "leftValue": "={{ $json.id }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEmpty",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Existe"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "sw-conv-nova",
+                    "leftValue": "={{ $json.id }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "empty",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Nova"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2016,
+        1072
+      ],
+      "id": "3298708f-6e9a-43ed-8617-3c44d325d69e",
+      "name": "SwitchConversa"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE crm_chat_conversations SET cliente_nome = {{ $('setar_informacoes1').item.json.cliente_nome }}, whatsapp_instance = {{ $('setar_informacoes1').item.json.instance }}, numero_receptor = {{ $('setar_informacoes1').item.json.numero_receptor }}, fila = {{ $('setar_informacoes1').item.json.fila }}, kanban_status = 'conversando', atendimento_humano = {{ $('setar_informacoes1').item.json.atendimento_humano }}, ultima_interacao_em = {{ $now }}, updated_at = NOW() WHERE document_key = {{ $('setar_informacoes1').item.json.whatsapp_lead }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2176,
+        944
+      ],
+      "id": "2bcf766f-ab43-46f1-9e12-01f928dccb75",
+      "name": "AtualizarConversa",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_chat_conversations (document_key, telefone, cliente_nome, whatsapp_instance, numero_receptor, fila, kanban_status, atendimento_humano, ultima_interacao_em) VALUES ({{ $('setar_informacoes1').item.json.whatsapp_lead }}, {{ $('setar_informacoes1').item.json.whatsapp_lead }}, {{ $('setar_informacoes1').item.json.cliente_nome }}, {{ $('setar_informacoes1').item.json.instance }}, {{ $('setar_informacoes1').item.json.numero_receptor }}, {{ $('setar_informacoes1').item.json.fila }}, 'conversando', {{ $('setar_informacoes1').item.json.atendimento_humano }}, {{ $now }}) RETURNING id",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2176,
+        1184
+      ],
+      "id": "61718be7-9ffb-4bfb-9f5e-871815a7f45c",
+      "name": "CriarConversa",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2400,
+        1072
+      ],
+      "id": "da838ed3-87bb-4e88-a167-03b5cd0e8228",
+      "name": "MergeConversa"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_chat_messages (conversation_id, document_key, direction, sender_type, mensagem) VALUES ({{ $json.id }}, {{ $('setar_informacoes1').item.json.whatsapp_lead }}, 'incoming', 'cliente', {{ $('setar_informacoes1').item.json.mensagem_lead }}) RETURNING id",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2592,
+        960
+      ],
+      "id": "e5ed3470-b24d-495f-8928-0d728f9c6d6b",
+      "name": "RegistrarMensagemCliente",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_chat_messages (conversation_id, document_key, direction, sender_type, mensagem) VALUES ({{ $('MergeConversa').item.json.id }}, {{ $('setar_informacoes1').item.json.whatsapp_lead }}, 'outgoing', {{ $('setar_informacoes1').item.json.atendimento_humano ? 'humano' : 'ia' }}, {{ $('setar_informacoes1').item.json.resposta_ia }}) RETURNING id",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2592,
+        1184
+      ],
+      "id": "525ee6e6-a502-4e11-9e66-adc2752db229",
+      "name": "RegistrarMensagemIA",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2784,
+        1072
+      ],
+      "id": "fcbb0d40-0a2c-4c11-8f58-05c790d1fa99",
+      "name": "MergeMensagens"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE crm_chat_conversations SET ultima_mensagem = {{ $('setar_informacoes1').item.json.resposta_ia?.slice(0, 300) }}, ultima_mensagem_direcao = 'outgoing', ultima_interacao_em = {{ $now }}, updated_at = NOW() WHERE document_key = {{ $('setar_informacoes1').item.json.whatsapp_lead }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2960,
+        1072
+      ],
+      "id": "34deffc8-e415-499a-b402-51bd3d214792",
+      "name": "AtualizarUltimaMensagem",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "si-01",
+              "name": "mensagem_lead",
+              "value": "={{ $json.mensagem_lead }}",
+              "type": "string"
+            },
+            {
+              "id": "si-02",
+              "name": "whatsapp_lead",
+              "value": "={{ $json.whatsapp_lead }}",
+              "type": "string"
+            },
+            {
+              "id": "si-03",
+              "name": "instance",
+              "value": "={{ $json.instance }}",
+              "type": "string"
+            },
+            {
+              "id": "si-04",
+              "name": "numero_receptor",
+              "value": "={{ $json.numero_receptor }}",
+              "type": "string"
+            },
+            {
+              "id": "si-05",
+              "name": "cliente_nome",
+              "value": "={{ $json.cliente_nome }}",
+              "type": "string"
+            },
+            {
+              "id": "si-06",
+              "name": "resposta_ia",
+              "value": "={{ $json.resposta_ia }}",
+              "type": "string"
+            },
+            {
+              "id": "si-07",
+              "name": "atendimento_humano",
+              "value": "={{ $json.atendimento_humano ?? false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "si-08",
+              "name": "fila",
+              "value": "={{ $json.instance === 'renovacao' ? 'renovacao' : 'atendimento' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        992
+      ],
+      "id": "0da1a1c9-074b-455f-9dfa-408ec82725e8",
+      "name": "setar_informacoes1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM crm_customers WHERE document_key = {{ $json.whatsapp_lead }} LIMIT 1",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        496,
+        992
+      ],
+      "id": "c4b47cc2-f9e4-4e7a-a79f-e553e40132ff",
+      "name": "PuxarNumeroLead1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        3216,
+        1056
+      ],
+      "id": "dbc16e6a-52c0-4b35-8313-cbc657b8c1b7",
+      "name": "Chat Memory Manager"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.messages.map(m => `Usuário: ${m.human}\\nIA: ${m.ai}`).join('\\n\\n') }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=Dia e hora atual: {{ $now }}\n\n# IDENTIDADE\nVocê é um agente IA responsável por atualizar o CRM da CertiID.\n\n# FUNÇÃO\nLer toda a conversa entre a atendente Clara e o cliente e gerar um resumo claro, objetivo e focado em renovação.\n\n# CAMPOS\n## nome\n- Nome informado pelo cliente. Só o primeiro nome se for apenas ele.\n\n## motivo_contato\n- Motivo (ex: renovar_ecpf, renovar_ecnpj, tirar_duvida_documento, suporte_tecnico_token)\n\n## resumo_conversa\n- Resumo em texto corrido: o que o cliente quer resolver, qual certificado e o andamento."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.8,
+      "position": [
+        3776,
+        1056
+      ],
+      "id": "14e6a180-e952-4862-93a4-8f70752aed97",
+      "name": "CRM"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE crm_customers SET nome = {{ $json.output.nome }}, observacoes = {{ 'Motivo: ' + $json.output.motivo_contato + '\\n\\nResumo: ' + $json.output.resumo_conversa }}, updated_at = NOW() WHERE document_key = {{ $('setar_informacoes1').item.json.whatsapp_lead }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        4368,
+        1088
+      ],
+      "id": "d409079e-3e8e-4f34-be2d-3ee5c53093b3",
+      "name": "atualizarCRM",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"nome\": \"Rafael Souza\",\n  \"motivo_contato\": \"renovar_ecnpj_a1\",\n  \"resumo_conversa\": \"O cliente Rafael Souza entrou em contato querendo renovar seu certificado e-CNPJ A1 que está vencendo essa semana.\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        3936,
+        1328
+      ],
+      "id": "d0866227-7f40-4722-b935-e55edcbf8e44",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('setar_informacoes1').item.json.whatsapp_lead }}",
+        "contextWindowLength": 30
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        3216,
+        1344
+      ],
+      "id": "8c420bc6-6866-43ac-9f42-3a04112d0e2f",
+      "name": "memoria",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        3712,
+        1328
+      ],
+      "id": "ab26d011-02d4-4c9c-b40e-d3ca363fb14d",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "RYxuxbSIGjvz8FoO",
+          "name": "OpenAi account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "setar_informacoes1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch_Cliente": {
+      "main": [
+        [
+          {
+            "node": "AtualizarStatusCliente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CriarCliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AtualizarStatusCliente": {
+      "main": [
+        [
+          {
+            "node": "Merge_Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CriarCliente": {
+      "main": [
+        [
+          {
+            "node": "Merge_Cliente",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge_Cliente": {
+      "main": [
+        [
+          {
+            "node": "PuxarConversa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PuxarConversa": {
+      "main": [
+        [
+          {
+            "node": "SwitchConversa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SwitchConversa": {
+      "main": [
+        [
+          {
+            "node": "AtualizarConversa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CriarConversa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AtualizarConversa": {
+      "main": [
+        [
+          {
+            "node": "MergeConversa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CriarConversa": {
+      "main": [
+        [
+          {
+            "node": "MergeConversa",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "MergeConversa": {
+      "main": [
+        [
+          {
+            "node": "RegistrarMensagemCliente",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RegistrarMensagemIA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RegistrarMensagemCliente": {
+      "main": [
+        [
+          {
+            "node": "MergeMensagens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RegistrarMensagemIA": {
+      "main": [
+        [
+          {
+            "node": "MergeMensagens",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "MergeMensagens": {
+      "main": [
+        [
+          {
+            "node": "AtualizarUltimaMensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AtualizarUltimaMensagem": {
+      "main": [
+        [
+          {
+            "node": "Chat Memory Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "setar_informacoes1": {
+      "main": [
+        [
+          {
+            "node": "PuxarNumeroLead1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PuxarNumeroLead1": {
+      "main": [
+        [
+          {
+            "node": "Switch_Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Memory Manager": {
+      "main": [
+        [
+          {
+            "node": "CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM": {
+      "main": [
+        [
+          {
+            "node": "atualizarCRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "CRM",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "memoria": {
+      "ai_memory": [
+        [
+          {
+            "node": "Chat Memory Manager",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "CRM",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f384ec86-5712-480f-90eb-3251ed788dc7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2c7c80362368f5797d33ff9abfd48f4da88cc2118b57c4bbe52975d23ba68e85"
+  },
+  "nodeGroups": [],
+  "id": "NjeD5KdnFHIVfwFL",
+  "tags": []
+}

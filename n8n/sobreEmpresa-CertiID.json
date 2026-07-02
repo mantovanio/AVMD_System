@@ -1,0 +1,435 @@
+{
+  "name": "2- sobreEmpresa | CertiID",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "NomeLead"
+            },
+            {
+              "name": "Duvida"
+            },
+            {
+              "name": "whatsaapp_lead"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        2688,
+        2192
+      ],
+      "id": "709f8470-a002-476e-b9e3-6499793ad9d0",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "content": "# SOBRE EMPRESA - CERTID\nFallback: Gemini → GPT → OpenRouter",
+        "height": 820,
+        "width": 1808,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2576,
+        1952
+      ],
+      "typeVersion": 1,
+      "id": "a673d61f-9e8b-47b3-9286-8f904997e478",
+      "name": "Sticky SobreEmpresa"
+    },
+    {
+      "parameters": {
+        "jsCode": "const days = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];\nconst now = new Date();\nconst pad = (n) => String(n).padStart(2, '0');\nlet result = `Hoje é ${days[now.getDay()]} ${pad(now.getDate())}/${pad(now.getMonth()+1)}/${String(now.getFullYear()).slice(2)} às ${pad(now.getHours())}:${pad(now.getMinutes())}\\n`;\nfor (let i = 1; i <= 6; i++) {\n  const future = new Date(now);\n  future.setDate(now.getDate() + i);\n  let label = '';\n  if (i === 1) label = `Amanhã é ${days[future.getDay()]} ${pad(future.getDate())}/${pad(future.getMonth()+1)}/${String(future.getFullYear()).slice(2)}`;\n  else if (i === 2) label = `Depois de amanhã é ${days[future.getDay()]} ${pad(future.getDate())}/${pad(future.getMonth()+1)}/${String(future.getFullYear()).slice(2)}`;\n  else label = `A próxima ${days[future.getDay()]} será dia ${pad(future.getDate())}/${pad(future.getMonth()+1)}/${String(future.getFullYear()).slice(2)}`;\n  result += `${label}\\n`;\n}\nreturn [{ json: { resultado: result.trim() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        2192
+      ],
+      "id": "27e3dc49-4b1d-44cd-ab01-11c7c42c48ff",
+      "name": "proximos_dias"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('setarInfo1').item.json.msgLead }}\n\n{{ $('setarInfo1').item.json.NomeLead }}",
+        "options": {
+          "systemMessage": "# AGENTE INSTITUCIONAL CERTID\nResponda dúvidas sobre a CertiID e certificados digitais. CertiID é AR credenciada pela Certisign. Emite e-CPF e e-CNPJ nos modelos A1, A3 e Nuvem. Sem markdown."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.8,
+      "position": [
+        3408,
+        2208
+      ],
+      "id": "1c738f60-2f23-45cd-b925-ef967d1392d5",
+      "name": "SobreEmpresa_GPT",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        3376,
+        2416
+      ],
+      "id": "9d226407-a5ae-4335-9f1a-e079683ce858",
+      "name": "GPT_LLM",
+      "credentials": {
+        "openAiApi": {
+          "id": "RYxuxbSIGjvz8FoO",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('setarInfo1').item.json.whatsaapp_lead }}",
+        "contextWindowLength": 40
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        3472,
+        2384
+      ],
+      "id": "27e0d53e-cef3-4950-82a8-e5ecde65f142",
+      "name": "Memoria_GPT",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "if2-sob",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3632,
+        2208
+      ],
+      "id": "3010d5d4-1d73-46c8-9124-35f0d2982381",
+      "name": "GPT_OK?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r2",
+              "name": "response",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3824,
+        2096
+      ],
+      "id": "0b86c830-b627-4497-a63a-6b9c371300aa",
+      "name": "Resp_GPT"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('setarInfo1').item.json.msgLead }}\n\n{{ $('setarInfo1').item.json.NomeLead }}",
+        "options": {
+          "systemMessage": "# AGENTE INSTITUCIONAL CERTID\nResponda dúvidas sobre a CertiID e certificados digitais. CertiID é AR credenciada pela Certisign. Emite e-CPF e e-CNPJ nos modelos A1, A3 e Nuvem. Sem markdown."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.8,
+      "position": [
+        3824,
+        2304
+      ],
+      "id": "eed03247-c31e-4867-972b-2a7be4c191a5",
+      "name": "SobreEmpresa_OpenRouter"
+    },
+    {
+      "parameters": {
+        "model": "anthropic/claude-3.5-haiku",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        3760,
+        2480
+      ],
+      "id": "96bbee1a-0d35-4a28-9937-6c89a16e585f",
+      "name": "OpenRouter_LLM",
+      "credentials": {
+        "openRouterApi": {
+          "id": "cUGfQ5LWuMpSbI3V",
+          "name": "OpenRouter | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('setarInfo1').item.json.whatsaapp_lead }}",
+        "contextWindowLength": 40
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        3888,
+        2560
+      ],
+      "id": "ea19becf-25e7-42a0-a9c1-0731b286f7ff",
+      "name": "Memoria_OpenRouter",
+      "credentials": {
+        "postgres": {
+          "id": "ukllpaFrPyrRfyG9",
+          "name": "Postgres | AVMD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r3",
+              "name": "response",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4160,
+        2320
+      ],
+      "id": "5ad4a41c-de85-415f-88d0-2da6083f132a",
+      "name": "Resp_OpenRouter"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "sob-nome",
+              "name": "NomeLead",
+              "value": "=Nome do lead: {{ $('When Executed by Another Workflow').item.json.NomeLead }}",
+              "type": "string"
+            },
+            {
+              "id": "sob-msg",
+              "name": "msgLead",
+              "value": "={{ $('When Executed by Another Workflow').item.json.Duvida }}",
+              "type": "string"
+            },
+            {
+              "id": "sob-wpp",
+              "name": "whatsaapp_lead",
+              "value": "={{ $('When Executed by Another Workflow').item.json.whatsaapp_lead }}",
+              "type": "string"
+            },
+            {
+              "id": "sob-dias",
+              "name": "proximosDias",
+              "value": "={{ $json.resultado }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3120,
+        2192
+      ],
+      "id": "fc7e7776-2567-4753-a110-c77e0eb32c95",
+      "name": "setarInfo1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "proximos_dias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "proximos_dias": {
+      "main": [
+        [
+          {
+            "node": "setarInfo1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT_LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "SobreEmpresa_GPT",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoria_GPT": {
+      "ai_memory": [
+        [
+          {
+            "node": "SobreEmpresa_GPT",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SobreEmpresa_GPT": {
+      "main": [
+        [
+          {
+            "node": "GPT_OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT_OK?": {
+      "main": [
+        [
+          {
+            "node": "Resp_GPT",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SobreEmpresa_OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter_LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "SobreEmpresa_OpenRouter",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoria_OpenRouter": {
+      "ai_memory": [
+        [
+          {
+            "node": "SobreEmpresa_OpenRouter",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SobreEmpresa_OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Resp_OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "setarInfo1": {
+      "main": [
+        [
+          {
+            "node": "SobreEmpresa_GPT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "168855fa-aae2-4dd2-888a-c1b8f2c0c57e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2c7c80362368f5797d33ff9abfd48f4da88cc2118b57c4bbe52975d23ba68e85"
+  },
+  "nodeGroups": [],
+  "id": "LUSsXKsFMgCpJGGU",
+  "tags": []
+}

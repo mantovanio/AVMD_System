@@ -8,6 +8,13 @@ loadEnvFile(path.join(rootDir, '.env.local'))
 loadEnvFile(path.join(rootDir, 'n8n', '.env.local'))
 
 const orderedWorkflowFiles = [
+  'avmd-clara-certiid-handler.workflow.json',
+  'avmd-consultaCRM-CertiID.json',
+  'sobreEmpresa-CertiID.json',
+  'renovaCertiID-CertiID.json',
+  'suporteCertiID-CertiID.json',
+  'CRM-CertiID.json',
+  'alertaHumano-CertiID.json',
   'avmd-clara-inbound-router.workflow.json',
   'avmd-clara-renovacao-handler.workflow.json',
   'avmd-clara-agendamento-handler.workflow.json',
@@ -144,7 +151,7 @@ function buildAuthHeaders() {
 
 function resolveWorkflowFiles(only) {
   const available = new Set(
-    readdirSync(n8nDir).filter((file) => file.endsWith('.workflow.json')),
+    readdirSync(n8nDir).filter((file) => file.endsWith('.workflow.json') || file.endsWith('-CertiID.json')),
   )
 
   const selected = only.length > 0 ? only : orderedWorkflowFiles
@@ -177,12 +184,13 @@ function validateWorkflow(workflow, fileName) {
 }
 
 function buildWorkflowPayload(workflow, options) {
+  const safeSettings = workflow.settings ? { executionOrder: workflow.settings.executionOrder || 'v1' } : { executionOrder: 'v1' }
   return {
     name: workflow.name,
     nodes: workflow.nodes,
     connections: workflow.connections,
-    settings: workflow.settings || {},
-    active: options.activate ? true : Boolean(workflow.active),
+    settings: safeSettings,
+    ...(options.activate ? { active: true } : {}),
   }
 }
 
