@@ -1603,6 +1603,7 @@ export default function ChatInboxCRM() {
           conversation_id: `${destinationNumber}@s.whatsapp.net`,
           content: text,
           lead_id: null,
+          sender_name: senderName,
         }),
       })
 
@@ -1720,6 +1721,7 @@ export default function ChatInboxCRM() {
           conversation_id: `${destinationNumber}@s.whatsapp.net`,
           content: caption,
           lead_id: null,
+          sender_name: currentHumanAgentName,
         }),
       })
 

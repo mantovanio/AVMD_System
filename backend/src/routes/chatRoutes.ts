@@ -27,6 +27,7 @@ type SendChatMessageInput = {
   conversation_id?: string
   content?: string
   instance_name?: string
+  sender_name?: string | null
   quoted_message_id?: string | null
   quoted_content?: string | null
 }
@@ -592,7 +593,7 @@ export async function handleChatRoutes(
       fromMe: true,
       messageId,
       messageType: 'conversation',
-      pushName: 'Operador',
+      pushName: body.sender_name || 'Operador',
       quoted: body.quoted_message_id
         ? {
             messageId: body.quoted_message_id,
@@ -648,7 +649,7 @@ export async function handleChatRoutes(
         content,
         fromMe: true,
         messageType: 'internalNote',
-        pushName: 'Operador',
+        pushName: body.sender_name || 'Operador',
       },
     })
 
