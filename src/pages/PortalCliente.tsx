@@ -40,7 +40,7 @@ function orderLabel(order: PortalOrder) {
 }
 
 export default function PortalCliente() {
-  const { user, profile, refreshProfile } = useAuth()
+  const { user, profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -56,7 +56,6 @@ export default function PortalCliente() {
     setLoading(true)
     setError(null)
     try {
-      await refreshProfile()
       const response = await fetch(getApiUrl('/portal/overview'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

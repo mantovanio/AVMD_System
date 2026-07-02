@@ -1151,7 +1151,7 @@ export async function handleChatRoutes(
 
   // GET /api/chat/media-proxy?url=...&instance=...
   // Proxy para Evolution API media — o browser nao pode adicionar header apikey
-  if (method === 'GET' && url.startsWith('/api/chat/media-proxy')) {
+  if (req.method === 'GET' && url.startsWith('/api/chat/media-proxy')) {
     const parsed = new URL(url, 'http://localhost')
     const mediaUrl = parsed.searchParams.get('url')
     const instanceName = parsed.searchParams.get('instance')
@@ -1161,49 +1161,51 @@ export async function handleChatRoutes(
     }
 
     const instances = [config.evolutionAtendimento, config.evolutionCertiid].filter(Boolean)
-    const match = instanceName ? instances.find(i => i.instanceName === instanceName) : null
-    const apiToken = match?.apiToken
-    if (!apiToken) {
-      writeJson(res, 404, { error: 'instance not found or apiToken not configured' }, corsOrigin)
-      return true
-    }
+    const matches = instanceName ? instances.filter(i => i.instanceName === instanceName) : instances
+    let lastError: unknown
 
-    try {
-      const mediaRes = await fetch(mediaUrl, { headers: { apikey: apiToken } })
-      if (!mediaRes.ok) {
-        writeJson(res, mediaRes.status, { error: `Evolution media fetch failed: HTTP ${mediaRes.status}` }, corsOrigin)
-        return true
-      }
-
-      const contentType = mediaRes.headers.get('content-type') || 'application/octet-stream'
-      const contentLength = mediaRes.headers.get('content-length')
-
-      res.writeHead(200, {
-        'Content-Type': contentType,
-        'Content-Length': contentLength ?? '',
-        'Access-Control-Allow-Origin': corsOrigin,
-        'Cache-Control': 'private, max-age=3600',
-      })
-
-      const reader = mediaRes.body?.getReader()
-      if (!reader) {
-        writeJson(res, 502, { error: 'no response body' }, corsOrigin)
-        return true
-      }
-
-      const pump = async () => {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) { res.end(); break }
-          res.write(value)
+    for (const inst of matches) {
+      if (!inst.apiToken) continue
+      try {
+        const mediaRes = await fetch(mediaUrl, { headers: { apikey: inst.apiToken } })
+        if (!mediaRes.ok) {
+          lastError = `HTTP ${mediaRes.status}`
+          continue
         }
+
+        const contentType = mediaRes.headers.get('content-type') || 'application/octet-stream'
+        const contentLength = mediaRes.headers.get('content-length')
+
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Content-Length': contentLength ?? '',
+          'Access-Control-Allow-Origin': corsOrigin,
+          'Cache-Control': 'private, max-age=3600',
+        })
+
+        const reader = mediaRes.body?.getReader()
+        if (!reader) {
+          writeJson(res, 502, { error: 'no response body' }, corsOrigin)
+          return true
+        }
+
+        const pump = async () => {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) { res.end(); break }
+            res.write(value)
+          }
+        }
+        pump().catch(() => { res.end() })
+        return true
+      } catch (err) {
+        lastError = err
+        continue
       }
-      pump().catch(() => { res.end() })
-      return true
-    } catch (err) {
-      writeJson(res, 502, { error: String(err) }, corsOrigin)
-      return true
     }
+
+    writeJson(res, 502, { error: `Evolution media fetch failed: ${lastError}` }, corsOrigin)
+    return true
   }
 
   return false
