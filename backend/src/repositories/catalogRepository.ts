@@ -415,7 +415,7 @@ export class CatalogRepository {
 
       const result = await this.db.query(
         `insert into cadastros_base (id, ${cols})
-         select ${valueCols.map(c => `v.${c}`).join(', ')}
+         select ${valueCols.map(c => c === 'id' ? 'v.id::uuid' : `v.${c}`).join(', ')}
          from (values ${valuesSql.join(', ')}) as v(${valueCols.join(', ')})
          where not exists (
            select 1
