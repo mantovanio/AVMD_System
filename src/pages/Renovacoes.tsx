@@ -187,6 +187,8 @@ const CSV_FIELDS: { key: keyof RenovacaoV2 | 'produto'; label: string }[] = [
   { key: 'contador',         label: 'Contador'                     },
 ]
 
+type ImportColumnKey = keyof RenovacaoV2 | 'produto'
+
 type TplForm  = { name: string; channel: 'whatsapp' | 'email'; subject: string; body: string; template_key: string }
 type LinkForm = { tipo_certificado: string; link_renovacao: string; link_nova_emissao: string; descricao: string; whatsapp_template_id: string }
 type ContatoForm = {
@@ -234,26 +236,49 @@ const COLUMN_ALIASES: Record<string, string> = {
   'status do pedido': 'status',
 }
 
-function normalizeRowKeys(rows: Record<string, string>[]): Record<string, string>[] {
-  if (rows.length === 0) return []
-  const rawHeaders = Object.keys(rows[0] ?? {})
+function cleanHeader(header: string): string {
+  return header.trim().replace(/"/g, '')
+}
+
+function normalizeHeaderToFieldKey(header: string): string {
+  const clean = normalizeAccents(cleanHeader(header)).toLowerCase()
   const fieldKeys = CSV_FIELDS.map(f => f.key as string)
-  const headerMap = rawHeaders.map(h => {
-    const clean = normalizeAccents(h.trim().replace(/"/g, '')).toLowerCase()
-    const byKey   = fieldKeys.find(k => k.toLowerCase() === clean)
-    const byLabel = CSV_FIELDS.find(f => normalizeAccents(f.label).toLowerCase().replace(/\s*\(.*\)/, '') === clean)?.key as string | undefined
-    const byAlias = COLUMN_ALIASES[clean]
-    return byKey ?? byLabel ?? byAlias ?? clean.replace(/\s+/g, '_')
+  const byKey = fieldKeys.find(k => k.toLowerCase() === clean)
+  const byLabel = CSV_FIELDS.find(f => normalizeAccents(f.label).toLowerCase().replace(/\s*\(.*\)/, '') === clean)?.key as string | undefined
+  const byAlias = COLUMN_ALIASES[clean]
+  return byKey ?? byLabel ?? byAlias ?? clean.replace(/\s+/g, '_')
+}
+
+function guessColumnMapping(headers: string[]): Partial<Record<ImportColumnKey, string>> {
+  const fieldSet = new Set(CSV_FIELDS.map(f => f.key as string))
+  const mapping: Partial<Record<ImportColumnKey, string>> = {}
+  for (const header of headers) {
+    const key = normalizeHeaderToFieldKey(header)
+    if (!fieldSet.has(key)) continue
+    const typedKey = key as ImportColumnKey
+    if (!mapping[typedKey]) mapping[typedKey] = header
+  }
+  return mapping
+}
+
+function applyColumnMapping(
+  rows: Record<string, string>[],
+  mapping: Partial<Record<ImportColumnKey, string>>,
+): Record<string, string>[] {
+  return rows.map(row => {
+    const mapped: Record<string, string> = {}
+    for (const field of CSV_FIELDS) {
+      const sourceHeader = mapping[field.key as ImportColumnKey]
+      mapped[field.key as string] = sourceHeader ? String(row[sourceHeader] ?? '').trim() : ''
+    }
+    return mapped
   })
-  return rows.map(row => Object.fromEntries(
-    rawHeaders.map((header, index) => [headerMap[index], String(row[header] ?? '').trim()]),
-  ))
 }
 
 function parseCSV(raw: string): Record<string, string>[] {
   const lines = raw.replace(/^﻿/, '').trim().split(/\r?\n/)
   if (lines.length < 2) return []
-  const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
+  const rawHeaders = lines[0].split(',').map(cleanHeader)
   const rows = lines.slice(1).filter(l => l.trim()).map(line => {
     const values: string[] = []
     let cur = ''; let inQ = false
@@ -265,7 +290,7 @@ function parseCSV(raw: string): Record<string, string>[] {
     values.push(cur.trim())
     return Object.fromEntries(rawHeaders.map((h, i) => [h, (values[i] ?? '').replace(/"/g, '').trim()]))
   })
-  return normalizeRowKeys(rows)
+  return rows
 }
 
 const SPREADSHEET_MAX_BYTES = 5 * 1024 * 1024 // 5 MB — mitiga ReDoS em xlsx
@@ -285,17 +310,17 @@ function parseSpreadsheet(buffer: ArrayBuffer, fileName: string): Record<string,
     defval: '',
     raw: true,
   })
-  return normalizeRowKeys(rows.map(row =>
+  return rows.map(row =>
     Object.fromEntries(Object.entries(row).map(([key, value]) => {
       if (value instanceof Date) {
         const y = value.getFullYear()
         const m = String(value.getMonth() + 1).padStart(2, '0')
         const d = String(value.getDate()).padStart(2, '0')
-        return [key, `${d}/${m}/${y}`]
+        return [cleanHeader(key), `${d}/${m}/${y}`]
       }
-      return [key, String(value ?? '').trim()]
+      return [cleanHeader(key), String(value ?? '').trim()]
     })),
-  ))
+  )
 }
 
 function downloadSpreadsheetTemplate() {
@@ -340,7 +365,9 @@ export default function Renovacoes() {
 
   // ── import CSV ───────────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null)
-  const [csvRows, setCsvRows]       = useState<Record<string, string>[]>([])
+  const [csvRawRows, setCsvRawRows] = useState<Record<string, string>[]>([])
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([])
+  const [csvColumnMap, setCsvColumnMap] = useState<Partial<Record<ImportColumnKey, string>>>({})
   const [showImport, setShowImport] = useState(false)
   const [importing, setImporting]   = useState(false)
   const [importToBase, setImportToBase] = useState<{
@@ -948,7 +975,11 @@ export default function Renovacoes() {
     reader.onload = ev => {
       const result = ev.target?.result
       if (!(result instanceof ArrayBuffer)) return
-      setCsvRows(parseSpreadsheet(result, file.name))
+      const rows = parseSpreadsheet(result, file.name)
+      const headers = Array.from(new Set(rows.flatMap(r => Object.keys(r)).map(cleanHeader).filter(Boolean)))
+      setCsvRawRows(rows)
+      setCsvHeaders(headers)
+      setCsvColumnMap(guessColumnMapping(headers))
       setShowImport(true)
     }
     reader.readAsArrayBuffer(file)
@@ -1045,7 +1076,9 @@ export default function Renovacoes() {
       const inserted = await apiBulkCreate(records)
       showMsg(`${inserted} renovações importadas!`)
       setShowImport(false)
-      setCsvRows([])
+      setCsvRawRows([])
+      setCsvHeaders([])
+      setCsvColumnMap({})
       void fetchRenovacoes()
     } catch (err) {
       showMsg('Erro na importação: ' + String(err), 'err')
@@ -1098,6 +1131,11 @@ export default function Renovacoes() {
   const previewClient  = previewId ? lista.find(r => r.id === previewId) : lista[0] ?? null
   const previewText    = previewClient && tplForm.body
     ? renderTemplate(tplForm.body, tplValues(previewClient)) : tplForm.body
+  const csvRows = useMemo(() => applyColumnMapping(csvRawRows, csvColumnMap), [csvRawRows, csvColumnMap])
+  const validImportCount = useMemo(
+    () => csvRows.filter(r => r.cliente?.trim() && r.data_vencimento?.trim()).length,
+    [csvRows],
+  )
 
   // ── render ───────────────────────────────────────────────────
 
@@ -1123,7 +1161,7 @@ export default function Renovacoes() {
                 <h3 className="font-semibold text-gray-800 dark:text-gray-200">Importar Renovações — {csvRows.length} linha(s) detectada(s)</h3>
                 <p className="text-xs text-gray-500 mt-0.5">Linhas sem Cliente ou Data Vencimento serão ignoradas.</p>
               </div>
-              <button type="button" title="Fechar" onClick={() => { setShowImport(false); setCsvRows([]) }}>
+              <button type="button" title="Fechar" onClick={() => { setShowImport(false); setCsvRawRows([]); setCsvHeaders([]); setCsvColumnMap({}) }}>
                 <X size={18} className="text-gray-400" />
               </button>
             </div>
@@ -1131,7 +1169,38 @@ export default function Renovacoes() {
               {csvRows.length === 0 ? (
                 <p className="text-sm text-gray-400">Nenhum dado válido encontrado. Verifique o formato.</p>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Associação de colunas</p>
+                      <p className="text-xs text-gray-500">Mapeamento automático sugerido. Ajuste se necessário.</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                      {CSV_FIELDS.map(field => {
+                        const required = field.key === 'cliente' || field.key === 'data_vencimento'
+                        return (
+                          <label key={field.key} className="text-xs text-gray-600 dark:text-gray-300 space-y-1 block">
+                            <span className="font-medium">{field.label.replace(' (YYYY-MM-DD)','')}{required ? ' *' : ''}</span>
+                            <select
+                              value={csvColumnMap[field.key as ImportColumnKey] ?? ''}
+                              onChange={e => setCsvColumnMap(prev => ({
+                                ...prev,
+                                [field.key]: e.target.value || undefined,
+                              }))}
+                              className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1.5 text-xs"
+                            >
+                              <option value="">Não mapear</option>
+                              {csvHeaders.map(header => (
+                                <option key={`${field.key}-${header}`} value={header}>{header}</option>
+                              ))}
+                            </select>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
                   <table className="w-full text-xs min-w-[1400px]">
                     <thead>
                       <tr className="bg-gray-50 dark:bg-gray-800/50 text-gray-500 uppercase">
@@ -1152,17 +1221,18 @@ export default function Renovacoes() {
                     </tbody>
                   </table>
                   {csvRows.length > 15 && <p className="text-xs text-gray-400 mt-2 px-1">… e mais {csvRows.length - 15} linhas</p>}
+                  </div>
                 </div>
               )}
             </div>
             <div className="flex gap-2 p-5 border-t border-gray-200 dark:border-gray-800 shrink-0">
               <button type="button" onClick={() => void confirmarImport()}
-                disabled={importing || !csvRows.filter(r => r.cliente?.trim() && r.data_vencimento?.trim()).length}
+                disabled={importing || !validImportCount}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
                 {importing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                {importing ? 'Importando…' : `Importar ${csvRows.filter(r => r.cliente?.trim() && r.data_vencimento?.trim()).length} registros`}
+                {importing ? 'Importando…' : `Importar ${validImportCount} registros`}
               </button>
-              <button type="button" onClick={() => { setShowImport(false); setCsvRows([]) }}
+              <button type="button" onClick={() => { setShowImport(false); setCsvRawRows([]); setCsvHeaders([]); setCsvColumnMap({}) }}
                 className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Cancelar</button>
             </div>
           </div>
