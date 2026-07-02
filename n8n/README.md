@@ -80,6 +80,8 @@ Esse endpoint faz o resto do tratamento no sistema:
 - gera mensagens de retorno por e-mail e WhatsApp na outbox
 - dispara o aviso de envio de documentos para validacao
 
+Importante: o workflow legado `AVMD - Email to CRM Kanban` nao deve ser reimportado nem reativado, porque ele duplica as entradas do Inbox operacional ao enviar o mesmo e-mail para `POST /api/chat/crm/events`.
+
 ## Ordem sugerida de importacao
 
 1. Importar `avmd-clara-inbound-router.workflow.json`.
