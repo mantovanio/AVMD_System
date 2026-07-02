@@ -1904,7 +1904,7 @@ function MessageBubble({
   const audioLabel = message.fromMe ? 'Audio enviado' : 'Audio recebido'
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const hasDirectUrl = Boolean(message.mediaUrl)
-  const displayUrl = evolution && resolvedMediaUrl
+  const displayUrl = evolution && resolvedMediaUrl && !resolvedMediaUrl.startsWith('blob:')
     ? getMediaProxyUrl(resolvedMediaUrl, evolution.instance_name)
     : resolvedMediaUrl
 

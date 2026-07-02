@@ -843,8 +843,6 @@ export async function handleChatRoutes(
     return true
   }
 
-  if (method !== 'POST' && method !== 'PATCH' && method !== 'DELETE') return false
-
   if (method === 'POST' && url === '/api/chat/leads') {
     const body = await readJson<Record<string, unknown>>(req)
     const lead = await leadRepository.create({
