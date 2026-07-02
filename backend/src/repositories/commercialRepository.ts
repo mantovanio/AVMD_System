@@ -490,35 +490,34 @@ export class CommercialRepository {
     for (const item of existingPayloads) {
       await this.db.query(
         `update cadastros_base
-         set tipo_cliente = $2,
-             tipo_cadastro = $3,
-             nome = $5,
-             nome_fantasia = $6,
-             email = $7,
-             telefone = $8,
-             cidade = $9,
-             logradouro = $10,
-             numero = $11,
-             complemento = $12,
-             bairro = $13,
-             uf = $14,
-             cep = $15,
-             inscricao_municipal = $16,
-             inscricao_estadual = $17,
-             iss_retido = $18,
-             status = $19,
+         set tipo_cliente = $1,
+             tipo_cadastro = $2,
+             nome = $4,
+             nome_fantasia = $5,
+             email = $6,
+             telefone = $7,
+             cidade = $8,
+             logradouro = $9,
+             numero = $10,
+             complemento = $11,
+             bairro = $12,
+             uf = $13,
+             cep = $14,
+             inscricao_municipal = $15,
+             inscricao_estadual = $16,
+             iss_retido = $17,
+             status = $18,
              metadata =
                (coalesce(metadata, '{}'::jsonb) - 'compras_historico')
-               || ($20::jsonb - 'compras_historico')
+               || ($19::jsonb - 'compras_historico')
                || jsonb_build_object(
                  'compras_historico',
                  coalesce(metadata -> 'compras_historico', '[]'::jsonb)
-                 || coalesce($20::jsonb -> 'compras_historico', '[]'::jsonb)
+                 || coalesce($19::jsonb -> 'compras_historico', '[]'::jsonb)
                ),
              updated_at = now()
-         where cpf_cnpj = $4`,
+         where cpf_cnpj = $3`,
         [
-          randomUUID(),
           item.tipo_cliente,
           item.tipo_cadastro,
           item.cpf_cnpj,
