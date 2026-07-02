@@ -368,7 +368,7 @@ export class CatalogRepository {
     return r.rows.map(row => row.cpf_cnpj)
   }
 
-  // ── Bulk clientes upsert ──────────────────────────────────────────────
+  // ── Bulk clientes upsert (requer UNIQUE em cpf_cnpj) ─────────
   async batchUpsertCadastros(payloads: Record<string, unknown>[]) {
     const fields = ['tipo_cliente','tipo_cadastro','cpf_cnpj','nome','nome_fantasia','email','telefone',
       'logradouro','numero','complemento','bairro','cidade','uf','cep','inscricao_municipal',
@@ -388,6 +388,24 @@ export class CatalogRepository {
       upserted++
     }
     return { upserted }
+  }
+
+  // ── Bulk insert sem ON CONFLICT (usar quando ja filtrou duplicatas) ──
+  async batchInsertCadastros(payloads: Record<string, unknown>[]) {
+    const fields = ['tipo_cliente','tipo_cadastro','cpf_cnpj','nome','nome_fantasia','email','telefone','status']
+    let inserted = 0
+    for (const p of payloads) {
+      const id = randomUUID()
+      const vals = fields.map(f => p[f] ?? null)
+      const cols = fields.join(', ')
+      const phs = fields.map((_, i) => `$${i + 2}`).join(', ')
+      await this.db.query(
+        `insert into cadastros_base (id, ${cols}) values ($1, ${phs})`,
+        [id, ...vals]
+      )
+      inserted++
+    }
+    return { inserted }
   }
 
   // ── Legacy agendamentos ───────────────────────────────────────────────

@@ -89,7 +89,7 @@ export async function handleRenovacaoRoutes(
     }
 
     if (toInsert.length > 0) {
-      await catalogRepo.batchUpsertCadastros(toInsert)
+      await catalogRepo.batchInsertCadastros(toInsert)
     }
 
     criados.push(...toInsert.map(t => ({ cpf_cnpj: String(t.cpf_cnpj ?? ''), nome: String(t.nome ?? '') })))
