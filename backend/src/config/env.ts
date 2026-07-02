@@ -11,6 +11,7 @@ export type BackendConfig = {
   n8nWebhookUrl: string
   n8nEmailSendUrl: string
   clerkSecretKey: string
+  publicApiBaseUrl: string
   // Canal de atendimento humano (dia a dia, sem IA)
   evolutionAtendimento: EvolutionInstanceConfig
   // Canal CertiID — renovações de certificados (com IA)
@@ -36,6 +37,7 @@ export function loadConfig(): BackendConfig {
     n8nWebhookUrl: env('N8N_WEBHOOK_URL'),
     n8nEmailSendUrl: env('N8N_EMAIL_SEND_URL'),
     clerkSecretKey: env('CLERK_SECRET_KEY'),
+    publicApiBaseUrl: env('PUBLIC_API_BASE_URL', 'https://api.certiid.mantovan.com.br'),
     evolutionAtendimento: {
       baseUrl,
       apiToken: env('EVOLUTION_ATENDIMENTO_API_TOKEN'),
