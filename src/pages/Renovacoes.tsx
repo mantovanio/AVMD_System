@@ -370,6 +370,7 @@ export default function Renovacoes() {
   const [csvColumnMap, setCsvColumnMap] = useState<Partial<Record<ImportColumnKey, string>>>({})
   const [showImport, setShowImport] = useState(false)
   const [importing, setImporting]   = useState(false)
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null)
   const [importToBase, setImportToBase] = useState<{
     criados: number; jaExistem: number; erros: number
     detalhes: { criados: { cpf_cnpj: string; nome: string }[]; jaExistem: { cpf_cnpj: string; nome: string }[]; erros: { cliente: string; motivo: string }[] }
@@ -1072,18 +1073,32 @@ export default function Renovacoes() {
       agr: r.agr || null, vendedor: r.vendedor || null, contador: r.contador || null,
       status: 'pendente' as StatusRenovacao, renovado: false,
     }))
+
+    const BATCH_SIZE = 300
+    let doneCount = 0
     try {
-      const inserted = await apiBulkCreate(records)
-      showMsg(`${inserted} renovações importadas!`)
+      let insertedTotal = 0
+      for (let i = 0; i < records.length; i += BATCH_SIZE) {
+        const chunk = records.slice(i, i + BATCH_SIZE)
+        setImportProgress({ done: i, total: records.length })
+        const inserted = await apiBulkCreate(chunk)
+        insertedTotal += inserted
+        doneCount = Math.min(i + chunk.length, records.length)
+        setImportProgress({ done: doneCount, total: records.length })
+      }
+
+      showMsg(`${insertedTotal} renovações importadas!`)
       setShowImport(false)
       setCsvRawRows([])
       setCsvHeaders([])
       setCsvColumnMap({})
       void fetchRenovacoes()
     } catch (err) {
-      showMsg('Erro na importação: ' + String(err), 'err')
+      const extra = doneCount > 0 ? ` (${doneCount}/${records.length} processados)` : ''
+      showMsg('Erro na importação: ' + String(err) + extra, 'err')
     } finally {
       setImporting(false)
+      setImportProgress(null)
     }
   }
 
@@ -1230,7 +1245,9 @@ export default function Renovacoes() {
                 disabled={importing || !validImportCount}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
                 {importing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                {importing ? 'Importando…' : `Importar ${validImportCount} registros`}
+                {importing
+                  ? `Importando ${importProgress?.done ?? 0}/${importProgress?.total ?? validImportCount}…`
+                  : `Importar ${validImportCount} registros`}
               </button>
               <button type="button" onClick={() => { setShowImport(false); setCsvRawRows([]); setCsvHeaders([]); setCsvColumnMap({}) }}
                 className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Cancelar</button>

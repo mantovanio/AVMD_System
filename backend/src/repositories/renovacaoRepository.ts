@@ -115,11 +115,51 @@ export class RenovacaoRepository {
 
   async bulkCreate(inputs: CreateRenovacaoInput[]): Promise<number> {
     if (inputs.length === 0) return 0
+    const chunkSize = 300
     let inserted = 0
-    for (const input of inputs) {
-      await this.create(input)
-      inserted++
+
+    for (let start = 0; start < inputs.length; start += chunkSize) {
+      const chunk = inputs.slice(start, start + chunkSize)
+      const params: unknown[] = []
+      const valuesSql: string[] = []
+
+      for (const input of chunk) {
+        const base = params.length
+        params.push(
+          input.pedido ?? null,
+          input.protocolo ?? null,
+          input.data_vencimento,
+          input.cliente,
+          input.email ?? null,
+          input.telefone ?? null,
+          input.tipo_certificado,
+          input.valor ?? null,
+          input.status ?? 'pendente',
+          input.renovado ?? false,
+          input.observacoes ?? null,
+          input.cpf ?? null,
+          input.cnpj ?? null,
+          input.razao_social ?? null,
+          input.agr ?? null,
+          input.vendedor ?? null,
+          input.contador ?? null,
+          JSON.stringify(input.snapshot_json ?? {}),
+        )
+        const placeholders = Array.from({ length: 18 }, (_, i) => `$${base + i + 1}`).join(',')
+        valuesSql.push(`(${placeholders})`)
+      }
+
+      await this.db.query(
+        `INSERT INTO renovacoes (
+          pedido, protocolo, data_vencimento, cliente, email, telefone,
+          tipo_certificado, valor, status, renovado, observacoes,
+          cpf, cnpj, razao_social, agr, vendedor, contador, snapshot_json
+         ) VALUES ${valuesSql.join(',')}`,
+        params,
+      )
+      inserted += chunk.length
     }
+
     return inserted
   }
 
