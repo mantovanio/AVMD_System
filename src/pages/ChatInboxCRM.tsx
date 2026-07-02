@@ -28,8 +28,6 @@ import {
 import { supabase } from '@/lib/supabase'
 import { getApiUrl } from '@/lib/api'
 import { logger } from '@/lib/logger'
-import MediaPreview from '@/components/MediaPreview'
-import { getMediaProxyUrl } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { applyOutgoingSignature, DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings } from '@/lib/crmChatSettings'
 
@@ -3057,8 +3055,6 @@ function MessageRow({
     const isVideo = isVideoMime(message.mime_type)
     const isDocument = isDocumentMime(message.mime_type)
     const mediaLabel = message.file_name || message.mensagem || (isAudio ? 'Audio' : isImage ? 'Imagem' : isVideo ? 'Video' : 'Arquivo')
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-    const displayUrl = message.media_url ? getMediaProxyUrl(message.media_url, conversation?.whatsapp_instance ?? undefined) : null
   
     return (
       <div className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'}`}>
@@ -3070,62 +3066,30 @@ function MessageRow({
             <span>•</span>
             <span>{formatDateTime(message.created_at)}</span>
           </div>
-          {isImage && displayUrl ? (
-            <div className="relative group">
-              <button type="button" onClick={() => setPreviewUrl(displayUrl)} className="block w-full overflow-hidden rounded-xl text-left">
-                <img src={displayUrl} alt={mediaLabel} className="max-w-full rounded-xl cursor-pointer" />
-              </button>
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-xl bg-black/30">
-                <span className="rounded-lg bg-white/90 px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm">
-                  Visualizar
-                </span>
-              </div>
-            </div>
-          ) : isAudio && displayUrl ? (
+          {isImage && message.media_url ? (
+            <a href={message.media_url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl">
+              <img src={message.media_url} alt={mediaLabel} className="max-w-full rounded-xl" />
+            </a>
+          ) : isAudio && message.media_url ? (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-violet-700">Audio anexado</p>
-              <div className="flex items-center gap-2">
-                <audio src={displayUrl} controls className="w-full min-w-0 flex-1" preload="metadata" />
-                <button
-                  type="button"
-                  onClick={() => window.open(displayUrl, '_blank')}
-                  className="shrink-0 rounded-lg bg-violet-50 px-2.5 py-1.5 text-[11px] font-medium text-violet-700 hover:bg-violet-100 transition-colors"
-                >
-                  Visualizar
-                </button>
-              </div>
+              <audio src={message.media_url} controls className="w-full min-w-0" preload="metadata" />
             </div>
-          ) : isVideo && displayUrl ? (
+          ) : isVideo && message.media_url ? (
             <div className="space-y-2">
-              <video src={displayUrl} controls className="max-w-full rounded-xl" preload="metadata" />
-              <a href={displayUrl} target="_blank" rel="noreferrer" className="text-xs text-sky-600 hover:underline">
+              <video src={message.media_url} controls className="max-w-full rounded-xl" preload="metadata" />
+              <a href={message.media_url} target="_blank" rel="noreferrer" className="text-xs text-sky-600 hover:underline">
                 Abrir video em nova aba
               </a>
             </div>
-          ) : isDocument && displayUrl ? (
-            <div className="space-y-1">
-              <button type="button" onClick={() => setPreviewUrl(displayUrl)} className="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-sky-700 hover:underline text-left">
-                📎 {mediaLabel}
-              </button>
-              <button
-                type="button"
-                onClick={() => setPreviewUrl(displayUrl)}
-                className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-200 transition-colors"
-              >
-                Visualizar
-              </button>
-            </div>
+          ) : isDocument && message.media_url ? (
+            <a href={message.media_url} target="_blank" rel="noreferrer" className="block rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-sky-700 hover:underline">
+              📎 {mediaLabel}
+            </a>
           ) : (
             <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.mensagem || mediaLabel || 'Mensagem sem texto'}</p>
           )}
         </div>
-        {previewUrl && (
-          <MediaPreview
-            url={previewUrl}
-            fileName={mediaLabel}
-            onClose={() => setPreviewUrl(null)}
-          />
-        )}
     </div>
   )
 }
