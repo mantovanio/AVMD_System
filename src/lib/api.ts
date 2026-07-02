@@ -30,6 +30,21 @@ export function getMediaProxyUrl(mediaUrl: string, instanceName?: string): strin
   return getApiUrl(`/chat/media-proxy?${params.toString()}`)
 }
 
+// Resolve media_url vindo do banco: pode ser um path relativo do proprio
+// backend (upload feito na CRM) ou uma URL remota da Evolution API (precisa
+// do proxy, pois o navegador nao pode enviar o header apikey).
+export function resolveChatMediaUrl(mediaUrl: string | null | undefined, instanceName?: string | null): string | null {
+  if (!mediaUrl) return null
+  if (mediaUrl.startsWith('/')) {
+    const origin = new URL(getApiUrl('/')).origin
+    return `${origin}${mediaUrl}`
+  }
+  if (/^https?:\/\//i.test(mediaUrl)) {
+    return getMediaProxyUrl(mediaUrl, instanceName ?? undefined)
+  }
+  return mediaUrl
+}
+
 export async function postJson<T = unknown>(url: string, payload: unknown) {
   const response = await fetch(url, {
     method: 'POST',

@@ -27,7 +27,7 @@ import {
   X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { getApiUrl } from '@/lib/api'
+import { getApiUrl, resolveChatMediaUrl } from '@/lib/api'
 import { logger } from '@/lib/logger'
 import { useAuth } from '@/contexts/AuthContext'
 import { applyOutgoingSignature, DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings } from '@/lib/crmChatSettings'
@@ -3089,6 +3089,7 @@ function MessageRow({
     const isVideo = isVideoMime(message.mime_type)
     const isDocument = isDocumentMime(message.mime_type)
     const mediaLabel = message.file_name || message.mensagem || (isAudio ? 'Audio' : isImage ? 'Imagem' : isVideo ? 'Video' : 'Arquivo')
+    const resolvedMediaUrl = resolveChatMediaUrl(message.media_url, conversation?.whatsapp_instance)
   
     return (
       <div className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'}`}>
@@ -3100,24 +3101,24 @@ function MessageRow({
             <span>•</span>
             <span>{formatDateTime(message.created_at)}</span>
           </div>
-          {isImage && message.media_url ? (
-            <a href={message.media_url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl">
-              <img src={message.media_url} alt={mediaLabel} className="max-w-full rounded-xl" />
+          {isImage && resolvedMediaUrl ? (
+            <a href={resolvedMediaUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl">
+              <img src={resolvedMediaUrl} alt={mediaLabel} className="max-w-full rounded-xl" />
             </a>
-          ) : isAudio && message.media_url ? (
+          ) : isAudio && resolvedMediaUrl ? (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-violet-700">Audio anexado</p>
-              <audio src={message.media_url} controls className="w-full min-w-0" preload="metadata" />
+              <audio src={resolvedMediaUrl} controls className="w-full min-w-0" preload="metadata" />
             </div>
-          ) : isVideo && message.media_url ? (
+          ) : isVideo && resolvedMediaUrl ? (
             <div className="space-y-2">
-              <video src={message.media_url} controls className="max-w-full rounded-xl" preload="metadata" />
-              <a href={message.media_url} target="_blank" rel="noreferrer" className="text-xs text-sky-600 hover:underline">
+              <video src={resolvedMediaUrl} controls className="max-w-full rounded-xl" preload="metadata" />
+              <a href={resolvedMediaUrl} target="_blank" rel="noreferrer" className="text-xs text-sky-600 hover:underline">
                 Abrir video em nova aba
               </a>
             </div>
-          ) : isDocument && message.media_url ? (
-            <a href={message.media_url} target="_blank" rel="noreferrer" className="block rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-sky-700 hover:underline">
+          ) : isDocument && resolvedMediaUrl ? (
+            <a href={resolvedMediaUrl} target="_blank" rel="noreferrer" className="block rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-sky-700 hover:underline">
               📎 {mediaLabel}
             </a>
           ) : (
