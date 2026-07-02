@@ -361,9 +361,9 @@ export class CatalogRepository {
   // ── Check which CPF/CNPJs already exist ──────────────────────────────
   async getExistingCpfs(cpfs: string[]) {
     if (!cpfs.length) return []
-    const phs = cpfs.map((_, i) => `$${i + 1}`).join(', ')
     const r = await this.db.query<{ cpf_cnpj: string }>(
-      `select cpf_cnpj from cadastros_base where cpf_cnpj in (${phs})`, cpfs
+      `select cpf_cnpj from cadastros_base where cpf_cnpj = any($1::text[])`,
+      [cpfs],
     )
     return r.rows.map(row => row.cpf_cnpj)
   }
@@ -393,18 +393,32 @@ export class CatalogRepository {
   // ── Bulk insert sem ON CONFLICT (usar quando ja filtrou duplicatas) ──
   async batchInsertCadastros(payloads: Record<string, unknown>[]) {
     const fields = ['tipo_cliente','tipo_cadastro','cpf_cnpj','nome','nome_fantasia','email','telefone','status']
+    const cols = fields.join(', ')
+    const chunkSize = 500
     let inserted = 0
-    for (const p of payloads) {
-      const id = randomUUID()
-      const vals = fields.map(f => p[f] ?? null)
-      const cols = fields.join(', ')
-      const phs = fields.map((_, i) => `$${i + 2}`).join(', ')
+
+    for (let start = 0; start < payloads.length; start += chunkSize) {
+      const chunk = payloads.slice(start, start + chunkSize)
+      const params: unknown[] = []
+      const valuesSql: string[] = []
+
+      for (const p of chunk) {
+        const base = params.length
+        params.push(randomUUID(), ...fields.map(f => p[f] ?? null))
+        const placeholders = Array.from(
+          { length: fields.length + 1 },
+          (_, i) => `$${base + i + 1}`,
+        ).join(', ')
+        valuesSql.push(`(${placeholders})`)
+      }
+
       await this.db.query(
-        `insert into cadastros_base (id, ${cols}) values ($1, ${phs})`,
-        [id, ...vals]
+        `insert into cadastros_base (id, ${cols}) values ${valuesSql.join(', ')} on conflict (cpf_cnpj) do nothing`,
+        params,
       )
-      inserted++
+      inserted += chunk.length
     }
+
     return { inserted }
   }
 

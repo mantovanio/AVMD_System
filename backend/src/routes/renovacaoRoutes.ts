@@ -68,14 +68,15 @@ export async function handleRenovacaoRoutes(
     const cpfs = rows.map(r => (r.cpf || r.cnpj || '').replace(/\D/g, '')).filter(Boolean)
     const uniqCpfs = [...new Set(cpfs)]
     const existentes = await catalogRepo.getExistingCpfs(uniqCpfs)
-    const existSet = new Set(existentes)
+    const docsNoLote = new Set(existentes)
 
     const toInsert: Record<string, unknown>[] = []
     for (const r of rows) {
       const doc = (r.cpf || r.cnpj || '').replace(/\D/g, '')
       if (!doc) { erros.push({ cliente: r.cliente, motivo: 'Sem CPF nem CNPJ' }); continue }
       const nomeBase = r.razao_social || r.cliente
-      if (existSet.has(doc)) { jaExistem.push({ cpf_cnpj: doc, nome: nomeBase }); continue }
+      if (docsNoLote.has(doc)) { jaExistem.push({ cpf_cnpj: doc, nome: nomeBase }); continue }
+      docsNoLote.add(doc)
       toInsert.push({
         tipo_cliente: r.cnpj ? 'pj' : 'pf',
         tipo_cadastro: 'cliente',
