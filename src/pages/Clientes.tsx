@@ -1,5 +1,5 @@
-import { Fragment, useState, useEffect, useCallback } from 'react'
-import { Search, X, ChevronDown, ChevronUp, Loader2, RefreshCcw, Plus, Pencil, MessageCircle, Mail, LifeBuoy, Save } from 'lucide-react'
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Search, X, ChevronDown, ChevronUp, Loader2, RefreshCcw, Plus, Pencil, MessageCircle, Mail, LifeBuoy, Save, Upload, Check } from 'lucide-react'
 import { getApiUrl } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -8,6 +8,7 @@ import { openCentralChat } from '@/lib/chatNavigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { buildSafeIlikePattern, hasPerfil } from '@/lib/security'
 import type { Agendamento, CommunicationOutbox, RenovacaoV2 } from '@/types'
+import * as XLSX from 'xlsx'
 
 type TipoCliente = 'pessoa_fisica' | 'pessoa_juridica'
 
@@ -109,6 +110,159 @@ type ClienteModalState = { mode: 'novo' | 'editar'; cliente?: ClienteComVendas }
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200]
 
+type ClienteImportField =
+  | 'tipo_cliente'
+  | 'cpf_cnpj'
+  | 'nome'
+  | 'nome_fantasia'
+  | 'email'
+  | 'telefone'
+  | 'cep'
+  | 'logradouro'
+  | 'numero'
+  | 'complemento'
+  | 'bairro'
+  | 'cidade'
+  | 'uf'
+  | 'inscricao_municipal'
+  | 'inscricao_estadual'
+  | 'status'
+
+const CLIENT_IMPORT_FIELDS: Array<{ key: ClienteImportField; label: string; required?: boolean }> = [
+  { key: 'tipo_cliente', label: 'Tipo cliente (PF/PJ)' },
+  { key: 'cpf_cnpj', label: 'CPF/CNPJ', required: true },
+  { key: 'nome', label: 'Nome / Razão social', required: true },
+  { key: 'nome_fantasia', label: 'Nome fantasia' },
+  { key: 'email', label: 'E-mail' },
+  { key: 'telefone', label: 'Telefone' },
+  { key: 'cep', label: 'CEP' },
+  { key: 'logradouro', label: 'Logradouro' },
+  { key: 'numero', label: 'Número' },
+  { key: 'complemento', label: 'Complemento' },
+  { key: 'bairro', label: 'Bairro' },
+  { key: 'cidade', label: 'Cidade' },
+  { key: 'uf', label: 'UF' },
+  { key: 'inscricao_municipal', label: 'Inscrição municipal' },
+  { key: 'inscricao_estadual', label: 'Inscrição estadual' },
+  { key: 'status', label: 'Status' },
+]
+
+const CLIENT_IMPORT_ALIASES: Record<string, ClienteImportField> = {
+  tipo: 'tipo_cliente',
+  tipo_cliente: 'tipo_cliente',
+  tipo_de_cliente: 'tipo_cliente',
+  documento: 'cpf_cnpj',
+  cpf: 'cpf_cnpj',
+  cnpj: 'cpf_cnpj',
+  cpf_cnpj: 'cpf_cnpj',
+  nome: 'nome',
+  razao_social: 'nome',
+  razao: 'nome',
+  nome_fantasia: 'nome_fantasia',
+  fantasia: 'nome_fantasia',
+  email: 'email',
+  e_mail: 'email',
+  telefone: 'telefone',
+  celular: 'telefone',
+  cep: 'cep',
+  logradouro: 'logradouro',
+  endereco: 'logradouro',
+  numero: 'numero',
+  complemento: 'complemento',
+  bairro: 'bairro',
+  cidade: 'cidade',
+  uf: 'uf',
+  inscricao_municipal: 'inscricao_municipal',
+  inscricao_estadual: 'inscricao_estadual',
+  ie: 'inscricao_estadual',
+  status: 'status',
+}
+
+const CLIENT_IMPORT_MAX_BYTES = 8 * 1024 * 1024
+
+function normalizeHeaderImport(header: string) {
+  return header
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/"/g, '')
+    .replace(/\s+/g, '_')
+}
+
+function cleanImportHeader(header: string) {
+  return header.trim().replace(/"/g, '')
+}
+
+function guessClientColumnMap(headers: string[]): Partial<Record<ClienteImportField, string>> {
+  const map: Partial<Record<ClienteImportField, string>> = {}
+  for (const header of headers) {
+    const normalized = normalizeHeaderImport(header)
+    const byKey = CLIENT_IMPORT_FIELDS.find(f => f.key === normalized)?.key
+    const byAlias = CLIENT_IMPORT_ALIASES[normalized]
+    const byLabel = CLIENT_IMPORT_FIELDS.find(f => normalizeHeaderImport(f.label) === normalized)?.key
+    const key = byKey ?? byAlias ?? byLabel
+    if (key && !map[key]) map[key] = header
+  }
+  return map
+}
+
+function applyClientColumnMap(
+  rows: Record<string, string>[],
+  map: Partial<Record<ClienteImportField, string>>,
+) {
+  return rows.map(row => {
+    const next: Record<string, string> = {}
+    for (const field of CLIENT_IMPORT_FIELDS) {
+      const source = map[field.key]
+      next[field.key] = source ? String(row[source] ?? '').trim() : ''
+    }
+    return next
+  })
+}
+
+function parseClientCsv(raw: string) {
+  const lines = raw.replace(/^﻿/, '').trim().split(/\r?\n/)
+  if (lines.length < 2) return [] as Record<string, string>[]
+  const headers = lines[0].split(',').map(cleanImportHeader)
+  return lines.slice(1).filter(line => line.trim()).map(line => {
+    const values: string[] = []
+    let cur = ''
+    let inQuotes = false
+    for (const ch of line) {
+      if (ch === '"') inQuotes = !inQuotes
+      else if (ch === ',' && !inQuotes) { values.push(cur); cur = '' }
+      else cur += ch
+    }
+    values.push(cur)
+    return Object.fromEntries(headers.map((header, i) => [header, String(values[i] ?? '').replace(/"/g, '').trim()]))
+  })
+}
+
+function parseClientSpreadsheet(buffer: ArrayBuffer, fileName: string) {
+  if (buffer.byteLength > CLIENT_IMPORT_MAX_BYTES) {
+    throw new Error('Arquivo muito grande. Limite de 8 MB.')
+  }
+  if (fileName.toLowerCase().endsWith('.csv')) {
+    return parseClientCsv(new TextDecoder('utf-8').decode(buffer))
+  }
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
+  const firstSheet = workbook.SheetNames[0]
+  if (!firstSheet) return [] as Record<string, string>[]
+  const sheet = workbook.Sheets[firstSheet]
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', raw: true })
+  return rows.map(row => Object.fromEntries(Object.entries(row).map(([k, v]) => {
+    const key = cleanImportHeader(k)
+    if (v instanceof Date) {
+      const y = v.getFullYear()
+      const m = String(v.getMonth() + 1).padStart(2, '0')
+      const d = String(v.getDate()).padStart(2, '0')
+      return [key, `${d}/${m}/${y}`]
+    }
+    return [key, String(v ?? '').trim()]
+  })))
+}
+
 function emptyClienteForm(): ClienteFormState {
   return {
     tipo_cliente: 'pessoa_fisica',
@@ -181,6 +335,7 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
 export default function Clientes() {
   const { profile } = useAuth()
   const canAccessChat = hasPerfil(profile, 'admin', 'agente_registro', 'usuario')
+  const fileImportRef = useRef<HTMLInputElement>(null)
   const [clientes, setClientes] = useState<ClienteComVendas[]>([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -197,6 +352,134 @@ export default function Clientes() {
   const [clienteModal, setClienteModal] = useState<ClienteModalState>(null)
   const [clienteForm, setClienteForm] = useState<ClienteFormState>(emptyClienteForm())
   const [savingCliente, setSavingCliente] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importRawRows, setImportRawRows] = useState<Record<string, string>[]>([])
+  const [importHeaders, setImportHeaders] = useState<string[]>([])
+  const [importColumnMap, setImportColumnMap] = useState<Partial<Record<ClienteImportField, string>>>({})
+  const [importingClientes, setImportingClientes] = useState(false)
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null)
+  const [importResult, setImportResult] = useState<{
+    criados: number
+    atualizados: number
+    ignorados: number
+    erros: Array<{ linha: number; motivo: string; cpf_cnpj?: string; nome?: string }>
+  } | null>(null)
+
+  const mappedImportRows = useMemo(
+    () => applyClientColumnMap(importRawRows, importColumnMap),
+    [importRawRows, importColumnMap],
+  )
+  const validImportRows = useMemo(
+    () => mappedImportRows.filter(r => r.cpf_cnpj?.trim() && r.nome?.trim()),
+    [mappedImportRows],
+  )
+
+  function resetImportState() {
+    setShowImportModal(false)
+    setImportRawRows([])
+    setImportHeaders([])
+    setImportColumnMap({})
+    setImportingClientes(false)
+    setImportProgress(null)
+    setImportResult(null)
+  }
+
+  function openImportModal() {
+    fileImportRef.current?.click()
+  }
+
+  function handleImportFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      try {
+        const result = ev.target?.result
+        if (!(result instanceof ArrayBuffer)) return
+        const rows = parseClientSpreadsheet(result, file.name)
+        const headers = Array.from(new Set(rows.flatMap(r => Object.keys(r)).map(cleanImportHeader).filter(Boolean)))
+        setImportRawRows(rows)
+        setImportHeaders(headers)
+        setImportColumnMap(guessClientColumnMap(headers))
+        setImportResult(null)
+        setShowImportModal(true)
+      } catch (err) {
+        alert(String(err))
+      }
+    }
+    reader.readAsArrayBuffer(file)
+    e.target.value = ''
+  }
+
+  async function confirmarImportacaoClientes() {
+    if (!validImportRows.length) return
+    setImportingClientes(true)
+    setImportResult(null)
+
+    const payload = validImportRows.map(row => ({
+      tipo_cliente: row.tipo_cliente || null,
+      cpf_cnpj: row.cpf_cnpj || null,
+      nome: row.nome || null,
+      nome_fantasia: row.nome_fantasia || null,
+      email: row.email || null,
+      telefone: row.telefone || null,
+      cep: row.cep || null,
+      logradouro: row.logradouro || null,
+      numero: row.numero || null,
+      complemento: row.complemento || null,
+      bairro: row.bairro || null,
+      cidade: row.cidade || null,
+      uf: row.uf || null,
+      inscricao_municipal: row.inscricao_municipal || null,
+      inscricao_estadual: row.inscricao_estadual || null,
+      status: row.status || null,
+    }))
+
+    const BATCH_SIZE = 300
+    const resume = { criados: 0, atualizados: 0, ignorados: 0, erros: [] as Array<{ linha: number; motivo: string; cpf_cnpj?: string; nome?: string }> }
+
+    try {
+      for (let i = 0; i < payload.length; i += BATCH_SIZE) {
+        const chunk = payload.slice(i, i + BATCH_SIZE)
+        setImportProgress({ done: i, total: payload.length })
+        const response = await fetch(getApiUrl('/comercial/clientes/import'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: chunk }),
+        })
+        const data = await response.json().catch(() => null) as {
+          ok?: boolean
+          criados?: number
+          atualizados?: number
+          ignorados?: number
+          erros?: Array<{ linha: number; motivo: string; cpf_cnpj?: string; nome?: string }>
+          error?: string
+        } | null
+        if (!response.ok || !data?.ok) {
+          throw new Error(data?.error ?? `Falha no lote ${Math.floor(i / BATCH_SIZE) + 1}`)
+        }
+
+        resume.criados += data.criados ?? 0
+        resume.atualizados += data.atualizados ?? 0
+        resume.ignorados += data.ignorados ?? 0
+        if (data.erros?.length) resume.erros.push(...data.erros)
+        setImportProgress({ done: Math.min(i + chunk.length, payload.length), total: payload.length })
+      }
+
+      setImportResult({
+        criados: resume.criados,
+        atualizados: resume.atualizados,
+        ignorados: resume.ignorados,
+        erros: resume.erros.slice(0, 50),
+      })
+      await fetchClientes()
+    } catch (err) {
+      alert('Erro ao importar carteira: ' + String(err))
+    } finally {
+      setImportingClientes(false)
+      setImportProgress(null)
+    }
+  }
 
   async function resolveProfiles(ids: string[]) {
     const unknown = ids.filter(id => !profileNomes.has(id))
@@ -589,6 +872,16 @@ export default function Clientes() {
 
   return (
     <div className="flex flex-col h-full">
+      <input
+        ref={fileImportRef}
+        type="file"
+        accept=".csv,.xls,.xlsx"
+        aria-label="Selecionar planilha de clientes"
+        title="Selecionar planilha de clientes"
+        className="hidden"
+        onChange={handleImportFileChange}
+      />
+
       {/* toolbar */}
       <div className="px-6 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-wrap items-center gap-3 shrink-0">
         <div className="flex items-center gap-2 flex-1 min-w-0 max-w-sm">
@@ -631,6 +924,14 @@ export default function Clientes() {
         <button type="button" onClick={() => void fetchClientes()} title="Atualizar"
           className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
           <RefreshCcw size={14} />
+        </button>
+
+        <button
+          type="button"
+          onClick={openImportModal}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/10 text-sm font-medium"
+        >
+          <Upload size={14} /> Importar carteira
         </button>
 
         <button
@@ -963,6 +1264,122 @@ export default function Clientes() {
           onChange={setClienteForm}
           saving={savingCliente}
         />
+      )}
+
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="w-full max-w-6xl max-h-[90vh] rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Importar carteira de clientes</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Mapeie as colunas da planilha e confirme a importação.</p>
+              </div>
+              <button type="button" title="Fechar" onClick={resetImportState} className="w-8 h-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center text-gray-400">
+                <span className="sr-only">Fechar importação</span>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto p-5 space-y-4">
+              <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                  {CLIENT_IMPORT_FIELDS.map(field => (
+                    <label key={field.key} className="text-xs text-gray-600 dark:text-gray-300 space-y-1 block">
+                      <span className="font-medium">{field.label}{field.required ? ' *' : ''}</span>
+                      <select
+                        aria-label={`Mapear coluna para ${field.label}`}
+                        title={`Mapear coluna para ${field.label}`}
+                        value={importColumnMap[field.key] ?? ''}
+                        onChange={e => setImportColumnMap(prev => ({ ...prev, [field.key]: e.target.value || undefined }))}
+                        className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1.5 text-xs"
+                      >
+                        <option value="">Não mapear</option>
+                        {importHeaders.map(header => (
+                          <option key={`${field.key}-${header}`} value={header}>{header}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+                <table className="w-full min-w-[1300px] text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-gray-800/60 text-gray-500 uppercase">
+                      {CLIENT_IMPORT_FIELDS.map(field => <th key={field.key} className="px-3 py-2 text-left">{field.label}</th>)}
+                      <th className="px-3 py-2 text-left">OK</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {mappedImportRows.slice(0, 12).map((row, idx) => {
+                      const ok = !!(row.cpf_cnpj?.trim() && row.nome?.trim())
+                      return (
+                        <tr key={idx} className={cn(!ok && 'opacity-50')}>
+                          {CLIENT_IMPORT_FIELDS.map(field => (
+                            <td key={`${idx}-${field.key}`} className="px-3 py-2 truncate max-w-[180px] text-gray-700 dark:text-gray-300">{row[field.key] || '—'}</td>
+                          ))}
+                          <td className="px-3 py-2">{ok ? <Check size={12} className="text-green-600" /> : <X size={12} className="text-red-500" />}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {importResult && (
+                <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-center">
+                    <div className="rounded-lg bg-green-50 dark:bg-green-900/20 px-3 py-2">
+                      <p className="text-xl font-bold text-green-600">{importResult.criados}</p>
+                      <p className="text-xs text-green-700 dark:text-green-400">Criados</p>
+                    </div>
+                    <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 px-3 py-2">
+                      <p className="text-xl font-bold text-blue-600">{importResult.atualizados}</p>
+                      <p className="text-xs text-blue-700 dark:text-blue-400">Atualizados</p>
+                    </div>
+                    <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 px-3 py-2">
+                      <p className="text-xl font-bold text-amber-600">{importResult.ignorados}</p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400">Ignorados</p>
+                    </div>
+                  </div>
+                  {importResult.erros.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-red-600 mb-1">Erros (primeiros 50)</p>
+                      <div className="max-h-28 overflow-y-auto space-y-1">
+                        {importResult.erros.map((err, i) => (
+                          <div key={`${err.linha}-${i}`} className="text-xs text-red-600 bg-red-50 dark:bg-red-900/10 px-2 py-1 rounded">
+                            Linha {err.linha}: {err.motivo}{err.cpf_cnpj ? ` (${err.cpf_cnpj})` : ''}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3">
+              <p className="text-xs text-gray-500">
+                {validImportRows.length} registro(s) válidos de {mappedImportRows.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={resetImportState} className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-300">Fechar</button>
+                <button
+                  type="button"
+                  onClick={() => void confirmarImportacaoClientes()}
+                  disabled={importingClientes || validImportRows.length === 0}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium disabled:opacity-50"
+                >
+                  {importingClientes ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                  {importingClientes
+                    ? `Importando ${importProgress?.done ?? 0}/${importProgress?.total ?? validImportRows.length}...`
+                    : `Importar ${validImportRows.length} clientes`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

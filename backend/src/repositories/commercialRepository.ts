@@ -182,6 +182,176 @@ export class CommercialRepository {
     return result.rows
   }
 
+  async importCustomers(items: Array<{
+    tipo_cliente?: string | null
+    tipo_cadastro?: string | null
+    cpf_cnpj?: string | null
+    nome?: string | null
+    nome_fantasia?: string | null
+    email?: string | null
+    telefone?: string | null
+    cidade?: string | null
+    logradouro?: string | null
+    numero?: string | null
+    complemento?: string | null
+    bairro?: string | null
+    uf?: string | null
+    cep?: string | null
+    inscricao_municipal?: string | null
+    inscricao_estadual?: string | null
+    iss_retido?: boolean | null
+    status?: string | null
+  }>) {
+    const erros: { linha: number; motivo: string; cpf_cnpj?: string; nome?: string }[] = []
+    const byDoc = new Map<string, {
+      tipo_cliente: string
+      tipo_cadastro: string
+      cpf_cnpj: string
+      nome: string
+      nome_fantasia: string | null
+      email: string | null
+      telefone: string | null
+      cidade: string | null
+      logradouro: string | null
+      numero: string | null
+      complemento: string | null
+      bairro: string | null
+      uf: string | null
+      cep: string | null
+      inscricao_municipal: string | null
+      inscricao_estadual: string | null
+      iss_retido: boolean
+      status: string
+      metadata: string
+    }>()
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i] ?? {}
+      const doc = String(item.cpf_cnpj ?? '').replace(/\D/g, '')
+      const nome = String(item.nome ?? '').trim()
+      if (!doc) {
+        erros.push({ linha: i + 1, motivo: 'CPF/CNPJ ausente', nome: nome || undefined })
+        continue
+      }
+      if (!nome) {
+        erros.push({ linha: i + 1, motivo: 'Nome ausente', cpf_cnpj: doc })
+        continue
+      }
+
+      const tipoClienteRaw = String(item.tipo_cliente ?? '').toLowerCase()
+      const tipo_cliente = tipoClienteRaw.includes('jur') || tipoClienteRaw === 'pj' || doc.length === 14
+        ? 'pessoa_juridica'
+        : 'pessoa_fisica'
+
+      byDoc.set(doc, {
+        tipo_cliente,
+        tipo_cadastro: String(item.tipo_cadastro ?? 'cliente').trim() || 'cliente',
+        cpf_cnpj: doc,
+        nome,
+        nome_fantasia: String(item.nome_fantasia ?? '').trim() || null,
+        email: String(item.email ?? '').trim() || null,
+        telefone: String(item.telefone ?? '').trim() || null,
+        cidade: String(item.cidade ?? '').trim() || null,
+        logradouro: String(item.logradouro ?? '').trim() || null,
+        numero: String(item.numero ?? '').trim() || null,
+        complemento: String(item.complemento ?? '').trim() || null,
+        bairro: String(item.bairro ?? '').trim() || null,
+        uf: String(item.uf ?? '').trim().toUpperCase() || null,
+        cep: String(item.cep ?? '').trim() || null,
+        inscricao_municipal: String(item.inscricao_municipal ?? '').trim() || null,
+        inscricao_estadual: String(item.inscricao_estadual ?? '').trim() || null,
+        iss_retido: Boolean(item.iss_retido),
+        status: String(item.status ?? 'ativo').trim() || 'ativo',
+        metadata: JSON.stringify({ imported_via: 'clientes.import', imported_at: new Date().toISOString() }),
+      })
+    }
+
+    const payloads = [...byDoc.values()]
+    if (!payloads.length) {
+      return { criados: 0, atualizados: 0, ignorados: erros.length, erros }
+    }
+
+    const docs = payloads.map(p => p.cpf_cnpj)
+    const existingResult = await this.db.query<{ cpf_cnpj: string }>(
+      `select cpf_cnpj from cadastros_base where cpf_cnpj = any($1::text[])`,
+      [docs],
+    )
+    const existingSet = new Set(existingResult.rows.map(r => r.cpf_cnpj))
+    const criados = payloads.filter(p => !existingSet.has(p.cpf_cnpj)).length
+    const atualizados = payloads.length - criados
+
+    const chunkSize = 300
+    for (let start = 0; start < payloads.length; start += chunkSize) {
+      const chunk = payloads.slice(start, start + chunkSize)
+      const params: unknown[] = []
+      const valuesSql: string[] = []
+
+      for (const item of chunk) {
+        const base = params.length
+        params.push(
+          randomUUID(),
+          item.tipo_cliente,
+          item.tipo_cadastro,
+          item.cpf_cnpj,
+          item.nome,
+          item.nome_fantasia,
+          item.email,
+          item.telefone,
+          item.cidade,
+          item.logradouro,
+          item.numero,
+          item.complemento,
+          item.bairro,
+          item.uf,
+          item.cep,
+          item.inscricao_municipal,
+          item.inscricao_estadual,
+          item.iss_retido,
+          item.status,
+          item.metadata,
+        )
+        const placeholders = Array.from({ length: 20 }, (_, i) => `$${base + i + 1}`).join(', ')
+        valuesSql.push(`(${placeholders})`)
+      }
+
+      await this.db.query(
+        `insert into cadastros_base (
+          id, tipo_cliente, tipo_cadastro, cpf_cnpj, nome, nome_fantasia, email, telefone,
+          cidade, logradouro, numero, complemento, bairro, uf, cep,
+          inscricao_municipal, inscricao_estadual, iss_retido, status, metadata
+        ) values ${valuesSql.join(', ')}
+        on conflict (cpf_cnpj) do update set
+          tipo_cliente = excluded.tipo_cliente,
+          tipo_cadastro = excluded.tipo_cadastro,
+          nome = excluded.nome,
+          nome_fantasia = excluded.nome_fantasia,
+          email = excluded.email,
+          telefone = excluded.telefone,
+          cidade = excluded.cidade,
+          logradouro = excluded.logradouro,
+          numero = excluded.numero,
+          complemento = excluded.complemento,
+          bairro = excluded.bairro,
+          uf = excluded.uf,
+          cep = excluded.cep,
+          inscricao_municipal = excluded.inscricao_municipal,
+          inscricao_estadual = excluded.inscricao_estadual,
+          iss_retido = excluded.iss_retido,
+          status = excluded.status,
+          metadata = coalesce(cadastros_base.metadata, '{}'::jsonb) || excluded.metadata,
+          updated_at = now()`,
+        params,
+      )
+    }
+
+    return {
+      criados,
+      atualizados,
+      ignorados: items.length - payloads.length,
+      erros,
+    }
+  }
+
   async getCustomerPortalAccess(customerId: string) {
     const result = await this.db.query<{
       profile_id: string

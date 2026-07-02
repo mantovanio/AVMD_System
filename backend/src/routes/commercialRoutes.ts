@@ -41,6 +41,28 @@ type SaveCustomerRequest = {
   metadata?: Record<string, unknown> | null
 }
 type SearchCustomerRequest = { term?: string }
+type ImportCustomersRequest = {
+  items?: Array<{
+    tipo_cliente?: string | null
+    tipo_cadastro?: string | null
+    cpf_cnpj?: string | null
+    nome?: string | null
+    nome_fantasia?: string | null
+    email?: string | null
+    telefone?: string | null
+    cidade?: string | null
+    logradouro?: string | null
+    numero?: string | null
+    complemento?: string | null
+    bairro?: string | null
+    uf?: string | null
+    cep?: string | null
+    inscricao_municipal?: string | null
+    inscricao_estadual?: string | null
+    iss_retido?: boolean | null
+    status?: string | null
+  }>
+}
 type CommissionReportRequest = {
   from?: string | null
   to?: string | null
@@ -109,6 +131,13 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
     const body = await readJson<SaveCustomerRequest>(req)
     const cliente = await repository.saveCustomer(body)
     writeJson(res, 200, { ok: true, cliente }, corsOrigin)
+    return true
+  }
+
+  if (req.method === 'POST' && req.url === '/api/comercial/clientes/import') {
+    const body = await readJson<ImportCustomersRequest>(req)
+    const result = await repository.importCustomers(body.items ?? [])
+    writeJson(res, 200, { ok: true, ...result }, corsOrigin)
     return true
   }
 
