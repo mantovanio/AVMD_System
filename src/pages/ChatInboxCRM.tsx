@@ -2004,7 +2004,7 @@ export default function ChatInboxCRM() {
               </div>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-4 xl:grid-cols-7 xl:self-stretch">
+            <div className="grid w-full grid-cols-3 gap-2 sm:grid-cols-6">
               <SummaryCard icon={MessageCircle} label="Atendimento" value={summary.atendimento} active={activeShortcut.atendimento} onClick={() => applySummaryShortcut('atendimento')} />
               <SummaryCard icon={RefreshCw} label="Renovacao" value={summary.renovacao} active={activeShortcut.renovacao} onClick={() => applySummaryShortcut('renovacao')} />
               <SummaryCard icon={Calendar} label="Agendamento" value={summary.agendamento} active={activeShortcut.agendamento} onClick={() => applySummaryShortcut('agendamento')} />
@@ -2858,7 +2858,7 @@ function SummaryCard({
   active?: boolean
   onClick?: () => void
 }) {
-  const className = `min-h-[72px] rounded-[18px] border px-3 py-2.5 text-left transition-all ${
+  const className = `flex flex-col items-center justify-center gap-1 rounded-[18px] border px-2 py-2.5 text-center transition-all ${
     active
       ? 'border-sky-200 bg-sky-50 text-sky-900 shadow-[0_10px_24px_rgba(14,116,144,0.08)]'
       : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
@@ -2866,26 +2866,17 @@ function SummaryCard({
 
   if (onClick) {
     return (
-      <button type="button" onClick={onClick} className={className}>
-        <div className="flex items-center gap-1.5">
-          <Icon size={14} className={active ? 'text-sky-700' : 'text-slate-400'} />
-          <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${active ? 'text-sky-700' : 'text-slate-400'}`}>{label}</p>
-        </div>
-        <div className="mt-2 flex items-end justify-between gap-2">
-          <p className={`text-[22px] font-semibold leading-none tracking-[-0.02em] ${active ? 'text-sky-950' : 'text-slate-900'}`}>{value}</p>
-          <span className={`text-[10px] ${active ? 'text-sky-600' : 'text-slate-400'}`}>ver</span>
-        </div>
+      <button type="button" onClick={onClick} className={className} title={label}>
+        <Icon size={22} className={active ? 'text-sky-700' : 'text-slate-400'} />
+        <p className={`text-[22px] font-semibold leading-none tracking-[-0.02em] ${active ? 'text-sky-950' : 'text-slate-900'}`}>{value}</p>
       </button>
     )
   }
 
   return (
-    <div className={className}>
-      <div className="flex items-center gap-1.5">
-        <Icon size={14} className="text-slate-400" />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
-      </div>
-      <p className="mt-2 text-[22px] font-semibold leading-none tracking-[-0.02em] text-slate-900">{value}</p>
+    <div className={className} title={label}>
+      <Icon size={22} className="text-slate-400" />
+      <p className="text-[22px] font-semibold leading-none tracking-[-0.02em] text-slate-900">{value}</p>
     </div>
   )
 }
