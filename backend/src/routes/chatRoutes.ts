@@ -7,6 +7,7 @@ import type { ConfigRepository } from '../repositories/configRepository.js'
 import type { FileRepository } from '../repositories/fileRepository.js'
 import type { LeadRepository } from '../repositories/leadRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
+import { resolveCadastroBaseByIdentity } from '../utils/customerIdentity.js'
 import { buildStoredPath, getStorageRoot, readFile, saveFile } from '../utils/storage.js'
 
 type JsonRecord = Record<string, unknown>
@@ -1157,6 +1158,23 @@ export async function handleChatRoutes(
       return true
     }
     const body = await readJson<JsonRecord>(req)
+    const existingCustomer = await db.query<{
+      nome: string | null
+      telefone: string | null
+      email: string | null
+      cpf: string | null
+      cnpj: string | null
+    }>(
+      `SELECT nome, telefone, email, cpf, cnpj
+         FROM crm_customers
+        WHERE id = $1::uuid
+        LIMIT 1`,
+      [id],
+    )
+    if (!existingCustomer.rows[0]) {
+      writeJson(res, 404, { ok: false, error: 'Cliente CRM nao encontrado.' }, corsOrigin)
+      return true
+    }
     const allowedFields = ['nome', 'telefone', 'email', 'contato_status', 'observacoes']
     const updates: string[] = []
     const values: unknown[] = []
@@ -1170,6 +1188,17 @@ export async function handleChatRoutes(
     if (!updates.length) {
       writeJson(res, 400, { ok: false, error: 'Nenhum campo valido para atualizar.' }, corsOrigin)
       return true
+    }
+    const current = existingCustomer.rows[0]
+    const resolvedCadastro = await resolveCadastroBaseByIdentity(db, {
+      phone: typeof body.telefone === 'string' ? body.telefone : current.telefone,
+      email: typeof body.email === 'string' ? body.email : current.email,
+      cpf: current.cpf,
+      cnpj: current.cnpj,
+    })
+    if (resolvedCadastro?.id) {
+      updates.push(`cadastro_base_id = $${idx++}`)
+      values.push(resolvedCadastro.id)
     }
     values.push(id)
     await db.query(`UPDATE crm_customers SET ${updates.join(', ')} WHERE id = $${idx}`, values)
@@ -1227,6 +1256,13 @@ export async function handleChatRoutes(
     const telefoneDigits = normalizePhoneDigits(telefone)
     const cleanCpf = cpf?.replace(/\D/g, '') || null
     const cleanCnpj = cnpj?.replace(/\D/g, '') || null
+    const resolvedCadastro = await resolveCadastroBaseByIdentity(db, {
+      phone: telefoneDigits,
+      email: email || null,
+      cpf: cleanCpf,
+      cnpj: cleanCnpj,
+    })
+
     const existing = await db.query<{ id: string }>(
       `SELECT id
          FROM crm_customers
@@ -1249,16 +1285,17 @@ export async function handleChatRoutes(
                 cpf = coalesce($5, cpf),
                 cnpj = coalesce($6, cnpj),
                 observacoes = coalesce($7, observacoes),
+                cadastro_base_id = coalesce($8::uuid, cadastro_base_id),
                 updated_at = now()
           WHERE id = $1::uuid`,
-        [customerId, nome || null, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null],
+        [customerId, nome || null, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
       )
     } else {
       const result = await db.query<{ id: string }>(
-        `INSERT INTO crm_customers (nome, telefone, email, cpf, cnpj, observacoes)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO crm_customers (nome, telefone, email, cpf, cnpj, observacoes, cadastro_base_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::uuid)
          RETURNING id`,
-        [nome, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null],
+        [nome, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
       )
       customerId = result.rows[0]?.id ?? null
     }

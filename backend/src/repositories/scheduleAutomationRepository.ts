@@ -1,4 +1,5 @@
 import type { AivenSqlClient } from '../db/aivenClient.js'
+import { resolveCadastroBaseByIdentity } from '../utils/customerIdentity.js'
 
 function normalizeText(value: unknown) {
   const text = String(value ?? '').trim()
@@ -353,6 +354,13 @@ export class ScheduleAutomationRepository {
     })
 
     let customerId: string | null = null
+    const resolvedCadastro = await resolveCadastroBaseByIdentity(this.db, {
+      phone: normalizedCustomerPhone ?? phoneDigits,
+      email: normalizedCustomerEmail,
+      cpf: document.cpf,
+      cnpj: document.cnpj,
+      document: documentDigits,
+    })
     if (normalizedCustomerEmail || phoneDigits || documentDigits) {
       const existing = await this.db.query<{ id: string }>(`
         select id
@@ -375,6 +383,7 @@ export class ScheduleAutomationRepository {
               cpf = coalesce($5, cpf),
               cnpj = coalesce($6, cnpj),
               observacoes = concat_ws(E'\n', nullif(observacoes, ''), $7),
+              cadastro_base_id = coalesce($8::uuid, cadastro_base_id),
               updated_at = now()
           where id = $1::uuid
         `, [
@@ -385,11 +394,12 @@ export class ScheduleAutomationRepository {
           document.cpf,
           document.cnpj,
           body,
+          resolvedCadastro?.id ?? null,
         ])
       } else {
         const created = await this.db.query<{ id: string }>(`
-          insert into crm_customers (nome, telefone, email, cpf, cnpj, observacoes)
-          values ($1, $2, $3, $4, $5, $6)
+          insert into crm_customers (nome, telefone, email, cpf, cnpj, observacoes, cadastro_base_id)
+          values ($1, $2, $3, $4, $5, $6, $7::uuid)
           returning id
         `, [
           normalizedCustomerName,
@@ -398,6 +408,7 @@ export class ScheduleAutomationRepository {
           document.cpf,
           document.cnpj,
           body,
+          resolvedCadastro?.id ?? null,
         ])
         customerId = created.rows[0]?.id ?? null
       }

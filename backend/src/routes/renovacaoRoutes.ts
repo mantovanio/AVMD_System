@@ -5,6 +5,7 @@ import type { CommunicationOutboxRepository } from '../repositories/communicatio
 import type { CatalogRepository } from '../repositories/catalogRepository.js'
 import type { AivenSqlClient } from '../db/aivenClient.js'
 import { readJson, writeJson } from '../utils/http.js'
+import { resolveCadastroBaseByIdentity } from '../utils/customerIdentity.js'
 
 export async function handleRenovacaoRoutes(
   req: IncomingMessage,
@@ -133,6 +134,13 @@ export async function handleRenovacaoRoutes(
       }
 
       try {
+        const resolvedCadastro = await resolveCadastroBaseByIdentity(db, {
+          phone: telefone,
+          email,
+          cpf: r.cpf?.replace(/\D/g, '') || null,
+          cnpj: r.cnpj?.replace(/\D/g, '') || null,
+          document: doc || null,
+        })
         const existing = await db.query<{ id: string }>(
           `SELECT id FROM crm_customers
             WHERE ($1::text is not null and regexp_replace(coalesce(cpf, ''), '\D', '', 'g') = $1)
@@ -158,6 +166,7 @@ export async function handleRenovacaoRoutes(
                     cpf = coalesce($5, cpf),
                     cnpj = coalesce($6, cnpj),
                     observacoes = coalesce($7, observacoes),
+                    cadastro_base_id = coalesce($8::uuid, cadastro_base_id),
                     updated_at = now()
               WHERE id = $1::uuid`,
             [
@@ -168,13 +177,14 @@ export async function handleRenovacaoRoutes(
               r.cpf?.replace(/\D/g, '') || null,
               r.cnpj?.replace(/\D/g, '') || null,
               r.observacoes || null,
+              resolvedCadastro?.id ?? null,
             ],
           )
           jaExistem.push({ doc: doc || telefone || email || '', nome: r.razao_social || r.cliente })
         } else {
           await db.query(
-            `INSERT INTO crm_customers (nome, telefone, email, cpf, cnpj, observacoes)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+            `INSERT INTO crm_customers (nome, telefone, email, cpf, cnpj, observacoes, cadastro_base_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7::uuid)`,
             [
               r.razao_social || r.cliente,
               telefone,
@@ -182,6 +192,7 @@ export async function handleRenovacaoRoutes(
               r.cpf?.replace(/\D/g, '') || null,
               r.cnpj?.replace(/\D/g, '') || null,
               r.observacoes || null,
+              resolvedCadastro?.id ?? null,
             ],
           )
           criados.push({ doc: doc || telefone || email || '', nome: r.razao_social || r.cliente })
