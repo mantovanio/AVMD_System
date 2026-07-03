@@ -551,6 +551,7 @@ export default function Clientes() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [detalhes, setDetalhes] = useState<Record<string, ClienteDetalhe>>({})
   const [loadingDetalhe, setLoadingDetalhe] = useState<string | null>(null)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const [profileNomes, setProfileNomes] = useState<Map<string, string>>(new Map())
   const [pageSize, setPageSize] = useState(50)
   const [clienteModal, setClienteModal] = useState<ClienteModalState>(null)
@@ -1173,6 +1174,15 @@ export default function Clientes() {
     })
   }
 
+  function isSectionCollapsed(clienteId: string, section: string) {
+    return collapsedSections[`${clienteId}:${section}`] ?? false
+  }
+
+  function toggleSectionCollapsed(clienteId: string, section: string) {
+    const key = `${clienteId}:${section}`
+    setCollapsedSections(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
   function applySearch() {
     setPage(0)
     setSearch(searchInput)
@@ -1291,6 +1301,12 @@ export default function Clientes() {
                 const comprasHistorico = Array.isArray((c.metadata as { compras_historico?: unknown[] } | null)?.compras_historico)
                   ? (((c.metadata as { compras_historico?: unknown[] }).compras_historico ?? []) as Array<Record<string, unknown>>)
                   : []
+                const portalCollapsed = isSectionCollapsed(c.id, 'portal')
+                const vendasCollapsed = isSectionCollapsed(c.id, 'vendas')
+                const renovacoesCollapsed = isSectionCollapsed(c.id, 'renovacoes')
+                const contatosCollapsed = isSectionCollapsed(c.id, 'contatos')
+                const comprasCollapsed = isSectionCollapsed(c.id, 'compras')
+                const agendamentosCollapsed = isSectionCollapsed(c.id, 'agendamentos')
 
                 return (
                 <Fragment key={c.id}>
@@ -1384,8 +1400,14 @@ export default function Clientes() {
 
                             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                               <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-100 dark:border-blue-900/20 overflow-hidden xl:col-span-2">
-                                <SectionTitle title="Acesso do portal" count={detalhe?.portal_access ? 1 : 0} />
-                                {!detalhe?.portal_access ? (
+                                <SectionTitle
+                                  title="Acesso do portal"
+                                  count={detalhe?.portal_access ? 1 : 0}
+                                  collapsible
+                                  collapsed={portalCollapsed}
+                                  onToggle={() => toggleSectionCollapsed(c.id, 'portal')}
+                                />
+                                {!portalCollapsed && (!detalhe?.portal_access ? (
                                   <EmptySection label="Este cliente ainda não possui um acesso de portal vinculado." />
                                 ) : (
                                   <div className="px-4 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -1415,11 +1437,17 @@ export default function Clientes() {
                                       </button>
                                     </div>
                                   </div>
-                                )}
+                                ))}
                               </div>
                               <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-100 dark:border-blue-900/20 overflow-hidden">
-                                <SectionTitle title="Histórico de vendas" count={detalhe?.vendas.length ?? 0} />
-                                {!(detalhe?.vendas.length) ? (
+                                <SectionTitle
+                                  title="Histórico de vendas"
+                                  count={detalhe?.vendas.length ?? 0}
+                                  collapsible
+                                  collapsed={vendasCollapsed}
+                                  onToggle={() => toggleSectionCollapsed(c.id, 'vendas')}
+                                />
+                                {!vendasCollapsed && (!(detalhe?.vendas.length) ? (
                                   <EmptySection label="Nenhuma venda registrada para este cliente." />
                                 ) : (
                                   <div className="overflow-x-auto">
@@ -1449,12 +1477,18 @@ export default function Clientes() {
                                       </tbody>
                                     </table>
                                   </div>
-                                )}
+                                ))}
                               </div>
 
                               <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-100 dark:border-blue-900/20 overflow-hidden">
-                                <SectionTitle title="Renovações" count={detalhe?.renovacoes.length ?? 0} />
-                                {!(detalhe?.renovacoes.length) ? (
+                                <SectionTitle
+                                  title="Renovações"
+                                  count={detalhe?.renovacoes.length ?? 0}
+                                  collapsible
+                                  collapsed={renovacoesCollapsed}
+                                  onToggle={() => toggleSectionCollapsed(c.id, 'renovacoes')}
+                                />
+                                {!renovacoesCollapsed && (!(detalhe?.renovacoes.length) ? (
                                   <EmptySection label="Nenhuma renovação encontrada para este cliente." />
                                 ) : (
                                   <div className="divide-y divide-blue-100 dark:divide-blue-900/20">
@@ -1480,12 +1514,18 @@ export default function Clientes() {
                                       </div>
                                     ))}
                                   </div>
-                                )}
+                                ))}
                               </div>
 
                               <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-100 dark:border-blue-900/20 overflow-hidden">
-                                <SectionTitle title="Histórico de contato" count={detalhe?.contatos.length ?? 0} />
-                                {!(detalhe?.contatos.length) ? (
+                                <SectionTitle
+                                  title="Histórico de contato"
+                                  count={detalhe?.contatos.length ?? 0}
+                                  collapsible
+                                  collapsed={contatosCollapsed}
+                                  onToggle={() => toggleSectionCollapsed(c.id, 'contatos')}
+                                />
+                                {!contatosCollapsed && (!(detalhe?.contatos.length) ? (
                                   <EmptySection label="Nenhum contato encontrado nas filas e eventos." />
                                 ) : (
                                   <div className="divide-y divide-blue-100 dark:divide-blue-900/20">
@@ -1500,12 +1540,18 @@ export default function Clientes() {
                                       </div>
                                     ))}
                                   </div>
-                                )}
+                                ))}
                               </div>
 
                               <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-100 dark:border-blue-900/20 overflow-hidden">
-                                <SectionTitle title="Histórico de compras (importação)" count={comprasHistorico.length} />
-                                {!comprasHistorico.length ? (
+                                <SectionTitle
+                                  title="Histórico de compras (importação)"
+                                  count={comprasHistorico.length}
+                                  collapsible
+                                  collapsed={comprasCollapsed}
+                                  onToggle={() => toggleSectionCollapsed(c.id, 'compras')}
+                                />
+                                {!comprasCollapsed && (!comprasHistorico.length ? (
                                   <EmptySection label="Nenhum histórico de compras importado para este cliente." />
                                 ) : (
                                   <div className="divide-y divide-blue-100 dark:divide-blue-900/20">
@@ -1524,12 +1570,18 @@ export default function Clientes() {
                                       </div>
                                     ))}
                                   </div>
-                                )}
+                                ))}
                               </div>
 
                               <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-100 dark:border-blue-900/20 overflow-hidden">
-                                <SectionTitle title="Agendamentos" count={detalhe?.agendamentos.length ?? 0} />
-                                {!(detalhe?.agendamentos.length) ? (
+                                <SectionTitle
+                                  title="Agendamentos"
+                                  count={detalhe?.agendamentos.length ?? 0}
+                                  collapsible
+                                  collapsed={agendamentosCollapsed}
+                                  onToggle={() => toggleSectionCollapsed(c.id, 'agendamentos')}
+                                />
+                                {!agendamentosCollapsed && (!(detalhe?.agendamentos.length) ? (
                                   <EmptySection label="Nenhum agendamento encontrado para este cliente." />
                                 ) : (
                                   <div className="divide-y divide-blue-100 dark:divide-blue-900/20">
@@ -1543,7 +1595,7 @@ export default function Clientes() {
                                       </div>
                                     ))}
                                   </div>
-                                )}
+                                ))}
                               </div>
                             </div>
                           </div>
@@ -1797,11 +1849,38 @@ function InfoMini({ label, value }: { label: string; value: string }) {
   )
 }
 
-function SectionTitle({ title, count }: { title: string; count: number }) {
+function SectionTitle({
+  title,
+  count,
+  collapsible = false,
+  collapsed = false,
+  onToggle,
+}: {
+  title: string
+  count: number
+  collapsible?: boolean
+  collapsed?: boolean
+  onToggle?: () => void
+}) {
   return (
     <div className="px-4 py-3 border-b border-blue-100 dark:border-blue-900/20 bg-blue-50/60 dark:bg-blue-900/10 flex items-center justify-between">
       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
-      <span className="text-xs text-gray-400">{count}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-400">{count}</span>
+        {collapsible && (
+          <button
+            type="button"
+            onClick={event => {
+              event.stopPropagation()
+              onToggle?.()
+            }}
+            className="inline-flex items-center gap-1 rounded-md border border-blue-200 dark:border-blue-900/40 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100/70 dark:hover:bg-blue-900/30 transition-colors"
+          >
+            {collapsed ? 'Expandir' : 'Ocultar'}
+            {collapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+          </button>
+        )}
+      </div>
     </div>
   )
 }
