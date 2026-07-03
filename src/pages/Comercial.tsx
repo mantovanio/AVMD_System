@@ -776,6 +776,10 @@ export default function Comercial() {
     () => new Map(pricingMatrixRules.map(rule => [rule.tabela_preco_id, rule])),
     [pricingMatrixRules]
   )
+  const parceiroSelecionadoVenda = useMemo(
+    () => parceiros.find(parceiro => parceiro.id === formV2.contador_id) ?? null,
+    [formV2.contador_id, parceiros]
+  )
 
   const tabelasDisponiveisVenda = useMemo(() => {
     const tipoEmissaoSelecionado = normalizeTipoEmissao(formV2.tipo_emissao)
@@ -800,6 +804,20 @@ export default function Comercial() {
         : tabelasBase
 
     return tabelasPorPonto.filter(tabela => {
+      const participantesTabela = tabelaParticipantes.filter(item => item.tabela_preco_id === tabela.id)
+      if (parceiroSelecionadoVenda && participantesTabela.length > 0) {
+        const parceiroCompativel = participantesTabela.some(item => {
+          if (item.tipo_participante === 'parceiro') {
+            return item.parceiro_id === parceiroSelecionadoVenda.id
+          }
+          if (item.tipo_participante === 'tipo_parceiro') {
+            return !!parceiroSelecionadoVenda.tipo_parceiro && item.tipo_parceiro === parceiroSelecionadoVenda.tipo_parceiro
+          }
+          return false
+        })
+        if (!parceiroCompativel) return false
+      }
+
       if (!tipoEmissaoSelecionado) return true
       return tabelaItens.some(item => {
         if (item.tabela_preco_id !== tabela.id || !item.ativo) return false
@@ -815,6 +833,8 @@ export default function Comercial() {
     currentUserId,
     formV2.ponto_atendimento_id,
     formV2.tipo_emissao,
+    parceiroSelecionadoVenda,
+    tabelaParticipantes,
     profile?.perfil,
     tabelaItens,
     tabelasAtivas,
@@ -980,8 +1000,25 @@ export default function Comercial() {
     return parceiros
   }, [currentUserId, isAdmin, parceiroIdsPermitidosAgente, parceiros, profile?.perfil])
 
+  const parceirosVinculadosTabelaSelecionada = useMemo(() => {
+    if (!formV2.tabela_preco_id) return parceirosVinculadosAoUsuario
+
+    const participantesTabela = tabelaParticipantes.filter(item => item.tabela_preco_id === formV2.tabela_preco_id)
+    if (participantesTabela.length === 0) return parceirosVinculadosAoUsuario
+
+    return parceirosVinculadosAoUsuario.filter(parceiro => participantesTabela.some(item => {
+      if (item.tipo_participante === 'parceiro') {
+        return item.parceiro_id === parceiro.id
+      }
+      if (item.tipo_participante === 'tipo_parceiro') {
+        return !!parceiro.tipo_parceiro && item.tipo_parceiro === parceiro.tipo_parceiro
+      }
+      return false
+    }))
+  }, [formV2.tabela_preco_id, parceirosVinculadosAoUsuario, tabelaParticipantes])
+
   const parceirosParaContador = useMemo(() => {
-    const origem = parceirosVinculadosAoUsuario
+    const origem = parceirosVinculadosTabelaSelecionada
     const q = contadorSearch.trim().toLowerCase()
 
     if (!q) return origem.slice(0, 20)
@@ -993,7 +1030,7 @@ export default function Comercial() {
         (p.nome_fantasia ?? '').toLowerCase().includes(q)
       )
       .slice(0, 20)
-  }, [contadorSearch, parceirosVinculadosAoUsuario])
+  }, [contadorSearch, parceirosVinculadosTabelaSelecionada])
 
   function showMsg(msg: string, type: 'ok' | 'err' = 'err') {
     setToast({ msg, type })
@@ -4307,8 +4344,7 @@ export default function Comercial() {
                       disabled={!formV2.tabela_preco_id}
                       options={[
                         { value: '', label: formV2.tabela_preco_id ? 'Selecione o produto' : 'Selecione a tabela primeiro' },
-                        ...itensTabela.map(item => {
-                          const cert = certificadoById.get(item.certificado_id)
+                        ...certsDaTabela.map(({ item, cert }) => {
                           const label = cert
                             ? `${cert.tipo}${cert.modelo ? ' · ' + cert.modelo : ''}${cert.validade ? ' · ' + cert.validade : ''} — ${item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
                             : item.id
