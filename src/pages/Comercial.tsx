@@ -1060,6 +1060,16 @@ export default function Comercial() {
     return ativoFallback ? 'Ativo' : 'Inativo'
   }
 
+  function normalizeCategoriaCertificado(value: string | null | undefined) {
+    return String(value ?? '')
+      .trim()
+      .replace(/[\u2010-\u2015\u2212]/g, '-')
+      .replace(/\s+/g, ' ')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+  }
+
   function normalizeTipoEmissao(value: string | null | undefined) {
     const normalized = String(value ?? '')
       .trim()
@@ -1225,6 +1235,7 @@ export default function Comercial() {
   }, [vendasV2, vendaFilters])
 
   const certificadosFiltrados = useMemo(() => {
+    const categoriaSelecionada = normalizeCategoriaCertificado(certFilters.categoria)
     return certificados.filter(c => {
       const termo = certFilters.busca.trim().toLowerCase()
       if (termo) {
@@ -1236,14 +1247,26 @@ export default function Comercial() {
       }
       if (certFilters.status === 'ativo' && !c.ativo) return false
       if (certFilters.status === 'inativo' && c.ativo) return false
-      if (certFilters.categoria && c.categoria !== certFilters.categoria) return false
+      if (categoriaSelecionada && normalizeCategoriaCertificado(c.categoria) !== categoriaSelecionada) return false
       return true
     })
   }, [certificados, certFilters])
 
   const categoriasDisponiveis = useMemo(() => {
-    const cats = new Set(certificados.map(c => c.categoria).filter(Boolean) as string[])
-    return Array.from(cats).sort()
+    const categoriasMap = new Map<string, string>()
+    for (const certificado of certificados) {
+      const categoriaOriginal = String(certificado.categoria ?? '').trim()
+      if (!categoriaOriginal) continue
+      const categoriaNormalizada = normalizeCategoriaCertificado(categoriaOriginal)
+      if (!categoriaNormalizada) continue
+      if (!categoriasMap.has(categoriaNormalizada)) {
+        categoriasMap.set(categoriaNormalizada, categoriaOriginal.replace(/\s+/g, ' '))
+      }
+    }
+
+    return Array.from(categoriasMap.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' }))
   }, [certificados])
 
   const totalFiltrado  = useMemo(() => vendasFiltradas.reduce((s, v) => s + (v.valor_venda ?? 0), 0), [vendasFiltradas])
@@ -5224,7 +5247,7 @@ export default function Comercial() {
                 onChange={v => setCertFilters(p => ({ ...p, categoria: v }))}
                 options={[
                   { value: '', label: 'Todas' },
-                  ...categoriasDisponiveis.map(c => ({ value: c, label: c })),
+                  ...categoriasDisponiveis,
                 ]}
                 className="min-w-[160px]" />
               {certFilters.busca || certFilters.status || certFilters.categoria ? (
