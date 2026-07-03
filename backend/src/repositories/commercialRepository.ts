@@ -172,14 +172,70 @@ export class CommercialRepository {
     return result.rows[0] ?? { id: agendaId }
   }
 
-  async listCustomers() {
-    const result = await this.db.query(`
-      select *
-      from cadastros_base
-      order by nome asc
-      limit 200
-    `)
-    return result.rows
+  async listCustomers(input?: {
+    page?: number
+    pageSize?: number
+    search?: string
+    filterTipo?: string | null
+    filterStatus?: string | null
+  }) {
+    const page = Math.max(0, Number(input?.page ?? 0) || 0)
+    const rawPageSize = Number(input?.pageSize ?? 50) || 50
+    const pageSize = Math.min(200, Math.max(1, rawPageSize))
+    const offset = page * pageSize
+    const search = String(input?.search ?? '').trim().toLowerCase()
+    const filterTipo = String(input?.filterTipo ?? '').trim()
+    const filterStatus = String(input?.filterStatus ?? '').trim()
+
+    const where: string[] = []
+    const params: unknown[] = []
+
+    if (search) {
+      params.push(`%${search}%`)
+      const p = `$${params.length}`
+      where.push(`(
+        lower(coalesce(nome, '')) like ${p}
+        or lower(coalesce(cpf_cnpj, '')) like ${p}
+        or lower(coalesce(nome_fantasia, '')) like ${p}
+      )`)
+    }
+
+    if (filterTipo) {
+      params.push(filterTipo)
+      where.push(`tipo_cliente = $${params.length}`)
+    }
+
+    if (filterStatus) {
+      params.push(filterStatus)
+      where.push(`status = $${params.length}`)
+    }
+
+    const whereSql = where.length ? `where ${where.join(' and ')}` : ''
+
+    const countResult = await this.db.query<{ total: string }>(
+      `select count(*)::text as total
+       from cadastros_base
+       ${whereSql}`,
+      params,
+    )
+
+    const listParams = [...params, pageSize, offset]
+    const limitPlaceholder = `$${listParams.length - 1}`
+    const offsetPlaceholder = `$${listParams.length}`
+    const result = await this.db.query(
+      `select *
+       from cadastros_base
+       ${whereSql}
+       order by nome asc
+       limit ${limitPlaceholder}
+       offset ${offsetPlaceholder}`,
+      listParams,
+    )
+
+    return {
+      clientes: result.rows,
+      total: Number(countResult.rows[0]?.total ?? '0'),
+    }
   }
 
   async importCustomers(items: Array<{

@@ -140,8 +140,15 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
   }
 
   if (req.method === 'POST' && req.url === '/api/comercial/clientes') {
-    const clientes = await repository.listCustomers()
-    writeJson(res, 200, { ok: true, clientes }, corsOrigin)
+    const body = await readJson<{
+      page?: number
+      pageSize?: number
+      search?: string
+      filterTipo?: string
+      filterStatus?: string
+    }>(req)
+    const result = await repository.listCustomers(body)
+    writeJson(res, 200, { ok: true, ...result }, corsOrigin)
     return true
   }
 

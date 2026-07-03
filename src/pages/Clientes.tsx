@@ -265,8 +265,90 @@ function cleanImportHeader(header: string) {
   return header.trim().replace(/"/g, '')
 }
 
-function guessClientColumnMap(headers: string[]): Partial<Record<ClienteImportField, string>> {
+function normalizeDigits(v: string | null | undefined) {
+  return (v ?? '').replace(/\D/g, '')
+}
+
+function normalizeImportDocument(v: string | null | undefined) {
+  const digits = normalizeDigits(v)
+  if (digits.length === 11 || digits.length === 14) return digits
+  return ''
+}
+
+function isLikelyDate(v: string) {
+  const raw = v.trim()
+  if (!raw) return false
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return true
+  if (/^\d{1,2}[\/-]\d{1,2}[\/-]\d{4}/.test(raw)) return true
+  if (/^\d{4}\s+\d{1,2}:\d{2}:\d{2}-\d{1,2}-\d{1,2}$/.test(raw)) return true
+  return false
+}
+
+function scoreImportFieldForHeader(field: ClienteImportField, header: string, samples: string[]) {
+  const normalized = normalizeHeaderImport(header)
+  const sampleValues = samples.filter(Boolean)
+  let score = 0
+
+  if (CLIENT_IMPORT_ALIASES[normalized] === field) score += 100
+  if (normalizeHeaderImport(field) === normalized) score += 90
+  if (normalizeHeaderImport(CLIENT_IMPORT_FIELDS.find(f => f.key === field)?.label ?? '') === normalized) score += 70
+
+  const digits = sampleValues.map(normalizeDigits).filter(Boolean)
+  const dateSamples = sampleValues.filter(isLikelyDate)
+
+  switch (field) {
+    case 'cpf':
+      if (digits.some(v => v.length === 11)) score += 60
+      if (normalized.includes('cpf') && !normalized.includes('cnpj')) score += 20
+      break
+    case 'cnpj':
+      if (digits.some(v => v.length === 14)) score += 60
+      if (normalized.includes('cnpj')) score += 40
+      break
+    case 'cpf_cnpj':
+    case 'documento':
+      if (digits.some(v => v.length === 11 || v.length === 14)) score += 60
+      if (normalized.includes('doc')) score += 20
+      break
+    case 'documento_titular':
+      if (digits.some(v => v.length === 11)) score += 70
+      if (normalized.includes('titular') || normalized.includes('tit')) score += 30
+      break
+    case 'data_nascimento':
+    case 'validade':
+    case 'vencimento':
+      if (dateSamples.length >= Math.max(1, Math.ceil(sampleValues.length * 0.6))) score += 60
+      if (normalized.includes('data') || normalized.includes('nasc') || normalized.includes('venc') || normalized.includes('valid')) score += 20
+      break
+    case 'pedido':
+    case 'protocolo':
+      if (normalized.includes('pedido') || normalized.includes('protocolo')) score += 50
+      break
+    case 'produto':
+    case 'tipo':
+      if (normalized.includes('produto') || normalized.includes('tipo')) score += 50
+      break
+    case 'valor_compra':
+      if (sampleValues.some(v => /\d+[,.]\d{2}/.test(v) || /^\d+$/.test(v))) score += 60
+      if (normalized.includes('valor') || normalized.includes('preco') || normalized.includes('compra')) score += 20
+      break
+    case 'status_pedido':
+      if (normalized.includes('status')) score += 40
+      if (sampleValues.some(v => /pendente|aprov|cancel|emit|pago|aguard/i.test(v))) score += 20
+      break
+    case 'ar':
+      if (normalized === 'ar' || normalized.includes('agente') || normalized.includes('ponto')) score += 40
+      break
+    default:
+      break
+  }
+
+  return score
+}
+
+function guessClientColumnMap(headers: string[], rows: Record<string, string>[] = []): Partial<Record<ClienteImportField, string>> {
   const map: Partial<Record<ClienteImportField, string>> = {}
+  const sampleRows = rows.slice(0, 5)
   for (const header of headers) {
     const normalized = normalizeHeaderImport(header)
     const byKey = CLIENT_IMPORT_FIELDS.find(f => f.key === normalized)?.key
@@ -274,6 +356,21 @@ function guessClientColumnMap(headers: string[]): Partial<Record<ClienteImportFi
     const byLabel = CLIENT_IMPORT_FIELDS.find(f => normalizeHeaderImport(f.label) === normalized)?.key
     const key = byKey ?? byAlias ?? byLabel
     if (key && !map[key]) map[key] = header
+
+    if (key) continue
+
+    let bestField: ClienteImportField | null = null
+    let bestScore = 0
+    const sampleValues = sampleRows.map(row => String(row[header] ?? '').trim()).filter(Boolean)
+    for (const candidate of CLIENT_IMPORT_FIELDS.map(f => f.key)) {
+      const score = scoreImportFieldForHeader(candidate, header, sampleValues)
+      if (score > bestScore) {
+        bestScore = score
+        bestField = candidate
+      }
+    }
+
+    if (bestField && bestScore >= 60 && !map[bestField]) map[bestField] = header
   }
   return map
 }
@@ -402,10 +499,6 @@ function formatDoc(v: string) {
   return v
 }
 
-function normalizeDigits(v: string | null | undefined) {
-  return (v ?? '').replace(/\D/g, '')
-}
-
 function buildPhoneCandidates(phone: string | null) {
   const digits = normalizeDigits(phone)
   if (!digits) return []
@@ -480,9 +573,47 @@ export default function Clientes() {
     () => applyClientColumnMap(importRawRows, importColumnMap),
     [importRawRows, importColumnMap],
   )
+  const autoImportMap = useMemo(
+    () => guessClientColumnMap(importHeaders, importRawRows),
+    [importHeaders, importRawRows],
+  )
+  const detectedImportFields = useMemo(
+    () => CLIENT_IMPORT_FIELDS
+      .map(field => ({ field, header: autoImportMap[field.key] }))
+      .filter(item => item.header),
+    [autoImportMap],
+  )
+  const importValidationSummary = useMemo(() => {
+    const details = mappedImportRows.map((row, index) => {
+      const rawDoc = row.documento || row.cpf_cnpj || row.cpf || row.cnpj || ''
+      const doc = normalizeImportDocument(rawDoc)
+      const nome = (row.nome || row.razao_social || '').trim()
+      if (!doc && !nome) return { index, reason: 'Sem CPF/CNPJ e sem nome' }
+      if (!doc) return { index, reason: 'CPF/CNPJ ausente ou inválido' }
+      if (!nome) return { index, reason: 'Nome/Razão social ausente' }
+      return { index, reason: null as string | null }
+    })
+
+    const accepted = details.filter(item => !item.reason).length
+    const rejected = details.length - accepted
+    const reasons = details
+      .filter(item => item.reason)
+      .reduce<Record<string, number>>((acc, item) => {
+        acc[item.reason as string] = (acc[item.reason as string] ?? 0) + 1
+        return acc
+      }, {})
+
+    return {
+      total: details.length,
+      accepted,
+      rejected,
+      reasons,
+      samples: details.filter(item => item.reason).slice(0, 5),
+    }
+  }, [mappedImportRows])
   const validImportRows = useMemo(
     () => mappedImportRows.filter(r => {
-      const doc = (r.documento || r.cpf_cnpj || r.cpf || r.cnpj || '').trim()
+      const doc = normalizeImportDocument(r.documento || r.cpf_cnpj || r.cpf || r.cnpj)
       const nome = (r.nome || r.razao_social || '').trim()
       return !!(doc && nome)
     }),
@@ -515,7 +646,7 @@ export default function Clientes() {
         const headers = Array.from(new Set(rows.flatMap(r => Object.keys(r)).map(cleanImportHeader).filter(Boolean)))
         setImportRawRows(rows)
         setImportHeaders(headers)
-        setImportColumnMap(guessClientColumnMap(headers))
+        setImportColumnMap(guessClientColumnMap(headers, rows))
         setImportResult(null)
         setShowImportModal(true)
       } catch (err) {
@@ -534,11 +665,11 @@ export default function Clientes() {
     const payload = validImportRows.map(row => ({
       tipo_cliente: row.tipo_cliente || row.tipo || null,
       data_nascimento: row.data_nascimento || null,
-      documento: row.documento || null,
-      documento_titular: row.documento_titular || null,
-      cpf_cnpj: row.cpf_cnpj || row.documento || row.cpf || row.cnpj || null,
-      cpf: row.cpf || null,
-      cnpj: row.cnpj || null,
+      documento: normalizeImportDocument(row.documento),
+      documento_titular: normalizeImportDocument(row.documento_titular),
+      cpf_cnpj: normalizeImportDocument(row.cpf_cnpj || row.documento || row.cpf || row.cnpj),
+      cpf: normalizeImportDocument(row.cpf),
+      cnpj: normalizeImportDocument(row.cnpj),
       nome: row.nome || row.razao_social || null,
       razao_social: row.razao_social || null,
       nome_fantasia: row.nome_fantasia || null,
@@ -605,7 +736,12 @@ export default function Clientes() {
         ignorados: resume.ignorados,
         erros: resume.erros.slice(0, 50),
       })
-      await fetchClientes()
+      setSearch('')
+      setSearchInput('')
+      setFilterTipo('')
+      setFilterStatus('')
+      setPage(0)
+      await fetchClientes({ page: 0, pageSize, search: '', filterTipo: '', filterStatus: '' })
     } catch (err) {
       alert('Erro ao importar carteira: ' + String(err))
     } finally {
@@ -627,29 +763,47 @@ export default function Clientes() {
     }
   }
 
-  const fetchClientes = useCallback(async () => {
+  const fetchClientes = useCallback(async (overrides?: {
+    page?: number
+    pageSize?: number
+    search?: string
+    filterTipo?: '' | TipoCliente
+    filterStatus?: '' | 'ativo' | 'inativo'
+  }) => {
     setLoading(true)
     try {
-      let q = supabase
-        .from('cadastros_base')
-        .select('id, tipo_cliente, cpf_cnpj, nome, nome_fantasia, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, uf, inscricao_municipal, inscricao_estadual, iss_retido, status, metadata, created_at', { count: 'exact' })
-        .order('nome')
-        .range(page * pageSize, page * pageSize + pageSize - 1)
+      const effectivePage = overrides?.page ?? page
+      const effectivePageSize = overrides?.pageSize ?? pageSize
+      const effectiveSearch = overrides?.search ?? search
+      const effectiveFilterTipo = overrides?.filterTipo ?? filterTipo
+      const effectiveFilterStatus = overrides?.filterStatus ?? filterStatus
 
-      if (search) {
-        const safeSearch = buildSafeIlikePattern(search)
-        if (safeSearch) {
-          q = q.or(`nome.ilike.${safeSearch},cpf_cnpj.ilike.${safeSearch},nome_fantasia.ilike.${safeSearch}`)
-        }
+      const response = await fetch(getApiUrl('/comercial/clientes'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          page: effectivePage,
+          pageSize: effectivePageSize,
+          search: effectiveSearch,
+          filterTipo: effectiveFilterTipo,
+          filterStatus: effectiveFilterStatus,
+        }),
+      })
+      const payload = await response.json().catch(() => null) as {
+        ok?: boolean
+        clientes?: Cliente[]
+        total?: number
+        error?: string
+      } | null
+
+      if (!response.ok || !payload?.ok) {
+        console.error(payload?.error ?? 'Falha ao carregar clientes')
+        return
       }
-      if (filterTipo)   q = q.eq('tipo_cliente', filterTipo)
-      if (filterStatus) q = q.eq('status', filterStatus)
 
-      const { data, count, error } = await q
-      if (error) { console.error(error); return }
-
-      const ids = (data ?? []).map(c => c.id as string)
-      setTotal(count ?? 0)
+      const data = payload.clientes ?? []
+      const ids = data.map(c => c.id as string)
+      setTotal(payload.total ?? data.length)
 
       if (ids.length === 0) { setClientes([]); return }
 
@@ -683,7 +837,7 @@ export default function Clientes() {
 
       void resolveProfiles([...new Set(agentIds)])
 
-      setClientes((data ?? []).map(c => {
+      setClientes(data.map(c => {
         const res = vendasPorCliente.get(c.id as string)
         return {
           ...(c as Cliente),
@@ -1441,6 +1595,72 @@ export default function Clientes() {
             </div>
 
             <div className="flex-1 overflow-auto p-5 space-y-4">
+              <div className="rounded-xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/60 dark:bg-blue-900/10 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Sugestão automática de encaixe</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">O sistema tentou identificar os campos com base no cabeçalho e nas primeiras linhas da planilha.</p>
+                  </div>
+                  <p className="text-xs text-gray-400">{detectedImportFields.length} campo(s) detectado(s)</p>
+                </div>
+                {detectedImportFields.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {detectedImportFields.slice(0, 12).map(({ field, header }) => (
+                      <span key={field.key} className="inline-flex items-center gap-2 rounded-full bg-white/90 dark:bg-gray-900 px-3 py-1 text-xs text-gray-700 dark:text-gray-200 border border-blue-100 dark:border-blue-900/30">
+                        <strong>{field.label}</strong>
+                        <span className="text-gray-400">→</span>
+                        <span className="text-blue-700 dark:text-blue-300">{header}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500">Não consegui sugerir mapeamento automático para esta planilha; faça o encaixe manual.</p>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-amber-100 dark:border-amber-900/30 bg-amber-50/60 dark:bg-amber-900/10 p-4 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Validação da planilha</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Mostra quantas linhas têm dados suficientes para entrar na base.</p>
+                  </div>
+                  <p className="text-xs text-gray-400">{importValidationSummary.accepted} aceitas · {importValidationSummary.rejected} rejeitadas</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-center">
+                  <div className="rounded-lg bg-white/90 dark:bg-gray-900 px-3 py-2 border border-amber-100 dark:border-amber-900/20">
+                    <p className="text-lg font-bold text-emerald-600">{importValidationSummary.accepted}</p>
+                    <p className="text-xs text-gray-500">Válidas para importar</p>
+                  </div>
+                  <div className="rounded-lg bg-white/90 dark:bg-gray-900 px-3 py-2 border border-amber-100 dark:border-amber-900/20">
+                    <p className="text-lg font-bold text-amber-600">{importValidationSummary.rejected}</p>
+                    <p className="text-xs text-gray-500">Serão ignoradas</p>
+                  </div>
+                  <div className="rounded-lg bg-white/90 dark:bg-gray-900 px-3 py-2 border border-amber-100 dark:border-amber-900/20">
+                    <p className="text-lg font-bold text-blue-600">{importValidationSummary.total}</p>
+                    <p className="text-xs text-gray-500">Linhas lidas</p>
+                  </div>
+                </div>
+                {Object.keys(importValidationSummary.reasons).length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {Object.entries(importValidationSummary.reasons).map(([reason, count]) => (
+                      <span key={reason} className="inline-flex items-center gap-2 rounded-full bg-white/90 dark:bg-gray-900 px-3 py-1 text-xs text-gray-700 dark:text-gray-200 border border-amber-100 dark:border-amber-900/20">
+                        <strong>{count}</strong>
+                        <span>{reason}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {importValidationSummary.samples.length > 0 && (
+                  <div className="space-y-1 pt-1">
+                    {importValidationSummary.samples.map(sample => (
+                      <p key={sample.index} className="text-xs text-amber-700 dark:text-amber-300">
+                        Linha {sample.index + 1}: {sample.reason}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                   {CLIENT_IMPORT_FIELDS.map(field => (
