@@ -512,6 +512,18 @@ type VendaFilters = {
   pa:           string
 }
 
+type CertFilters = {
+  busca:  string
+  status: string
+  categoria: string
+}
+
+const EMPTY_CERT_FILTERS: CertFilters = {
+  busca: '',
+  status: '',
+  categoria: '',
+}
+
 const EMPTY_VENDA_FILTERS: VendaFilters = {
   filtroData:   'geral',
   dataInicial:  '',
@@ -620,6 +632,7 @@ export default function Comercial() {
   const [editingCertId, setEditingCertId]       = useState<string | null>(null)
   const [formCert, setFormCert]                 = useState<NovoCertificado>(EMPTY_CERTIFICADO)
   const [importando, setImportando]             = useState(false)
+  const [certFilters, setCertFilters]           = useState<CertFilters>(EMPTY_CERT_FILTERS)
   const [selectedCertIds, setSelectedCertIds]   = useState<Set<string>>(new Set())
   const [selectedItemIds, setSelectedItemIds]   = useState<Set<string>>(new Set())
   const clienteSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1173,6 +1186,28 @@ export default function Comercial() {
         && (!vendaFilters.pa        || paNome.includes(vendaFilters.pa.trim().toLowerCase()))
     })
   }, [vendasV2, vendaFilters])
+
+  const certificadosFiltrados = useMemo(() => {
+    return certificados.filter(c => {
+      const termo = certFilters.busca.trim().toLowerCase()
+      if (termo) {
+        const matchNome   = (c.tipo ?? '').toLowerCase().includes(termo)
+        const matchCodigo = (c.codigo?.toString() ?? '').includes(termo)
+        const matchHash   = (c.hash ?? '').toLowerCase().includes(termo)
+        const matchAC     = (c.produto_vinculado_ac ?? '').toLowerCase().includes(termo)
+        if (!matchNome && !matchCodigo && !matchHash && !matchAC) return false
+      }
+      if (certFilters.status === 'ativo' && !c.ativo) return false
+      if (certFilters.status === 'inativo' && c.ativo) return false
+      if (certFilters.categoria && c.categoria !== certFilters.categoria) return false
+      return true
+    })
+  }, [certificados, certFilters])
+
+  const categoriasDisponiveis = useMemo(() => {
+    const cats = new Set(certificados.map(c => c.categoria).filter(Boolean) as string[])
+    return Array.from(cats).sort()
+  }, [certificados])
 
   const totalFiltrado  = useMemo(() => vendasFiltradas.reduce((s, v) => s + (v.valor_venda ?? 0), 0), [vendasFiltradas])
   const totalPaginas   = Math.max(1, Math.ceil(vendasFiltradas.length / itensPorPagina))
@@ -5136,8 +5171,37 @@ export default function Comercial() {
             {catalogoErro && <div className="text-red-600 text-sm">{catalogoErro}</div>}
 
 
+            {/* ── FILTROS ── */}
+            <div className="flex flex-wrap items-end gap-3">
+              <TextInput label="Buscar" value={certFilters.busca}
+                onChange={v => setCertFilters(p => ({ ...p, busca: v }))}
+                className="flex-1 min-w-[200px]" placeholder="Nome, código, hash, produto AC..." />
+              <SelectInput label="Status" value={certFilters.status}
+                onChange={v => setCertFilters(p => ({ ...p, status: v }))}
+                options={[
+                  { value: '', label: 'Todos' },
+                  { value: 'ativo', label: 'Ativo' },
+                  { value: 'inativo', label: 'Inativo' },
+                ]}
+                className="min-w-[140px]" />
+              <SelectInput label="Categoria" value={certFilters.categoria}
+                onChange={v => setCertFilters(p => ({ ...p, categoria: v }))}
+                options={[
+                  { value: '', label: 'Todas' },
+                  ...categoriasDisponiveis.map(c => ({ value: c, label: c })),
+                ]}
+                className="min-w-[160px]" />
+              {certFilters.busca || certFilters.status || certFilters.categoria ? (
+                <button type="button" onClick={() => setCertFilters(EMPTY_CERT_FILTERS)}
+                  className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700">
+                  <X size={12} /> Limpar
+                </button>
+              ) : null}
+            </div>
+
+
             {(() => {
-              const allIds = certificados.map(c => c.id)
+              const allIds = certificadosFiltrados.map(c => c.id)
               const allSelected = allIds.length > 0 && allIds.every(id => selectedCertIds.has(id))
               const toggleAll = () => setSelectedCertIds(allSelected ? new Set() : new Set(allIds))
               const toggleOne = (id: string) => setSelectedCertIds(prev => {
@@ -5147,6 +5211,8 @@ export default function Comercial() {
                 <DataTable headers={['', 'Status', 'Tipo emissão', 'Código', 'Nome', 'Validade (meses)', 'Tipo', 'Produto vinculado na AC', 'Preço de venda', 'Valor Custo AC', 'Valor Custo AR', 'Agrupador', 'Hash', 'Ações']}>
                   {certificados.length === 0 ? (
                     <EmptyRow colSpan={14} label="Nenhum certificado cadastrado. Use 'Importar Planilha' ou 'Novo Certificado'." />
+                  ) : certificadosFiltrados.length === 0 ? (
+                    <EmptyRow colSpan={14} label="Nenhum certificado encontrado com os filtros aplicados." />
                   ) : (
                     <>
                       <tr className="bg-gray-50 dark:bg-gray-800/50">
@@ -5154,11 +5220,11 @@ export default function Comercial() {
                           <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-500 select-none">
                             <input type="checkbox" checked={allSelected} onChange={toggleAll}
                               className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer" />
-                            {allSelected ? 'Desmarcar todos' : `Selecionar todos (${certificados.length})`}
+                            {allSelected ? 'Desmarcar todos' : `Selecionar todos (${certificadosFiltrados.length})`}
                           </label>
                         </td>
                       </tr>
-                      {certificados.map(c => (
+                      {certificadosFiltrados.map(c => (
                         <tr key={c.id} className={cn('hover:bg-gray-50 dark:hover:bg-gray-800/50', !c.ativo && 'opacity-50', selectedCertIds.has(c.id) && 'bg-blue-50 dark:bg-blue-900/10')}>
                           <td className="px-4 py-3">
                             <input type="checkbox" checked={selectedCertIds.has(c.id)} onChange={() => toggleOne(c.id)}

@@ -29,6 +29,28 @@ const targetPath = path.resolve(rootDir, fileArg)
 const relativePath = path.relative(rootDir, targetPath).replace(/\\/g, '/')
 const migrationName = path.basename(targetPath)
 
+function parseTargetFromDatabaseUrl(databaseUrl) {
+  try {
+    const parsed = new URL(databaseUrl)
+    return {
+      host: parsed.hostname,
+      port: parsed.port || '5432',
+      database: parsed.pathname.replace(/^\//, ''),
+    }
+  } catch {
+    return { host: 'desconhecido', port: 'desconhecida', database: 'desconhecido' }
+  }
+}
+
+function parseRequiredTables(sqlText) {
+  const matches = [...sqlText.matchAll(/^\s*--\s*@requires-table\s+(.+)$/gim)]
+  if (!matches.length) return []
+  return [...new Set(matches
+    .flatMap(match => String(match[1] ?? '').split(','))
+    .map(item => item.trim().toLowerCase())
+    .filter(Boolean))]
+}
+
 const { Pool } = pg
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -38,10 +60,36 @@ const pool = new Pool({
 try {
   const sql = await fs.readFile(targetPath, 'utf8')
   const checksum = createHash('sha256').update(sql).digest('hex')
+  const target = parseTargetFromDatabaseUrl(process.env.DATABASE_URL)
+  const requiredTables = parseRequiredTables(sql)
 
   const client = await pool.connect()
   try {
     await client.query('begin')
+
+    const dbInfoResult = await client.query(
+      `select current_database() as database_name, current_schema() as schema_name`,
+    )
+    const dbInfo = dbInfoResult.rows[0] ?? { database_name: 'desconhecido', schema_name: 'desconhecido' }
+
+    if (requiredTables.length > 0) {
+      const tablesResult = await client.query(
+        `select distinct lower(table_name) as table_name
+         from information_schema.tables
+         where table_type = 'BASE TABLE'
+           and lower(table_name) = any($1::text[])`,
+        [requiredTables],
+      )
+      const existing = new Set(tablesResult.rows.map(row => row.table_name))
+      const missing = requiredTables.filter(t => !existing.has(t))
+      if (missing.length > 0) {
+        throw new Error(
+          `Preflight falhou: tabela(s) obrigatoria(s) ausente(s): ${missing.join(', ')}. ` +
+          `Banco alvo: ${target.host}:${target.port}/${target.database} (conectado em ${dbInfo.database_name}, schema ${dbInfo.schema_name}).`,
+        )
+      }
+    }
+
     await client.query(`
       create table if not exists avmd_sql_migrations (
         id bigserial primary key,
@@ -87,6 +135,8 @@ try {
         dryRun: true,
         file: migrationName,
         path: relativePath,
+        target,
+        requiredTables,
         checksum,
         bytes: Buffer.byteLength(sql, 'utf8'),
       }, null, 2))
@@ -111,6 +161,8 @@ try {
       applied: true,
       file: migrationName,
       path: relativePath,
+      target,
+      requiredTables,
       checksum,
       bytes: Buffer.byteLength(sql, 'utf8'),
       forced: force,
