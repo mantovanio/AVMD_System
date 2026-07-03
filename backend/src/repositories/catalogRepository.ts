@@ -499,9 +499,16 @@ export class CatalogRepository {
 
     const fields = ['cadastro_base_id','empresa_id','vendedor_id','agente_registro_id',
       'ponto_atendimento_id','tabela_preco_id','tabela_preco_item_id','tipo_produto',
-      'certificado_id','quantidade','valor_venda','desconto','status_venda','pago',
-      'forma_pagamento_id','nome_faturamento','cpf_cnpj_faturamento','email_faturamento',
-      'telefone_faturamento','observacoes','metadata']
+      'certificado_id','quantidade','tipo_venda','tipo_emissao','tabela_preco',
+      'valor_venda','desconto','status_venda','pago','data_pagamento','data_vencimento',
+      'forma_pagamento_id','nome_faturamento','documento_faturamento','email_faturamento',
+      'telefone_faturamento','logradouro','numero','complemento','bairro','cidade','uf','cep',
+      'inscricao_municipal','inscricao_estadual','iss_retido','contador_id',
+      'pedido_numero','pedido_status','protocolo_numero','protocolo_status','certificadora',
+      'voucher_codigo','voucher_percentual','voucher_valor',
+      'api_payload_pedido','api_payload_protocolo',
+      'comissao_vendedor_tipo','comissao_vendedor_valor','comissao_agente_tipo','comissao_agente_valor',
+      'observacoes','metadata']
     const present = fields.filter(f => f in payload)
     if (!present.length) throw new Error('No fields provided for venda')
     const vals = present.map(f => (payload as Record<string, unknown>)[f] ?? null)

@@ -114,6 +114,8 @@ type LocalFormVenda = {
   tipo_emissao: string
   forma_pagamento: string
   valor_venda: number
+  desconto: number
+  voucher_codigo: string
   data_vencimento: string
   observacoes: string | null
   contador_id: string | null     // parceiro que indicou
@@ -395,13 +397,15 @@ const STATUS_VENDA_V2_OPTIONS: StatusVendaCertificado[] = [
 const EMPTY_VENDA_V2: LocalFormVenda = {
   cadastro_base_id: '',
   empresa_id: null,
-  tipo_venda: 'balcao',
+  tipo_venda: '',
   tabela_preco_id: '',
   tabela_preco_item_id: '',
   certificado_id: '',
   tipo_emissao: '',
   forma_pagamento: '',
   valor_venda: 0,
+  desconto: 0,
+  voucher_codigo: '',
   data_vencimento: '',
   observacoes: null,
   contador_id: null,
@@ -760,6 +764,54 @@ export default function Comercial() {
     [pricingMatrixRules]
   )
 
+  const tabelasDisponiveisVenda = useMemo(() => {
+    const tipoEmissaoSelecionado = normalizeTipoEmissao(formV2.tipo_emissao)
+    const tabelasBase = tabelasAtivas.filter(t =>
+      tabelaItens.some(item => item.tabela_preco_id === t.id && item.ativo)
+    )
+
+    const tabelasPorPonto =
+      profile?.perfil === 'agente_registro' && currentUserId
+        ? (() => {
+            const tabelaIds = new Set(
+              agentesTabelaPreco
+                .filter(item =>
+                  item.ativo &&
+                  item.agente_registro_id === currentUserId &&
+                  (!formV2.ponto_atendimento_id || item.ponto_atendimento_id === formV2.ponto_atendimento_id)
+                )
+                .map(item => item.tabela_preco_id)
+            )
+            return tabelasBase.filter(t => tabelaIds.has(t.id))
+          })()
+        : tabelasBase
+
+    return tabelasPorPonto.filter(tabela => {
+      if (!tipoEmissaoSelecionado) return true
+      return tabelaItens.some(item => {
+        if (item.tabela_preco_id !== tabela.id || !item.ativo) return false
+        const cert = certificadoById.get(item.certificado_id)
+        if (!cert) return false
+        const tipoPadrao = normalizeTipoEmissao(cert.tipo_emissao_padrao)
+        return !tipoPadrao || tipoPadrao === tipoEmissaoSelecionado
+      })
+    })
+  }, [
+    agentesTabelaPreco,
+    certificadoById,
+    currentUserId,
+    formV2.ponto_atendimento_id,
+    formV2.tipo_emissao,
+    profile?.perfil,
+    tabelaItens,
+    tabelasAtivas,
+  ])
+
+  const tabelaSelecionadaVenda = useMemo(
+    () => tabelaById.get(formV2.tabela_preco_id) ?? null,
+    [formV2.tabela_preco_id, tabelaById]
+  )
+
   // itens da tabela selecionada no form de venda
   const itensTabelaTodos = useMemo(() =>
     tabelaItens.filter(i => i.tabela_preco_id === formV2.tabela_preco_id),
@@ -787,32 +839,85 @@ export default function Comercial() {
     })
   }, [certsDaTabelaBruta, formV2.tipo_emissao])
   const motivoSemCertificados = useMemo(() => {
+    if (!formV2.tipo_emissao) return 'Selecione primeiro o tipo de emissão.'
+    if (!formV2.ponto_atendimento_id) return 'Selecione primeiro o ponto de atendimento.'
     if (!formV2.tabela_preco_id) return 'Selecione primeiro uma tabela de venda.'
     if (itensTabelaTodos.length === 0) return 'Esta tabela ainda não possui produtos vinculados em Produtos e Preços.'
     if (itensTabela.length === 0) return 'Esta tabela possui produtos vinculados, mas todos estão inativos.'
     if (certsDaTabela.length === 0) return `Nenhum certificado desta tabela está compatível com o tipo de emissão "${capitalize(formV2.tipo_emissao)}".`
     return null
-  }, [formV2.tabela_preco_id, formV2.tipo_emissao, itensTabelaTodos.length, itensTabela.length, certsDaTabela.length])
+  }, [formV2.ponto_atendimento_id, formV2.tabela_preco_id, formV2.tipo_emissao, itensTabelaTodos.length, itensTabela.length, certsDaTabela.length])
+
+  const itemTabelaSelecionado = useMemo(
+    () => itensTabela.find(item => item.id === formV2.tabela_preco_item_id) ?? null,
+    [formV2.tabela_preco_item_id, itensTabela]
+  )
+  const valorBaseProduto = Number(itemTabelaSelecionado?.valor ?? 0)
+  const descontoCalculadoVenda = useMemo(() => {
+    if (!valorBaseProduto || formV2.valor_venda >= valorBaseProduto) return 0
+    return Number((valorBaseProduto - formV2.valor_venda).toFixed(2))
+  }, [formV2.valor_venda, valorBaseProduto])
+  const descontoMaximoPermitido = useMemo(() => {
+    if (!tabelaSelecionadaVenda || !valorBaseProduto) return 0
+    const limites: number[] = []
+    if (Number(tabelaSelecionadaVenda.max_desconto_percentual) > 0) {
+      limites.push(Number((valorBaseProduto * Number(tabelaSelecionadaVenda.max_desconto_percentual) / 100).toFixed(2)))
+    }
+    if (Number(tabelaSelecionadaVenda.max_desconto_valor) > 0) {
+      limites.push(Number(tabelaSelecionadaVenda.max_desconto_valor))
+    }
+    if (limites.length === 0) return 0
+    return Number(Math.min(...limites).toFixed(2))
+  }, [tabelaSelecionadaVenda, valorBaseProduto])
+  const voucherAplicadoValido = useMemo(() => {
+    if (!formV2.voucher_codigo.trim()) return true
+    const codigoTabela = tabelaSelecionadaVenda?.codigo_voucher?.trim()
+    if (!codigoTabela) return false
+    return codigoTabela.toLowerCase() === formV2.voucher_codigo.trim().toLowerCase()
+  }, [formV2.voucher_codigo, tabelaSelecionadaVenda])
+  const descontoDentroDoLimite = useMemo(() => {
+    if (descontoCalculadoVenda <= 0) return true
+    return descontoCalculadoVenda <= descontoMaximoPermitido
+  }, [descontoCalculadoVenda, descontoMaximoPermitido])
   const vendaStepStatus = useMemo(() => {
-    const clienteOk = !!formV2.cadastro_base_id
-    const produtoOk = !!formV2.tabela_preco_item_id && !!formV2.certificado_id
-    const baseOk = clienteOk && produtoOk
-    const contadorOk = baseOk && (contadorStepHandled || !!formV2.contador_id)
-    const emissaoOk = contadorOk && !!formV2.tipo_emissao
-    const pagamentoOk = emissaoOk && !!formV2.forma_pagamento && formV2.valor_venda > 0
-    const vencimentoOk = pagamentoOk && !!formV2.data_vencimento
-    const pontoOk = vencimentoOk && !!formV2.ponto_atendimento_id
-    return { clienteOk, produtoOk, contadorOk, emissaoOk, pagamentoOk, vencimentoOk, pontoOk }
-  }, [contadorStepHandled, formV2.cadastro_base_id, formV2.contador_id, formV2.tipo_emissao, formV2.certificado_id, formV2.tabela_preco_item_id, formV2.forma_pagamento, formV2.valor_venda, formV2.data_vencimento, formV2.ponto_atendimento_id])
+    const tipoVendaOk = !!formV2.tipo_venda
+    const clienteOk = tipoVendaOk && !!formV2.cadastro_base_id
+    const parceiroOk = clienteOk && (contadorStepHandled || !!formV2.contador_id)
+    const emissaoOk = parceiroOk && !!formV2.tipo_emissao
+    const pontoOk = emissaoOk && !!formV2.ponto_atendimento_id
+    const produtoOk = pontoOk && !!formV2.tabela_preco_id && !!formV2.tabela_preco_item_id && !!formV2.certificado_id
+    const pagamentoOk = produtoOk
+      && !!formV2.forma_pagamento
+      && !!formV2.data_vencimento
+      && formV2.valor_venda > 0
+      && descontoDentroDoLimite
+      && voucherAplicadoValido
+    return { tipoVendaOk, clienteOk, parceiroOk, emissaoOk, pontoOk, produtoOk, pagamentoOk }
+  }, [
+    contadorStepHandled,
+    descontoDentroDoLimite,
+    formV2.cadastro_base_id,
+    formV2.certificado_id,
+    formV2.contador_id,
+    formV2.data_vencimento,
+    formV2.forma_pagamento,
+    formV2.ponto_atendimento_id,
+    formV2.tabela_preco_id,
+    formV2.tabela_preco_item_id,
+    formV2.tipo_emissao,
+    formV2.tipo_venda,
+    formV2.valor_venda,
+    voucherAplicadoValido,
+  ])
   const vendaSteps = useMemo(() => {
     const steps = [
-      { key: 'cliente', label: '1. Cliente', done: vendaStepStatus.clienteOk },
-      { key: 'produto', label: '2. Produto', done: vendaStepStatus.produtoOk },
-      { key: 'contador', label: '3. Contador/Parceiro', done: vendaStepStatus.contadorOk },
+      { key: 'tipo_venda', label: '1. Tipo de venda', done: vendaStepStatus.tipoVendaOk },
+      { key: 'cliente', label: '2. Cliente', done: vendaStepStatus.clienteOk },
+      { key: 'parceiro', label: '3. Parceiro vendedor', done: vendaStepStatus.parceiroOk },
       { key: 'emissao', label: '4. Tipo de emissão', done: vendaStepStatus.emissaoOk },
-      { key: 'pagamento', label: '5. Pagamento', done: vendaStepStatus.pagamentoOk },
-      { key: 'vencimento', label: '6. Vencimento', done: vendaStepStatus.vencimentoOk },
-      { key: 'ponto', label: '7. Ponto de atendimento', done: vendaStepStatus.pontoOk },
+      { key: 'ponto', label: '5. Ponto de atendimento', done: vendaStepStatus.pontoOk },
+      { key: 'produto', label: '6. Tabela e produto', done: vendaStepStatus.produtoOk },
+      { key: 'pagamento', label: '7. Pagamento e desconto', done: vendaStepStatus.pagamentoOk },
     ] as const
     const currentStepIndex = steps.findIndex(step => !step.done)
     return {
@@ -1270,18 +1375,35 @@ export default function Comercial() {
   }, [profile?.id])
 
   useEffect(() => {
-    if (pontosAtivos.length > 0 && !formV2.ponto_atendimento_id) {
-      setFormV2(p => ({ ...p, ponto_atendimento_id: pontosAtivos[0].id }))
-    }
-  }, [pontosAtivos, formV2.ponto_atendimento_id])
-
-  useEffect(() => {
     if (!formV2.certificado_id) return
     const certificadoAindaCompativel = certsDaTabela.some(({ cert }) => cert.id === formV2.certificado_id)
     if (!certificadoAindaCompativel) {
-      setFormV2(prev => ({ ...prev, certificado_id: '', tabela_preco_item_id: '', valor_venda: 0 }))
+      setFormV2(prev => ({ ...prev, certificado_id: '', tabela_preco_item_id: '', valor_venda: 0, desconto: 0 }))
     }
   }, [formV2.certificado_id, certsDaTabela])
+
+  useEffect(() => {
+    if (!formV2.tabela_preco_id) return
+    const tabelaAindaDisponivel = tabelasDisponiveisVenda.some(tabela => tabela.id === formV2.tabela_preco_id)
+    if (!tabelaAindaDisponivel) {
+      setFormV2(prev => ({
+        ...prev,
+        tabela_preco_id: '',
+        tabela_preco_item_id: '',
+        certificado_id: '',
+        valor_venda: 0,
+        desconto: 0,
+        voucher_codigo: '',
+      }))
+    }
+  }, [formV2.tabela_preco_id, tabelasDisponiveisVenda])
+
+  useEffect(() => {
+    setFormV2(prev => {
+      if (prev.desconto === descontoCalculadoVenda) return prev
+      return { ...prev, desconto: descontoCalculadoVenda }
+    })
+  }, [descontoCalculadoVenda])
 
   useEffect(() => {
     if (canManageAgenda) {
@@ -1370,15 +1492,24 @@ export default function Comercial() {
   }
 
   async function salvarVendaV2() {
+    if (!formV2.tipo_venda) { showMsg('Selecione o tipo de venda.'); return }
     if (!formV2.cadastro_base_id) { showMsg('Selecione um cliente.'); return }
-    if (!vendaStepStatus.contadorOk) { showMsg('Confirme a etapa de contador/parceiro antes de seguir.'); return }
-    if (!formV2.tabela_preco_id) { showMsg('Selecione uma tabela de venda.'); return }
+    if (!vendaStepStatus.parceiroOk) { showMsg('Confirme a etapa do parceiro vendedor antes de seguir.'); return }
     if (!formV2.tipo_emissao) { showMsg('Selecione o tipo de emissão.'); return }
-    if (!formV2.certificado_id) { showMsg('Selecione o certificado.'); return }
+    if (!formV2.ponto_atendimento_id) { showMsg('Selecione o ponto de atendimento.'); return }
+    if (!formV2.tabela_preco_id) { showMsg('Selecione uma tabela de venda compatível.'); return }
+    if (!formV2.certificado_id) { showMsg('Selecione o produto.'); return }
     if (formV2.valor_venda <= 0) { showMsg('Informe o valor da venda.'); return }
+    if (!descontoDentroDoLimite) {
+      showMsg(`O desconto aplicado excede o limite da tabela. Máximo permitido: ${formatCurrency(descontoMaximoPermitido)}.`)
+      return
+    }
+    if (!voucherAplicadoValido) {
+      showMsg('O cupom informado não corresponde ao voucher configurado na tabela selecionada.')
+      return
+    }
     if (!formV2.forma_pagamento) { showMsg('Selecione a forma de pagamento.'); return }
     if (!formV2.data_vencimento) { showMsg('Selecione o vencimento da forma de pagamento.'); return }
-    if (!formV2.ponto_atendimento_id && !pontosAtivos[0]?.id) { showMsg('Cadastre e selecione um ponto de atendimento antes de lançar a venda.'); return }
     if (!currentUserId) { showMsg('Usuário não autenticado.'); return }
     setSalvandoV(true)
 
@@ -1386,7 +1517,7 @@ export default function Comercial() {
     const cert = certificadoById.get(formV2.certificado_id)
     const tabela = tabelaById.get(formV2.tabela_preco_id)
     const pagamentoSelecionado = resolveFormaPagamentoSelection(formV2.forma_pagamento)
-    const pontoAtendimentoId = formV2.ponto_atendimento_id || pontosAtivos[0]?.id || ''
+    const pontoAtendimentoId = formV2.ponto_atendimento_id
 
     const payload = {
       cadastro_base_id:        formV2.cadastro_base_id,
@@ -1401,6 +1532,7 @@ export default function Comercial() {
       tabela_preco:            tabela?.nome ?? null,
       forma_pagamento_id:      pagamentoSelecionado.formaPagamentoId,
       valor_venda:             formV2.valor_venda,
+      desconto:                formV2.desconto || 0,
       valor_custo:             null,
       pago:                    false,
       data_pagamento:          null,
@@ -1428,6 +1560,9 @@ export default function Comercial() {
       protocolo_numero:        null,
       protocolo_status:        'nao_gerado',
       certificadora:           null,
+      voucher_codigo:          formV2.voucher_codigo.trim() || null,
+      voucher_percentual:      formV2.voucher_codigo.trim() ? Number(tabela?.max_desconto_percentual ?? 0) : null,
+      voucher_valor:           formV2.desconto > 0 ? formV2.desconto : null,
       api_payload_pedido:      {},
       api_payload_protocolo:   {},
       comissao_vendedor_tipo:  null,
@@ -1438,6 +1573,11 @@ export default function Comercial() {
       observacoes:             formV2.observacoes,
       metadata:                {
         forma_pagamento: formV2.forma_pagamento,
+        voucher_codigo: formV2.voucher_codigo.trim() || null,
+        desconto_calculado: formV2.desconto || 0,
+        valor_base_produto: valorBaseProduto || null,
+        parceiro_indicador_id: formV2.contador_id || null,
+        ponto_atendimento_id: pontoAtendimentoId,
         payment_method_id: pagamentoSelecionado.paymentMethod?.id ?? null,
         payment_method_label: pagamentoSelecionado.paymentMethod?.label ?? null,
         payment_runtime: paymentRuntime,
@@ -1510,7 +1650,7 @@ export default function Comercial() {
     }
 
     fecharFormVenda()
-    setFormV2({ ...EMPTY_VENDA_V2, ponto_atendimento_id: pontosAtivos[0]?.id ?? '' })
+    setFormV2({ ...EMPTY_VENDA_V2 })
     setVendaFilters(EMPTY_VENDA_FILTERS)
     setSelectedIds(new Set())
     showMsg(`Venda salva com sucesso! ${comunicacaoResumo}.`, 'ok')
@@ -3788,7 +3928,7 @@ export default function Comercial() {
                   <div className="grid grid-cols-1 md:grid-cols-[160px_1fr_auto] gap-3">
                     <SelectInput label="Tipo Venda" value={formV2.tipo_venda}
                       onChange={v => setFormV2(p => ({ ...p, tipo_venda: v }))}
-                      options={TIPO_VENDA_OPTIONS} />
+                      options={[{ value: '', label: 'Selecione' }, ...TIPO_VENDA_OPTIONS]} />
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">Cliente *</label>
                       <div className="relative flex gap-2">
@@ -3809,8 +3949,9 @@ export default function Comercial() {
                             }}
                             onFocus={() => { if (clienteResultados.length > 0) setClienteDropdownOpen(true) }}
                             onBlur={() => setTimeout(() => setClienteDropdownOpen(false), 150)}
+                            disabled={!formV2.tipo_venda}
                             placeholder="Nome, CPF, CNPJ ou telefone (mín. 3 caracteres)"
-                            className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 pr-8 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 pr-8 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60" />
                           {clienteBuscando && (
                             <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-gray-400 pointer-events-none" />
                           )}
@@ -3820,11 +3961,13 @@ export default function Comercial() {
                                 <button key={c.id} type="button"
                                   onMouseDown={e => e.preventDefault()}
                                   onClick={() => {
-                                    setFormV2(p => ({ ...p, cadastro_base_id: c.id }))
+                                    setFormV2(p => ({ ...p, cadastro_base_id: c.id, contador_id: null }))
                                     setClienteSelecionadoObj(c)
                                     setClienteSearch('')
                                     setClienteDropdownOpen(false)
                                     setClienteResultados([])
+                                    setContadorSearch('')
+                                    setContadorStepHandled(false)
                                   }}
                                   className="w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 border-b border-gray-100 dark:border-gray-800 last:border-0 transition-colors">
                                   <div className="flex items-center justify-between gap-3">
@@ -3850,7 +3993,13 @@ export default function Comercial() {
                         </div>
                         {formV2.cadastro_base_id && (
                           <button type="button" title="Limpar cliente"
-                            onClick={() => { setFormV2(p => ({ ...p, cadastro_base_id: '' })); setClienteSearch(''); setClienteSelecionadoObj(null) }}
+                            onClick={() => {
+                              setFormV2(p => ({ ...p, cadastro_base_id: '', contador_id: null, tipo_emissao: '', ponto_atendimento_id: '', tabela_preco_id: '', tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '', forma_pagamento: '', data_vencimento: '' }))
+                              setClienteSearch('')
+                              setClienteSelecionadoObj(null)
+                              setContadorSearch('')
+                              setContadorStepHandled(false)
+                            }}
                             className="px-2 text-gray-400 hover:text-gray-600">
                             <X size={14} />
                           </button>
@@ -3944,39 +4093,9 @@ export default function Comercial() {
                     </div>
                   )}
 
-                  {/* 2. Produto */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <SelectInput label="Tabela de Preço *" value={formV2.tabela_preco_id}
-                      onChange={v => setFormV2(p => ({ ...p, tabela_preco_id: v, certificado_id: '', tabela_preco_item_id: '', valor_venda: 0 }))}
-                      options={[
-                        { value: '', label: 'Selecione a tabela' },
-                        ...tabelasAtivas.map(t => ({ value: t.id, label: t.nome })),
-                      ]} />
-                    <SelectInput label="Produto *" value={formV2.tabela_preco_item_id}
-                      onChange={v => {
-                        const item = itensTabela.find(i => i.id === v)
-                        setFormV2(p => ({
-                          ...p,
-                          tabela_preco_item_id: v,
-                          certificado_id: item?.certificado_id ?? '',
-                          valor_venda: item?.valor ?? p.valor_venda,
-                        }))
-                      }}
-                      options={[
-                        { value: '', label: formV2.tabela_preco_id ? 'Selecione o produto' : 'Selecione a tabela primeiro' },
-                        ...itensTabela.map(item => {
-                          const cert = certificadoById.get(item.certificado_id)
-                          const label = cert
-                            ? `${cert.tipo}${cert.modelo ? ' · ' + cert.modelo : ''}${cert.validade ? ' · ' + cert.validade : ''} — ${item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
-                            : item.id
-                          return { value: item.id, label }
-                        }),
-                      ]} />
-                  </div>
-
-                  {/* 3. Contador/Parceiro */}
+                  {/* 3. Parceiro vendedor */}
                   <div>
-                    <label className="block text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">Se for indicação de Contador/Parceiro:</label>
+                    <label className="block text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">Parceiro vendedor / indicador da venda</label>
                     <div className="relative">
                       <input
                         value={formV2.contador_id
@@ -3991,8 +4110,9 @@ export default function Comercial() {
                         }}
                         onFocus={() => setContadorDropdownOpen(true)}
                         onBlur={() => setTimeout(() => setContadorDropdownOpen(false), 150)}
-                        placeholder="Nenhum selecionado"
-                        className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        disabled={!formV2.cadastro_base_id}
+                        placeholder={!formV2.cadastro_base_id ? 'Selecione o cliente primeiro' : 'Busque um parceiro vendedor'}
+                        className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60" />
                       {contadorDropdownOpen && parceirosParaContador.length > 0 && (
                         <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                           {parceirosParaContador.map(p => (
@@ -4023,13 +4143,14 @@ export default function Comercial() {
                     <div className="mt-2">
                       <button type="button"
                         onClick={() => { setFormV2(p => ({ ...p, contador_id: null })); setContadorSearch(''); setContadorDropdownOpen(false); setContadorStepHandled(true) }}
+                        disabled={!formV2.cadastro_base_id}
                         className={cn(
                           'px-3 py-1.5 text-xs rounded-lg border transition-colors',
-                          vendaStepStatus.contadorOk && !formV2.contador_id
+                          vendaStepStatus.parceiroOk && !formV2.contador_id
                             ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/30 dark:bg-green-950/20 dark:text-green-300'
-                            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+                            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50'
                         )}>
-                        Seguir sem contador/parceiro
+                        Seguir sem parceiro vendedor
                       </button>
                     </div>
                   </div>
@@ -4037,31 +4158,36 @@ export default function Comercial() {
                   {/* 4. Tipo emissão */}
                   <div>
                     <SelectInput label="Tipo Emissão *" value={formV2.tipo_emissao}
-                      onChange={v => setFormV2(p => ({ ...p, tipo_emissao: v }))}
-                      options={[{ value: '', label: 'Selecione' }, ...TIPO_EMISSAO_OPTIONS]} />
+                      onChange={v => setFormV2(p => ({
+                        ...p,
+                        tipo_emissao: v,
+                        tabela_preco_id: '',
+                        tabela_preco_item_id: '',
+                        certificado_id: '',
+                        valor_venda: 0,
+                        desconto: 0,
+                        voucher_codigo: '',
+                      }))}
+                      disabled={!vendaStepStatus.parceiroOk}
+                      options={[{ value: '', label: vendaStepStatus.parceiroOk ? 'Selecione' : 'Confirme o parceiro primeiro' }, ...TIPO_EMISSAO_OPTIONS]} />
                   </div>
 
-                  {/* 5. Valor / Pagamento / Vencimento */}
-                  <div className="grid grid-cols-1 md:grid-cols-[120px_1fr_160px] gap-3">
-                    <label className="flex flex-col gap-1">
-                      <span className="text-xs text-green-600 dark:text-green-400 font-medium">Valor (R$) *</span>
-                      <input type="number" min="0" step="0.01" value={formV2.valor_venda}
-                        onChange={e => setFormV2(p => ({ ...p, valor_venda: parseFloat(e.target.value) || 0 }))}
-                        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </label>
-                    <SelectInput label="Forma de Pagamento *" value={formV2.forma_pagamento}
-                      onChange={v => setFormV2(p => ({ ...p, forma_pagamento: v }))}
-                      options={[{ value: '', label: 'Selecione' }, ...formasPagamento.map(n => ({ value: n, label: n }))]} />
-                    <TextInput label="Vencimento *" type="date" value={formV2.data_vencimento}
-                      onChange={v => setFormV2(p => ({ ...p, data_vencimento: v }))} />
-                  </div>
-
-                  {/* 6. Ponto / Observações */}
+                  {/* 5. Ponto / Observações */}
                   <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-3">
                     <SelectInput label="Ponto de Atendimento *" value={formV2.ponto_atendimento_id}
-                      onChange={v => setFormV2(p => ({ ...p, ponto_atendimento_id: v }))}
+                      onChange={v => setFormV2(p => ({
+                        ...p,
+                        ponto_atendimento_id: v,
+                        tabela_preco_id: '',
+                        tabela_preco_item_id: '',
+                        certificado_id: '',
+                        valor_venda: 0,
+                        desconto: 0,
+                        voucher_codigo: '',
+                      }))}
+                      disabled={!vendaStepStatus.emissaoOk}
                       options={[
-                        { value: '', label: pontosAtivos.length ? 'Selecione' : 'Cadastre um ponto primeiro' },
+                        { value: '', label: !vendaStepStatus.emissaoOk ? 'Selecione o tipo de emissão primeiro' : pontosAtivos.length ? 'Selecione' : 'Cadastre um ponto primeiro' },
                         ...pontosAtivos.map(ponto => ({
                           value: ponto.id,
                           label: [ponto.nome, ponto.cidade, ponto.uf].filter(Boolean).join(' · '),
@@ -4075,13 +4201,103 @@ export default function Comercial() {
                     </label>
                   </div>
 
-                  {/* 7. Ações */}
+                  {/* 6. Tabela e produto */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <SelectInput label="Tabela de Preço *" value={formV2.tabela_preco_id}
+                      onChange={v => setFormV2(p => ({ ...p, tabela_preco_id: v, certificado_id: '', tabela_preco_item_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))}
+                      disabled={!vendaStepStatus.pontoOk}
+                      options={[
+                        { value: '', label: !vendaStepStatus.pontoOk ? 'Selecione o ponto primeiro' : 'Selecione a tabela' },
+                        ...tabelasDisponiveisVenda.map(t => ({ value: t.id, label: t.nome })),
+                      ]} />
+                    <SelectInput label="Produto *" value={formV2.tabela_preco_item_id}
+                      onChange={v => {
+                        const item = itensTabela.find(i => i.id === v)
+                        setFormV2(p => ({
+                          ...p,
+                          tabela_preco_item_id: v,
+                          certificado_id: item?.certificado_id ?? '',
+                          valor_venda: item?.valor ?? 0,
+                          desconto: 0,
+                          voucher_codigo: '',
+                        }))
+                      }}
+                      disabled={!formV2.tabela_preco_id}
+                      options={[
+                        { value: '', label: formV2.tabela_preco_id ? 'Selecione o produto' : 'Selecione a tabela primeiro' },
+                        ...itensTabela.map(item => {
+                          const cert = certificadoById.get(item.certificado_id)
+                          const label = cert
+                            ? `${cert.tipo}${cert.modelo ? ' · ' + cert.modelo : ''}${cert.validade ? ' · ' + cert.validade : ''} — ${item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+                            : item.id
+                          return { value: item.id, label }
+                        }),
+                      ]} />
+                  </div>
+
+                  {motivoSemCertificados && vendaStepStatus.pontoOk && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                      {motivoSemCertificados}
+                    </div>
+                  )}
+
+                  {/* 7. Pagamento / Desconto */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <NumberInput label="Valor Final (R$) *" value={formV2.valor_venda}
+                      onChange={v => setFormV2(p => ({ ...p, valor_venda: v }))}
+                      disabled={!vendaStepStatus.produtoOk} />
+                    <TextInput label="Cupom / Voucher" value={formV2.voucher_codigo}
+                      onChange={v => setFormV2(p => ({ ...p, voucher_codigo: v }))}
+                      disabled={!vendaStepStatus.produtoOk}
+                      placeholder={tabelaSelecionadaVenda?.codigo_voucher ? `Tabela aceita: ${tabelaSelecionadaVenda.codigo_voucher}` : 'Opcional'} />
+                    <SelectInput label="Forma de Pagamento *" value={formV2.forma_pagamento}
+                      onChange={v => setFormV2(p => ({ ...p, forma_pagamento: v }))}
+                      disabled={!vendaStepStatus.produtoOk}
+                      options={[{ value: '', label: 'Selecione' }, ...formasPagamento.map(n => ({ value: n, label: n }))]} />
+                    <TextInput label="Vencimento *" type="date" value={formV2.data_vencimento}
+                      onChange={v => setFormV2(p => ({ ...p, data_vencimento: v }))}
+                      disabled={!vendaStepStatus.produtoOk} />
+                  </div>
+
+                  {vendaStepStatus.produtoOk && (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/40 p-3">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-gray-400">Preço base</p>
+                        <p className="mt-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{formatCurrency(valorBaseProduto)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-gray-400">Desconto aplicado</p>
+                        <p className={cn('mt-1 text-sm font-semibold', descontoDentroDoLimite ? 'text-gray-700 dark:text-gray-200' : 'text-red-600 dark:text-red-400')}>
+                          {formatCurrency(formV2.desconto || 0)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-gray-400">Limite da tabela</p>
+                        <p className="mt-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{formatCurrency(descontoMaximoPermitido)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-gray-400">Voucher configurado</p>
+                        <p className={cn('mt-1 text-sm font-semibold', voucherAplicadoValido ? 'text-gray-700 dark:text-gray-200' : 'text-red-600 dark:text-red-400')}>
+                          {tabelaSelecionadaVenda?.codigo_voucher ?? 'Nenhum'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {vendaStepStatus.produtoOk && (!descontoDentroDoLimite || !voucherAplicadoValido) && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800/40 dark:bg-red-950/20 dark:text-red-300">
+                      {!descontoDentroDoLimite && <p>O desconto atual ultrapassa o limite permitido pela tabela.</p>}
+                      {!voucherAplicadoValido && <p>O cupom informado não corresponde ao voucher configurado para esta tabela.</p>}
+                    </div>
+                  )}
+
+                  {/* 8. Ações */}
                   <div className="flex justify-end border-t border-gray-100 dark:border-gray-800 pt-4">
                     <FormActions
                       onSave={salvarVendaV2}
                       onCancel={fecharFormVenda}
                       saving={salvandoV}
-                      disabled={!vendaStepStatus.pontoOk}
+                      disabled={!vendaStepStatus.pagamentoOk}
                     />
                   </div>
 
@@ -4128,7 +4344,7 @@ export default function Comercial() {
                   </button>
                   <button type="button" onClick={() => {
                     if (showFormV) { fecharFormVenda(); return }
-                    setFormV2({ ...EMPTY_VENDA_V2, ponto_atendimento_id: pontosAtivos[0]?.id ?? '' })
+                    setFormV2({ ...EMPTY_VENDA_V2 })
                     setClienteSelecionadoObj(null)
                     setClienteSearch('')
                     setContadorSearch('')
@@ -6458,42 +6674,43 @@ function FormActions({ onSave, onCancel, saving, disabled = false }: {
   )
 }
 
-function TextInput({ label, value, onChange, onBlur, type = 'text', className }: {
-  label: string; value: string; onChange: (value: string) => void; onBlur?: () => void; type?: string; className?: string
+function TextInput({ label, value, onChange, onBlur, type = 'text', className, disabled = false, placeholder }: {
+  label: string; value: string; onChange: (value: string) => void; onBlur?: () => void; type?: string; className?: string; disabled?: boolean; placeholder?: string
 }) {
   return (
     <label className={cn('flex flex-col gap-1', className)}>
       <span className="text-xs text-gray-500">{label}</span>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)} onBlur={onBlur}
-        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} onBlur={onBlur} disabled={disabled} placeholder={placeholder}
+        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60" />
     </label>
   )
 }
 
-function NumberInput({ label, value, onChange, step = 0.01 }: {
-  label: string; value: number; onChange: (value: number) => void; step?: number
+function NumberInput({ label, value, onChange, step = 0.01, disabled = false, min = 0 }: {
+  label: string; value: number; onChange: (value: number) => void; step?: number; disabled?: boolean; min?: number
 }) {
   return (
     <label className="flex flex-col gap-1">
       <span className="text-xs text-gray-500">{label}</span>
-      <input type="number" min="0" step={step} value={value || ''} onChange={e => onChange(parseFloat(e.target.value) || 0)}
-        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      <input type="number" min={min} step={step} value={value || ''} onChange={e => onChange(parseFloat(e.target.value) || 0)} disabled={disabled}
+        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60" />
     </label>
   )
 }
 
-function SelectInput({ label, value, onChange, options, className }: {
+function SelectInput({ label, value, onChange, options, className, disabled = false }: {
   label: string
   value: string
   onChange: (value: string) => void
   options: { value: string; label: string }[]
   className?: string
+  disabled?: boolean
 }) {
   return (
     <label className={cn('flex flex-col gap-1', className)}>
       <span className="text-xs text-gray-500">{label}</span>
-      <select value={value} onChange={e => onChange(e.target.value)}
-        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <select value={value} onChange={e => onChange(e.target.value)} disabled={disabled}
+        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60">
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </label>
