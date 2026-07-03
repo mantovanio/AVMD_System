@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -151,13 +151,40 @@ function IconRail({
   const [hoveredPage, setHoveredPage] = useState<Page | null>(null)
   const [flyoutStyle, setFlyoutStyle] = useState<React.CSSProperties | undefined>(undefined)
   const hoverTimeout = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const railRef = useRef<HTMLDivElement>(null)
+  const flyoutRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!hoveredPage) return
+
+    function closeFlyout() {
+      setHoveredPage(null)
+      setFlyoutStyle(undefined)
+      clearTimeout(hoverTimeout.current)
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node | null
+      if (!target) return
+      if (railRef.current?.contains(target)) return
+      if (flyoutRef.current?.contains(target)) return
+      closeFlyout()
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown)
+    return () => window.removeEventListener('pointerdown', handlePointerDown)
+  }, [hoveredPage])
 
   function handleFlyoutNavigate(page: Page, tab: string) {
     setHoveredPage(null)
     setFlyoutStyle(undefined)
     clearTimeout(hoverTimeout.current)
     onNavigate(page)
-    window.dispatchEvent(new CustomEvent('crm:navigate-tab', { detail: { tab } }))
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new CustomEvent('crm:navigate-tab', { detail: { tab } }))
+      })
+    })
   }
 
   function handleMouseEnter(page: Page, e: React.MouseEvent) {
@@ -182,7 +209,7 @@ function IconRail({
   const hoveredLabel = hoveredPage ? MENU_GROUPS.flatMap(g => g.items).find(i => i.id === hoveredPage)?.label ?? '' : ''
 
   return (
-    <div className="w-16 flex flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
+    <div ref={railRef} className="w-16 flex flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
       <div className="flex items-center justify-center mb-4">
         {agencyConfig?.logo_interna_url?.trim() ? (
           <div className="w-9 h-9 rounded-xl bg-white border border-gray-200 dark:border-gray-800 flex items-center justify-center p-1.5 overflow-hidden">
@@ -215,7 +242,13 @@ function IconRail({
                     onMouseEnter={e => handleMouseEnter(id, e)}
                   >
                     <button
-                      onClick={() => { onNavigate(id); onMobileClose?.() }}
+                      onClick={() => {
+                        setHoveredPage(null)
+                        setFlyoutStyle(undefined)
+                        clearTimeout(hoverTimeout.current)
+                        onNavigate(id)
+                        onMobileClose?.()
+                      }}
                       type="button"
                       title={label}
                       className={cn(
@@ -235,31 +268,29 @@ function IconRail({
         </nav>
 
         {hoveredPage && hoveredSubs && flyoutStyle && (
-          <>
-            <div className="fixed inset-0 z-30" onClick={() => { setHoveredPage(null); setFlyoutStyle(undefined); clearTimeout(hoverTimeout.current) }} />
-            <div
-              onMouseEnter={() => clearTimeout(hoverTimeout.current)}
-              className="fixed z-50 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl"
-              style={flyoutStyle}
-            >
-              <div className="max-h-80 overflow-y-auto p-1.5">
-                <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                  {hoveredLabel}
-                </p>
-                {hoveredSubs.map(sub => (
-                  <button
-                    key={sub.id}
-                    type="button"
-                    onClick={() => handleFlyoutNavigate(hoveredPage, sub.id)}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors"
-                  >
-                    {sub.icon && <sub.icon size={16} className="shrink-0 text-gray-400 dark:text-gray-500" />}
-                    <span>{sub.label}</span>
-                  </button>
-                ))}
-              </div>
+          <div
+            ref={flyoutRef}
+            onMouseEnter={() => clearTimeout(hoverTimeout.current)}
+            className="fixed z-50 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl"
+            style={flyoutStyle}
+          >
+            <div className="max-h-80 overflow-y-auto p-1.5">
+              <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                {hoveredLabel}
+              </p>
+              {hoveredSubs.map(sub => (
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => handleFlyoutNavigate(hoveredPage, sub.id)}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors"
+                >
+                  {sub.icon && <sub.icon size={16} className="shrink-0 text-gray-400 dark:text-gray-500" />}
+                  <span>{sub.label}</span>
+                </button>
+              ))}
             </div>
-          </>
+          </div>
         )}
       </div>
 
