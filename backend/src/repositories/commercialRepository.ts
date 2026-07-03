@@ -276,6 +276,24 @@ export class CommercialRepository {
     iss_retido?: boolean | null
     status?: string | null
   }>) {
+    type CompraHistoricoItem = {
+      imported_at: string
+      documento_titular: string | null
+      pedido: string | null
+      protocolo: string | null
+      produto: string | null
+      tipo: string | null
+      validade: string | null
+      vencimento: string | null
+      atendente: string | null
+      ponto: string | null
+      vendedor: string | null
+      status_pedido: string | null
+      valor_compra: number | null
+      ar: string | null
+      import_key: string
+    }
+
     const parseDate = (value: unknown): string | null => {
       const raw = String(value ?? '').trim().replace(/^"|"$/g, '')
       if (!raw) return null
@@ -325,6 +343,71 @@ export class CommercialRepository {
 
     const pick = (current: string | null, next: string | null) => next ?? current
 
+    const normalizeKeyPart = (value: unknown) => String(value ?? '').trim().toLowerCase()
+
+    const buildCompraImportKey = (item: {
+      documento_titular?: string | null
+      pedido?: string | null
+      protocolo?: string | null
+      produto?: string | null
+      tipo?: string | null
+      validade?: string | null
+      vencimento?: string | null
+      valor_compra?: number | null
+    }) => {
+      const valor = item.valor_compra === null || item.valor_compra === undefined
+        ? ''
+        : Number(item.valor_compra).toFixed(2)
+      return [
+        normalizeKeyPart(item.documento_titular),
+        normalizeKeyPart(item.pedido),
+        normalizeKeyPart(item.protocolo),
+        normalizeKeyPart(item.produto),
+        normalizeKeyPart(item.tipo),
+        normalizeKeyPart(item.validade),
+        normalizeKeyPart(item.vencimento),
+        normalizeKeyPart(valor),
+      ].join('|')
+    }
+
+    const buildImportMetadata = (payload: {
+      cpf_cnpj: string
+      data_nascimento: string | null
+      documento_titular: string | null
+      pedido: string | null
+      protocolo: string | null
+      produto: string | null
+      tipo: string | null
+      validade: string | null
+      vencimento: string | null
+      atendente: string | null
+      ponto: string | null
+      vendedor: string | null
+      status_pedido: string | null
+      valor_compra: number | null
+      ar: string | null
+      compras_historico: CompraHistoricoItem[]
+    }) => JSON.stringify({
+      imported_via: 'clientes.import',
+      imported_at: new Date().toISOString(),
+      data_nascimento: payload.data_nascimento,
+      documento_principal: payload.cpf_cnpj,
+      documento_titular: payload.documento_titular,
+      pedido: payload.pedido,
+      protocolo: payload.protocolo,
+      produto: payload.produto,
+      tipo: payload.tipo,
+      validade: payload.validade,
+      vencimento: payload.vencimento,
+      atendente: payload.atendente,
+      ponto: payload.ponto,
+      vendedor: payload.vendedor,
+      status_pedido: payload.status_pedido,
+      valor_compra: payload.valor_compra,
+      ar: payload.ar,
+      compras_historico: payload.compras_historico,
+    })
+
     const erros: { linha: number; motivo: string; cpf_cnpj?: string; nome?: string }[] = []
     const byDoc = new Map<string, {
       tipo_cliente: string
@@ -361,22 +444,8 @@ export class CommercialRepository {
       valor_compra: number | null
       ar: string | null
       documento_titular: string | null
-      compras_historico: Array<{
-        imported_at: string
-        documento_titular: string | null
-        pedido: string | null
-        protocolo: string | null
-        produto: string | null
-        tipo: string | null
-        validade: string | null
-        vencimento: string | null
-        atendente: string | null
-        ponto: string | null
-        vendedor: string | null
-        status_pedido: string | null
-        valor_compra: number | null
-        ar: string | null
-      }>
+      compras_historico: CompraHistoricoItem[]
+      compras_historico_keys: Set<string>
     }>()
 
     for (let i = 0; i < items.length; i++) {
@@ -413,9 +482,20 @@ export class CommercialRepository {
       const valor_compra = parseCurrency(item.valor_compra)
       const ar = String(item.ar ?? '').trim() || null
 
-      const compraEvento = {
-        imported_at: new Date().toISOString(),
+      const compraBase = {
         documento_titular: docTitular || (doc.length === 11 ? doc : null),
+        pedido,
+        protocolo,
+        produto,
+        tipo,
+        validade,
+        vencimento,
+        valor_compra,
+      }
+      const compraImportKey = buildCompraImportKey(compraBase)
+      const compraEvento: CompraHistoricoItem = {
+        imported_at: new Date().toISOString(),
+        ...compraBase,
         pedido,
         protocolo,
         produto,
@@ -428,6 +508,7 @@ export class CommercialRepository {
         status_pedido,
         valor_compra,
         ar,
+        import_key: compraImportKey,
       }
 
       const existente = byDoc.get(doc)
@@ -462,9 +543,16 @@ export class CommercialRepository {
         existente.ar = pick(existente.ar, ar)
         existente.documento_titular = pick(existente.documento_titular, docTitular || null)
         const hasData = compraEvento.pedido || compraEvento.protocolo || compraEvento.produto || compraEvento.vencimento || compraEvento.valor_compra !== null
-        if (hasData) existente.compras_historico.push(compraEvento)
+        if (hasData && !existente.compras_historico_keys.has(compraImportKey)) {
+          existente.compras_historico.push(compraEvento)
+          existente.compras_historico_keys.add(compraImportKey)
+        }
         continue
       }
+
+      const hasData = compraEvento.pedido || compraEvento.protocolo || compraEvento.produto || compraEvento.vencimento || compraEvento.valor_compra !== null
+      const comprasHistorico = hasData ? [compraEvento] : []
+      const comprasHistoricoKeys = new Set<string>(hasData ? [compraImportKey] : [])
 
       byDoc.set(doc, {
         tipo_cliente,
@@ -487,11 +575,9 @@ export class CommercialRepository {
         inscricao_estadual: String(item.inscricao_estadual ?? '').trim() || null,
         iss_retido: Boolean(item.iss_retido),
         status: String(item.status ?? 'ativo').trim() || 'ativo',
-        metadata: JSON.stringify({
-          imported_via: 'clientes.import',
-          imported_at: new Date().toISOString(),
+        metadata: buildImportMetadata({
+          cpf_cnpj: doc,
           data_nascimento,
-          documento_principal: doc,
           documento_titular: docTitular || (doc.length === 11 ? doc : null),
           pedido,
           protocolo,
@@ -505,7 +591,7 @@ export class CommercialRepository {
           status_pedido,
           valor_compra,
           ar,
-          compras_historico: [compraEvento],
+          compras_historico: comprasHistorico,
         }),
         pedido,
         protocolo,
@@ -520,33 +606,13 @@ export class CommercialRepository {
         valor_compra,
         ar,
         documento_titular: docTitular || (doc.length === 11 ? doc : null),
-        compras_historico: (compraEvento.pedido || compraEvento.protocolo || compraEvento.produto || compraEvento.vencimento || compraEvento.valor_compra !== null)
-          ? [compraEvento]
-          : [],
+        compras_historico: comprasHistorico,
+        compras_historico_keys: comprasHistoricoKeys,
       })
     }
 
     for (const payload of byDoc.values()) {
-      payload.metadata = JSON.stringify({
-        imported_via: 'clientes.import',
-        imported_at: new Date().toISOString(),
-        data_nascimento: payload.data_nascimento,
-        documento_principal: payload.cpf_cnpj,
-        documento_titular: payload.documento_titular,
-        pedido: payload.pedido,
-        protocolo: payload.protocolo,
-        produto: payload.produto,
-        tipo: payload.tipo,
-        validade: payload.validade,
-        vencimento: payload.vencimento,
-        atendente: payload.atendente,
-        ponto: payload.ponto,
-        vendedor: payload.vendedor,
-        status_pedido: payload.status_pedido,
-        valor_compra: payload.valor_compra,
-        ar: payload.ar,
-        compras_historico: payload.compras_historico,
-      })
+      payload.metadata = buildImportMetadata(payload)
     }
 
     const payloads = [...byDoc.values()]
@@ -555,8 +621,8 @@ export class CommercialRepository {
     }
 
     const docs = payloads.map(p => p.cpf_cnpj)
-    const existingResult = await this.db.query<{ cpf_cnpj: string }>(
-      `select cpf_cnpj from cadastros_base where cpf_cnpj = any($1::text[])`,
+    const existingResult = await this.db.query<{ cpf_cnpj: string; metadata: unknown }>(
+      `select cpf_cnpj, metadata from cadastros_base where cpf_cnpj = any($1::text[])`,
       [docs],
     )
     const existingSet = new Set(existingResult.rows.map(r => r.cpf_cnpj))
@@ -565,6 +631,41 @@ export class CommercialRepository {
 
     const existingPayloads = payloads.filter(p => existingSet.has(p.cpf_cnpj))
     const newPayloads = payloads.filter(p => !existingSet.has(p.cpf_cnpj))
+
+    const existingCompraKeysByDoc = new Map<string, Set<string>>()
+    for (const row of existingResult.rows) {
+      const metadata = this.asObject(row.metadata)
+      const compras = Array.isArray(metadata.compras_historico) ? metadata.compras_historico : []
+      const keys = new Set<string>()
+      for (const compra of compras) {
+        if (!compra || typeof compra !== 'object') continue
+        const entry = compra as Record<string, unknown>
+        const key = String(entry.import_key ?? '').trim() || buildCompraImportKey({
+          documento_titular: typeof entry.documento_titular === 'string' ? entry.documento_titular : null,
+          pedido: typeof entry.pedido === 'string' ? entry.pedido : null,
+          protocolo: typeof entry.protocolo === 'string' ? entry.protocolo : null,
+          produto: typeof entry.produto === 'string' ? entry.produto : null,
+          tipo: typeof entry.tipo === 'string' ? entry.tipo : null,
+          validade: typeof entry.validade === 'string' ? entry.validade : null,
+          vencimento: typeof entry.vencimento === 'string' ? entry.vencimento : null,
+          valor_compra: typeof entry.valor_compra === 'number' ? entry.valor_compra : parseCurrency(entry.valor_compra),
+        })
+        keys.add(key)
+      }
+      existingCompraKeysByDoc.set(row.cpf_cnpj, keys)
+    }
+
+    for (const item of existingPayloads) {
+      const existingKeys = existingCompraKeysByDoc.get(item.cpf_cnpj) ?? new Set<string>()
+      item.compras_historico = item.compras_historico.filter(compra => {
+        const key = compra.import_key || buildCompraImportKey(compra)
+        if (!key || existingKeys.has(key)) return false
+        existingKeys.add(key)
+        return true
+      })
+      item.compras_historico_keys = existingKeys
+      item.metadata = buildImportMetadata(item)
+    }
 
     for (const item of existingPayloads) {
       await this.db.query(
