@@ -3167,7 +3167,7 @@ function MessageRow({
               📎 {mediaLabel}
             </a>
           ) : (
-            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.mensagem || mediaLabel || 'Mensagem sem texto'}</p>
+            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{normalizeStructuredMessage(message.mensagem) || mediaLabel || 'Mensagem sem texto'}</p>
           )}
         </div>
     </div>
