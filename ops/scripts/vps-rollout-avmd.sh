@@ -40,7 +40,6 @@ smoke_test_public_api_get() {
   for ((attempt=1; attempt<=PUBLIC_API_RETRIES; attempt++)); do
     http_code="$(curl -sS -o /tmp/avmd-public-api-healthz.body -w '%{http_code}' "${PUBLIC_API_URL}" || true)"
     if [ "${http_code}" = "200" ]; then
-      curl -fsS "${PUBLIC_API_URL}" >/dev/null
       return 0
     fi
 
