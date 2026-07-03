@@ -1471,19 +1471,19 @@ export default function Renovacoes() {
         </div>
       )}
 
-      <div ref={pageScrollRef} className="flex-1 overflow-auto p-6 space-y-5">
+      <div ref={pageScrollRef} className="flex-1 overflow-auto p-4 space-y-3">
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { label: visao === 'operacional' ? 'Renovações Operacionais' : 'Histórico de renovações', value: loading ? '…' : String(kpis.total), color: 'bg-red-500', sub: visao === 'operacional' ? 'janela atual' : 'registros antigos' },
             { label: 'Valor Potencial',       value: loading ? '…' : fmtCurrency(kpis.potencial), color: 'bg-green-500',  sub: 'receita estimada'    },
             { label: 'Urgentes (≤ 7 dias)',   value: loading ? '…' : String(kpis.urgentes),       color: 'bg-orange-500', sub: 'ação imediata'       },
             { label: 'Já Contatados',         value: loading ? '…' : String(kpis.contatados),     color: 'bg-blue-500',   sub: 'aguardando resposta' },
           ].map(k => (
-            <div key={k.label} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
-              <div className={cn('w-2 h-2 rounded-full mb-3', k.color)} />
-              <p className="text-xl font-bold">{k.value}</p>
+            <div key={k.label} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3">
+              <div className={cn('w-2 h-2 rounded-full mb-2', k.color)} />
+              <p className="text-lg font-bold leading-tight">{k.value}</p>
               <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mt-0.5">{k.label}</p>
               <p className="text-xs text-gray-400">{k.sub}</p>
             </div>
@@ -1491,19 +1491,19 @@ export default function Renovacoes() {
         </div>
 
         {/* Priority Segments */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {(['urgente','media','normal'] as PrioridadeRenovacao[]).map(p => {
             const cfg = PRIORIDADE_CONFIG[p]; const Icon = cfg.icon
             const count = lista.filter(r => r.prioridade === p).length
             return (
               <button key={p} type="button" onClick={() => setFiltro(filtro === p ? 'todos' : p)}
-                className={cn('text-left rounded-xl border p-4 transition-all', cfg.bg,
+                className={cn('text-left rounded-xl border p-3 transition-all', cfg.bg,
                   filtro === p ? 'ring-2 ring-offset-1 ring-blue-500' : 'border-gray-200 dark:border-gray-800 hover:border-blue-300')}>
                 <div className="flex items-center gap-2 mb-1">
                   <Icon size={16} className={cfg.color} />
                   <span className={cn('text-sm font-semibold', cfg.color)}>{cfg.label}</span>
                 </div>
-                <p className="text-2xl font-bold">{loading ? '…' : count}</p>
+                <p className="text-xl font-bold leading-tight">{loading ? '…' : count}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">certificados neste segmento</p>
               </button>
             )
@@ -1530,7 +1530,39 @@ export default function Renovacoes() {
               {item.label}
             </button>
           ))}
-          <span className="text-xs text-gray-400 ml-1">{janelaLabel}</span>
+          <span className="text-xs text-gray-400 ml-1 mr-2">{janelaLabel}</span>
+
+          <label className="flex items-center gap-2 min-w-[260px]">
+            <span className="text-[11px] font-medium text-gray-500 whitespace-nowrap">Template WA</span>
+            <select
+              value={selectedWaTplId}
+              onChange={e => setSelectedWaTplId(e.target.value)}
+              className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-2.5 py-1.5 text-xs bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Padrão</option>
+              {waTemplates.map(tpl => (
+                <option key={tpl.id} value={tpl.id}>
+                  {tpl.name}{tpl.ativo ? ' (padrão)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2 min-w-[260px]">
+            <span className="text-[11px] font-medium text-gray-500 whitespace-nowrap">Template E-mail</span>
+            <select
+              value={selectedEmailTplId}
+              onChange={e => setSelectedEmailTplId(e.target.value)}
+              className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-2.5 py-1.5 text-xs bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Padrão</option>
+              {emailTemplates.map(tpl => (
+                <option key={tpl.id} value={tpl.id}>
+                  {tpl.name}{tpl.ativo ? ' (padrão)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -1607,39 +1639,6 @@ export default function Renovacoes() {
             <Zap size={14} /> Automações
             {showAutomation ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </button>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">Template usado no envio de WhatsApp</span>
-            <select
-              value={selectedWaTplId}
-              onChange={e => setSelectedWaTplId(e.target.value)}
-              className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Padrão do canal</option>
-              {waTemplates.map(tpl => (
-                <option key={tpl.id} value={tpl.id}>
-                  {tpl.name}{tpl.ativo ? ' (padrão)' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">Template usado no envio de e-mail</span>
-            <select
-              value={selectedEmailTplId}
-              onChange={e => setSelectedEmailTplId(e.target.value)}
-              className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Padrão do canal</option>
-              {emailTemplates.map(tpl => (
-                <option key={tpl.id} value={tpl.id}>
-                  {tpl.name}{tpl.ativo ? ' (padrão)' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
 
         {/* Automation Panel */}
