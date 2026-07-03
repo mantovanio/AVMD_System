@@ -4,6 +4,7 @@ import { getApiUrl } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { buscarCep } from '@/lib/cep'
+import { buscarCnpj } from '@/lib/cnpj'
 import { openCentralChat } from '@/lib/chatNavigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { buildSafeIlikePattern, hasPerfil } from '@/lib/security'
@@ -1602,6 +1603,51 @@ function ClienteEditorModal({
   onChange: (next: ClienteFormState) => void
   saving: boolean
 }) {
+  const [cepLoading, setCepLoading] = useState(false)
+  const [cnpjLoading, setCnpjLoading] = useState(false)
+
+  async function handleCepBlur() {
+    const cep = normalizeDigits(form.cep)
+    if (cep.length !== 8) return
+
+    setCepLoading(true)
+    const r = await buscarCep(cep)
+    setCepLoading(false)
+    if (!r) return
+
+    onChange({
+      ...form,
+      logradouro: form.logradouro || r.logradouro,
+      bairro: form.bairro || r.bairro,
+      cidade: form.cidade || r.localidade,
+      uf: form.uf || r.uf,
+    })
+  }
+
+  async function handleCnpjBlur() {
+    const cnpj = normalizeDigits(form.cpf_cnpj)
+    if (cnpj.length !== 14) return
+
+    setCnpjLoading(true)
+    const result = await buscarCnpj(cnpj)
+    setCnpjLoading(false)
+    if (!result) return
+
+    onChange({
+      ...form,
+      tipo_cliente: 'pessoa_juridica',
+      nome: form.nome || result.razao_social,
+      nome_fantasia: form.nome_fantasia || result.nome_fantasia || '',
+      cep: form.cep || result.cep || '',
+      logradouro: form.logradouro || result.logradouro || '',
+      numero: form.numero || result.numero || '',
+      complemento: form.complemento || result.complemento || '',
+      bairro: form.bairro || result.bairro || '',
+      cidade: form.cidade || result.municipio || '',
+      uf: form.uf || result.uf || '',
+    })
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="w-full max-w-5xl max-h-[92vh] rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl overflow-hidden flex flex-col">
@@ -1628,7 +1674,19 @@ function ClienteEditorModal({
             </select>
           </ModalField>
           <ModalField label="CPF / CNPJ">
-            <input value={form.cpf_cnpj} onChange={e => onChange({ ...form, cpf_cnpj: e.target.value })} className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm" />
+            <div className="relative">
+              <input
+                value={form.cpf_cnpj}
+                onChange={e => onChange({ ...form, cpf_cnpj: e.target.value })}
+                onBlur={() => void handleCnpjBlur()}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 pr-10 text-sm"
+              />
+              {cnpjLoading && (
+                <span className="absolute inset-y-0 right-3 flex items-center text-gray-400">
+                  <Loader2 size={15} className="animate-spin" />
+                </span>
+              )}
+            </div>
           </ModalField>
           <ModalField label="Nome / Razão social">
             <input value={form.nome} onChange={e => onChange({ ...form, nome: e.target.value })} className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm" />
@@ -1643,22 +1701,19 @@ function ClienteEditorModal({
             <input value={form.telefone} onChange={e => onChange({ ...form, telefone: e.target.value })} className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm" />
           </ModalField>
           <ModalField label="CEP">
-            <input
-              value={form.cep}
-              onChange={e => onChange({ ...form, cep: e.target.value })}
-              onBlur={async () => {
-                const r = await buscarCep(form.cep)
-                if (!r) return
-                onChange({
-                  ...form,
-                  logradouro: r.logradouro || form.logradouro,
-                  bairro: r.bairro || form.bairro,
-                  cidade: r.localidade || form.cidade,
-                  uf: r.uf || form.uf,
-                })
-              }}
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm"
-            />
+            <div className="relative">
+              <input
+                value={form.cep}
+                onChange={e => onChange({ ...form, cep: e.target.value })}
+                onBlur={() => void handleCepBlur()}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 pr-10 text-sm"
+              />
+              {cepLoading && (
+                <span className="absolute inset-y-0 right-3 flex items-center text-gray-400">
+                  <Loader2 size={15} className="animate-spin" />
+                </span>
+              )}
+            </div>
           </ModalField>
           <ModalField label="Cidade">
             <input value={form.cidade} onChange={e => onChange({ ...form, cidade: e.target.value })} className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm" />
