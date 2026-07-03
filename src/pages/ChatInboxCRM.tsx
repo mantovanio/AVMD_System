@@ -1441,6 +1441,19 @@ export default function ChatInboxCRM() {
     const resolvedStatus = cleanedStatus || null
     const resolvedObs = cleanedObs || null
 
+    if (selectedConversation.fila !== 'email') {
+      if (!resolvedName) {
+        setContactEditSaving(false)
+        setContactEditError('Informe ao menos o nome do contato.')
+        return
+      }
+      if (!resolvedPhone) {
+        setContactEditSaving(false)
+        setContactEditError('Para contato solto no chat, salve ao menos nome e telefone. O e-mail e opcional.')
+        return
+      }
+    }
+
     try {
       let nextCustomerId = customerId
       if (customerId) {
@@ -2543,7 +2556,7 @@ export default function ChatInboxCRM() {
                             value={contactEdit.email}
                             onChange={event => setContactEdit(prev => ({ ...prev, email: event.target.value }))}
                             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                            placeholder="email@dominio.com"
+                            placeholder="Opcional"
                           />
                         </label>
 
