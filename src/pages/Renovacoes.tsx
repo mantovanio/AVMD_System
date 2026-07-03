@@ -351,6 +351,8 @@ export default function Renovacoes() {
   const { profile } = useAuth()
   const isAdmin = isAdminProfile(profile)
   const canEditCadastro = hasPerfil(profile, 'admin', 'agente_registro')
+  const pageScrollRef = useRef<HTMLDivElement>(null)
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
 
   // ── list state ──────────────────────────────────────────────
   const [lista, setLista]           = useState<RenovacaoV2[]>([])
@@ -361,6 +363,8 @@ export default function Renovacoes() {
   const [filtro, setFiltro]         = useState<PrioridadeRenovacao | 'todos'>('todos')
   const [visao, setVisao]           = useState<'operacional' | 'historico'>('operacional')
   const [busca, setBusca]           = useState('')
+  const [filtroDataInicio, setFiltroDataInicio] = useState('')
+  const [filtroDataFim, setFiltroDataFim] = useState('')
   const [sendingId, setSendingId]   = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [toast, setToast]           = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
@@ -465,6 +469,29 @@ export default function Renovacoes() {
       setLoadingMore(false)
     }
   }, [hasMore, lista.length, loading, loadingMore, visao])
+
+  useEffect(() => {
+    const root = pageScrollRef.current
+    const sentinel = loadMoreSentinelRef.current
+    if (!root || !sentinel || !hasMore) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (entry?.isIntersecting && !loading && !loadingMore) {
+          void carregarMaisRenovacoes()
+        }
+      },
+      {
+        root,
+        rootMargin: '0px 0px 240px 0px',
+        threshold: 0.05,
+      },
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [carregarMaisRenovacoes, hasMore, loading, loadingMore])
 
   const fetchAutoRules = useCallback(async () => {
     setLoadingRules(true)
@@ -1177,7 +1204,10 @@ export default function Renovacoes() {
     const matchFiltro = filtro === 'todos' || r.prioridade === filtro
     const term = busca.toLowerCase()
     const matchBusca  = !term || [r.cliente,r.razao_social,r.tipo_certificado,r.email,r.telefone,r.cpf,r.cnpj,r.pedido,r.protocolo,r.vendedor,r.contador,r.agr].some(v => v?.toLowerCase().includes(term))
-    return matchFiltro && matchBusca
+    const dataRef = String(r.data_vencimento ?? '').slice(0, 10)
+    const matchDataInicio = !filtroDataInicio || dataRef >= filtroDataInicio
+    const matchDataFim = !filtroDataFim || dataRef <= filtroDataFim
+    return matchFiltro && matchBusca && matchDataInicio && matchDataFim
   })
 
   const allSelected   = listagem.length > 0 && selectedIds.size === listagem.length
@@ -1441,7 +1471,7 @@ export default function Renovacoes() {
         </div>
       )}
 
-      <div className="flex-1 overflow-auto p-6 space-y-5">
+      <div ref={pageScrollRef} className="flex-1 overflow-auto p-6 space-y-5">
 
         {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1507,9 +1537,35 @@ export default function Renovacoes() {
           <input type="text" placeholder="Buscar por cliente, CPF, CNPJ, pedido…"
             value={busca} onChange={e => setBusca(e.target.value)}
             className="flex-1 min-w-[200px] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input
+            type="date"
+            value={filtroDataInicio}
+            onChange={e => setFiltroDataInicio(e.target.value)}
+            title="Filtrar pedidos com vencimento a partir desta data"
+            className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <input
+            type="date"
+            value={filtroDataFim}
+            onChange={e => setFiltroDataFim(e.target.value)}
+            title="Filtrar pedidos com vencimento até esta data"
+            className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
           <button type="button" title="Atualizar" onClick={() => void fetchRenovacoes()}
             className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
             <RefreshCw size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setBusca('')
+              setFiltroDataInicio('')
+              setFiltroDataFim('')
+              setFiltro('todos')
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            <X size={14} /> Limpar filtros
           </button>
           <button type="button" onClick={downloadSpreadsheetTemplate}
             className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
@@ -2234,22 +2290,21 @@ export default function Renovacoes() {
             </table>
           </div>
 
-          <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-gray-500">
-              Mostrando {listagem.length} registro(s) nesta visão{hasMore ? ' (carregamento em lotes)' : ''}.
+          <div className="sticky bottom-0 z-10 px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-gray-600 dark:text-gray-300">
+              Mostrando {listagem.length} registro(s) nesta visão{hasMore ? ' (carregamento em lotes)' : ' (fim da lista atual)'}.
             </p>
-            {hasMore && (
-              <button
-                type="button"
-                onClick={() => void carregarMaisRenovacoes()}
-                disabled={loadingMore || loading}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
-              >
-                {loadingMore ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-                {loadingMore ? 'Carregando...' : 'Carregar mais'}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => void carregarMaisRenovacoes()}
+              disabled={loadingMore || loading || !hasMore}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+            >
+              {loadingMore ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              {loadingMore ? 'Carregando...' : hasMore ? 'Carregar mais 200' : 'Sem mais registros'}
+            </button>
           </div>
+          <div ref={loadMoreSentinelRef} className="h-1 w-full" aria-hidden="true" />
         </div>
 
       </div>
