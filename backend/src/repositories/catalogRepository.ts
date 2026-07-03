@@ -12,7 +12,7 @@ export class CatalogRepository {
 
   async saveCertificado(input: Record<string, unknown>) {
     const id = (input.id as string | null)?.trim() || randomUUID()
-    const fields = ['codigo','tipo','estoque','validade','descricao','modelo','categoria',
+    const fields = ['codigo','status_produto','tipo','estoque','validade','validade_meses','descricao','modelo','categoria',
       'tipo_emissao_padrao','periodo_uso','descricao_produto','produto_vinculado_ac',
       'preco_venda','valor_custo_ac','valor_custo','agrupador','hash','ativo']
     const vals = fields.map(f => input[f] ?? null)
@@ -28,7 +28,14 @@ export class CatalogRepository {
   }
 
   async toggleCertificado(id: string, ativo: boolean) {
-    await this.db.query(`update certificados set ativo = $2, updated_at = now() where id = $1::uuid`, [id, ativo])
+    await this.db.query(
+      `update certificados
+       set ativo = $2,
+           status_produto = case when $2 then 'Ativo' else 'Inativo' end,
+           updated_at = now()
+       where id = $1::uuid`,
+      [id, ativo],
+    )
   }
 
   async deleteCertificado(id: string) {
@@ -42,7 +49,7 @@ export class CatalogRepository {
   }
 
   async bulkUpsertCertificados(items: Record<string, unknown>[]) {
-    const fields = ['codigo','tipo','estoque','validade','descricao','modelo','categoria',
+    const fields = ['codigo','status_produto','tipo','estoque','validade','validade_meses','descricao','modelo','categoria',
       'tipo_emissao_padrao','periodo_uso','descricao_produto','produto_vinculado_ac',
       'preco_venda','valor_custo_ac','valor_custo','agrupador','hash','ativo']
     for (const item of items) {

@@ -179,9 +179,11 @@ export type NovoClienteComercial = Omit<ClienteComercial, 'id' | 'created_at' | 
 export interface Certificado {
   id: string
   codigo: number | null
+  status_produto: string | null
   tipo: string              // nome do produto, ex: "e-CPF A1"
   descricao: string | null
   validade: string          // ex: "1 Ano", "2 Anos"
+  validade_meses: number | null
   modelo: string | null     // A1, A3
   categoria: string | null  // e-CPF, e-CNPJ, NF-e, SSL
   tipo_emissao_padrao: string | null

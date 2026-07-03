@@ -26,9 +26,11 @@ create table if not exists app_settings (
 create table if not exists certificados (
   id uuid primary key default gen_random_uuid(),
   codigo integer,
+  status_produto text not null default 'Ativo',
   tipo text not null,
   estoque integer not null default 0,
   validade text,
+  validade_meses integer,
   descricao text,
   modelo text,
   categoria text,
