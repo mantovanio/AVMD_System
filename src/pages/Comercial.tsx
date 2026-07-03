@@ -852,6 +852,16 @@ export default function Comercial() {
     () => itensTabela.find(item => item.id === formV2.tabela_preco_item_id) ?? null,
     [formV2.tabela_preco_item_id, itensTabela]
   )
+  const certificadoSelecionadoVenda = useMemo(
+    () => certificadoById.get(formV2.certificado_id) ?? null,
+    [certificadoById, formV2.certificado_id]
+  )
+  const validadeSelecionadaVenda = certificadoSelecionadoVenda?.validade?.trim() ?? ''
+  const validadeSelecionadaMeses = useMemo(() => {
+    if (!validadeSelecionadaVenda) return ''
+    const meses = validadeEmMeses(validadeSelecionadaVenda)
+    return meses ? `${meses} meses` : validadeSelecionadaVenda
+  }, [validadeSelecionadaVenda])
   const valorBaseProduto = Number(itemTabelaSelecionado?.valor ?? 0)
   const descontoCalculadoVenda = useMemo(() => {
     if (!valorBaseProduto || formV2.valor_venda >= valorBaseProduto) return 0
@@ -4098,69 +4108,69 @@ export default function Comercial() {
                   )}
 
                   {/* 3. Parceiro vendedor */}
-                  <div>
-                    <label className="block text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">Parceiro vendedor / indicador da venda</label>
-                    <div className="relative">
-                      <input
-                        value={formV2.contador_id
-                          ? (() => { const p = parceiros.find(x => x.id === formV2.contador_id); return p ? `${p.cpf_cnpj ?? ''} - ${(p.tipo_parceiro ?? '').toUpperCase()} - ${p.nome}` : '' })()
-                          : contadorSearch}
-                        onChange={e => {
-                          const v = e.target.value
-                          if (formV2.contador_id) setFormV2(p => ({ ...p, contador_id: null }))
-                          setContadorSearch(v)
-                          setContadorDropdownOpen(true)
-                          setContadorStepHandled(false)
-                        }}
-                        onFocus={() => setContadorDropdownOpen(true)}
-                        onBlur={() => setTimeout(() => setContadorDropdownOpen(false), 150)}
-                        disabled={!formV2.cadastro_base_id}
-                        placeholder={!formV2.cadastro_base_id ? 'Selecione o cliente primeiro' : 'Busque um parceiro vendedor'}
-                        className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60" />
-                      {contadorDropdownOpen && parceirosParaContador.length > 0 && (
-                        <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                          {parceirosParaContador.map(p => (
-                            <button key={p.id} type="button"
-                              onMouseDown={e => e.preventDefault()}
-                              onClick={() => {
-                                setFormV2(prev => ({ ...prev, contador_id: p.id }))
-                                setContadorStepHandled(true)
-                                setContadorSearch('')
-                                setContadorDropdownOpen(false)
-                              }}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
-                              {p.cpf_cnpj ?? ''} - {(p.tipo_parceiro ?? '').toUpperCase()} - {p.nome}{p.nome_fantasia ? ` - ${p.nome_fantasia}` : ''}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {contadorDropdownOpen && parceirosParaContador.length === 0 && (
-                        <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400">
-                          {contadorSearch.trim() ? 'Nenhum parceiro vinculado corresponde a esta busca.' : 'Nenhum parceiro vinculado foi encontrado para o seu usuário.'}
-                        </div>
-                      )}
-                      {formV2.contador_id && (
-                        <button type="button" onClick={() => { setFormV2(p => ({ ...p, contador_id: null })); setContadorSearch(''); setContadorDropdownOpen(false); setContadorStepHandled(false) }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>
-                      )}
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+                    <div>
+                      <label className="block text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">Parceiro vendedor / indicador da venda</label>
+                      <div className="relative">
+                        <input
+                          value={formV2.contador_id
+                            ? (() => { const p = parceiros.find(x => x.id === formV2.contador_id); return p ? `${p.cpf_cnpj ?? ''} - ${(p.tipo_parceiro ?? '').toUpperCase()} - ${p.nome}` : '' })()
+                            : contadorSearch}
+                          onChange={e => {
+                            const v = e.target.value
+                            if (formV2.contador_id) setFormV2(p => ({ ...p, contador_id: null }))
+                            setContadorSearch(v)
+                            setContadorDropdownOpen(true)
+                            setContadorStepHandled(false)
+                          }}
+                          onFocus={() => setContadorDropdownOpen(true)}
+                          onBlur={() => setTimeout(() => setContadorDropdownOpen(false), 150)}
+                          disabled={!formV2.cadastro_base_id}
+                          placeholder={!formV2.cadastro_base_id ? 'Selecione o cliente primeiro' : 'Busque um parceiro vendedor'}
+                          className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60" />
+                        {contadorDropdownOpen && parceirosParaContador.length > 0 && (
+                          <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {parceirosParaContador.map(p => (
+                              <button key={p.id} type="button"
+                                onMouseDown={e => e.preventDefault()}
+                                onClick={() => {
+                                  setFormV2(prev => ({ ...prev, contador_id: p.id }))
+                                  setContadorStepHandled(true)
+                                  setContadorSearch('')
+                                  setContadorDropdownOpen(false)
+                                }}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                                {p.cpf_cnpj ?? ''} - {(p.tipo_parceiro ?? '').toUpperCase()} - {p.nome}{p.nome_fantasia ? ` - ${p.nome_fantasia}` : ''}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {contadorDropdownOpen && parceirosParaContador.length === 0 && (
+                          <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400">
+                            {contadorSearch.trim() ? 'Nenhum parceiro vinculado corresponde a esta busca.' : 'Nenhum parceiro vinculado foi encontrado para o seu usuário.'}
+                          </div>
+                        )}
+                        {formV2.contador_id && (
+                          <button type="button" onClick={() => { setFormV2(p => ({ ...p, contador_id: null })); setContadorSearch(''); setContadorDropdownOpen(false); setContadorStepHandled(false) }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>
+                        )}
+                      </div>
                     </div>
-                    <div className="mt-2">
-                      <button type="button"
-                        onClick={() => { setFormV2(p => ({ ...p, contador_id: null })); setContadorSearch(''); setContadorDropdownOpen(false); setContadorStepHandled(true) }}
-                        disabled={!formV2.cadastro_base_id}
-                        className={cn(
-                          'px-3 py-1.5 text-xs rounded-lg border transition-colors',
-                          vendaStepStatus.parceiroOk && !formV2.contador_id
-                            ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/30 dark:bg-green-950/20 dark:text-green-300'
-                            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50'
-                        )}>
-                        Seguir sem parceiro vendedor
-                      </button>
-                    </div>
+                    <button type="button"
+                      onClick={() => { setFormV2(p => ({ ...p, contador_id: null })); setContadorSearch(''); setContadorDropdownOpen(false); setContadorStepHandled(true) }}
+                      disabled={!formV2.cadastro_base_id}
+                      className={cn(
+                        'px-3 py-2 text-xs rounded-lg border transition-colors whitespace-nowrap',
+                        vendaStepStatus.parceiroOk && !formV2.contador_id
+                          ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/30 dark:bg-green-950/20 dark:text-green-300'
+                          : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50'
+                      )}>
+                      Seguir sem parceiro vendedor
+                    </button>
                   </div>
 
-                  {/* 4. Tipo emissão */}
-                  <div>
+                  {/* 4. Emissão e ponto */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <SelectInput label="Tipo Emissão *" value={formV2.tipo_emissao}
                       onChange={v => setFormV2(p => ({
                         ...p,
@@ -4174,10 +4184,6 @@ export default function Comercial() {
                       }))}
                       disabled={!vendaStepStatus.parceiroOk}
                       options={[{ value: '', label: vendaStepStatus.parceiroOk ? 'Selecione' : 'Confirme o parceiro primeiro' }, ...TIPO_EMISSAO_OPTIONS]} />
-                  </div>
-
-                  {/* 5. Ponto / Observações */}
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-3">
                     <SelectInput label="Ponto de Atendimento *" value={formV2.ponto_atendimento_id}
                       onChange={v => setFormV2(p => ({
                         ...p,
@@ -4197,16 +4203,10 @@ export default function Comercial() {
                           label: [ponto.nome, ponto.cidade, ponto.uf].filter(Boolean).join(' · '),
                         })),
                       ]} />
-                    <label className="flex flex-col gap-1">
-                      <span className="text-xs text-gray-500">Observações</span>
-                      <textarea rows={2} value={formV2.observacoes ?? ''}
-                        onChange={e => setFormV2(p => ({ ...p, observacoes: e.target.value || null }))}
-                        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-                    </label>
                   </div>
 
-                  {/* 6. Tabela e produto */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* 5. Tabela */}
+                  <div>
                     <SelectInput label="Tabela de Preço *" value={formV2.tabela_preco_id}
                       onChange={v => setFormV2(p => ({ ...p, tabela_preco_id: v, certificado_id: '', tabela_preco_item_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))}
                       disabled={!vendaStepStatus.pontoOk}
@@ -4214,6 +4214,10 @@ export default function Comercial() {
                         { value: '', label: !vendaStepStatus.pontoOk ? 'Selecione o ponto primeiro' : 'Selecione a tabela' },
                         ...tabelasDisponiveisVenda.map(t => ({ value: t.id, label: t.nome })),
                       ]} />
+                  </div>
+
+                  {/* 6. Produto */}
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_220px] gap-3">
                     <SelectInput label="Produto *" value={formV2.tabela_preco_item_id}
                       onChange={v => {
                         const item = itensTabela.find(i => i.id === v)
@@ -4237,6 +4241,13 @@ export default function Comercial() {
                           return { value: item.id, label }
                         }),
                       ]} />
+                    <TextInput
+                      label="Validade (Meses)"
+                      value={validadeSelecionadaMeses}
+                      onChange={() => {}}
+                      disabled
+                      placeholder="Será preenchida pelo produto"
+                    />
                   </div>
 
                   {motivoSemCertificados && vendaStepStatus.pontoOk && (
@@ -4250,10 +4261,6 @@ export default function Comercial() {
                     <NumberInput label="Valor Final (R$) *" value={formV2.valor_venda}
                       onChange={v => setFormV2(p => ({ ...p, valor_venda: v }))}
                       disabled={!vendaStepStatus.produtoOk} />
-                    <TextInput label="Cupom / Voucher" value={formV2.voucher_codigo}
-                      onChange={v => setFormV2(p => ({ ...p, voucher_codigo: v }))}
-                      disabled={!vendaStepStatus.produtoOk}
-                      placeholder={tabelaSelecionadaVenda?.codigo_voucher ? `Tabela aceita: ${tabelaSelecionadaVenda.codigo_voucher}` : 'Opcional'} />
                     <SelectInput label="Forma de Pagamento *" value={formV2.forma_pagamento}
                       onChange={v => setFormV2(p => ({ ...p, forma_pagamento: v }))}
                       disabled={!vendaStepStatus.produtoOk}
@@ -4261,6 +4268,19 @@ export default function Comercial() {
                     <TextInput label="Vencimento *" type="date" value={formV2.data_vencimento}
                       onChange={v => setFormV2(p => ({ ...p, data_vencimento: v }))}
                       disabled={!vendaStepStatus.produtoOk} />
+                    <TextInput label="Cupom / Voucher" value={formV2.voucher_codigo}
+                      onChange={v => setFormV2(p => ({ ...p, voucher_codigo: v }))}
+                      disabled={!vendaStepStatus.produtoOk}
+                      placeholder={tabelaSelecionadaVenda?.codigo_voucher ? `Tabela aceita: ${tabelaSelecionadaVenda.codigo_voucher}` : 'Opcional'} />
+                  </div>
+
+                  <div>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs text-gray-500">Observações</span>
+                      <textarea rows={2} value={formV2.observacoes ?? ''}
+                        onChange={e => setFormV2(p => ({ ...p, observacoes: e.target.value || null }))}
+                        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                    </label>
                   </div>
 
                   {vendaStepStatus.produtoOk && (
