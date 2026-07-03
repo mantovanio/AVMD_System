@@ -287,12 +287,15 @@ function AbaGeral() {
     setSaving(true)
     setErro(null)
     setOk(false)
-    const { error } = await supabase
-      .from('app_settings')
-      .upsert({ key: 'agency', value: form, updated_by: profile?.id ?? null }, { onConflict: 'key' })
+    const response = await fetch(getApiUrl('/app-settings'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'agency', value: form, updated_by: profile?.id ?? null }),
+    }).catch(() => null)
     setSaving(false)
-    if (error) {
-      setErro(`Erro ao salvar: ${error.message}`)
+    const payload = await response?.json().catch(() => null) as { ok?: boolean; error?: string } | null
+    if (!response?.ok || !payload?.ok) {
+      setErro(`Erro ao salvar: ${payload?.error ?? 'Não foi possível salvar a configuração da agência.'}`)
       return
     }
     setOk(true)
@@ -303,16 +306,19 @@ function AbaGeral() {
     setChatSettingsSaving(true)
     setChatSettingsError(null)
     setChatSettingsOk(false)
-    const { error } = await supabase
-      .from('app_settings')
-      .upsert({
+    const response = await fetch(getApiUrl('/app-settings'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         key: 'crm_chat_settings',
         value: { sign_outgoing_messages: chatSettingsSignOutgoing },
         updated_by: profile?.id ?? null,
-      }, { onConflict: 'key' })
+      }),
+    }).catch(() => null)
     setChatSettingsSaving(false)
-    if (error) {
-      setChatSettingsError(`Erro ao salvar configuração do chat: ${error.message}`)
+    const payload = await response?.json().catch(() => null) as { ok?: boolean; error?: string } | null
+    if (!response?.ok || !payload?.ok) {
+      setChatSettingsError(`Erro ao salvar configuração do chat: ${payload?.error ?? 'Não foi possível salvar a preferência do chat.'}`)
       return
     }
     setChatSettingsOk(true)

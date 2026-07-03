@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { getApiUrl } from '@/lib/api'
 
 const DEFAULT_BRAND_LOGO = '/logo-certiid.png'
 
@@ -82,21 +82,34 @@ function normalizeAgencyConfig(value: Partial<AgencyConfig>) {
 }
 
 export async function fetchAgencyConfig() {
-  const { data, error } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'agency')
-    .maybeSingle()
+  try {
+    const response = await fetch(getApiUrl('/app-settings?keys=agency'))
+    const payload = await response.json().catch(() => null) as {
+      ok?: boolean
+      settings?: Record<string, unknown>
+      error?: string
+    } | null
 
-  if (error) return { data: DEFAULT_AGENCY_CONFIG, error }
+    if (!response.ok || !payload?.ok) {
+      return {
+        data: DEFAULT_AGENCY_CONFIG,
+        error: new Error(payload?.error ?? 'Não foi possível carregar a configuração da agência.'),
+      }
+    }
 
-  const value = data?.value
-  if (!value || typeof value !== 'object') {
-    return { data: DEFAULT_AGENCY_CONFIG, error: null }
-  }
+    const value = payload.settings?.agency
+    if (!value || typeof value !== 'object') {
+      return { data: DEFAULT_AGENCY_CONFIG, error: null }
+    }
 
-  return {
-    data: normalizeAgencyConfig(value as Partial<AgencyConfig>),
-    error: null,
+    return {
+      data: normalizeAgencyConfig(value as Partial<AgencyConfig>),
+      error: null,
+    }
+  } catch (error) {
+    return {
+      data: DEFAULT_AGENCY_CONFIG,
+      error: error instanceof Error ? error : new Error('Não foi possível carregar a configuração da agência.'),
+    }
   }
 }

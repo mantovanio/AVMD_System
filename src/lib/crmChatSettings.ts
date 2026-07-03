@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { getApiUrl } from '@/lib/api'
 
 export type CrmChatSettings = {
   sign_outgoing_messages: boolean
@@ -17,22 +17,35 @@ export function applyOutgoingSignature(content: string, senderName?: string | nu
 }
 
 export async function loadCrmChatSettings() {
-  const { data, error } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'crm_chat_settings')
-    .maybeSingle()
+  try {
+    const response = await fetch(getApiUrl('/app-settings?keys=crm_chat_settings'))
+    const payload = await response.json().catch(() => null) as {
+      ok?: boolean
+      settings?: Record<string, unknown>
+      error?: string
+    } | null
 
-  if (error) return { data: DEFAULT_CRM_CHAT_SETTINGS, error }
+    if (!response.ok || !payload?.ok) {
+      return {
+        data: DEFAULT_CRM_CHAT_SETTINGS,
+        error: new Error(payload?.error ?? 'Não foi possível carregar as preferências do chat.'),
+      }
+    }
 
-  const value = (data?.value ?? {}) as Partial<CrmChatSettings>
-  return {
-    data: {
-      ...DEFAULT_CRM_CHAT_SETTINGS,
-      ...value,
-      sign_outgoing_messages: value.sign_outgoing_messages ?? DEFAULT_CRM_CHAT_SETTINGS.sign_outgoing_messages,
-    },
-    error: null,
+    const value = (payload.settings?.crm_chat_settings ?? {}) as Partial<CrmChatSettings>
+    return {
+      data: {
+        ...DEFAULT_CRM_CHAT_SETTINGS,
+        ...value,
+        sign_outgoing_messages: value.sign_outgoing_messages ?? DEFAULT_CRM_CHAT_SETTINGS.sign_outgoing_messages,
+      },
+      error: null,
+    }
+  } catch (error) {
+    return {
+      data: DEFAULT_CRM_CHAT_SETTINGS,
+      error: error instanceof Error ? error : new Error('Não foi possível carregar as preferências do chat.'),
+    }
   }
 }
 
