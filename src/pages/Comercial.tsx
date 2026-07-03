@@ -441,7 +441,7 @@ const EMPTY_AGENDA: NovoAgendamento = {
 }
 
 const EMPTY_CERTIFICADO: NovoCertificado = {
-  codigo: null, tipo: '', descricao: null, validade: '1 Ano',
+  codigo: null, tipo: '', descricao: null, validade: '12 meses',
   modelo: null, categoria: null, tipo_emissao_padrao: null, periodo_uso: null, descricao_produto: null,
   produto_vinculado_ac: null, preco_venda: 0, valor_custo_ac: 0, valor_custo: 0,
   agrupador: null, hash: null, estoque: 0, ativo: true,
@@ -988,11 +988,20 @@ export default function Comercial() {
   }
 
   function validadeEmMeses(val: string): number | null {
+    const puroNumero = String(val ?? '').trim().match(/^(\d+)$/)
+    if (puroNumero) return parseInt(puroNumero[1])
     const anos = val.match(/(\d+)\s*[Aa]no/)
     if (anos) return parseInt(anos[1]) * 12
     const meses = val.match(/(\d+)\s*[Mm](?:ês|es)?/)
     if (meses) return parseInt(meses[1])
     return null
+  }
+
+  function formatarValidadeMeses(val: string | null | undefined) {
+    const raw = String(val ?? '').trim()
+    if (!raw) return '—'
+    const meses = validadeEmMeses(raw)
+    return meses ? String(meses) : raw
   }
 
   function normalizeTipoEmissao(value: string | null | undefined) {
@@ -2176,21 +2185,27 @@ export default function Comercial() {
       const rows = await lerPlanilha(file)
       if (!rows.length) { showMsg('Planilha sem dados.'); return }
       const parseNum = (v: string) => parseFloat((v ?? '').replace(/[R$\s]/g, '').replace(',', '.')) || 0
+      const normalizeValidadeImport = (value: string) => {
+        const raw = String(value ?? '').trim()
+        if (!raw) return ''
+        if (/^\d+$/.test(raw)) return `${raw} meses`
+        return raw
+      }
       const records = rows.filter(r => Object.values(r).some(v => v)).map(row => ({
         codigo:               row['codigo'] ? parseInt(row['codigo']) : null,
         tipo:                 row['nome'] || '',
         descricao:            row['descricao'] || null,
-        validade:             row['validade'] || '',
+        validade:             normalizeValidadeImport(row['validade_meses'] ?? row['validade_em_meses'] ?? row['validade'] ?? ''),
         modelo:               row['modelo'] || null,
         categoria:            row['tipo'] || null,
-        tipo_emissao_padrao:  row['tipo_emissao'] || null,
+        tipo_emissao_padrao:  row['tipo_emissao'] || row['tipo_de_emissao'] || row['semissao'] || null,
         descricao_produto:    row['descricao_do_produto'] || row['descricao_produto'] || null,
         produto_vinculado_ac: row['produto_vinculado_na_ac'] || row['produto_vinculado_ac'] || row['produto_ac'] || null,
         preco_venda:          parseNum(row['preco_de_venda'] ?? row['preco_venda'] ?? row['preco'] ?? '0'),
         valor_custo_ac:       parseNum(row['valor_custo_ac'] ?? row['custo_ac'] ?? '0'),
-        valor_custo:          parseNum(row['valor_custo'] ?? row['custo'] ?? '0'),
+        valor_custo:          parseNum(row['valor_custo_ar'] ?? row['valor_custo'] ?? row['custo'] ?? '0'),
         agrupador:            row['agrupador'] || row['agrupador_utilizado_no_e_commerce'] || null,
-        hash:                 row['hash'] || null,
+        hash:                 row['hash_produto'] || row['hash'] || null,
         estoque:              0,
         ativo:                (row['cadastrado'] ?? row['status'] ?? '').toLowerCase() === 'sim' || (row['status'] ?? '').toLowerCase() === 'ativo',
       }))
@@ -5105,7 +5120,7 @@ export default function Comercial() {
                 const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s
               })
               return (
-                <DataTable headers={['', 'Cód', 'Nome', 'Descrição', 'Modelo', 'Validade', 'Tipo', 'Tipo Emissão', 'Produto AC', 'Preço Venda', 'Custo AC', 'Custo', 'Status', 'Ações']}>
+                <DataTable headers={['', 'Status', 'Tipo emissão', 'Código', 'Nome', 'Validade (meses)', 'Tipo', 'Produto vinculado na AC', 'Preço de venda', 'Valor Custo AC', 'Valor Custo AR', 'Agrupador', 'Hash', 'Ações']}>
                   {certificados.length === 0 ? (
                     <EmptyRow colSpan={14} label="Nenhum certificado cadastrado. Use 'Importar Planilha' ou 'Novo Certificado'." />
                   ) : (
@@ -5125,18 +5140,18 @@ export default function Comercial() {
                             <input type="checkbox" checked={selectedCertIds.has(c.id)} onChange={() => toggleOne(c.id)}
                               className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer" />
                           </td>
+                          <td className="px-4 py-3"><StatusPill active={c.ativo} /></td>
+                          <td className="px-4 py-3 text-xs">{c.tipo_emissao_padrao ?? '—'}</td>
                           <td className="px-4 py-3 text-xs text-gray-400">{c.codigo ?? '—'}</td>
                           <td className="px-4 py-3 font-medium text-sm">{c.tipo || '—'}</td>
-                          <td className="px-4 py-3 text-xs text-gray-500 max-w-[160px] truncate" title={c.descricao ?? ''}>{c.descricao ?? '—'}</td>
-                          <td className="px-4 py-3 text-xs text-gray-500">{c.modelo ?? '—'}</td>
-                          <td className="px-4 py-3 text-sm">{c.validade || '—'}</td>
+                          <td className="px-4 py-3 text-sm">{formatarValidadeMeses(c.validade)}</td>
                           <td className="px-4 py-3 text-xs">{c.categoria ?? '—'}</td>
-                          <td className="px-4 py-3 text-xs">{c.tipo_emissao_padrao ?? '—'}</td>
                           <td className="px-4 py-3 text-xs text-gray-400 max-w-[140px] truncate" title={c.produto_vinculado_ac ?? ''}>{c.produto_vinculado_ac ?? '—'}</td>
                           <td className="px-4 py-3 text-sm font-semibold">{c.preco_venda ? <span className="text-green-600 dark:text-green-400">{formatCurrency(c.preco_venda)}</span> : <span className="text-gray-400">—</span>}</td>
                           <td className="px-4 py-3 text-sm text-gray-500">{c.valor_custo_ac ? formatCurrency(c.valor_custo_ac) : '—'}</td>
                           <td className="px-4 py-3 text-sm text-gray-500">{c.valor_custo ? formatCurrency(c.valor_custo) : '—'}</td>
-                          <td className="px-4 py-3"><StatusPill active={c.ativo} /></td>
+                          <td className="px-4 py-3 text-xs text-gray-500 max-w-[120px] truncate" title={c.agrupador ?? ''}>{c.agrupador ?? '—'}</td>
+                          <td className="px-4 py-3 text-xs text-gray-500 max-w-[160px] truncate" title={c.hash ?? ''}>{c.hash ?? '—'}</td>
                           <td className="px-4 py-3"><RowActions active={c.ativo} onEdit={() => editarCertificado(c)} onToggle={() => toggleCertificado(c)} onDelete={() => excluirCertificado(c.id)} /></td>
                         </tr>
                       ))}
@@ -6589,9 +6604,9 @@ export default function Comercial() {
                 <NumberInput label="Código" value={formCert.codigo ?? 0} onChange={v => setFormCert(p => ({ ...p, codigo: v || null }))} step={1} />
                 <TextInput label="Nome *" value={formCert.tipo} onChange={v => setFormCert(p => ({ ...p, tipo: v }))} className="md:col-span-3" />
                 <TextInput label="Tipo Emissão" value={formCert.tipo_emissao_padrao ?? ''} onChange={v => setFormCert(p => ({ ...p, tipo_emissao_padrao: v || null }))} />
-                <TextInput label="Validade *" value={formCert.validade} onChange={v => setFormCert(p => ({ ...p, validade: v }))} />
+                <TextInput label="Validade (meses) *" value={formCert.validade} onChange={v => setFormCert(p => ({ ...p, validade: v }))} placeholder="Ex.: 12 meses" />
                 <TextInput label="Período de Uso (Fast)" value={formCert.periodo_uso ?? ''} onChange={v => setFormCert(p => ({ ...p, periodo_uso: v || null }))} />
-                <TextInput label="Tipo (Categoria)" value={formCert.categoria ?? ''} onChange={v => setFormCert(p => ({ ...p, categoria: v || null }))} />
+                <TextInput label="Tipo" value={formCert.categoria ?? ''} onChange={v => setFormCert(p => ({ ...p, categoria: v || null }))} />
                 <TextInput label="Modelo" value={formCert.modelo ?? ''} onChange={v => setFormCert(p => ({ ...p, modelo: v || null }))} />
                 <TextInput label="Agrupador (e-commerce)" value={formCert.agrupador ?? ''} onChange={v => setFormCert(p => ({ ...p, agrupador: v || null }))} className="md:col-span-2" />
                 <ActiveSelect value={formCert.ativo} onChange={v => setFormCert(p => ({ ...p, ativo: v }))} />
@@ -6599,7 +6614,7 @@ export default function Comercial() {
                 <TextInput label="Hash" value={formCert.hash ?? ''} onChange={v => setFormCert(p => ({ ...p, hash: v || null }))} className="md:col-span-2" />
                 <NumberInput label="Preço de Venda (R$)" value={formCert.preco_venda} onChange={v => setFormCert(p => ({ ...p, preco_venda: v }))} />
                 <NumberInput label="Valor Custo AC (R$)" value={formCert.valor_custo_ac} onChange={v => setFormCert(p => ({ ...p, valor_custo_ac: v }))} />
-                <NumberInput label="Valor Custo (R$)" value={formCert.valor_custo} onChange={v => setFormCert(p => ({ ...p, valor_custo: v }))} />
+                <NumberInput label="Valor Custo AR (R$)" value={formCert.valor_custo} onChange={v => setFormCert(p => ({ ...p, valor_custo: v }))} />
                 <TextInput label="Descrição" value={formCert.descricao ?? ''} onChange={v => setFormCert(p => ({ ...p, descricao: v || null }))} className="md:col-span-6" />
               </div>
               <label className="flex flex-col gap-1 mt-3">
