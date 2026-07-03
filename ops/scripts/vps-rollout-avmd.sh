@@ -10,6 +10,8 @@ NGINX_TARGET="/opt/avmd/nginx-avmd.conf"
 NGINX_BACKUP_DIR="/opt/avmd/backups/nginx"
 PUBLIC_API_URL="https://api.certiid.mantovan.com.br/healthz"
 PUBLIC_CRM_URL="https://crm.certiid.mantovan.com.br"
+PUBLIC_API_RETRIES="${PUBLIC_API_RETRIES:-8}"
+PUBLIC_API_RETRY_DELAY_SEC="${PUBLIC_API_RETRY_DELAY_SEC:-5}"
 
 if [ "${DEPLOY_GATE_APPROVED:-0}" != "1" ]; then
   echo "[ERRO] Deploy bloqueado: execute via /root/vps-deploy-gate.sh"
@@ -31,6 +33,46 @@ require_file() {
     log "[ERRO] Arquivo obrigatorio ausente: ${path}"
     exit 1
   fi
+}
+
+smoke_test_public_api_get() {
+  local attempt http_code
+  for ((attempt=1; attempt<=PUBLIC_API_RETRIES; attempt++)); do
+    http_code="$(curl -sS -o /tmp/avmd-public-api-healthz.body -w '%{http_code}' "${PUBLIC_API_URL}" || true)"
+    if [ "${http_code}" = "200" ]; then
+      curl -fsS "${PUBLIC_API_URL}" >/dev/null
+      return 0
+    fi
+
+    log "Tentativa ${attempt}/${PUBLIC_API_RETRIES} do health publico retornou HTTP ${http_code:-erro}."
+    if [ "${attempt}" -lt "${PUBLIC_API_RETRIES}" ]; then
+      sleep "${PUBLIC_API_RETRY_DELAY_SEC}"
+    fi
+  done
+
+  log "[ERRO] Health publico falhou apos ${PUBLIC_API_RETRIES} tentativas."
+  if [ -f /tmp/avmd-public-api-healthz.body ]; then
+    log "Ultimo body (ate 300 chars): $(head -c 300 /tmp/avmd-public-api-healthz.body | tr '\n' ' ')"
+  fi
+  return 1
+}
+
+smoke_test_public_api_head() {
+  local attempt http_code
+  for ((attempt=1; attempt<=PUBLIC_API_RETRIES; attempt++)); do
+    http_code="$(curl -sSI -o /dev/null -w '%{http_code}' "${PUBLIC_API_URL}" || true)"
+    if [ "${http_code}" = "200" ]; then
+      return 0
+    fi
+
+    log "Tentativa ${attempt}/${PUBLIC_API_RETRIES} do HEAD publico retornou HTTP ${http_code:-erro}."
+    if [ "${attempt}" -lt "${PUBLIC_API_RETRIES}" ]; then
+      sleep "${PUBLIC_API_RETRY_DELAY_SEC}"
+    fi
+  done
+
+  log "[ERRO] HEAD publico falhou apos ${PUBLIC_API_RETRIES} tentativas."
+  return 1
 }
 
 install_edge_config() {
@@ -92,10 +134,10 @@ log "9) Smoke test roteamento interno via Traefik"
 curl -fsS -H "Host: api.certiid.mantovan.com.br" "http://127.0.0.1/healthz"
 
 log "10) Smoke test publico da API (GET)"
-curl -fsS "${PUBLIC_API_URL}"
+smoke_test_public_api_get
 
 log "11) Smoke test publico da API (HEAD)"
-curl -fsSI "${PUBLIC_API_URL}" >/dev/null
+smoke_test_public_api_head
 
 log "Rollout finalizado"
 log "Frontend: ${PUBLIC_CRM_URL}"
