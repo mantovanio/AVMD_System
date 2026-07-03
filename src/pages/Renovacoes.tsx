@@ -1098,9 +1098,16 @@ export default function Renovacoes() {
     if (!canEditCadastro) { showMsg('Seu perfil não pode alterar cadastro por aqui.', 'err'); return }
     if (!editingContato) return
     setSavingContato(true)
+    const email = contatoForm.email.trim() || null
+    const telefone = normalizePhoneBR(contatoForm.telefone)
+    if (!email && !telefone) {
+      setSavingContato(false)
+      showMsg('Informe ao menos um canal de contato. O e-mail e opcional, mas telefone ou e-mail precisam existir.', 'err')
+      return
+    }
     const payload = {
-      email: contatoForm.email.trim() || null,
-      telefone: normalizePhoneBR(contatoForm.telefone),
+      email,
+      telefone,
     }
     try {
       await apiUpdateRenovacao(editingContato.id, payload)
@@ -1442,17 +1449,19 @@ export default function Renovacoes() {
             </div>
             <div className="flex-1 overflow-auto p-5">
               <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                Aqui você pode ajustar apenas <strong>e-mail</strong> e <strong>telefone</strong>. Nome, CPF, CNPJ e demais dados devem ser alterados no cadastro principal para refletir no sistema todo.
+                Aqui você pode ajustar apenas <strong>e-mail</strong> e <strong>telefone</strong>. O e-mail é opcional. Nome, CPF, CNPJ e demais dados devem ser alterados no cadastro principal para refletir no sistema todo.
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label className="flex flex-col gap-1">
                   <span className="text-xs text-gray-500">E-mail</span>
                   <input type="email" value={contatoForm.email} onChange={e => setContatoForm(p => ({ ...p, email: e.target.value }))}
+                    placeholder="Opcional"
                     className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </label>
                 <label className="flex flex-col gap-1">
                   <span className="text-xs text-gray-500">Telefone</span>
                   <input type="text" value={contatoForm.telefone} onChange={e => setContatoForm(p => ({ ...p, telefone: e.target.value }))}
+                    placeholder="Telefone principal"
                     className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </label>
               </div>
