@@ -572,6 +572,12 @@ export default function Clientes() {
     criados: number
     atualizados: number
     ignorados: number
+    ignoradosDuplicidade: number
+    resumoIgnorados: {
+      semDocumento: number
+      semNome: number
+      duplicidadeHistorico: number
+    }
     erros: Array<{ linha: number; motivo: string; cpf_cnpj?: string; nome?: string }>
   } | null>(null)
 
@@ -706,7 +712,18 @@ export default function Clientes() {
     }))
 
     const BATCH_SIZE = 300
-    const resume = { criados: 0, atualizados: 0, ignorados: 0, erros: [] as Array<{ linha: number; motivo: string; cpf_cnpj?: string; nome?: string }> }
+    const resume = {
+      criados: 0,
+      atualizados: 0,
+      ignorados: 0,
+      ignoradosDuplicidade: 0,
+      resumoIgnorados: {
+        semDocumento: 0,
+        semNome: 0,
+        duplicidadeHistorico: 0,
+      },
+      erros: [] as Array<{ linha: number; motivo: string; cpf_cnpj?: string; nome?: string }>,
+    }
 
     try {
       for (let i = 0; i < payload.length; i += BATCH_SIZE) {
@@ -722,6 +739,12 @@ export default function Clientes() {
           criados?: number
           atualizados?: number
           ignorados?: number
+          ignorados_duplicidade?: number
+          resumo_ignorados?: {
+            sem_documento?: number
+            sem_nome?: number
+            duplicidade_historico?: number
+          }
           erros?: Array<{ linha: number; motivo: string; cpf_cnpj?: string; nome?: string }>
           error?: string
         } | null
@@ -732,6 +755,10 @@ export default function Clientes() {
         resume.criados += data.criados ?? 0
         resume.atualizados += data.atualizados ?? 0
         resume.ignorados += data.ignorados ?? 0
+        resume.ignoradosDuplicidade += data.ignorados_duplicidade ?? 0
+        resume.resumoIgnorados.semDocumento += data.resumo_ignorados?.sem_documento ?? 0
+        resume.resumoIgnorados.semNome += data.resumo_ignorados?.sem_nome ?? 0
+        resume.resumoIgnorados.duplicidadeHistorico += data.resumo_ignorados?.duplicidade_historico ?? 0
         if (data.erros?.length) resume.erros.push(...data.erros)
         setImportProgress({ done: Math.min(i + chunk.length, payload.length), total: payload.length })
       }
@@ -740,8 +767,13 @@ export default function Clientes() {
         criados: resume.criados,
         atualizados: resume.atualizados,
         ignorados: resume.ignorados,
+        ignoradosDuplicidade: resume.ignoradosDuplicidade,
+        resumoIgnorados: resume.resumoIgnorados,
         erros: resume.erros.slice(0, 50),
       })
+      alert(
+        `Importação concluída. Criados: ${resume.criados}; Atualizados: ${resume.atualizados}; Ignorados por validação: ${resume.ignorados}; Ignorados por duplicidade de histórico: ${resume.ignoradosDuplicidade}.`
+      )
       setSearch('')
       setSearchInput('')
       setFilterTipo('')
@@ -1789,7 +1821,7 @@ export default function Clientes() {
 
               {importResult && (
                 <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-center">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-center">
                     <div className="rounded-lg bg-green-50 dark:bg-green-900/20 px-3 py-2">
                       <p className="text-xl font-bold text-green-600">{importResult.criados}</p>
                       <p className="text-xs text-green-700 dark:text-green-400">Criados</p>
@@ -1800,8 +1832,26 @@ export default function Clientes() {
                     </div>
                     <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 px-3 py-2">
                       <p className="text-xl font-bold text-amber-600">{importResult.ignorados}</p>
-                      <p className="text-xs text-amber-700 dark:text-amber-400">Ignorados</p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400">Ignorados (validação)</p>
                     </div>
+                    <div className="rounded-lg bg-violet-50 dark:bg-violet-900/20 px-3 py-2">
+                      <p className="text-xl font-bold text-violet-600">{importResult.ignoradosDuplicidade}</p>
+                      <p className="text-xs text-violet-700 dark:text-violet-400">Ignorados (duplicidade)</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-2 rounded-full bg-white/90 dark:bg-gray-900 px-3 py-1 text-xs text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-800">
+                      <strong>{importResult.resumoIgnorados.semDocumento}</strong>
+                      <span>sem documento</span>
+                    </span>
+                    <span className="inline-flex items-center gap-2 rounded-full bg-white/90 dark:bg-gray-900 px-3 py-1 text-xs text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-800">
+                      <strong>{importResult.resumoIgnorados.semNome}</strong>
+                      <span>sem nome</span>
+                    </span>
+                    <span className="inline-flex items-center gap-2 rounded-full bg-white/90 dark:bg-gray-900 px-3 py-1 text-xs text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-800">
+                      <strong>{importResult.resumoIgnorados.duplicidadeHistorico}</strong>
+                      <span>duplicidade de histórico</span>
+                    </span>
                   </div>
                   {importResult.erros.length > 0 && (
                     <div>

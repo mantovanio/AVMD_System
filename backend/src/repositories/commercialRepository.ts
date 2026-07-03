@@ -416,6 +416,9 @@ export class CommercialRepository {
     })
 
     const erros: { linha: number; motivo: string; cpf_cnpj?: string; nome?: string }[] = []
+    let ignoradosSemDocumento = 0
+    let ignoradosSemNome = 0
+    let ignoradosDuplicidadeHistorico = 0
     const byDoc = new Map<string, {
       tipo_cliente: string
       tipo_cadastro: string
@@ -462,10 +465,12 @@ export class CommercialRepository {
       const doc = docPrincipal
       const nome = String(item.nome ?? item.razao_social ?? '').trim()
       if (!doc) {
+        ignoradosSemDocumento++
         erros.push({ linha: i + 1, motivo: 'CPF/CNPJ ausente', nome: nome || undefined })
         continue
       }
       if (!nome) {
+        ignoradosSemNome++
         erros.push({ linha: i + 1, motivo: 'Nome ausente', cpf_cnpj: doc })
         continue
       }
@@ -553,6 +558,8 @@ export class CommercialRepository {
         if (hasData && !existente.compras_historico_keys.has(compraImportKey)) {
           existente.compras_historico.push(compraEvento)
           existente.compras_historico_keys.add(compraImportKey)
+        } else if (hasData) {
+          ignoradosDuplicidadeHistorico++
         }
         continue
       }
@@ -664,12 +671,14 @@ export class CommercialRepository {
 
     for (const item of existingPayloads) {
       const existingKeys = existingCompraKeysByDoc.get(item.cpf_cnpj) ?? new Set<string>()
+      const beforeCount = item.compras_historico.length
       item.compras_historico = item.compras_historico.filter(compra => {
         const key = compra.import_key || buildCompraImportKey(compra)
         if (!key || existingKeys.has(key)) return false
         existingKeys.add(key)
         return true
       })
+      ignoradosDuplicidadeHistorico += beforeCount - item.compras_historico.length
       item.compras_historico_keys = existingKeys
       item.metadata = buildImportMetadata(item)
     }
@@ -875,6 +884,12 @@ export class CommercialRepository {
       criados,
       atualizados,
       ignorados: erros.length,
+      ignorados_duplicidade: ignoradosDuplicidadeHistorico,
+      resumo_ignorados: {
+        sem_documento: ignoradosSemDocumento,
+        sem_nome: ignoradosSemNome,
+        duplicidade_historico: ignoradosDuplicidadeHistorico,
+      },
       erros,
     }
   }
