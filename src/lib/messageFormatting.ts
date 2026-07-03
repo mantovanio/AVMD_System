@@ -10,8 +10,8 @@ const HTML_ENTITY_MAP: Record<string, string> = {
 
 function decodeHtmlEntities(text: string): string {
   return text.replace(/&(#(\d+)|#x([0-9a-fA-F]+)|([a-zA-Z]+));/g, (match, _group, dec, hex, named) => {
-    if (dec) return String.fromCharCode(Number(dec))
-    if (hex) return String.fromCharCode(parseInt(hex, 16))
+    if (dec) return String.fromCodePoint(Number(dec))
+    if (hex) return String.fromCodePoint(parseInt(hex, 16))
     return HTML_ENTITY_MAP[named as string] ?? match
   })
 }
