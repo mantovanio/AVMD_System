@@ -1006,14 +1006,26 @@ export default function Clientes() {
 
   async function saveCliente() {
     setSavingCliente(true)
+    const cpfCnpj = normalizeDigits(clienteForm.cpf_cnpj)
+    const cep = normalizeDigits(clienteForm.cep)
+    const telefone = normalizeDigits(clienteForm.telefone)
+
+    if (!cpfCnpj || !clienteForm.nome.trim()) {
+      setSavingCliente(false)
+      alert('Preencha ao menos CPF/CNPJ e nome do cliente.')
+      return
+    }
+
     const payload = {
+      id: clienteModal?.mode === 'editar' && clienteModal.cliente ? clienteModal.cliente.id : undefined,
       tipo_cliente: clienteForm.tipo_cliente,
-      cpf_cnpj: clienteForm.cpf_cnpj.trim(),
+      tipo_cadastro: 'cliente',
+      cpf_cnpj: cpfCnpj,
       nome: clienteForm.nome.trim(),
       nome_fantasia: clienteForm.nome_fantasia.trim() || null,
       email: clienteForm.email.trim() || null,
-      telefone: clienteForm.telefone.trim() || null,
-      cep: clienteForm.cep.trim() || null,
+      telefone: telefone || null,
+      cep: cep || null,
       logradouro: clienteForm.logradouro.trim() || null,
       numero: clienteForm.numero.trim() || null,
       complemento: clienteForm.complemento.trim() || null,
@@ -1026,18 +1038,29 @@ export default function Clientes() {
       status: clienteForm.status,
     }
 
-    const query = clienteModal?.mode === 'editar' && clienteModal.cliente
-      ? supabase.from('cadastros_base').update(payload).eq('id', clienteModal.cliente.id)
-      : supabase.from('cadastros_base').insert([payload])
+    try {
+      const response = await fetch(getApiUrl('/comercial/clientes/save'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await response.json().catch(() => null) as {
+        ok?: boolean
+        error?: string
+      } | null
 
-    const { error } = await query
-    setSavingCliente(false)
-    if (error) {
-      alert('Erro ao salvar cliente.')
-      return
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error ?? 'Falha ao salvar cliente.')
+      }
+
+      setClienteModal(null)
+      await fetchClientes()
+    } catch (error) {
+      console.error('Falha ao salvar cliente', { error, payload })
+      alert(error instanceof Error ? error.message : 'Erro ao salvar cliente.')
+    } finally {
+      setSavingCliente(false)
     }
-    setClienteModal(null)
-    await fetchClientes()
   }
 
   async function ensureLeadForCliente(cliente: ClienteComVendas) {
