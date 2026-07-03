@@ -31,6 +31,7 @@ import { getApiUrl, resolveChatMediaUrl } from '@/lib/api'
 import { logger } from '@/lib/logger'
 import { useAuth } from '@/contexts/AuthContext'
 import { applyOutgoingSignature, DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings } from '@/lib/crmChatSettings'
+import { normalizeStructuredMessage } from '@/lib/messageFormatting'
 
 type QueueType = 'atendimento' | 'renovacao' | 'email' | 'agendamento'
 type DirectionType = 'incoming' | 'outgoing'
@@ -411,9 +412,10 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] 
       const messageType = (payload.messageType as string | undefined)
         ?? (data?.messageType as string | undefined)
         ?? 'conversation'
-      const content = (payload.content as string | undefined)
+      const rawContent = (payload.content as string | undefined)
         ?? (data?.content as string | undefined)
         ?? null
+      const content = rawContent ? normalizeStructuredMessage(rawContent) : rawContent
       const mimeType = (payload.mimeType as string | undefined)
         ?? (data?.mimeType as string | undefined)
         ?? null
@@ -2699,12 +2701,12 @@ export default function ChatInboxCRM() {
                     </PanelBlock>
 
                     <PanelBlock title="Leitura operacional">
-                      <ul className="space-y-2 text-sm text-slate-600">
+                      <ul className="space-y-2 whitespace-pre-line text-sm text-slate-600">
                         <li>Fila: <strong>{queueLabel(selectedConversation.fila)}</strong></li>
                         <li>Modo atual: <strong>{humanModeActive ? 'Humano' : 'IA Clara'}</strong></li>
                         <li>Documento-chave: <strong>{selectedConversation.document_key}</strong></li>
                         <li>Agente desde: <strong>{formatDateTime(selectedConversation.agente_desde)}</strong></li>
-                        <li>Ultima mensagem: <strong>{selectedConversation.ultima_mensagem || 'Sem resumo'}</strong></li>
+                        <li>Ultima mensagem: <strong>{normalizeStructuredMessage(selectedConversation.ultima_mensagem) || 'Sem resumo'}</strong></li>
                       </ul>
                     </PanelBlock>
                   </div>
@@ -3081,7 +3083,7 @@ function ConversationMiniCard({
           </div>
           <p className={`mt-1 truncate text-xs ${selected ? 'text-slate-300' : 'text-slate-500'}`}>{contactPhone(item)}</p>
           {urgency && <div className="mt-2"><Badge text={urgency.label} tone={urgency.tone} /></div>}
-          <p className={`mt-2 line-clamp-2 text-xs ${selected ? 'text-slate-100' : 'text-slate-600'}`}>{item.ultima_mensagem || 'Sem mensagem'}</p>
+          <p className={`mt-2 line-clamp-2 text-xs ${selected ? 'text-slate-100' : 'text-slate-600'}`}>{normalizeStructuredMessage(item.ultima_mensagem) || 'Sem mensagem'}</p>
         </button>
         <div className="absolute right-1 top-1 hidden gap-1 group-hover:flex">
           {!hasCrmCustomer && onSaveContact && (
@@ -3165,7 +3167,7 @@ function MessageRow({
               📎 {mediaLabel}
             </a>
           ) : (
-            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.mensagem || mediaLabel || 'Mensagem sem texto'}</p>
+            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{normalizeStructuredMessage(message.mensagem) || mediaLabel || 'Mensagem sem texto'}</p>
           )}
         </div>
     </div>
