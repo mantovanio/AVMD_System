@@ -275,6 +275,11 @@ function normalizeImportDocument(v: string | null | undefined) {
   return ''
 }
 
+function emptyToNull(v: string | null | undefined) {
+  const text = String(v ?? '').trim()
+  return text || null
+}
+
 function isLikelyDate(v: string) {
   const raw = v.trim()
   if (!raw) return false
@@ -664,40 +669,40 @@ export default function Clientes() {
     setImportResult(null)
 
     const payload = validImportRows.map(row => ({
-      tipo_cliente: row.tipo_cliente || row.tipo || null,
-      data_nascimento: row.data_nascimento || null,
-      documento: normalizeImportDocument(row.documento),
-      documento_titular: normalizeImportDocument(row.documento_titular),
-      cpf_cnpj: normalizeImportDocument(row.cpf_cnpj || row.documento || row.cpf || row.cnpj),
-      cpf: normalizeImportDocument(row.cpf),
-      cnpj: normalizeImportDocument(row.cnpj),
-      nome: row.nome || row.razao_social || null,
-      razao_social: row.razao_social || null,
-      nome_fantasia: row.nome_fantasia || null,
-      email: row.email || null,
-      telefone: row.telefone || null,
-      cep: row.cep || null,
-      logradouro: row.logradouro || null,
-      numero: row.numero || null,
-      complemento: row.complemento || null,
-      bairro: row.bairro || null,
-      cidade: row.cidade || null,
-      uf: row.uf || null,
-      inscricao_municipal: row.inscricao_municipal || null,
-      inscricao_estadual: row.inscricao_estadual || null,
-      pedido: row.pedido || null,
-      protocolo: row.protocolo || null,
-      produto: row.produto || null,
-      tipo: row.tipo || null,
-      validade: row.validade || null,
-      vencimento: row.vencimento || null,
-      atendente: row.atendente || null,
-      ponto: row.ponto || null,
-      vendedor: row.vendedor || null,
-      status_pedido: row.status_pedido || null,
-      valor_compra: row.valor_compra || null,
-      ar: row.ar || null,
-      status: row.status || null,
+      tipo_cliente: emptyToNull(row.tipo_cliente || row.tipo),
+      data_nascimento: emptyToNull(row.data_nascimento),
+      documento: emptyToNull(normalizeImportDocument(row.documento)),
+      documento_titular: emptyToNull(normalizeImportDocument(row.documento_titular)),
+      cpf_cnpj: emptyToNull(normalizeImportDocument(row.cpf_cnpj || row.documento || row.cpf || row.cnpj)),
+      cpf: emptyToNull(normalizeImportDocument(row.cpf)),
+      cnpj: emptyToNull(normalizeImportDocument(row.cnpj)),
+      nome: emptyToNull(row.nome || row.razao_social),
+      razao_social: emptyToNull(row.razao_social),
+      nome_fantasia: emptyToNull(row.nome_fantasia),
+      email: emptyToNull(row.email),
+      telefone: emptyToNull(row.telefone),
+      cep: emptyToNull(row.cep),
+      logradouro: emptyToNull(row.logradouro),
+      numero: emptyToNull(row.numero),
+      complemento: emptyToNull(row.complemento),
+      bairro: emptyToNull(row.bairro),
+      cidade: emptyToNull(row.cidade),
+      uf: emptyToNull(row.uf),
+      inscricao_municipal: emptyToNull(row.inscricao_municipal),
+      inscricao_estadual: emptyToNull(row.inscricao_estadual),
+      pedido: emptyToNull(row.pedido),
+      protocolo: emptyToNull(row.protocolo),
+      produto: emptyToNull(row.produto),
+      tipo: emptyToNull(row.tipo),
+      validade: emptyToNull(row.validade),
+      vencimento: emptyToNull(row.vencimento),
+      atendente: emptyToNull(row.atendente),
+      ponto: emptyToNull(row.ponto),
+      vendedor: emptyToNull(row.vendedor),
+      status_pedido: emptyToNull(row.status_pedido),
+      valor_compra: emptyToNull(row.valor_compra),
+      ar: emptyToNull(row.ar),
+      status: emptyToNull(row.status),
     }))
 
     const BATCH_SIZE = 300

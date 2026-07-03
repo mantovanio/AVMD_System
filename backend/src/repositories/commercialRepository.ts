@@ -342,6 +342,13 @@ export class CommercialRepository {
     }
 
     const pick = (current: string | null, next: string | null) => next ?? current
+    const firstNonEmpty = (...values: Array<unknown>) => {
+      for (const value of values) {
+        const text = String(value ?? '').trim()
+        if (text) return text
+      }
+      return ''
+    }
 
     const normalizeKeyPart = (value: unknown) => String(value ?? '').trim().toLowerCase()
 
@@ -450,8 +457,8 @@ export class CommercialRepository {
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i] ?? {}
-      const docPrincipal = String(item.documento ?? item.cpf_cnpj ?? item.cpf ?? item.cnpj ?? '').replace(/\D/g, '')
-      const docTitular = String(item.documento_titular ?? '').replace(/\D/g, '')
+      const docPrincipal = firstNonEmpty(item.documento, item.cpf_cnpj, item.cpf, item.cnpj).replace(/\D/g, '')
+      const docTitular = firstNonEmpty(item.documento_titular).replace(/\D/g, '')
       const doc = docPrincipal
       const nome = String(item.nome ?? item.razao_social ?? '').trim()
       if (!doc) {
