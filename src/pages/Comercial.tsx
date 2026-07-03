@@ -1513,84 +1513,83 @@ export default function Comercial() {
     if (!currentUserId) { showMsg('Usuário não autenticado.'); return }
     setSalvandoV(true)
 
-    const cli = clienteSelecionadoObj
-    const cert = certificadoById.get(formV2.certificado_id)
-    const tabela = tabelaById.get(formV2.tabela_preco_id)
-    const pagamentoSelecionado = resolveFormaPagamentoSelection(formV2.forma_pagamento)
-    const pontoAtendimentoId = formV2.ponto_atendimento_id
+    try {
+      const cli = clienteSelecionadoObj
+      const cert = certificadoById.get(formV2.certificado_id)
+      const tabela = tabelaById.get(formV2.tabela_preco_id)
+      const pagamentoSelecionado = resolveFormaPagamentoSelection(formV2.forma_pagamento)
+      const pontoAtendimentoId = formV2.ponto_atendimento_id
 
-    const payload = {
-      cadastro_base_id:        formV2.cadastro_base_id,
-      empresa_id:              formV2.empresa_id,
-      titular_id:              null,
-      certificado_id:          formV2.certificado_id || null,
-      tabela_preco_id:         formV2.tabela_preco_id || null,
-      tabela_preco_item_id:    formV2.tabela_preco_item_id || null,
-      tipo_produto:            cert?.tipo ?? '',
-      tipo_venda:              formV2.tipo_venda,
-      tipo_emissao:            formV2.tipo_emissao,
-      tabela_preco:            tabela?.nome ?? null,
-      forma_pagamento_id:      pagamentoSelecionado.formaPagamentoId,
-      valor_venda:             formV2.valor_venda,
-      desconto:                formV2.desconto || 0,
-      valor_custo:             null,
-      pago:                    false,
-      data_pagamento:          null,
-      data_vencimento:         formV2.data_vencimento || null,
-      contador_id:             formV2.contador_id || null,
-      documento_faturamento:   cli?.cpf_cnpj ?? null,
-      nome_faturamento:        cli?.nome ?? null,
-      email_faturamento:       cli?.email ?? null,
-      telefone_faturamento:    cli?.telefone ?? null,
-      logradouro:              cli?.logradouro ?? null,
-      numero:                  cli?.numero ?? null,
-      complemento:             cli?.complemento ?? null,
-      bairro:                  cli?.bairro ?? null,
-      cidade:                  cli?.cidade ?? null,
-      uf:                      cli?.uf ?? null,
-      cep:                     cli?.cep ?? null,
-      inscricao_municipal:     cli?.inscricao_municipal ?? null,
-      inscricao_estadual:      cli?.inscricao_estadual ?? null,
-      iss_retido:              cli?.iss_retido ?? false,
-      vendedor_id:             currentUserId,
-      agente_registro_id:      null,
-      ponto_atendimento_id:    pontoAtendimentoId,
-      pedido_numero:           null,
-      pedido_status:           'nao_gerado',
-      protocolo_numero:        null,
-      protocolo_status:        'nao_gerado',
-      certificadora:           null,
-      voucher_codigo:          formV2.voucher_codigo.trim() || null,
-      voucher_percentual:      formV2.voucher_codigo.trim() ? Number(tabela?.max_desconto_percentual ?? 0) : null,
-      voucher_valor:           formV2.desconto > 0 ? formV2.desconto : null,
-      api_payload_pedido:      {},
-      api_payload_protocolo:   {},
-      comissao_vendedor_tipo:  null,
-      comissao_vendedor_valor: null,
-      comissao_agente_tipo:    null,
-      comissao_agente_valor:   null,
-      status_venda:            'vendido' as const,
-      observacoes:             formV2.observacoes,
-      metadata:                {
-        forma_pagamento: formV2.forma_pagamento,
-        voucher_codigo: formV2.voucher_codigo.trim() || null,
-        desconto_calculado: formV2.desconto || 0,
-        valor_base_produto: valorBaseProduto || null,
-        parceiro_indicador_id: formV2.contador_id || null,
-        ponto_atendimento_id: pontoAtendimentoId,
-        payment_method_id: pagamentoSelecionado.paymentMethod?.id ?? null,
-        payment_method_label: pagamentoSelecionado.paymentMethod?.label ?? null,
-        payment_runtime: paymentRuntime,
-        ambiente_teste: paymentRuntime.modo_teste_geral,
-      },
-    }
+      const payload = {
+        cadastro_base_id:        formV2.cadastro_base_id,
+        empresa_id:              formV2.empresa_id,
+        titular_id:              null,
+        certificado_id:          formV2.certificado_id || null,
+        tabela_preco_id:         formV2.tabela_preco_id || null,
+        tabela_preco_item_id:    formV2.tabela_preco_item_id || null,
+        tipo_produto:            cert?.tipo ?? '',
+        tipo_venda:              formV2.tipo_venda,
+        tipo_emissao:            formV2.tipo_emissao,
+        tabela_preco:            tabela?.nome ?? null,
+        forma_pagamento_id:      pagamentoSelecionado.formaPagamentoId,
+        valor_venda:             formV2.valor_venda,
+        desconto:                formV2.desconto || 0,
+        valor_custo:             null,
+        pago:                    false,
+        data_pagamento:          null,
+        data_vencimento:         formV2.data_vencimento || null,
+        contador_id:             formV2.contador_id || null,
+        documento_faturamento:   cli?.cpf_cnpj ?? null,
+        nome_faturamento:        cli?.nome ?? null,
+        email_faturamento:       cli?.email ?? null,
+        telefone_faturamento:    cli?.telefone ?? null,
+        logradouro:              cli?.logradouro ?? null,
+        numero:                  cli?.numero ?? null,
+        complemento:             cli?.complemento ?? null,
+        bairro:                  cli?.bairro ?? null,
+        cidade:                  cli?.cidade ?? null,
+        uf:                      cli?.uf ?? null,
+        cep:                     cli?.cep ?? null,
+        inscricao_municipal:     cli?.inscricao_municipal ?? null,
+        inscricao_estadual:      cli?.inscricao_estadual ?? null,
+        iss_retido:              cli?.iss_retido ?? false,
+        vendedor_id:             currentUserId,
+        agente_registro_id:      null,
+        ponto_atendimento_id:    pontoAtendimentoId,
+        pedido_numero:           null,
+        pedido_status:           'nao_gerado',
+        protocolo_numero:        null,
+        protocolo_status:        'nao_gerado',
+        certificadora:           null,
+        voucher_codigo:          formV2.voucher_codigo.trim() || null,
+        voucher_percentual:      formV2.voucher_codigo.trim() ? Number(tabela?.max_desconto_percentual ?? 0) : null,
+        voucher_valor:           formV2.desconto > 0 ? formV2.desconto : null,
+        api_payload_pedido:      {},
+        api_payload_protocolo:   {},
+        comissao_vendedor_tipo:  null,
+        comissao_vendedor_valor: null,
+        comissao_agente_tipo:    null,
+        comissao_agente_valor:   null,
+        status_venda:            'vendido' as const,
+        observacoes:             formV2.observacoes,
+        metadata:                {
+          forma_pagamento: formV2.forma_pagamento,
+          voucher_codigo: formV2.voucher_codigo.trim() || null,
+          desconto_calculado: formV2.desconto || 0,
+          valor_base_produto: valorBaseProduto || null,
+          parceiro_indicador_id: formV2.contador_id || null,
+          ponto_atendimento_id: pontoAtendimentoId,
+          payment_method_id: pagamentoSelecionado.paymentMethod?.id ?? null,
+          payment_method_label: pagamentoSelecionado.paymentMethod?.label ?? null,
+          payment_runtime: paymentRuntime,
+          ambiente_teste: paymentRuntime.modo_teste_geral,
+        },
+      }
 
-    const vendaCriada = await saveAivenCommercialSale(payload as Record<string, unknown>)
-    setSalvandoV(false)
-    if (!vendaCriada) { showMsg('Erro ao criar venda'); return }
+      const vendaCriada = await saveAivenCommercialSale(payload as Record<string, unknown>)
+      if (!vendaCriada) { showMsg('Erro ao criar venda'); return }
 
-    let comunicacaoResumo = 'sem contato do cliente para disparo automático'
-    if (vendaCriada) {
+      let comunicacaoResumo = 'sem contato do cliente para disparo automático'
       const pontoSelecionado = pontos.find(item => item.id === pontoAtendimentoId) ?? null
       const vendaParaLista: VendaRow = {
         ...(vendaCriada as VendaCertificado),
@@ -1647,15 +1646,20 @@ export default function Comercial() {
       if (nfseAutomationSettings.gatilho_emissao === 'antes_pagamento') {
         void tentarEmitirNfseAutomaticamente(vendaParaLista, 'venda criada antes do pagamento')
       }
+      fecharFormVenda()
+      setFormV2({ ...EMPTY_VENDA_V2 })
+      setVendaFilters(EMPTY_VENDA_FILTERS)
+      setSelectedIds(new Set())
+      showMsg(`Venda salva com sucesso! ${comunicacaoResumo}.`, 'ok')
+      void fetchVendasV2()
+      void fetchAgenda()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error('Falha ao criar venda', { error, formV2 })
+      showMsg(`Erro ao salvar venda: ${message}`, 'err')
+    } finally {
+      setSalvandoV(false)
     }
-
-    fecharFormVenda()
-    setFormV2({ ...EMPTY_VENDA_V2 })
-    setVendaFilters(EMPTY_VENDA_FILTERS)
-    setSelectedIds(new Set())
-    showMsg(`Venda salva com sucesso! ${comunicacaoResumo}.`, 'ok')
-    void fetchVendasV2()
-    void fetchAgenda()
   }
 
   async function salvarCliente() {
