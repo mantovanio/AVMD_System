@@ -6063,14 +6063,12 @@ function AbaPermissoes() {
   const [expandedPerfil, setExpandedPerfil] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const apiOrigin = window.location.origin
-
   async function loadData() {
     setLoading(true)
     try {
       const [modRes, perfRes] = await Promise.all([
-        fetch(`${apiOrigin}/api/permissoes/modulos`).then(r => r.json()),
-        fetch(`${apiOrigin}/api/permissoes/perfis`).then(r => r.json()),
+        fetch(getApiUrl('/permissoes/modulos')).then(r => r.json()),
+        fetch(getApiUrl('/permissoes/perfis')).then(r => r.json()),
       ])
       if (modRes.ok) setModulos(modRes.modulos)
       if (perfRes.ok) setPerfis(perfRes.perfis)
@@ -6084,7 +6082,7 @@ function AbaPermissoes() {
       return
     }
     try {
-      const res = await fetch(`${apiOrigin}/api/permissoes/perfis/${perfilId}/modulos`).then(r => r.json())
+      const res = await fetch(getApiUrl(`/permissoes/perfis/${perfilId}/modulos`)).then(r => r.json())
       if (res.ok) {
         setPerfilModulos(prev => ({ ...prev, [perfilId]: res.modulos }))
         setExpandedPerfil(perfilId)
@@ -6219,7 +6217,7 @@ function AbaPermissoes() {
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
           Selecione um usuário para sobrescrever as permissões do perfil dele em módulos específicos.
         </p>
-        <UserOverrideSection apiOrigin={apiOrigin} modulos={modulos} grupos={grupos} grupoLabels={grupoLabels} />
+        <UserOverrideSection modulos={modulos} grupos={grupos} grupoLabels={grupoLabels} />
       </div>
 
       {/* ── Pacotes de Negócio ───────────────────────────────── */}
@@ -6231,19 +6229,17 @@ function AbaPermissoes() {
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
           Defina quais módulos cada pacote de negócio inclui. O pacote do parceiro determina os módulos disponíveis para os usuários daquela organização.
         </p>
-        <PacotesSection apiOrigin={apiOrigin} modulos={modulos} grupos={grupos} grupoLabels={grupoLabels} />
+        <PacotesSection modulos={modulos} grupos={grupos} grupoLabels={grupoLabels} />
       </div>
     </div>
   )
 }
 
 function UserOverrideSection({
-  apiOrigin,
   modulos,
   grupos,
   grupoLabels,
 }: {
-  apiOrigin: string
   modulos: ModuloData[]
   grupos: string[]
   grupoLabels: Record<string, string>
@@ -6257,20 +6253,20 @@ function UserOverrideSection({
   const [loadingUsers, setLoadingUsers] = useState(true)
 
   useEffect(() => {
-    fetch(`${apiOrigin}/api/profiles`)
+    fetch(getApiUrl('/profiles'))
       .then(res => res.json())
       .then(data => {
         if (data.ok) setUsers(data.profiles ?? [])
         setLoadingUsers(false)
       })
       .catch(() => setLoadingUsers(false))
-  }, [apiOrigin])
+  }, [])
 
   async function loadUserOverrides(userId: string) {
     try {
       const [permRes, ovRes] = await Promise.all([
-        fetch(`${apiOrigin}/api/permissoes/profile/${userId}`).then(r => r.json()),
-        fetch(`${apiOrigin}/api/permissoes/profile/${userId}/overrides`).then(r => r.json()),
+        fetch(getApiUrl(`/permissoes/profile/${userId}`)).then(r => r.json()),
+        fetch(getApiUrl(`/permissoes/profile/${userId}/overrides`)).then(r => r.json()),
       ])
       const ovMap: Record<string, string> = {}
       if (ovRes.ok) {
@@ -6308,7 +6304,7 @@ function UserOverrideSection({
       const ovList = Object.entries(overrides)
         .filter(([_, nivel]) => nivel !== 'herdar')
         .map(([modulo_id, nivel_acesso]) => ({ modulo_id, nivel_acesso }))
-      const res = await fetch(`${apiOrigin}/api/permissoes/profile/${selectedUserId}/overrides`, {
+      const res = await fetch(getApiUrl(`/permissoes/profile/${selectedUserId}/overrides`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ overrides: ovList }),
@@ -6414,12 +6410,10 @@ function UserOverrideSection({
 
 
 function PacotesSection({
-  apiOrigin,
   modulos,
   grupos,
   grupoLabels,
 }: {
-  apiOrigin: string
   modulos: ModuloData[]
   grupos: string[]
   grupoLabels: Record<string, string>
@@ -6432,15 +6426,15 @@ function PacotesSection({
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    fetch(`${apiOrigin}/api/permissoes/pacotes`)
+    fetch(getApiUrl('/permissoes/pacotes'))
       .then(r => r.json())
       .then(data => { if (data.ok) setPacotes(data.pacotes) })
-  }, [apiOrigin])
+  }, [])
 
   async function loadPacoteModulos(id: string) {
     if (pacoteModulos[id]) { setEditPacote(editPacote === id ? null : id); return }
     try {
-      const res = await fetch(`${apiOrigin}/api/permissoes/pacotes/${id}/modulos`).then(r => r.json())
+      const res = await fetch(getApiUrl(`/permissoes/pacotes/${id}/modulos`)).then(r => r.json())
       if (res.ok) {
         setPacoteModulos(prev => ({ ...prev, [id]: res.modulos }))
         setEditPacote(id)
@@ -6460,7 +6454,7 @@ function PacotesSection({
     if (!editPacote) return
     setSaving(true)
     try {
-      const res = await fetch(`${apiOrigin}/api/permissoes/pacotes/${editPacote}/modulos`, {
+      const res = await fetch(getApiUrl(`/permissoes/pacotes/${editPacote}/modulos`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ modulos: editModulos }),
