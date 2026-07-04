@@ -675,6 +675,8 @@ export default function Comercial() {
   const [formPagamento, setFormPagamento]           = useState<PagamentoForm>(EMPTY_PAGAMENTO)
   const [selectedBaseCertIds, setSelectedBaseCertIds] = useState<Set<string>>(new Set())
   const [showCatalogoBasePopup, setShowCatalogoBasePopup] = useState(false)
+  const [tabelaCertBusca, setTabelaCertBusca] = useState('')
+  const [tabelaCertCategoria, setTabelaCertCategoria] = useState('')
   const [featureNotice, setFeatureNotice]           = useState<FeatureNotice>(null)
   const [loadingVendaFinanceiro, setLoadingVendaFinanceiro] = useState(false)
   const [vendaFinanceiroModal, setVendaFinanceiroModal]     = useState<VendaFinanceiroModal>(null)
@@ -5449,7 +5451,18 @@ export default function Comercial() {
               const parts = tabelaParticipantes.filter(p => p.tabela_preco_id === selectedTabelaId)
               const agentesPermitidos = agentesTabelaPreco.filter(a => a.tabela_preco_id === selectedTabelaId)
               const pricingRule = pricingRuleByTabelaId.get(selectedTabelaId) ?? null
-              const certificadosDisponiveisBase = certificadosAtivos.filter(cert => !itens.some(item => item.certificado_id === cert.id))
+              const certificadosDisponiveisBase = certificadosFiltrados.filter(cert => !itens.some(item => item.certificado_id === cert.id))
+              const certificadosDisponiveisBaseFiltrados = certificadosDisponiveisBase.filter(cert => {
+                const termo = tabelaCertBusca.trim().toLowerCase()
+                if (termo) {
+                  const matchNome   = (cert.tipo ?? '').toLowerCase().includes(termo)
+                  const matchCodigo = (cert.codigo?.toString() ?? '').includes(termo)
+                  const matchHash   = (cert.hash ?? '').toLowerCase().includes(termo)
+                  if (!matchNome && !matchCodigo && !matchHash) return false
+                }
+                if (tabelaCertCategoria && cert.categoria !== tabelaCertCategoria) return false
+                return true
+              })
               const parceiroPreview = parceiros.find(p => p.id === slotPreviewParceiroId) ?? null
               const restricoesParceiroPreview = parceiroPreview
                 ? parceirosAgentesPermitidos.filter(item => item.parceiro_id === parceiroPreview.id && item.ativo)
@@ -5553,7 +5566,7 @@ export default function Comercial() {
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <div>
                         <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Catálogo base da tabela</h4>
-                        <p className="text-xs text-gray-400 mt-0.5">A tela principal mostra só os produtos que realmente ficaram nesta tabela. Para agregar ou recolocar produtos, abra o popup do catálogo base.</p>
+                        <p className="text-xs text-gray-400 mt-0.5">A tela principal mostra só os produtos que realmente ficaram nesta tabela. Para agregar ou recolocar produtos, filtre e use os botões abaixo.</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <button
@@ -5571,8 +5584,42 @@ export default function Comercial() {
                         >
                           Repor todos do catálogo
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const ids = new Set(certificadosDisponiveisBaseFiltrados.map(c => c.id))
+                            if (!ids.size) { showMsg('Nenhum certificado disponível com os filtros atuais.'); return }
+                            setSelectedBaseCertIds(ids)
+                            void vincularCertificadosBaseNaTabela(selectedTabelaId)
+                          }}
+                          disabled={salvandoCatalogo || !certificadosDisponiveisBaseFiltrados.length}
+                          className="px-3 py-2 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-60"
+                        >
+                          Adicionar filtrados ({certificadosDisponiveisBaseFiltrados.length})
+                        </button>
                       </div>
                     </div>
+
+                    {/* ── Filtros inline ── */}
+                    <div className="flex flex-wrap items-end gap-3">
+                      <TextInput label="Buscar" value={tabelaCertBusca}
+                        onChange={setTabelaCertBusca}
+                        className="flex-1 min-w-[180px]" placeholder="Nome, código, hash..." />
+                      <SelectInput label="Categoria" value={tabelaCertCategoria}
+                        onChange={setTabelaCertCategoria}
+                        options={[
+                          { value: '', label: 'Todas' },
+                          ...categoriasDisponiveis,
+                        ]}
+                        className="min-w-[150px]" />
+                      {(tabelaCertBusca || tabelaCertCategoria) ? (
+                        <button type="button" onClick={() => { setTabelaCertBusca(''); setTabelaCertCategoria('') }}
+                          className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700">
+                          <X size={12} /> Limpar
+                        </button>
+                      ) : null}
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div className="rounded-lg border border-gray-100 dark:border-gray-800 px-3 py-3">
                         <p className="text-[11px] uppercase tracking-wide text-gray-400">Produtos na tabela</p>
@@ -5600,7 +5647,7 @@ export default function Comercial() {
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
-                              onClick={() => setSelectedBaseCertIds(new Set(certificadosDisponiveisBase.map(cert => cert.id)))}
+                              onClick={() => setSelectedBaseCertIds(new Set(certificadosDisponiveisBaseFiltrados.map(cert => cert.id)))}
                               className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-xs rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
                             >
                               Selecionar todos
@@ -5623,11 +5670,13 @@ export default function Comercial() {
                           </div>
                         </div>
                         {certificadosDisponiveisBase.length === 0 ? (
-                          <p className="text-sm text-gray-400">Todos os certificados ativos do catálogo já estão presentes nesta tabela.</p>
+                          <p className="text-sm text-gray-400">Todos os certificados disponíveis já estão presentes nesta tabela.</p>
+                        ) : certificadosDisponiveisBaseFiltrados.length === 0 ? (
+                          <p className="text-sm text-gray-400">Nenhum certificado encontrado com os filtros aplicados.</p>
                         ) : (
                           <div className="max-h-[520px] overflow-y-auto pr-1 rounded-lg border border-gray-100 dark:border-gray-800">
                             <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                              {certificadosDisponiveisBase.map(cert => (
+                              {certificadosDisponiveisBaseFiltrados.map(cert => (
                                 <label key={cert.id} className="flex items-start gap-3 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer">
                                   <input
                                     type="checkbox"
