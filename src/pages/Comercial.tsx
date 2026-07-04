@@ -5587,10 +5587,16 @@ export default function Comercial() {
                         <button
                           type="button"
                           onClick={() => {
-                            const ids = new Set(certificadosDisponiveisBaseFiltrados.map(c => c.id))
-                            if (!ids.size) { showMsg('Nenhum certificado disponível com os filtros atuais.'); return }
-                            setSelectedBaseCertIds(ids)
-                            void vincularCertificadosBaseNaTabela(selectedTabelaId)
+                            const selecionados = certificadosDisponiveisBaseFiltrados
+                            if (!selecionados.length) { showMsg('Nenhum certificado disponível com os filtros atuais.'); return }
+                            setSalvandoCatalogo(true)
+                            void criarVinculosBaseDaTabela(selectedTabelaId, selecionados).then(result => {
+                              setSalvandoCatalogo(false)
+                              if (result.error) { showMsg('Erro ao adicionar filtrados: ' + result.error); return }
+                              if (!result.inserted) { showMsg('Os certificados já estão vinculados nesta tabela.'); return }
+                              showMsg(`${result.inserted} certificado(s) adicionados à tabela.`, 'ok')
+                              void fetchCatalogo()
+                            })
                           }}
                           disabled={salvandoCatalogo || !certificadosDisponiveisBaseFiltrados.length}
                           className="px-3 py-2 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-60"
