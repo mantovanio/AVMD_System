@@ -361,13 +361,13 @@ function dedupeConversations(rows: ConversationRow[]) {
     const emailKey = (item.email_principal || item.document_key || '').includes('@')
       ? (item.email_principal || item.document_key || '').trim().toLowerCase()
       : ''
-    const identity = item.crm_customer_id
-      ? `customer:${item.crm_customer_id}`
-      : phoneKey
-        ? `phone:${phoneKey}`
-        : emailKey
-          ? `email:${emailKey}`
-          : `row:${item.id}`
+    // Usa telefone como chave primaria estavel — nao muda quando
+    // crm_customer_id passa de null para uuid apos salvar contato.
+    const identity = phoneKey
+      ? `phone:${phoneKey}`
+      : emailKey
+        ? `email:${emailKey}`
+        : `row:${item.id}`
     const key = `${item.fila}:${identity}`
     const current = bestByKey.get(key)
     if (!current) {
