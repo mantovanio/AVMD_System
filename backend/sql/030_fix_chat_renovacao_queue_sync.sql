@@ -240,7 +240,7 @@ UPDATE crm_chat_conversations c
          NULLIF((
            SELECT ce.payload->>'instance_name'
              FROM communication_events ce
-            WHERE ce.conversation_id = c.id
+            WHERE ce.conversation_id = c.id::text
               AND (
                 ce.payload->>'canal' = 'renovacao'
                 OR lower(coalesce(ce.payload->>'instance_name', ce.payload->>'instanceName', '')) LIKE '%renov%'
@@ -255,7 +255,7 @@ UPDATE crm_chat_conversations c
  WHERE EXISTS (
    SELECT 1
      FROM communication_events ce
-    WHERE ce.conversation_id = c.id
+    WHERE ce.conversation_id = c.id::text
       AND (
         ce.payload->>'canal' = 'renovacao'
         OR lower(coalesce(ce.payload->>'instance_name', ce.payload->>'instanceName', '')) LIKE '%renov%'
