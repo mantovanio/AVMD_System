@@ -141,11 +141,15 @@ export async function importRenovacoesToCrm(ids?: string[]): Promise<{
 
 // ── WhatsApp ──────────────────────────────────────────────────
 
-export async function sendWhatsApp(phone: string, body: string): Promise<{ ok: boolean; error?: string }> {
+export async function sendWhatsApp(
+  phone: string,
+  body: string,
+  options?: { canal?: 'atendimento' | 'renovacao'; instance_name?: string },
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const data = await apiFetch<{ ok: boolean; error?: string }>('/whatsapp/send', {
       method: 'POST',
-      body: JSON.stringify({ phone, body }),
+      body: JSON.stringify({ phone, body, canal: options?.canal ?? null, instance_name: options?.instance_name ?? null }),
     })
     return data
   } catch (err) {

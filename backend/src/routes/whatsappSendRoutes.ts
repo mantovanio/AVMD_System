@@ -11,6 +11,7 @@ interface SendWhatsAppInput {
   phone: string
   body: string
   instance_name?: string
+  canal?: 'atendimento' | 'renovacao'
 }
 
 type JsonRecord = Record<string, unknown>
@@ -92,6 +93,19 @@ function inferCanalFromInstance(instanceName: string | null | undefined) {
   if (!normalized) return 'atendimento'
   if (normalized.includes('renov') || normalized.includes('certiid')) return 'renovacao'
   return 'atendimento'
+}
+
+function chooseIntegrationByCanal(
+  integrations: Awaited<ReturnType<ExternalIntegrationRepository['findActiveWhatsApp']>>,
+  canal: 'atendimento' | 'renovacao' | null | undefined,
+) {
+  if (!canal) return integrations[0] ?? null
+
+  const target = canal === 'renovacao'
+    ? integrations.find(item => inferCanalFromInstance(item.instance_name) === 'renovacao')
+    : integrations.find(item => inferCanalFromInstance(item.instance_name) === 'atendimento')
+
+  return target ?? integrations[0] ?? null
 }
 
 function calculateDiasRestantes(dataVencimento: string | null | undefined) {
@@ -520,7 +534,7 @@ export async function handleWhatsappSendRoutes(
   }
 
   const integrations = await integrationRepo.findActiveWhatsApp()
-  let integration = integrations[0] ?? null
+  let integration = chooseIntegrationByCanal(integrations, body.canal)
 
   if (body.instance_name) {
     const byInstance = integrations.find(i => i.instance_name === body.instance_name)

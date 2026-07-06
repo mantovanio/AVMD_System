@@ -581,17 +581,43 @@ export default function Renovacoes() {
 
   // ── template values (for rendering) ─────────────────────────
 
+  function normalizeProdutoKey(value: string) {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+  }
+
   function findLinkForProduto(tipo: string) {
-    // Busca exata primeiro, depois parcial (chave mais longa que o produto contém)
-    if (linksMap.has(tipo)) return linksMap.get(tipo)
-    const tipoLow = tipo.toLowerCase()
+    const tipoNormalizado = normalizeProdutoKey(tipo)
+    if (!tipoNormalizado) return undefined
+
+    const exato = links.find(link => normalizeProdutoKey(link.tipo_certificado) === tipoNormalizado)
+    if (exato) return exato
+
     let best: LinkProduto | undefined
     for (const [key, link] of linksMap) {
-      if (tipoLow.includes(key.toLowerCase())) {
-        if (!best || key.length > best.tipo_certificado.length) best = link
+      const keyNormalizada = normalizeProdutoKey(key)
+      if (!keyNormalizada) continue
+      if (tipoNormalizado.includes(keyNormalizada) || keyNormalizada.includes(tipoNormalizado)) {
+        if (!best || keyNormalizada.length > normalizeProdutoKey(best.tipo_certificado).length) best = link
       }
     }
     return best
+  }
+
+  function templateRequiresLink(template: string | null | undefined) {
+    return String(template ?? '').includes('{{link_renovacao}}')
+  }
+
+  function ensureLinkForTemplate(r: RenovacaoV2, template: string | null | undefined) {
+    if (!templateRequiresLink(template)) return true
+    const link = findLinkForProduto(r.tipo_certificado)?.link_renovacao?.trim()
+    if (link) return true
+    showMsg(`O produto "${r.tipo_certificado}" não tem link de renovação vinculado. Cadastre em "Links de Renovação por Produto".`, 'err')
+    return false
   }
 
   function tplValues(r: RenovacaoV2): Record<string, string | number> {
@@ -697,8 +723,9 @@ export default function Renovacoes() {
     if (!r.telefone) { showMsg('Cliente sem telefone.', 'err'); return }
     setSendingId(r.id)
     const tpl = getTemplateForRenovacao(r)
+    if (!ensureLinkForTemplate(r, tpl?.body ?? WHATSAPP_TPL_DEFAULT)) { setSendingId(null); return }
     const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
-    const result = await apiSendWhatsApp(r.telefone, body)
+    const result = await apiSendWhatsApp(r.telefone, body, { canal: 'renovacao' })
     if (!result.ok) { setSendingId(null); showMsg('Erro WhatsApp: ' + result.error, 'err'); return }
     const agora = new Date().toISOString()
     await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
@@ -715,6 +742,7 @@ export default function Renovacoes() {
     const body    = renderTemplate(tpl?.body ?? EMAIL_TPL_DEFAULT, tplValues(r))
     const subject = renderTemplate(tpl?.subject ?? 'Renovação do seu certificado digital', tplValues(r))
     const waTpl   = getSelectedTpl('whatsapp')
+    if (!ensureLinkForTemplate(r, tpl?.body ?? EMAIL_TPL_DEFAULT) || !ensureLinkForTemplate(r, waTpl?.body ?? WHATSAPP_TPL_DEFAULT)) { setSendingId(null); return }
     const waBody  = renderTemplate(waTpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
     const [waResult, emailResult] = await Promise.all([
       r.telefone ? queueWhatsAppMessage({ to: r.telefone, body: waBody, canal: 'renovacao', payload: { renovacao_id: r.id, tipo: 'renovacao' } }) : Promise.resolve({ error: null }),
@@ -757,8 +785,12 @@ export default function Renovacoes() {
     let erros = 0
     for (const r of alvos) {
       const tpl = getTemplateForRenovacao(r)
+      if (!ensureLinkForTemplate(r, tpl?.body ?? WHATSAPP_TPL_DEFAULT)) {
+        erros++
+        continue
+      }
       const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
-      const result = await apiSendWhatsApp(r.telefone!, body)
+      const result = await apiSendWhatsApp(r.telefone!, body, { canal: 'renovacao' })
       if (result.ok) {
         enviados++
         const agora = new Date().toISOString()
@@ -839,7 +871,7 @@ export default function Renovacoes() {
     for (const r of alvos) {
       const tpl = getTemplateForRenovacao(r)
       const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
-      const result = await apiSendWhatsApp(r.telefone!, body)
+      const result = await apiSendWhatsApp(r.telefone!, body, { canal: 'renovacao' })
       if (result.ok) {
         enviados++
         const agora = new Date().toISOString()
