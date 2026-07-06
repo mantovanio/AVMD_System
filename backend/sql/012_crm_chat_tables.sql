@@ -116,9 +116,11 @@ BEGIN
     updated_at             = NOW()
   RETURNING id INTO v_conv_id;
 
-  INSERT INTO crm_chat_messages (conversation_id, document_key, direction, sender_type, sender_name, mensagem, created_at)
-  VALUES (v_conv_id, v_phone, v_direction, v_sender_type, v_sender_name, v_content, NEW.created_at)
-  ON CONFLICT DO NOTHING;
+  IF v_content <> '' OR NEW.payload->>'mimeType' IS NOT NULL OR NEW.payload->>'mediaUrl' IS NOT NULL THEN
+    INSERT INTO crm_chat_messages (conversation_id, document_key, direction, sender_type, sender_name, mensagem, created_at)
+    VALUES (v_conv_id, v_phone, v_direction, v_sender_type, v_sender_name, v_content, NEW.created_at)
+    ON CONFLICT DO NOTHING;
+  END IF;
 
   RETURN NEW;
 END;

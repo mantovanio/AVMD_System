@@ -3044,6 +3044,15 @@ export default function Comercial() {
   }
   async function salvarParticipante() {
     if (!formParticipante.tabela_preco_id) return
+    if (formParticipante.tipo_participante === 'parceiro' && !formParticipante.parceiro_id) {
+      showMsg('Selecione o parceiro.'); return
+    }
+    if (formParticipante.tipo_participante === 'tipo_parceiro' && !formParticipante.tipo_parceiro) {
+      showMsg('Selecione o tipo de parceiro.'); return
+    }
+    if (formParticipante.tipo_participante === 'perfil' && !formParticipante.perfil) {
+      showMsg('Selecione o perfil.'); return
+    }
     const payload = {
       ...formParticipante,
       parceiro_id:   formParticipante.tipo_participante === 'parceiro'      ? formParticipante.parceiro_id   : null,
@@ -6046,18 +6055,18 @@ export default function Comercial() {
                             ]} />
                           {formParticipante.tipo_participante === 'tipo_parceiro' && (
                             <SelectInput label="Tipo de Parceiro" value={formParticipante.tipo_parceiro ?? ''}
-                              onChange={v => setFormParticipante(p => ({ ...p, tipo_parceiro: v as TipoParceiro }))}
-                              options={TIPO_PARCEIRO_OPTS} />
+                              onChange={v => setFormParticipante(p => ({ ...p, tipo_parceiro: (v || null) as TipoParceiro | null }))}
+                              options={[{ value: '', label: 'Selecione' }, ...TIPO_PARCEIRO_OPTS]} />
                           )}
                           {formParticipante.tipo_participante === 'perfil' && (
                             <SelectInput label="Perfil" value={formParticipante.perfil ?? ''}
-                              onChange={v => setFormParticipante(p => ({ ...p, perfil: v as PerfilAcesso }))}
-                              options={PERFIL_OPTS} />
+                              onChange={v => setFormParticipante(p => ({ ...p, perfil: (v || null) as PerfilAcesso | null }))}
+                              options={[{ value: '', label: 'Selecione' }, ...PERFIL_OPTS]} />
                           )}
                           {formParticipante.tipo_participante === 'parceiro' && (
                             <SelectInput label="Parceiro" value={formParticipante.parceiro_id ?? ''}
-                              onChange={v => setFormParticipante(p => ({ ...p, parceiro_id: v }))}
-                              options={parceiros.map(p => ({ value: p.id, label: `${p.cpf_cnpj ?? ''} - ${p.nome}` }))} />
+                              onChange={v => setFormParticipante(p => ({ ...p, parceiro_id: v || null }))}
+                              options={[{ value: '', label: 'Selecione' }, ...parceiros.map(p => ({ value: p.id, label: `${p.cpf_cnpj ?? ''} - ${p.nome}` }))]} />
                           )}
                         </div>
                         <FormActions onSave={salvarParticipante} onCancel={() => setShowFormParticipante(false)} saving={salvandoCatalogo} />

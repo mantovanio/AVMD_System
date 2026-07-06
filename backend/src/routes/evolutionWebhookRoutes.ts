@@ -335,9 +335,12 @@ export async function handleEvolutionWebhookRoutes(
     const body = await readJson<JsonRecord>(req)
     const normalized = normalizeEvolutionEvent(body)
 
-    const lead = normalized.eventType === 'messages.update'
-      ? null
-      : await upsertLeadFromEvolutionEvent(leadRepository, normalized)
+    if (normalized.eventType === 'messages.update') {
+      writeJson(res, 200, { ok: true, skipped: true, reason: 'status update' }, corsOrigin)
+      return true
+    }
+
+    const lead = await upsertLeadFromEvolutionEvent(leadRepository, normalized)
 
     const payload: JsonRecord = {
       ...normalized.raw,
