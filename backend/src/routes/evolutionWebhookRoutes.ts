@@ -61,6 +61,15 @@ function buildRemoteJid(phoneDigits: string | null) {
   return phoneDigits ? `${phoneDigits}@s.whatsapp.net` : null
 }
 
+function inferCanalFromInstance(instanceName: string | null | undefined) {
+  const normalized = String(instanceName ?? '').trim().toLowerCase()
+  if (!normalized) return 'atendimento'
+  if (normalized.includes('renov') || normalized.includes('certiid')) {
+    return 'renovacao'
+  }
+  return 'atendimento'
+}
+
 function extractMessageContent(message: JsonRecord | null): { content: string | null; messageType: string; mimeType: string | null; fileName: string | null; mediaUrl: string | null; quoted: { messageId: string; content: string } | null } {
   if (!message) {
     return {
@@ -243,12 +252,15 @@ async function configureEvolutionWebhook(input: EvolutionControlInput) {
 async function forwardInboundToN8n(config: BackendConfig, event: NormalizedEvolutionEvent, leadId: string | null) {
   if (!config.n8nWebhookUrl || event.fromMe) return { forwarded: false, error: null as string | null }
 
+  const canal = inferCanalFromInstance(event.instanceName)
+
   try {
     const response = await fetch(config.n8nWebhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         source: 'evolution',
+        canal,
         event_type: event.eventType,
         conversation_id: event.conversationId,
         contact: event.contact,

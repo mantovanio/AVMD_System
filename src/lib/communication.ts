@@ -75,6 +75,7 @@ export async function queueWhatsAppMessage(input: Omit<QueueMessageInput, 'chann
     provider: communicationProviderFromWhatsAppEngine(active?.engine ?? null, active?.provider),
     payload: {
       ...(input.payload ?? {}),
+      canal: input.canal ?? null,
       integration_id: active?.id ?? null,
       whatsapp_engine: active?.engine ?? null,
       instance_name: active?.instance_name ?? null,
@@ -110,6 +111,7 @@ export async function queueWhatsAppFollowUp(input: {
     body: input.body,
     payload: {
       renovacao_id:  input.renovacaoId,
+      canal: 'renovacao',
       instance_name: input.instanceName ?? active?.instance_name ?? null,
       integration_id: active?.id ?? null,
       whatsapp_engine: active?.engine ?? null,
