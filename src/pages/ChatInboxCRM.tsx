@@ -414,6 +414,10 @@ function safeAttachmentName(name: string) {
   return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.\- ]+/g, '').trim() || `arquivo-${Date.now()}`
 }
 
+function asMessageRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
 function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] {
   return events
     .filter(event => event.source === 'evolution' || event.source === 'chatwoot')
@@ -438,10 +442,17 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] 
         ?? null
       // A url do WhatsApp (mmg.whatsapp.net/...enc) e criptografada e nao pode
       // ser tocada/exibida direto. A Evolution API (webhook com base64: true)
-      // ja manda o conteudo decifrado em data.message.base64 -- usa isso
-      // quando disponivel em vez da url crua.
+      // ja manda o conteudo decifrado em data.message, mas o base64 fica dentro
+      // do tipo especifico (imageMessage.base64, videoMessage.base64, etc.).
       const rawMessage = data?.message as Record<string, unknown> | undefined
-      const inlineBase64 = (payload.base64 as string | undefined) ?? (rawMessage?.base64 as string | undefined) ?? null
+      const messageEntry = rawMessage
+        ? Object.entries(rawMessage).find(([, v]) => v !== null && v !== undefined)
+        : null
+      const messagePayload = asMessageRecord(messageEntry?.[1])
+      const inlineBase64 = (payload.base64 as string | undefined)
+        ?? (rawMessage?.base64 as string | undefined)
+        ?? (messagePayload?.base64 as string | undefined)
+        ?? null
       const mediaUrl = inlineBase64
         ? `data:${mimeType || 'application/octet-stream'};base64,${inlineBase64}`
         : (payload.mediaUrl as string | undefined)
@@ -476,7 +487,7 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] 
 
 function mergeConversationMessages(messages: CrmMessage[]) {
   const ordered = [...messages].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-  const seenExternalIds = new Set<string>()
+  const seenExternalIds = new Map<string, CrmMessage>()
   const seenSignatures = new Set<string>()
   const result: CrmMessage[] = []
 
@@ -484,8 +495,15 @@ function mergeConversationMessages(messages: CrmMessage[]) {
     const content = (message.mensagem ?? '').trim().replace(/\s+/g, ' ')
     const externalId = message.external_message_id?.trim() || (message.id.startsWith('evo-') ? message.id.slice(4) : '')
     if (externalId) {
-      if (seenExternalIds.has(externalId)) continue
-      seenExternalIds.add(externalId)
+      const existing = seenExternalIds.get(externalId)
+      if (existing) {
+        // Prefere a versao com midia (evolutionMessages tem base64, crmMessages tem campos vazios)
+        if (!existing.mime_type && !existing.media_url && (message.mime_type || message.media_url)) {
+          seenExternalIds.set(externalId, message)
+        }
+        continue
+      }
+      seenExternalIds.set(externalId, message)
     }
 
     const signature = [
@@ -498,10 +516,13 @@ function mergeConversationMessages(messages: CrmMessage[]) {
 
     if (seenSignatures.has(signature)) continue
     seenSignatures.add(signature)
+  }
+
+  for (const message of seenExternalIds.values()) {
     result.push(message)
   }
 
-  return result
+  return result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
 }
 
 export default function ChatInboxCRM() {
