@@ -807,8 +807,17 @@ export default function Comercial() {
 
     return tabelasPorPonto.filter(tabela => {
       const participantesTabela = tabelaParticipantes.filter(item => item.tabela_preco_id === tabela.id)
-      if (parceiroSelecionadoVenda && participantesTabela.length > 0) {
-        const parceiroCompativel = participantesTabela.some(item => {
+
+      const participantesPerfil = participantesTabela.filter(item => item.tipo_participante === 'perfil')
+      if (participantesPerfil.length > 0 && !participantesPerfil.some(item => item.perfil === profile?.perfil)) {
+        return false
+      }
+
+      const participantesParceiro = participantesTabela.filter(item =>
+        item.tipo_participante === 'parceiro' || item.tipo_participante === 'tipo_parceiro'
+      )
+      if (parceiroSelecionadoVenda && participantesParceiro.length > 0) {
+        const parceiroCompativel = participantesParceiro.some(item => {
           if (item.tipo_participante === 'parceiro') {
             return item.parceiro_id === parceiroSelecionadoVenda.id
           }
