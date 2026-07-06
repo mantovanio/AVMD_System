@@ -57,14 +57,18 @@ Siga nesta ordem:
 5. O **Tipo de Emissão** selecionado no passo 4 bate com o `tipo_emissao_padrao` de pelo menos um produto ativo da tabela? Teste trocando o tipo de emissão para ver se muda o resultado.
 6. Se nada acima explicar, pode ser necessário inspecionar os dados diretamente (nomes duplicados, ids inconsistentes, etc.) — nesse ponto, acionar suporte técnico com os dados exatos das tabelas envolvidas.
 
-## Limitação conhecida / investigação em aberto (2026-07-06)
+## Terceiro tipo de participante: restrição por Perfil de usuário
 
-Foi reportado um caso em que, com **4 tabelas cadastradas** (todas confirmadas ativas, todas com produtos ativos), **apenas 1 aparecia no passo 6**, independente de:
+Além de `parceiro` e `tipo_parceiro`, existe um terceiro tipo de participante: **`perfil`**. Ele restringe quem pode ver a tabela no wizard de Nova Venda com base no **perfil do usuário logado** (`admin`, `vendedor`, `agente_registro`, `usuario`) — não tem relação nenhuma com o parceiro vendedor selecionado na venda.
 
-- ponto de atendimento selecionado (esperado, já que o usuário era `admin`, não `agente_registro`)
-- trocar o tipo de emissão (Presencial ↔ Videoconferência)
-- remover o parceiro vendedor selecionado
+Exemplo real: a tabela "Matriz" tinha participantes `Perfil: agente_registro` e `Perfil: vendedor` cadastrados. Um usuário `admin` nunca vai ver essa tabela no wizard, porque `admin` não está na lista — isso é esperado. Se quiser que administradores também vejam, adicione `Perfil: admin` na lista de participantes da tabela.
 
-Todos os filtros documentados acima foram testados e descartados um a um sem explicar a diferença entre a tabela que aparece e as que não aparecem. A versão em produção foi confirmada como sendo exatamente o código mais atual (commit `6cb76f9`), então não é um problema de deploy desatualizado.
+Atualize o checklist do item 4 acima: além de checar participantes do tipo parceiro, confira também se há participantes do tipo **Perfil** — se houver, o perfil do usuário logado precisa estar na lista, senão a tabela não aparece para ele, independente de parceiro, ponto ou tipo de emissão.
 
-**Causa raiz ainda não identificada.** Hipóteses já descartadas: filtro por ponto, tipo de emissão, parceiro/participantes, status ativo de tabela e produtos, cache do navegador (testado com F5). Para retomar a investigação, o próximo passo é inspecionar diretamente os dados das 3 tabelas que não aparecem (nomes exatos, ids, e o conteúdo completo dos registros em `tabelas_preco` e `tabelas_preco_itens`) — algo que não foi possível fazer remotamente porque o ambiente de desenvolvimento não tem acesso aos dados reais de produção desta área.
+## Bug corrigido em 2026-07-06 (commit `c50ca8d`)
+
+Foi reportado um caso em que, com **4 tabelas cadastradas** (todas ativas, todas com produtos ativos), **apenas 1 aparecia no passo 6**, independente de ponto, tipo de emissão ou parceiro selecionado.
+
+**Causa raiz encontrada:** o filtro de participantes em `tabelasDisponiveisVenda` ([Comercial.tsx:808-834](../src/pages/Comercial.tsx#L808-L834)) só sabia comparar participantes do tipo `parceiro`/`tipo_parceiro` contra o parceiro selecionado na venda. Uma tabela com participante do tipo `perfil` (como a "Matriz" do exemplo acima) caía automaticamente em "incompatível" sempre que qualquer parceiro estava selecionado, mesmo que o tipo `perfil` não tivesse relação nenhuma com o parceiro. As outras 2 tabelas que também não apareciam (Full, SJC) tinham participantes do tipo `parceiro`/`tipo_parceiro` configurados para um parceiro diferente do selecionado — esse era o comportamento correto, não um bug.
+
+**Correção aplicada:** a checagem de `perfil` agora roda de forma independente, comparando contra o perfil do usuário logado. A checagem de `parceiro`/`tipo_parceiro` passou a considerar só participantes desses dois tipos, ignorando os do tipo `perfil` — preservando o comportamento já existente para tabelas restritas por parceiro.
