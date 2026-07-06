@@ -635,12 +635,13 @@ export default function Renovacoes() {
   function tplValues(r: RenovacaoV2): Record<string, string | number> {
     const linkData = findLinkForProduto(r.tipo_certificado)
     const nomeCompleto = r.razao_social ?? r.cliente
+    const dias = r.dias_restantes
     return {
       cliente:           nomeCompleto,
       primeiro_nome:     extrairPrimeiroNome(nomeCompleto, r.cnpj),
       razao_social:      r.razao_social ?? '',
       tipo_certificado:  r.tipo_certificado,
-      dias_restantes:    r.dias_restantes,
+      dias_restantes:    Math.max(0, dias),
       data_vencimento:   new Date(r.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR'),
       valor:             fmtCurrency(r.valor),
       pedido:            r.pedido ?? '',
