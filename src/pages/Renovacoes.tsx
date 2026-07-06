@@ -587,7 +587,17 @@ export default function Renovacoes() {
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[()/-]+/g, ' ')
+      .replace(/\b1\s+ano\b/g, '12 meses')
+      .replace(/\b2\s+anos?\b/g, '24 meses')
+      .replace(/\b3\s+anos?\b/g, '36 meses')
+      .replace(/\bvalidade\b/g, ' ')
+      .replace(/\bsomente certificado\b/g, ' ')
+      .replace(/\barquivo\b/g, ' ')
+      .replace(/\btoken\b/g, ' ')
+      .replace(/\bmidia\b/g, ' ')
       .replace(/\s+/g, ' ')
+      .trim()
   }
 
   function findLinkForProduto(tipo: string) {
