@@ -2421,7 +2421,7 @@ export default function Comercial() {
     setShowFormTabela(false); setEditingTabelaId(null)
     if (!editingTabelaId && data) setSelectedTabelaId(data.id)
     if (!editingTabelaId && data) {
-      showMsg(`Tabela criada com ${produtosAutoVinculados} produto(s) vinculados automaticamente. Agora você pode editar preços e excluir em lote o que não quiser.`, 'ok')
+      showMsg(`Tabela criada com ${produtosAutoVinculados} produto(s) vinculados automaticamente. Os preços passam a herdar do cadastro do certificado.`, 'ok')
     }
     void fetchCatalogo()
   }
@@ -2628,21 +2628,29 @@ export default function Comercial() {
 
   // tabela itens
   function abrirNovoItem(tabelaId: string) {
+    const certificadoId = certificadosAtivos[0]?.id ?? ''
+    const certificado = certificadoById.get(certificadoId)
     setEditingItemId(null)
-    setFormItem({ ...EMPTY_ITEM, tabela_preco_id: tabelaId, certificado_id: certificadosAtivos[0]?.id ?? '' })
+    setFormItem({
+      ...EMPTY_ITEM,
+      tabela_preco_id: tabelaId,
+      certificado_id: certificadoId,
+      valor: certificado?.preco_venda ?? 0,
+    })
     setShowFormItem(true)
   }
   function editarItem(item: TabelaPrecoItem) {
+    const certificado = certificadoById.get(item.certificado_id)
     setEditingItemId(item.id)
     setFormItem({
       tabela_preco_id: item.tabela_preco_id, certificado_id: item.certificado_id,
-      valor: item.valor, valor_custo: item.valor_custo, valor_repasse: item.valor_repasse,
+      valor: certificado?.preco_venda ?? item.valor, valor_custo: item.valor_custo, valor_repasse: item.valor_repasse,
       link_safeweb: item.link_safeweb, ativo: item.ativo,
     })
     setShowFormItem(true)
   }
   async function salvarItem() {
-    if (!formItem.certificado_id || formItem.valor < 0) return
+    if (!formItem.certificado_id) return
     setSalvandoCatalogo(true)
     const rI = await fetch(getApiUrl('/catalog/itens'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -5738,10 +5746,15 @@ export default function Comercial() {
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                           <div className="md:col-span-4">
                             <SelectInput label="Certificado *" value={formItem.certificado_id}
-                              onChange={v => setFormItem(p => ({ ...p, certificado_id: v }))}
+                              onChange={v => setFormItem(p => ({ ...p, certificado_id: v, valor: certificadoById.get(v)?.preco_venda ?? 0 }))}
                               options={certificadosAtivos.map(c => ({ value: c.id, label: `${c.codigo ? c.codigo + ' · ' : ''}${c.tipo}${c.validade ? ' · ' + c.validade : ''}` }))} />
                           </div>
-                          <NumberInput label="Preço de Venda (R$) *" value={formItem.valor} onChange={v => setFormItem(p => ({ ...p, valor: v }))} />
+                          <div className="space-y-1">
+                            <span className="text-xs text-gray-500">Preço de Venda Herdado</span>
+                            <div className="h-11 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 flex items-center text-sm font-semibold text-green-600 dark:text-green-400">
+                              {formatCurrency(certificadoById.get(formItem.certificado_id)?.preco_venda ?? 0)}
+                            </div>
+                          </div>
                           <NumberInput label="Valor Custo (R$)" value={formItem.valor_custo} onChange={v => setFormItem(p => ({ ...p, valor_custo: v }))} />
                           <NumberInput label="Valor Repasse (R$)" value={formItem.valor_repasse} onChange={v => setFormItem(p => ({ ...p, valor_repasse: v }))} />
                           <ActiveSelect value={formItem.ativo} onChange={v => setFormItem(p => ({ ...p, ativo: v }))} />
@@ -5784,7 +5797,7 @@ export default function Comercial() {
                                       <td className="px-4 py-3 text-xs text-gray-400">{cert?.codigo ?? '—'}</td>
                                       <td className="px-4 py-3 font-medium text-sm">{cert?.tipo ?? 'Cert. removido'}</td>
                                       <td className="px-4 py-3 text-sm text-gray-500">{cert?.validade ?? '—'}</td>
-                                      <td className="px-4 py-3 text-green-600 dark:text-green-400 font-semibold">{formatCurrency(item.valor)}</td>
+                                      <td className="px-4 py-3 text-green-600 dark:text-green-400 font-semibold">{formatCurrency(cert?.preco_venda ?? item.valor)}</td>
                                       <td className="px-4 py-3 text-sm text-gray-500">{formatCurrency(item.valor_custo)}</td>
                                       <td className="px-4 py-3 text-sm text-gray-500">{formatCurrency(item.valor_repasse)}</td>
                                       <td className="px-4 py-3">
