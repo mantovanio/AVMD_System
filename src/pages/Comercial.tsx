@@ -706,6 +706,12 @@ export default function Comercial() {
   const certificadoById    = useMemo(() => new Map(certificados.map(c => [c.id, c])), [certificados])
   const tabelasAtivas      = useMemo(() => tabelasPreco.filter(t => t.ativo), [tabelasPreco])
 
+  function descricaoProdutoVenda(v: { certificado_id?: string | null; tipo_produto?: string | null }): string {
+    const cert = v.certificado_id ? certificadoById.get(v.certificado_id) : undefined
+    if (!cert) return v.tipo_produto?.trim() || '—'
+    return [cert.tipo, cert.modelo, cert.validade].filter(Boolean).join(' · ')
+  }
+
   const pontosAtivos       = useMemo(() => pontos.filter(p => p.status === 'ativo'), [pontos])
   const tabelaById         = useMemo(() => new Map(tabelasPreco.map(t => [t.id, t])), [tabelasPreco])
 
@@ -4734,7 +4740,7 @@ export default function Comercial() {
                         <td className="px-3 py-2 text-right font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">
                           {formatCurrency(v.valor_venda ?? 0)}
                         </td>
-                        <td className="px-3 py-2 text-gray-500 max-w-[180px] truncate">{v.tipo_produto}</td>
+                        <td className="px-3 py-2 text-gray-500 max-w-[180px] truncate" title={descricaoProdutoVenda(v)}>{descricaoProdutoVenda(v)}</td>
                         <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
                           {(v.cadastros_base as { cpf_cnpj?: string } | null)?.cpf_cnpj ?? v.documento_faturamento ?? '—'}
                         </td>
@@ -6707,7 +6713,7 @@ export default function Comercial() {
                 <div>
                   <p className="text-xs text-gray-500">Certificado:</p>
                   <p className="text-blue-600 font-medium">
-                    {protocoloVenda.certificado_id ? (certificadoById.get(protocoloVenda.certificado_id)?.tipo ?? '—') : protocoloVenda.tipo_produto}
+                    {descricaoProdutoVenda(protocoloVenda)}
                   </p>
                 </div>
               </div>
