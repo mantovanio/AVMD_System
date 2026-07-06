@@ -40,12 +40,14 @@ export class CatalogRepository {
   }
 
   async deleteCertificado(id: string) {
+    await this.db.query(`delete from tabela_preco_itens where certificado_id = $1::uuid`, [id])
     await this.db.query(`delete from certificados where id = $1::uuid`, [id])
   }
 
   async bulkDeleteCertificados(ids: string[]) {
     if (!ids.length) return
     const phs = ids.map((_, i) => `$${i + 1}`).join(', ')
+    await this.db.query(`delete from tabela_preco_itens where certificado_id::text in (${phs})`, ids)
     await this.db.query(`delete from certificados where id::text in (${phs})`, ids)
   }
 
