@@ -28,6 +28,7 @@ type SendChatMessageInput = {
   conversation_id?: string
   content?: string
   instance_name?: string
+  canal?: 'atendimento' | 'renovacao'
   sender_name?: string | null
   quoted_message_id?: string | null
   quoted_content?: string | null
@@ -56,6 +57,13 @@ function cleanBaseUrl(value: string | null | undefined) {
   if (!raw) return ''
   const withProtocol = /^https?:\/\//i.test(raw) ? raw : ('https://' + raw.replace(/^\/+/,'') )
   return withProtocol.replace(/\/$/, '')
+}
+
+function inferCanalFromInstance(instanceName: string | null | undefined) {
+  const normalized = String(instanceName ?? '').trim().toLowerCase()
+  if (!normalized) return 'atendimento'
+  if (normalized.includes('renov') || normalized.includes('certiid')) return 'renovacao'
+  return 'atendimento'
 }
 
 function asString(value: unknown) {
@@ -670,6 +678,7 @@ export async function handleChatRoutes(
     const payload: JsonRecord = {
       content,
       fromMe: true,
+      canal: body.canal ?? inferCanalFromInstance(sendResult.instanceName ?? asString(body.instance_name)),
       messageId,
       messageType: 'conversation',
       pushName: body.sender_name || 'Operador',

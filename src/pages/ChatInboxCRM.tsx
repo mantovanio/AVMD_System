@@ -1368,6 +1368,7 @@ export default function ChatInboxCRM() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           instance_name: selectedChannel.integration.instance_name,
+          canal: manualConversation.queue === 'renovacao' ? 'renovacao' : 'atendimento',
           conversation_id: `${normalizedPhone}@s.whatsapp.net`,
           content: firstMessage,
           lead_id: null,
