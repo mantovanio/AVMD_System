@@ -72,6 +72,22 @@ function pickString(source: JsonRecord | null, ...keys: string[]) {
   return ''
 }
 
+function parseMessageId(payload: JsonRecord | null | undefined) {
+  if (!payload || typeof payload !== 'object') return null
+  const key = asRecord(payload.key)
+  if (key) {
+    const direct = pickString(key, 'id')
+    if (direct) return direct
+  }
+  const response = asRecord(payload.response)
+  const responseKey = asRecord(response?.key)
+  if (responseKey) {
+    const nested = pickString(responseKey, 'id')
+    if (nested) return nested
+  }
+  return pickString(payload, 'messageId', 'id') || null
+}
+
 function cleanBaseUrl(value: string) {
   const raw = value.trim()
   if (!raw) return ''
@@ -482,12 +498,9 @@ export async function handleWhatsappSendRoutes(
       return true
     }
 
-    if (normalized.eventType === 'messages.update') {
-      writeJson(res, 200, { ok: true, skipped: 'messages.update' }, corsOrigin)
-      return true
-    }
-
-    const lead = await upsertLeadFromEvolutionEvent(normalized)
+    const lead = normalized.eventType === 'messages.update'
+      ? null
+      : await upsertLeadFromEvolutionEvent(normalized)
 
     const payload: JsonRecord = {
       ...normalized.raw,
@@ -573,6 +586,32 @@ export async function handleWhatsappSendRoutes(
       writeJson(res, 502, { ok: false, error: `Evolution retornou HTTP ${evRes.status}`, detail: payload }, corsOrigin)
       return true
     }
+
+    const remoteJid = buildRemoteJid(destinationNumber)
+    const messageId = parseMessageId(payload)
+    const canal = body.canal ?? inferCanalFromInstance(integration.instance_name)
+
+    await communicationEventRepository.create({
+      source: 'evolution',
+      event_type: 'message_sent',
+      external_id: messageId,
+      conversation_id: remoteJid,
+      lead_id: null,
+      contact: destinationNumber,
+      payload: {
+        content: body.body,
+        fromMe: true,
+        canal,
+        messageId,
+        messageType: 'conversation',
+        pushName: integration.sender_name || integration.name || 'Operador',
+        conversationId: remoteJid,
+        documentKey: destinationNumber,
+        instanceName: integration.instance_name,
+        instance_name: integration.instance_name,
+        provider_payload: payload,
+      },
+    })
 
     writeJson(res, 200, { ok: true, payload }, corsOrigin)
   } catch (err) {

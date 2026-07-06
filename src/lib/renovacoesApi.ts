@@ -153,7 +153,7 @@ export async function sendWhatsApp(
     })
     return data
   } catch (err) {
-    return { ok: false, error: String(err) }
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 }
 

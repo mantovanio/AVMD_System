@@ -612,11 +612,13 @@ export default function Renovacoes() {
     return String(template ?? '').includes('{{link_renovacao}}')
   }
 
-  function ensureLinkForTemplate(r: RenovacaoV2, template: string | null | undefined) {
+  function ensureLinkForTemplate(r: RenovacaoV2, template: string | null | undefined, options?: { silent?: boolean }) {
     if (!templateRequiresLink(template)) return true
     const link = findLinkForProduto(r.tipo_certificado)?.link_renovacao?.trim()
     if (link) return true
-    showMsg(`O produto "${r.tipo_certificado}" não tem link de renovação vinculado. Cadastre em "Links de Renovação por Produto".`, 'err')
+    if (!options?.silent) {
+      showMsg(`O produto "${r.tipo_certificado}" não tem link de renovação vinculado. Cadastre em "Links de Renovação por Produto".`, 'err')
+    }
     return false
   }
 
@@ -783,10 +785,12 @@ export default function Renovacoes() {
     setBulkSending(true)
     let enviados = 0
     let erros = 0
+    const detalhesErro: string[] = []
     for (const r of alvos) {
       const tpl = getTemplateForRenovacao(r)
-      if (!ensureLinkForTemplate(r, tpl?.body ?? WHATSAPP_TPL_DEFAULT)) {
+      if (!ensureLinkForTemplate(r, tpl?.body ?? WHATSAPP_TPL_DEFAULT, { silent: true })) {
         erros++
+        detalhesErro.push(`${r.razao_social ?? r.cliente}: sem link de renovação vinculado para ${r.tipo_certificado}`)
         continue
       }
       const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
@@ -798,12 +802,22 @@ export default function Renovacoes() {
         setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
       } else {
         erros++
-        logger.warn('Renovacoes', `Erro envio WA para ${r.telefone}: ${result.error}`)
+        const motivo = result.error || 'falha no envio'
+        detalhesErro.push(`${r.razao_social ?? r.cliente}: ${motivo}`)
+        logger.warn('Renovacoes', `Erro envio WA para ${r.telefone}: ${motivo}`)
       }
       await new Promise(resolve => setTimeout(resolve, 1500))
     }
     setBulkSending(false)
-    showMsg(`${enviados} enviados${erros > 0 ? `, ${erros} com erro` : ''}.`)
+    if (erros > 0 && enviados === 0 && detalhesErro.length > 0) {
+      showMsg(`0 enviados, ${erros} com erro. ${detalhesErro.slice(0, 2).join(' | ')}${detalhesErro.length > 2 ? ' | ...' : ''}.`, 'err')
+      return
+    }
+    if (erros > 0 && detalhesErro.length > 0) {
+      showMsg(`${enviados} enviados, ${erros} com erro. ${detalhesErro.slice(0, 2).join(' | ')}${detalhesErro.length > 2 ? ' | ...' : ''}.`, 'err')
+      return
+    }
+    showMsg(`${enviados} enviados.`)
   }
 
   async function bulkEnviarEmail() {

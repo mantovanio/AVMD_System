@@ -545,7 +545,7 @@ export async function handleChatRoutes(
     const remoteJid = documentKey ? `${documentKey}@s.whatsapp.net` : ''
     const [crmResult, evolutionResult] = await Promise.all([
       db.query<any>(
-        `SELECT id, conversation_id, document_key, external_message_id, direction, sender_type, sender_name, mensagem, mime_type, file_name, media_url, created_at
+        `SELECT id, conversation_id, document_key, external_message_id, direction, sender_type, sender_name, mensagem, mime_type, file_name, media_url, delivery_status, delivered_at, read_at, status_updated_at, created_at
          FROM crm_chat_messages
          WHERE (conversation_id::text = $1 OR document_key = $2 OR document_key = $3)
          ORDER BY created_at ASC`,
@@ -1002,12 +1002,17 @@ export async function handleChatRoutes(
       payload: {
         content: caption ?? fileName,
         fromMe: true,
+        canal: inferCanalFromInstance(sendResult.instanceName ?? instanceName),
         messageId,
         messageType: messageTypeFromCategory(category),
         mimeType,
         fileName,
         mediaUrl,
         pushName: senderName || 'Operador',
+        conversationId: remoteJid,
+        documentKey: destinationNumber,
+        instanceName: sendResult.instanceName ?? instanceName,
+        instance_name: sendResult.instanceName ?? instanceName,
         provider_payload: sendResult.payload,
       },
     })

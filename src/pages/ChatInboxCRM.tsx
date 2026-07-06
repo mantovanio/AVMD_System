@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bot,
   Calendar,
+  Check,
+  CheckCheck,
   ChevronDown,
   Clock3,
   Columns3,
@@ -77,6 +79,10 @@ interface CrmMessage {
   mime_type?: string | null
   file_name?: string | null
   media_url?: string | null
+  delivery_status?: string | null
+  delivered_at?: string | null
+  read_at?: string | null
+  status_updated_at?: string | null
   created_at: string
 }
 
@@ -458,6 +464,10 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] 
         mime_type: mimeType,
         file_name: fileName,
         media_url: mediaUrl,
+        delivery_status: null,
+        delivered_at: null,
+        read_at: null,
+        status_updated_at: null,
         created_at: event.created_at,
       }
     })
@@ -3146,6 +3156,24 @@ function MessageRow({
     const hasMedia = isImage || isAudio || isVideo || isDocument
     const mediaLabel = message.file_name || message.mensagem || (isAudio ? 'Audio' : isImage ? 'Imagem' : isVideo ? 'Video' : isDocument ? 'Arquivo' : '')
     const resolvedMediaUrl = resolveChatMediaUrl(message.media_url, conversation?.whatsapp_instance)
+    const receiptStatus = String(message.delivery_status ?? '').trim().toLowerCase()
+    const receiptLabel = receiptStatus === 'read'
+      ? 'Lida'
+      : receiptStatus === 'delivered'
+        ? 'Recebida'
+        : receiptStatus === 'received'
+          ? 'Recebida'
+          : receiptStatus === 'failed'
+            ? 'Falhou'
+            : 'Enviada'
+    const receiptTone = receiptStatus === 'read'
+      ? 'text-sky-600'
+      : receiptStatus === 'delivered' || receiptStatus === 'received'
+        ? 'text-slate-500'
+        : receiptStatus === 'failed'
+          ? 'text-rose-600'
+          : 'text-slate-400'
+    const receiptTime = message.read_at || message.delivered_at || message.status_updated_at || message.created_at
   
     return (
       <div className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'}`}>
@@ -3154,8 +3182,6 @@ function MessageRow({
             <span>{senderLabel}</span>
             <span>•</span>
             <span>{detailLabel}</span>
-            <span>•</span>
-            <span>{formatDateTime(message.created_at)}</span>
           </div>
           {isImage && resolvedMediaUrl ? (
             <a href={resolvedMediaUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl">
@@ -3180,6 +3206,15 @@ function MessageRow({
           ) : (
             <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{normalizeStructuredMessage(message.mensagem) || mediaLabel || 'Mensagem sem texto'}</p>
           )}
+          <div className={`mt-2 flex items-center justify-end gap-1 text-[11px] ${isOutgoing ? 'text-emerald-800/80' : 'text-slate-400'}`}>
+            <span>{formatDateTime(message.created_at)}</span>
+            {isOutgoing && (
+              <span className={`inline-flex items-center gap-1 ${receiptTone}`} title={`${receiptLabel} em ${formatDateTime(receiptTime)}`}>
+                {receiptStatus === 'read' ? <CheckCheck size={13} /> : receiptStatus === 'delivered' || receiptStatus === 'received' ? <CheckCheck size={13} /> : <Check size={13} />}
+                <span>{receiptLabel}</span>
+              </span>
+            )}
+          </div>
         </div>
     </div>
   )
