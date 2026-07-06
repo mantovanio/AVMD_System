@@ -81,7 +81,10 @@ function cleanBaseUrl(value: string) {
 
 function normalizePhoneDigits(value: string | null | undefined) {
   const digits = String(value ?? '').replace(/\D/g, '')
-  return digits || null
+  if (!digits) return null
+  if (digits.startsWith('55')) return digits
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`
+  return digits
 }
 
 function buildRemoteJid(phoneDigits: string | null) {
@@ -532,6 +535,11 @@ export async function handleWhatsappSendRoutes(
     writeJson(res, 400, { ok: false, error: 'phone e body sao obrigatorios' }, corsOrigin)
     return true
   }
+  const destinationNumber = normalizePhoneDigits(body.phone)
+  if (!destinationNumber) {
+    writeJson(res, 400, { ok: false, error: 'phone invalido' }, corsOrigin)
+    return true
+  }
 
   const integrations = await integrationRepo.findActiveWhatsApp()
   let integration = chooseIntegrationByCanal(integrations, body.canal)
@@ -556,7 +564,7 @@ export async function handleWhatsappSendRoutes(
         'Content-Type': 'application/json',
         apikey: integration.api_token,
       },
-      body: JSON.stringify({ number: body.phone.replace(/^\+/, ''), text: body.body }),
+      body: JSON.stringify({ number: destinationNumber, text: body.body }),
     })
 
     const payload = await evRes.json().catch(() => ({ status: evRes.status })) as Record<string, unknown>

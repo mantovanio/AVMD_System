@@ -302,6 +302,14 @@ function normalizePhone(value: string) {
   return digits
 }
 
+function formatPhoneHint(value: string) {
+  const digits = normalizePhone(value)
+  if (!digits) return 'Aceita com ou sem DDI. Ex.: 11999999999 ou 5511999999999'
+  return digits.startsWith('55')
+    ? `Será enviado como ${digits}`
+    : 'Aceita com ou sem DDI. Ex.: 11999999999 ou 5511999999999'
+}
+
 function normalizeDigits(value: string | null | undefined) {
   return (value ?? '').replace(/\D/g, '')
 }
@@ -1134,7 +1142,7 @@ export default function ChatInboxCRM() {
         ?? rows[0]
       setManualConversation({
         contactName: prefill?.contactName ?? '',
-        phone: prefill?.phone ?? '',
+        phone: normalizePhone(prefill?.phone ?? ''),
         queue: inferQueueFromIntegration(defaultIntegration),
         integrationId: defaultIntegration.id,
         firstMessage: prefill?.firstMessage ?? '',
@@ -1321,7 +1329,7 @@ export default function ChatInboxCRM() {
 
   async function createManualConversation() {
     const normalizedPhone = normalizePhone(manualConversation.phone)
-    const rawDigits = manualConversation.phone.replace(/\D/g, '')
+    const normalizedDigits = normalizedPhone.replace(/\D/g, '')
     const firstMessage = manualConversation.firstMessage.trim()
     const contactName = manualConversation.contactName.trim()
     const selectedChannel = manualChannelOptions.find(item => item.integration.id === manualConversation.integrationId)
@@ -1336,12 +1344,12 @@ export default function ChatInboxCRM() {
       return
     }
 
-    if (rawDigits.startsWith('55') && rawDigits.length === 12) {
+    if (normalizedDigits.startsWith('55') && normalizedDigits.length === 12) {
       setManualConversationError('Esse numero parece incompleto para WhatsApp. Para celular no Brasil, use 55 + DDD + 9 dígitos. Exemplo: 5511999999999.')
       return
     }
 
-    if (rawDigits.length < 12) {
+    if (normalizedDigits.length < 12) {
       setManualConversationError('Esse numero esta curto demais para WhatsApp. Confira o DDD e o 9 do celular antes de enviar.')
       return
     }
@@ -2747,9 +2755,11 @@ export default function ChatInboxCRM() {
                   <input
                     value={manualConversation.phone}
                     onChange={event => setManualConversation(prev => ({ ...prev, phone: event.target.value }))}
-                    placeholder="5511999999999"
+                    onBlur={() => setManualConversation(prev => ({ ...prev, phone: normalizePhone(prev.phone) }))}
+                    placeholder="11999999999"
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
                   />
+                  <span className="block text-[11px] text-slate-400">{formatPhoneHint(manualConversation.phone)}</span>
                 </label>
               </div>
 
