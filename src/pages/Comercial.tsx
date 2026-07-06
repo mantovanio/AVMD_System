@@ -970,6 +970,22 @@ export default function Comercial() {
       currentStepIndex: currentStepIndex === -1 ? steps.length - 1 : currentStepIndex,
     }
   }, [vendaStepStatus])
+
+  const vendaStepIssues = useMemo((): { step: string; mensagem: string } | null => {
+    if (vendaStepStatus.pagamentoOk) return null
+    const current = vendaSteps.steps.find((_, i) => i === vendaSteps.currentStepIndex)
+    if (!current) return null
+    const msgs: Record<string, string> = {
+      tipo_venda: 'Selecione o tipo de venda para começar.',
+      cliente: 'Informe o tipo de venda e depois busque ou cadastre um cliente.',
+      parceiro: 'Selecione ou dispense o parceiro vendedor antes de continuar. Esta etapa é obrigatória para definir as regras de comissão.',
+      emissao: 'Confirme o parceiro vendedor e depois selecione o tipo de emissão (Balcão, Ecommerce etc.).',
+      ponto: 'Selecione o tipo de emissão e depois escolha o ponto de atendimento.',
+      produto: 'Defina o ponto de atendimento, escolha uma tabela de preço e selecione um produto.',
+      pagamento: 'Preencha valor final, forma de pagamento, vencimento e cupom/voucher. Confira o limite de desconto da tabela.',
+    }
+    return { step: current.key, mensagem: msgs[current.key] ?? 'Preencha os campos obrigatórios para avançar.' }
+  }, [vendaStepStatus, vendaSteps])
   const parceiroIdsPermitidosAgente = useMemo(() => {
     if (profile?.perfil !== 'agente_registro' || !currentUserId) return new Set<string>()
     return new Set(
@@ -4047,6 +4063,18 @@ export default function Comercial() {
               >
                 <div className="w-full max-w-5xl my-auto" onClick={e => e.stopPropagation()}>
               <Panel title="Nova Venda" onClose={fecharFormVenda}>
+                {loadingCatalogo ? (
+                  <div className="flex items-center gap-2 text-gray-400 text-sm py-8 justify-center">
+                    <Loader2 size={16} className="animate-spin" /> Carregando catálogo...
+                  </div>
+                ) : catalogoErro ? (
+                  <div className="text-red-600 text-sm py-8 text-center">{catalogoErro}</div>
+                ) : certificados.length === 0 ? (
+                  <div className="rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-300 mb-5">
+                    Nenhum certificado encontrado no catálogo. Antes de vender, cadastre certificados em <strong>Comercial → Certificados</strong> e configure tabelas de preço em <strong>Tabelas</strong>.
+                  </div>
+                ) : (
+                <>
                 {/* ── Aviso de pré-requisitos ausentes ── */}
                 {preflightProblemas.length > 0 && (
                   <div className="mb-5 rounded-xl border border-red-200 dark:border-red-800/40 bg-red-50 dark:bg-red-950/20 p-3 space-y-2">
@@ -4078,6 +4106,13 @@ export default function Comercial() {
                     </div>
                   ))}
                 </div>
+
+                {/* ── Aviso do passo atual ── */}
+                {vendaStepIssues && (
+                  <div className="mb-4 rounded-xl border border-blue-200 dark:border-blue-800/40 bg-blue-50 dark:bg-blue-950/20 px-4 py-3 text-sm text-blue-700 dark:text-blue-300">
+                    {vendaStepIssues.mensagem}
+                  </div>
+                )}
 
                 {/* ── FORMULÁRIO DE NOVA VENDA ─────────────────── */}
                 <div className="space-y-4">
@@ -4459,7 +4494,12 @@ export default function Comercial() {
                   )}
 
                   {/* 8. Ações */}
-                  <div className="flex justify-end border-t border-gray-100 dark:border-gray-800 pt-4">
+                  <div className="flex justify-end items-center gap-3 border-t border-gray-100 dark:border-gray-800 pt-4">
+                    {!vendaStepStatus.pagamentoOk && (
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mr-auto">
+                        Preencha todos os passos para salvar a venda.
+                      </p>
+                    )}
                     <FormActions
                       onSave={salvarVendaV2}
                       onCancel={fecharFormVenda}
@@ -4470,6 +4510,8 @@ export default function Comercial() {
 
                 </div>
 
+              </>
+              )}
               </Panel>
                 </div>
               </div>,
