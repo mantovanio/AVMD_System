@@ -2,6 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { loadConfig } from '../config/env.js'
 import { createAivenSqlClient } from '../db/aivenClient.js'
 import type { ExternalIntegrationRepository } from '../repositories/externalIntegrationRepository.js'
+import type { LinksProdutosRepository } from '../repositories/linksProdutosRepository.js'
+import type { RenovacaoRepository, RenovacaoRow } from '../repositories/renovacaoRepository.js'
 import { CommunicationEventRepository } from '../repositories/communicationEventRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
 
@@ -83,6 +85,24 @@ function normalizePhoneDigits(value: string | null | undefined) {
 
 function buildRemoteJid(phoneDigits: string | null) {
   return phoneDigits ? `${phoneDigits}@s.whatsapp.net` : null
+}
+
+function inferCanalFromInstance(instanceName: string | null | undefined) {
+  const normalized = String(instanceName ?? '').trim().toLowerCase()
+  if (!normalized) return 'atendimento'
+  if (normalized.includes('renov') || normalized.includes('certiid')) return 'renovacao'
+  return 'atendimento'
+}
+
+function calculateDiasRestantes(dataVencimento: string | null | undefined) {
+  const dateStr = String(dataVencimento ?? '').slice(0, 10)
+  if (!dateStr) return null
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  const venc = new Date(`${dateStr}T00:00:00`)
+  if (Number.isNaN(venc.getTime())) return null
+  venc.setHours(0, 0, 0, 0)
+  return Math.round((venc.getTime() - hoje.getTime()) / 86400000)
 }
 
 function extractMessageContent(message: JsonRecord | null) {
@@ -174,6 +194,9 @@ async function upsertLeadFromEvolutionEvent(event: NormalizedEvolutionEvent) {
 
   const summary = event.content || (event.fileName ? `Arquivo: ${event.fileName}` : null)
   const existing = await findLeadByPhone(phoneDigits)
+  const motivoContato = inferCanalFromInstance(event.instanceName) === 'renovacao'
+    ? 'renovacao_clara'
+    : 'whatsapp_evolution'
 
   if (existing) {
     const result = await db.query<LeadRow>(
@@ -182,6 +205,7 @@ async function upsertLeadFromEvolutionEvent(event: NormalizedEvolutionEvent) {
               whatsapp_lead = coalesce($3, whatsapp_lead),
               resumo_conversa = CASE WHEN $4::text IS NULL OR $6::boolean THEN resumo_conversa ELSE $4 END,
               ultima_mensagem = coalesce($4, ultima_mensagem),
+              motivo_contato = CASE WHEN $8::text IS NULL OR $6::boolean THEN motivo_contato ELSE $8 END,
               status = CASE WHEN $6::boolean THEN coalesce(status, 'conversando') ELSE 'conversando' END,
               evolution_remote_jid = coalesce($5, evolution_remote_jid),
               evolution_instance = coalesce($7, evolution_instance),
@@ -196,6 +220,7 @@ async function upsertLeadFromEvolutionEvent(event: NormalizedEvolutionEvent) {
         event.conversationId ?? null,
         event.fromMe,
         event.instanceName ?? null,
+        motivoContato,
       ],
     )
 
@@ -222,7 +247,7 @@ async function upsertLeadFromEvolutionEvent(event: NormalizedEvolutionEvent) {
     [
       event.pushName ?? null,
       phoneDigits,
-      'whatsapp_evolution',
+      motivoContato,
       summary,
       summary,
       'iniciou_conversa',
@@ -319,8 +344,49 @@ async function configureEvolutionWebhook(input: EvolutionControlInput) {
   return { status: 502, payload: { ok: false, error: `Falha ao configurar webhook na Evolution (${errors.join(', ') || 'sem resposta valida'}).` } }
 }
 
-async function forwardInboundToN8n(event: NormalizedEvolutionEvent, leadId: string | null) {
+async function forwardInboundToN8n(
+  event: NormalizedEvolutionEvent,
+  leadId: string | null,
+  renovacaoRepo: RenovacaoRepository,
+  linksRepo: LinksProdutosRepository,
+) {
   if (!config.n8nWebhookUrl || event.fromMe) return { forwarded: false, error: null as string | null }
+
+  const canal = inferCanalFromInstance(event.instanceName)
+  let renovacao: RenovacaoRow | null = null
+  let linkRenovacao: string | null = null
+
+  if (canal === 'renovacao' && event.contactDigits) {
+    renovacao = await renovacaoRepo.findLatestByPhone(event.contactDigits)
+    if (renovacao?.tipo_certificado) {
+      const linkProduto = await linksRepo.findBestByTipoCertificado(renovacao.tipo_certificado)
+      linkRenovacao = linkProduto?.link_renovacao ?? null
+    }
+  }
+
+  const customerName = renovacao?.razao_social ?? renovacao?.cliente ?? event.pushName ?? null
+  const customerEmail = renovacao?.email ?? null
+  const messageText = event.content ?? ''
+  const context = {
+    tipo_fluxo: canal === 'renovacao' ? 'renovacao' : 'atendimento',
+    flow_type: canal === 'renovacao' ? 'renovacao' : 'atendimento',
+    channel: 'whatsapp',
+    source: 'evolution',
+    conversation_id: event.conversationId,
+    customer_phone: event.contactDigits,
+    customer_name: customerName,
+    customer_email: customerEmail,
+    renovacao_id: renovacao?.id ?? null,
+    pedido: renovacao?.pedido ?? null,
+    protocolo: renovacao?.protocolo ?? null,
+    tipo_certificado: renovacao?.tipo_certificado ?? null,
+    data_vencimento: renovacao?.data_vencimento?.slice(0, 10) ?? null,
+    dias_restantes: calculateDiasRestantes(renovacao?.data_vencimento),
+    valor: renovacao?.valor ?? null,
+    cpf: renovacao?.cpf ?? null,
+    cnpj: renovacao?.cnpj ?? null,
+    link_renovacao: linkRenovacao,
+  }
 
   try {
     const response = await fetch(config.n8nWebhookUrl, {
@@ -328,11 +394,18 @@ async function forwardInboundToN8n(event: NormalizedEvolutionEvent, leadId: stri
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         source: 'evolution',
+        channel: 'whatsapp',
+        canal,
         event_type: event.eventType,
         conversation_id: event.conversationId,
+        customer_phone: event.contactDigits,
+        customer_name: customerName,
+        customer_email: customerEmail,
+        message_text: messageText,
         contact: event.contactDigits,
         lead_id: leadId,
         instance_name: event.instanceName,
+        context,
         message: {
           id: event.externalMessageId,
           from_me: event.fromMe,
@@ -362,6 +435,8 @@ export async function handleWhatsappSendRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   integrationRepo: ExternalIntegrationRepository,
+  renovacaoRepo: RenovacaoRepository,
+  linksRepo: LinksProdutosRepository,
   corsOrigin: string,
 ): Promise<boolean> {
   const url = req.url ?? ''
@@ -424,7 +499,7 @@ export async function handleWhatsappSendRoutes(
       payload,
     })
 
-    const forwarded = await forwardInboundToN8n(normalized, lead?.id ?? null)
+    const forwarded = await forwardInboundToN8n(normalized, lead?.id ?? null, renovacaoRepo, linksRepo)
 
     writeJson(res, 200, {
       ok: true,

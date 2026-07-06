@@ -115,7 +115,14 @@ const server = createServer(async (req, res) => {
     const handledLinks = await handleLinksProdutosRoutes(req, res, linksProdutosRepository, config.corsOrigin)
     if (handledLinks) return
 
-    const handledWhatsapp = await handleWhatsappSendRoutes(req, res, externalIntegrationRepository, config.corsOrigin)
+    const handledWhatsapp = await handleWhatsappSendRoutes(
+      req,
+      res,
+      externalIntegrationRepository,
+      renovacaoRepository,
+      linksProdutosRepository,
+      config.corsOrigin,
+    )
     if (handledWhatsapp) return
 
     const handledEvolutionWebhook = await handleEvolutionWebhookRoutes(

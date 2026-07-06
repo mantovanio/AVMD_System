@@ -132,6 +132,27 @@ export class RenovacaoRepository {
     return result.rows[0] ?? null
   }
 
+  async findLatestByPhone(phoneDigits: string): Promise<RenovacaoRow | null> {
+    if (!phoneDigits) return null
+    const result = await this.db.query<RenovacaoRow>(
+      `SELECT *
+         FROM renovacoes
+        WHERE deleted_at IS NULL
+          AND regexp_replace(coalesce(telefone, ''), '\\D', '', 'g') = $1
+        ORDER BY
+          CASE
+            WHEN renovado = false AND status IN ('pendente', 'contatado') THEN 0
+            WHEN renovado = false THEN 1
+            ELSE 2
+          END,
+          ABS(EXTRACT(EPOCH FROM (data_vencimento::timestamp - CURRENT_DATE::timestamp))) ASC,
+          updated_at DESC
+        LIMIT 1`,
+      [phoneDigits],
+    )
+    return result.rows[0] ?? null
+  }
+
   async create(input: CreateRenovacaoInput): Promise<RenovacaoRow> {
     const result = await this.db.query<RenovacaoRow>(
       `INSERT INTO renovacoes (

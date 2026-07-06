@@ -25,6 +25,28 @@ export class LinksProdutosRepository {
     return result.rows
   }
 
+  async findBestByTipoCertificado(tipoCertificado: string): Promise<LinkProdutoRow | null> {
+    const tipo = String(tipoCertificado ?? '').trim()
+    if (!tipo) return null
+
+    const result = await this.db.query<LinkProdutoRow>(
+      `SELECT *
+         FROM links_produtos
+        WHERE ativo = true
+          AND (
+            lower(tipo_certificado) = lower($1)
+            OR position(lower(tipo_certificado) in lower($1)) > 0
+          )
+        ORDER BY
+          CASE WHEN lower(tipo_certificado) = lower($1) THEN 0 ELSE 1 END,
+          length(tipo_certificado) DESC,
+          updated_at DESC
+        LIMIT 1`,
+      [tipo],
+    )
+    return result.rows[0] ?? null
+  }
+
   async create(input: CreateLinkInput): Promise<LinkProdutoRow> {
     const result = await this.db.query<LinkProdutoRow>(
       `INSERT INTO links_produtos (tipo_certificado, link_renovacao, link_nova_emissao, descricao, ativo, whatsapp_template_id)
