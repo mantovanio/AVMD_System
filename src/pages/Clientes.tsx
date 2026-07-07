@@ -1148,7 +1148,7 @@ export default function Clientes() {
       alert('Este cliente ainda nao possui telefone cadastrado para abrir conversa.')
       return
     }
-    openCentralChat({
+    const opened = openCentralChat({
       phone,
       contactName: (lead?.nome_lead as string | null) ?? cliente.nome,
       context: {
@@ -1158,6 +1158,9 @@ export default function Clientes() {
         tipo_cliente: cliente.tipo_cliente,
       },
     })
+    if (!opened) {
+      alert('O telefone deste cliente parece invalido para abrir uma conversa. Confira o numero cadastrado.')
+    }
   }
 
   async function openKanbanFromCliente(cliente: ClienteComVendas) {
@@ -1171,7 +1174,7 @@ export default function Clientes() {
       alert('Este cliente ainda nao possui telefone cadastrado para abrir conversa.')
       return
     }
-    openCentralChat({
+    const opened = openCentralChat({
       phone,
       contactName: (lead?.nome_lead as string | null) ?? cliente.nome,
       context: {
@@ -1181,6 +1184,9 @@ export default function Clientes() {
         foco: 'kanban',
       },
     })
+    if (!opened) {
+      alert('O telefone deste cliente parece invalido para abrir uma conversa. Confira o numero cadastrado.')
+    }
   }
 
   async function togglePortalAccess(cliente: ClienteComVendas, currentStatus: 'ativo' | 'inativo') {

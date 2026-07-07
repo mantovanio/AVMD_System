@@ -670,7 +670,7 @@ export default function Renovacoes() {
     if (!r.telefone) { showMsg('Cliente sem telefone para chat.', 'err'); return }
     const tpl = getSelectedTpl('whatsapp')
     const msgTemplate = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
-    openCentralChat({
+    const opened = openCentralChat({
       phone: r.telefone,
       contactName: r.razao_social ?? r.cliente ?? '',
       firstMessage: msgTemplate,
@@ -683,6 +683,7 @@ export default function Renovacoes() {
         valor: r.valor != null ? `R$ ${r.valor.toFixed(2).replace('.', ',')}` : '',
       },
     })
+    if (!opened) { showMsg('Telefone deste cliente parece invalido para abrir o chat.', 'err') }
   }
 
   // ── template values (for rendering) ─────────────────────────
