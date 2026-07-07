@@ -12,8 +12,16 @@ Levantamento feito em produção (banco Postgres da VPS, `avmd`) antes de desenh
 
 1. Uma única fonte de verdade para "qual é o telefone normalizado deste contato", usada em todos os pontos de escrita e comparação do sistema.
 2. Uma trava real no banco que impede duas linhas com o mesmo telefone normalizado de coexistir em `crm_customers` e em `crm_chat_conversations`.
-3. Isso vale **só para o sistema de chat** (banco Postgres da VPS: `crm_customers`, `crm_chat_conversations`, e a trigger). `cadastros_base` (Aiven) fica de fora — entra na Fase 3, quando os bancos forem unificados.
+3. Isso vale **só para `crm_customers` e `crm_chat_conversations`**. `cadastros_base` fica de fora — não porque esteja em outro banco (ver correção abaixo), mas porque seu modelo de dados é diferente e uma trava de telefone único ali seria incorreta.
 4. Duplicatas **já existentes** não são mescladas nesta fase (histórico de conversa não é tocado) — só o suficiente é feito para viabilizar a trava (ver "Limpeza mínima" abaixo).
+
+### Correção pós-auditoria: `cadastros_base` já está no mesmo banco físico
+
+Verificação direta em produção (VPS) confirmou que `cadastros_base`, `crm_customers`, `crm_chat_conversations` e `tabelas_preco` **já coexistem na mesma instância Postgres** (o Postgres local da VPS, `avmd`) — o banco "Aiven cloud" consultado antes nesta investigação é um ambiente separado, não usado pela aplicação em produção. A divisão em "três bancos" da auditoria original estava parcialmente errada: o que resta fisicamente separado é só o Supabase legado que algumas telas do frontend (`Clientes.tsx`, `Configuracoes.tsx`, `Financeiro.tsx`) ainda acessam direto do navegador — isso é a Fase 3, e fica menor do que se pensava (trocar chamadas diretas ao Supabase por chamadas à API, não migrar dados entre bancos).
+
+### Por que `cadastros_base` fica fora mesmo estando no mesmo banco
+
+Investigação nos dados reais: o telefone mais duplicado em `cadastros_base` aparece em **82 linhas**, com **80 CPF/CNPJs distintos** entre elas (empresas diferentes: "CRIATIVA CELL LTDA", "BETEL CONSULT LTDA", "LEDO INDUSTRIA...", etc.), todas criadas no mesmo segundo (importação em lote). Confirmado com o usuário: em `cadastros_base`, um telefone representa **uma pessoa de contato que trata de várias empresas ao mesmo tempo** (ex.: contador/parceiro que cadastra vários CNPJs clientes usando o próprio número) — cada CNPJ é uma entidade isolada e legítima, o contato é compartilhado por design, não por erro. A identidade real de uma linha em `cadastros_base` é o `cpf_cnpj` (já indexado via `idx_cadastros_base_cpf_cnpj`), não o telefone. Aplicar unicidade de telefone ali quebraria cadastros legítimos. Essa tabela não deve ganhar essa regra nem nesta fase nem depois — é uma exclusão permanente, não um adiamento para a Fase 3.
 
 ## Distinção importante: identidade vs. envio
 
