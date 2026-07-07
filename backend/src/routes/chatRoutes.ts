@@ -290,6 +290,11 @@ async function sendEvolutionTextMessage(
     return { ok: false, error: 'Nenhuma integracao WhatsApp ativa configurada.', status: 422, payload: null as JsonRecord | null, instanceName: null as string | null }
   }
 
+  const destinationNumber = normalizePhoneDigits(input.remoteJid.replace(/@.+$/, ''))
+  if (!destinationNumber) {
+    return { ok: false, error: 'Numero do destinatario invalido para envio.', status: 400, payload: null as JsonRecord | null, instanceName: integration.instance_name }
+  }
+
   const evolutionUrl = `${cleanBaseUrl(integration.base_url)}/message/sendText/${integration.instance_name}`
   const response = await fetch(evolutionUrl, {
     method: 'POST',
@@ -298,7 +303,7 @@ async function sendEvolutionTextMessage(
       apikey: integration.api_token,
     },
     body: JSON.stringify({
-      number: input.remoteJid.replace(/@.+$/, ''),
+      number: destinationNumber,
       text: input.content,
     }),
   })

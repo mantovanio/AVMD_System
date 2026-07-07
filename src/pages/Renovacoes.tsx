@@ -122,8 +122,8 @@ function extrairPrimeiroNome(nome: string | null | undefined, cnpj?: string | nu
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-const WHATSAPP_TPL_DEFAULT = 'Olá {{primeiro_nome}}, seu certificado {{tipo_certificado}} vence em {{dias_restantes}} dias ({{data_vencimento}}). Podemos ajudar com a renovação! 🔐'
-const EMAIL_TPL_DEFAULT    = 'Olá {{primeiro_nome}},\n\nSeu certificado {{tipo_certificado}} vence em {{dias_restantes}} dias ({{data_vencimento}}).\n\nEntre em contato para renovar e evitar interrupções.\n\nEquipe AR CERTI ID'
+const WHATSAPP_TPL_DEFAULT = 'Olá {{primeiro_nome}}!\n\nSeu certificado digital {{tipo_certificado}} vence em {{data_vencimento}}.\n\nPara renovar de forma rápida, clique aqui:\n{{link_renovacao}}\n\nSe preferir, me responda por aqui que seguimos com seu atendimento.'
+const EMAIL_TPL_DEFAULT    = 'Olá {{primeiro_nome}},\n\nSeu certificado digital {{tipo_certificado}} vence em {{data_vencimento}}.\n\nPara renovar com mais rapidez, clique no link abaixo:\n{{link_renovacao}}\n\nSe quiser, também podemos seguir com seu atendimento por este canal.\n\nEquipe AR CERTI ID'
 
 // variáveis disponíveis para templates
 const TEMPLATE_VARS = [
