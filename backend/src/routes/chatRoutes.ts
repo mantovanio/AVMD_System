@@ -30,6 +30,7 @@ type SendChatMessageInput = {
   instance_name?: string
   canal?: 'atendimento' | 'renovacao'
   sender_name?: string | null
+  contact_name?: string | null
   quoted_message_id?: string | null
   quoted_content?: string | null
 }
@@ -682,6 +683,7 @@ export async function handleChatRoutes(
       messageId,
       messageType: 'conversation',
       pushName: body.sender_name || 'Operador',
+      from_name: body.contact_name || null,
       quoted: body.quoted_message_id
         ? {
             messageId: body.quoted_message_id,
