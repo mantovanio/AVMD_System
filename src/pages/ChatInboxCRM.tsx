@@ -1402,6 +1402,7 @@ export default function ChatInboxCRM() {
           canal: manualConversation.queue === 'renovacao' ? 'renovacao' : 'atendimento',
           conversation_id: `${normalizedPhone}@s.whatsapp.net`,
           content: firstMessage,
+          contact_name: contactName || null,
           lead_id: null,
         }),
       })
