@@ -8,6 +8,7 @@ import type { FileRepository } from '../repositories/fileRepository.js'
 import type { LeadRepository } from '../repositories/leadRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
 import { resolveCadastroBaseByIdentity } from '../utils/customerIdentity.js'
+import { normalizePhoneBR } from '../utils/phone.js'
 import { buildStoredPath, getStorageRoot, readFile, saveFile } from '../utils/storage.js'
 
 type JsonRecord = Record<string, unknown>
@@ -1273,6 +1274,7 @@ export async function handleChatRoutes(
     }
 
     const telefoneDigits = normalizePhoneDigits(telefone)
+    const telefoneCanonico = normalizePhoneBR(telefone)
     const cleanCpf = cpf?.replace(/\D/g, '') || null
     const cleanCnpj = cnpj?.replace(/\D/g, '') || null
     const resolvedCadastro = await resolveCadastroBaseByIdentity(db, {
@@ -1282,16 +1284,23 @@ export async function handleChatRoutes(
       cnpj: cleanCnpj,
     })
 
+    // Usa a mesma normalizacao canonica do indice unico
+    // (idx_crm_customers_telefone_normalizado) para achar um cliente
+    // existente. Antes comparava com normalizePhoneDigits (que ADICIONA
+    // o DDI), incompativel com o indice (que REMOVE o DDI) — isso fazia
+    // essa busca nao encontrar clientes que o banco ja considerava
+    // duplicados, e a tentativa de INSERT quebrava com erro de
+    // constraint cru.
     const existing = await db.query<{ id: string }>(
       `SELECT id
          FROM crm_customers
-        WHERE ($1::text is not null and regexp_replace(coalesce(telefone, ''), '\D', '', 'g') = $1)
+        WHERE ($1::text is not null and fn_normalize_phone_br(telefone) = $1)
            OR ($2::text is not null and lower(coalesce(email, '')) = lower($2))
            OR ($3::text is not null and regexp_replace(coalesce(cpf, ''), '\D', '', 'g') = $3)
            OR ($4::text is not null and regexp_replace(coalesce(cnpj, ''), '\D', '', 'g') = $4)
         ORDER BY updated_at DESC, created_at DESC
         LIMIT 1`,
-      [telefoneDigits, email || null, cleanCpf, cleanCnpj],
+      [telefoneCanonico, email || null, cleanCpf, cleanCnpj],
     )
 
     let customerId = existing.rows[0]?.id ?? null
@@ -1310,13 +1319,43 @@ export async function handleChatRoutes(
         [customerId, nome || null, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
       )
     } else {
-      const result = await db.query<{ id: string }>(
-        `INSERT INTO crm_customers (nome, telefone, email, cpf, cnpj, observacoes, cadastro_base_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::uuid)
-         RETURNING id`,
-        [nome, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
-      )
-      customerId = result.rows[0]?.id ?? null
+      try {
+        const result = await db.query<{ id: string }>(
+          `INSERT INTO crm_customers (nome, telefone, email, cpf, cnpj, observacoes, cadastro_base_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::uuid)
+           RETURNING id`,
+          [nome, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
+        )
+        customerId = result.rows[0]?.id ?? null
+      } catch (error) {
+        // Defesa extra contra corrida (dois salvamentos quase
+        // simultaneos pro mesmo telefone): se o INSERT esbarrar na
+        // trava de telefone unico mesmo apos a checagem acima, busca de
+        // novo e atualiza o cliente encontrado em vez de propagar o
+        // erro cru do Postgres pra tela.
+        const isDuplicatePhone = (error as { code?: string })?.code === '23505'
+          && (error as { constraint?: string })?.constraint === 'idx_crm_customers_telefone_normalizado'
+        if (!isDuplicatePhone) throw error
+
+        const retry = await db.query<{ id: string }>(
+          `SELECT id FROM crm_customers WHERE fn_normalize_phone_br(telefone) = $1 LIMIT 1`,
+          [telefoneCanonico],
+        )
+        customerId = retry.rows[0]?.id ?? null
+        if (!customerId) throw error
+        await db.query(
+          `UPDATE crm_customers
+              SET nome = coalesce($2, nome),
+                  email = coalesce($3, email),
+                  cpf = coalesce($4, cpf),
+                  cnpj = coalesce($5, cnpj),
+                  observacoes = coalesce($6, observacoes),
+                  cadastro_base_id = coalesce($7::uuid, cadastro_base_id),
+                  updated_at = now()
+            WHERE id = $1::uuid`,
+          [customerId, nome || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
+        )
+      }
     }
 
     const conversationId = asString(body.conversation_id)
