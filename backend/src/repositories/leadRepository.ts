@@ -1,4 +1,5 @@
 import type { AivenSqlClient } from '../db/aivenClient.js'
+import { normalizePhoneBR } from '../utils/phone.js'
 
 export interface LeadRow {
   id: string
@@ -65,15 +66,16 @@ export class LeadRepository {
   }
 
   async findByPhone(phoneDigits: string) {
-    if (!phoneDigits) return null
+    const canonical = normalizePhoneBR(phoneDigits)
+    if (!canonical) return null
 
     const result = await this.db.query<LeadRow>(
       `SELECT *
          FROM leads_contabilidade
-        WHERE regexp_replace(coalesce(whatsapp_lead, ''), '\\D', '', 'g') = $1
+        WHERE fn_normalize_phone_br(whatsapp_lead) = $1
         ORDER BY updated_at DESC, created_at DESC
         LIMIT 1`,
-      [phoneDigits],
+      [canonical],
     )
 
     return result.rows[0] ?? null

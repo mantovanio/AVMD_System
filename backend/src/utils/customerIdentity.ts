@@ -1,4 +1,5 @@
 import type { AivenSqlClient } from '../db/aivenClient.js'
+import { normalizePhoneBR } from './phone.js'
 
 export type ResolvedCadastroBase = {
   id: string
@@ -28,7 +29,7 @@ export async function resolveCadastroBaseByIdentity(
     document?: string | null
   },
 ): Promise<ResolvedCadastroBase | null> {
-  const phoneDigits = onlyDigits(input.phone)
+  const phoneDigits = normalizePhoneBR(input.phone)
   const cleanEmail = normalizeText(input.email)
   const cleanCpf = onlyDigits(input.cpf)
   const cleanCnpj = onlyDigits(input.cnpj)
@@ -46,12 +47,12 @@ export async function resolveCadastroBaseByIdentity(
        cpf_cnpj
      from cadastros_base
      where ($1::text is not null and regexp_replace(coalesce(cpf_cnpj, ''), '\D', '', 'g') = $1)
-        or ($2::text is not null and right(regexp_replace(coalesce(telefone, ''), '\D', '', 'g'), 11) = right($2, 11))
+        or ($2::text is not null and fn_normalize_phone_br(telefone) = $2)
         or ($3::text is not null and lower(coalesce(email, '')) = lower($3))
      order by
        case
          when $1::text is not null and regexp_replace(coalesce(cpf_cnpj, ''), '\D', '', 'g') = $1 then 1
-         when $2::text is not null and right(regexp_replace(coalesce(telefone, ''), '\D', '', 'g'), 11) = right($2, 11) then 2
+         when $2::text is not null and fn_normalize_phone_br(telefone) = $2 then 2
          when $3::text is not null and lower(coalesce(email, '')) = lower($3) then 3
          else 99
        end,
