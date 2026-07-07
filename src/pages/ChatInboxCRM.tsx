@@ -34,6 +34,7 @@ import { logger } from '@/lib/logger'
 import { useAuth } from '@/contexts/AuthContext'
 import { applyOutgoingSignature, DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings } from '@/lib/crmChatSettings'
 import { normalizeStructuredMessage } from '@/lib/messageFormatting'
+import { normalizePhoneBR } from '@/lib/phone'
 
 type QueueType = 'atendimento' | 'renovacao' | 'email' | 'agendamento'
 type DirectionType = 'incoming' | 'outgoing'
@@ -778,11 +779,13 @@ export default function ChatInboxCRM() {
 
   useEffect(() => {
     if (!deepLinkPhone || loading) return
-    const digits = deepLinkPhone.replace(/\D/g, '')
-    const match = conversations.find(item =>
-      (item.document_key ?? '').replace(/\D/g, '').endsWith(digits) ||
-      (item.telefone ?? '').replace(/\D/g, '').endsWith(digits)
-    )
+    const digits = normalizePhoneBR(deepLinkPhone)
+    const match = digits
+      ? conversations.find(item =>
+          normalizePhoneBR(item.document_key) === digits ||
+          normalizePhoneBR(item.telefone) === digits
+        )
+      : undefined
     if (match) {
       setSelectedId(match.id)
     } else {
