@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { buscarCep } from '@/lib/cep'
 import { buscarCnpj } from '@/lib/cnpj'
 import { openCentralChat } from '@/lib/chatNavigation'
+import { normalizePhoneBR } from '@/lib/phone'
 import { useAuth } from '@/contexts/AuthContext'
 import { buildSafeIlikePattern, hasPerfil } from '@/lib/security'
 import type { Agendamento, CommunicationOutbox, RenovacaoV2 } from '@/types'
@@ -505,13 +506,15 @@ function formatDoc(v: string) {
 }
 
 function buildPhoneCandidates(phone: string | null) {
-  const digits = normalizeDigits(phone)
-  if (!digits) return []
+  const canonical = normalizePhoneBR(phone)
+  if (!canonical) return []
 
-  const variants = new Set<string>([phone ?? '', digits])
-  if (digits.length >= 10) variants.add(`+55${digits}`)
-  if (digits.startsWith('55') && digits.length > 11) variants.add(`+${digits}`)
-  return [...variants].filter(Boolean)
+  // Esta função busca em leads_contabilidade no Supabase legado (fora do
+  // escopo da normalização desta fase — essa tabela não é tocada aqui),
+  // então mantemos várias variantes de formato para não perder matches
+  // com dados antigos gravados sem normalização.
+  const variants = new Set<string>([canonical, `55${canonical}`, `+55${canonical}`])
+  return [...variants]
 }
 
 function formatCurrency(v: number) {

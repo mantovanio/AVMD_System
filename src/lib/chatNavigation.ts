@@ -1,4 +1,5 @@
 import type { Page } from '@/components/Sidebar'
+import { normalizePhoneBR } from '@/lib/phone'
 
 export type CentralChatContext = Record<string, string | number | boolean | null | undefined>
 
@@ -22,7 +23,7 @@ function cleanContext(context: CentralChatContext | null | undefined) {
 }
 
 export function openCentralChat(options: OpenCentralChatOptions) {
-  const digits = options.phone.replace(/\D/g, '')
+  const digits = normalizePhoneBR(options.phone) ?? ''
   if (!digits) return false
 
   const page = options.page ?? 'chat'
