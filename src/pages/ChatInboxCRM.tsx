@@ -1555,9 +1555,21 @@ export default function ChatInboxCRM() {
           contact: normalizeContactPhone(resolvedPhone ?? selectedConversation.telefone ?? selectedConversation.document_key),
           payload: {
             conversation_id: selectedConversation.id,
+            documentKey: selectedConversation.document_key,
+            telefone: resolvedPhone ?? selectedConversation.telefone ?? selectedConversation.document_key,
+            customer_email: resolvedEmail ?? selectedConversation.email_principal ?? (selectedConversation.fila === 'email' ? selectedConversation.document_key : null),
+            canal: selectedConversation.fila === 'renovacao'
+              ? 'renovacao'
+              : selectedConversation.fila === 'agendamento'
+                ? 'agendamento'
+                : selectedConversation.fila === 'email'
+                  ? 'email'
+                  : 'atendimento',
+            kanban_status: selectedConversation.kanban_status,
+            instance_name: selectedConversation.whatsapp_instance,
+            instanceName: selectedConversation.whatsapp_instance,
             customer_id: nextCustomerId,
             nome: resolvedName,
-            telefone: resolvedPhone,
             email: resolvedEmail,
             status: resolvedStatus,
             observacoes: resolvedObs,
