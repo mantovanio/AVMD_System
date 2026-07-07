@@ -665,6 +665,8 @@ export default function Renovacoes() {
     setN8nWebhookUrl(await apiFetchN8nWebhookUrl())
   }, [])
 
+  useEffect(() => { void fetchLinks() }, [fetchLinks])
+
 
   function openChat(r: RenovacaoV2) {
     if (!r.telefone) { showMsg('Cliente sem telefone para chat.', 'err'); return }
