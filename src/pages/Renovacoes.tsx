@@ -145,6 +145,74 @@ const TEMPLATE_VARS = [
 ]
 
 const RENOVACOES_PAGE_SIZE = 200
+const RENOVACOES_COLUMN_WIDTHS_STORAGE_KEY = 'renovacoes:column-widths:v1'
+const RENOVACOES_MIN_TABLE_WIDTH = 2200
+
+type RenovacoesColumnKey =
+  | 'acoes'
+  | 'pedido'
+  | 'protocolo'
+  | 'vencimento'
+  | 'dias'
+  | 'cliente'
+  | 'email'
+  | 'telefone'
+  | 'produto'
+  | 'valor'
+  | 'cpf'
+  | 'cnpj'
+  | 'razaoSocial'
+  | 'agr'
+  | 'vendedor'
+  | 'contador'
+  | 'status'
+
+type RenovacoesColumnConfig = {
+  key: RenovacoesColumnKey
+  label: string
+  defaultWidth: number
+}
+
+const RENOVACOES_COLUMNS: RenovacoesColumnConfig[] = [
+  { key: 'acoes', label: 'Ações', defaultWidth: 210 },
+  { key: 'pedido', label: 'Pedido', defaultWidth: 110 },
+  { key: 'protocolo', label: 'Protocolo', defaultWidth: 110 },
+  { key: 'vencimento', label: 'Vencimento', defaultWidth: 95 },
+  { key: 'dias', label: 'Dias', defaultWidth: 70 },
+  { key: 'cliente', label: 'Cliente', defaultWidth: 190 },
+  { key: 'email', label: 'E-mail', defaultWidth: 180 },
+  { key: 'telefone', label: 'Telefone', defaultWidth: 120 },
+  { key: 'produto', label: 'Produto', defaultWidth: 190 },
+  { key: 'valor', label: 'Valor', defaultWidth: 120 },
+  { key: 'cpf', label: 'CPF', defaultWidth: 130 },
+  { key: 'cnpj', label: 'CNPJ', defaultWidth: 150 },
+  { key: 'razaoSocial', label: 'Razão Social', defaultWidth: 210 },
+  { key: 'agr', label: 'AGR', defaultWidth: 110 },
+  { key: 'vendedor', label: 'Vendedor', defaultWidth: 150 },
+  { key: 'contador', label: 'Contador', defaultWidth: 150 },
+  { key: 'status', label: 'Status', defaultWidth: 120 },
+]
+
+const RENOVACOES_DEFAULT_COLUMN_WIDTHS: Record<RenovacoesColumnKey, number> = Object.fromEntries(
+  RENOVACOES_COLUMNS.map(column => [column.key, column.defaultWidth]),
+) as Record<RenovacoesColumnKey, number>
+
+function loadRenovacoesColumnWidths() {
+  if (typeof window === 'undefined') return { ...RENOVACOES_DEFAULT_COLUMN_WIDTHS }
+  try {
+    const raw = window.localStorage.getItem(RENOVACOES_COLUMN_WIDTHS_STORAGE_KEY)
+    if (!raw) return { ...RENOVACOES_DEFAULT_COLUMN_WIDTHS }
+    const parsed = JSON.parse(raw) as Partial<Record<RenovacoesColumnKey, number>>
+    const next = { ...RENOVACOES_DEFAULT_COLUMN_WIDTHS }
+    for (const column of RENOVACOES_COLUMNS) {
+      const candidate = Number(parsed[column.key])
+      if (Number.isFinite(candidate) && candidate >= 60) next[column.key] = candidate
+    }
+    return next
+  } catch {
+    return { ...RENOVACOES_DEFAULT_COLUMN_WIDTHS }
+  }
+}
 
 function parseBrDate(s: string): string {
   const trimmed = s.trim()
@@ -353,6 +421,7 @@ export default function Renovacoes() {
   const canEditCadastro = hasPerfil(profile, 'admin', 'agente_registro')
   const pageScrollRef = useRef<HTMLDivElement>(null)
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
+  const resizingColumnRef = useRef<{ key: RenovacoesColumnKey; startX: number; startWidth: number } | null>(null)
 
   // ── list state ──────────────────────────────────────────────
   const [lista, setLista]           = useState<RenovacaoV2[]>([])
@@ -368,6 +437,7 @@ export default function Renovacoes() {
   const [sendingId, setSendingId]   = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [toast, setToast]           = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
+  const [columnWidths, setColumnWidths] = useState<Record<RenovacoesColumnKey, number>>(() => loadRenovacoesColumnWidths())
 
   // ── bulk selection ───────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -436,6 +506,42 @@ export default function Renovacoes() {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 4000)
   }
+
+  function startColumnResize(event: React.MouseEvent<HTMLSpanElement>, key: RenovacoesColumnKey) {
+    event.preventDefault()
+    event.stopPropagation()
+    resizingColumnRef.current = {
+      key,
+      startX: event.clientX,
+      startWidth: columnWidths[key],
+    }
+  }
+
+  useEffect(() => {
+    function handlePointerMove(event: MouseEvent) {
+      const active = resizingColumnRef.current
+      if (!active) return
+      const nextWidth = Math.max(60, active.startWidth + (event.clientX - active.startX))
+      setColumnWidths(prev => ({ ...prev, [active.key]: nextWidth }))
+    }
+
+    function handlePointerUp() {
+      if (!resizingColumnRef.current) return
+      resizingColumnRef.current = null
+    }
+
+    window.addEventListener('mousemove', handlePointerMove)
+    window.addEventListener('mouseup', handlePointerUp)
+    return () => {
+      window.removeEventListener('mousemove', handlePointerMove)
+      window.removeEventListener('mouseup', handlePointerUp)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(RENOVACOES_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths))
+  }, [columnWidths])
 
   // ── fetch ────────────────────────────────────────────────────
 
@@ -1277,6 +1383,8 @@ export default function Renovacoes() {
   const allSelected   = listagem.length > 0 && selectedIds.size === listagem.length
   const someSelected  = selectedIds.size > 0 && !allSelected
   const selCount      = selectedIds.size
+  const totalResizableWidth = RENOVACOES_COLUMNS.reduce((sum, column) => sum + columnWidths[column.key], 0)
+  const tableMinWidth = Math.max(RENOVACOES_MIN_TABLE_WIDTH, totalResizableWidth + 52)
   const kpis = {
     total:      lista.length,
     potencial:  lista.reduce((s, r) => s + (r.valor ?? 0), 0),
@@ -2221,7 +2329,13 @@ export default function Renovacoes() {
         {/* ── Wide Table ───────────────────────────────────────── */}
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[2200px]">
+            <table className="w-full table-fixed text-sm" style={{ minWidth: `${tableMinWidth}px` }}>
+              <colgroup>
+                <col style={{ width: '52px' }} />
+                {RENOVACOES_COLUMNS.map(column => (
+                  <col key={column.key} style={{ width: `${columnWidths[column.key]}px` }} />
+                ))}
+              </colgroup>
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left">
                   {/* Checkbox all */}
@@ -2233,8 +2347,19 @@ export default function Renovacoes() {
                       aria-label="Selecionar todos"
                       className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
                   </th>
-                  {['Ações','Pedido','Protocolo','Vencimento','Dias','Cliente','E-mail','Telefone','Produto','Valor','CPF','CNPJ','Razão Social','AGR','Vendedor','Contador','Status'].map(h => (
-                    <th key={h} className="px-3 py-3 whitespace-nowrap font-semibold">{h}</th>
+                  {RENOVACOES_COLUMNS.map(column => (
+                    <th key={column.key} className="group relative px-3 py-3 whitespace-nowrap font-semibold select-none">
+                      <span>{column.label}</span>
+                      <span
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label={`Ajustar largura da coluna ${column.label}`}
+                        onMouseDown={event => startColumnResize(event, column.key)}
+                        className="absolute right-0 top-0 h-full w-3 cursor-col-resize touch-none"
+                      >
+                        <span className="absolute right-1 top-1/2 h-6 w-px -translate-y-1/2 bg-transparent group-hover:bg-blue-300" />
+                      </span>
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -2264,7 +2389,7 @@ export default function Renovacoes() {
                           className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
                       </td>
 
-                      <td className="px-3 py-3 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap" style={{ width: `${columnWidths.acoes}px` }}>
                         <div className="flex items-center gap-1">
                           <button type="button" disabled={busy} onClick={() => void marcarRenovado(r)}
                             title={r.status === 'convertido' ? 'Desmarcar renovado' : 'Marcar como renovado'}
@@ -2321,30 +2446,30 @@ export default function Renovacoes() {
                           </button>
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{r.pedido ?? '—'}</td>
-                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{r.protocolo ?? '—'}</td>
-                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
+                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: `${columnWidths.pedido}px` }}>{r.pedido ?? '—'}</td>
+                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: `${columnWidths.protocolo}px` }}>{r.protocolo ?? '—'}</td>
+                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: `${columnWidths.vencimento}px` }}>
                         {new Date(r.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
                       </td>
-                      <td className="px-3 py-3 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: `${columnWidths.dias}px` }}>
                         <span className={cn('text-xs font-bold', pCfg.color)}>
                           {r.dias_restantes > 0 ? `${r.dias_restantes}d` : 'Vencido'}
                         </span>
                       </td>
-                      <td className="px-3 py-3 font-medium max-w-[140px]"><span className="truncate block">{r.cliente}</span></td>
-                      <td className="px-3 py-3 text-xs text-gray-500 max-w-[160px]"><span className="truncate block">{r.email ?? '—'}</span></td>
-                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{r.telefone ?? '—'}</td>
-                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{r.tipo_certificado}</td>
-                      <td className="px-3 py-3 text-xs font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">{fmtCurrency(r.valor)}</td>
-                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{r.cpf ?? '—'}</td>
-                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{r.cnpj ?? '—'}</td>
-                      <td className="px-3 py-3 text-xs text-gray-500 max-w-[150px]"><span className="truncate block">{r.razao_social ?? '—'}</span></td>
-                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{r.agr ?? '—'}</td>
-                      <td className="px-3 py-3 text-xs text-gray-500 max-w-[110px]"><span className="truncate block">{r.vendedor ?? '—'}</span></td>
-                      <td className="px-3 py-3 text-xs text-gray-500 max-w-[110px]"><span className="truncate block">{r.contador ?? '—'}</span></td>
+                      <td className="px-3 py-3 font-medium overflow-hidden" style={{ width: `${columnWidths.cliente}px` }}><span className="truncate block">{r.cliente}</span></td>
+                      <td className="px-3 py-3 text-xs text-gray-500 overflow-hidden" style={{ width: `${columnWidths.email}px` }}><span className="truncate block">{r.email ?? '—'}</span></td>
+                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: `${columnWidths.telefone}px` }}>{r.telefone ?? '—'}</td>
+                      <td className="px-3 py-3 text-xs text-gray-500 overflow-hidden" style={{ width: `${columnWidths.produto}px` }}><span className="truncate block">{r.tipo_certificado}</span></td>
+                      <td className="px-3 py-3 text-xs font-semibold text-green-600 dark:text-green-400 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: `${columnWidths.valor}px` }}>{fmtCurrency(r.valor)}</td>
+                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: `${columnWidths.cpf}px` }}>{r.cpf ?? '—'}</td>
+                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: `${columnWidths.cnpj}px` }}>{r.cnpj ?? '—'}</td>
+                      <td className="px-3 py-3 text-xs text-gray-500 overflow-hidden" style={{ width: `${columnWidths.razaoSocial}px` }}><span className="truncate block">{r.razao_social ?? '—'}</span></td>
+                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: `${columnWidths.agr}px` }}>{r.agr ?? '—'}</td>
+                      <td className="px-3 py-3 text-xs text-gray-500 overflow-hidden" style={{ width: `${columnWidths.vendedor}px` }}><span className="truncate block">{r.vendedor ?? '—'}</span></td>
+                      <td className="px-3 py-3 text-xs text-gray-500 overflow-hidden" style={{ width: `${columnWidths.contador}px` }}><span className="truncate block">{r.contador ?? '—'}</span></td>
 
                       {/* Status badge */}
-                      <td className="px-3 py-3 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap overflow-hidden" style={{ width: `${columnWidths.status}px` }}>
                         <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', sCfg.cls)}>{sCfg.label}</span>
                       </td>
 
