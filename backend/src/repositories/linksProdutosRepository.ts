@@ -18,6 +18,14 @@ export type UpdateLinkInput = Partial<Omit<LinkProdutoRow, 'id' | 'created_at'>>
 export class LinksProdutosRepository {
   constructor(private readonly db: AivenSqlClient) {}
 
+  async findById(id: string): Promise<LinkProdutoRow | null> {
+    const result = await this.db.query<LinkProdutoRow>(
+      `SELECT * FROM links_produtos WHERE id = $1 LIMIT 1`,
+      [id],
+    )
+    return result.rows[0] ?? null
+  }
+
   async findAll(): Promise<LinkProdutoRow[]> {
     const result = await this.db.query<LinkProdutoRow>(
       `SELECT * FROM links_produtos ORDER BY tipo_certificado ASC`,

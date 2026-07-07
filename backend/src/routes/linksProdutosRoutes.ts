@@ -11,6 +11,39 @@ export async function handleLinksProdutosRoutes(
   const url = req.url ?? ''
   const method = req.method ?? ''
 
+  const redirectToLink = async (
+    id: string,
+    field: 'link_renovacao' | 'link_nova_emissao',
+  ): Promise<boolean> => {
+    const row = await repo.findById(id)
+    if (!row || !row.ativo) {
+      writeJson(res, 404, { ok: false, error: 'Link nao encontrado' }, corsOrigin)
+      return true
+    }
+
+    const destination = String(row[field] ?? '').trim()
+    if (!destination) {
+      writeJson(res, 404, { ok: false, error: 'Destino nao configurado para este link' }, corsOrigin)
+      return true
+    }
+
+    res.statusCode = 302
+    res.setHeader('Access-Control-Allow-Origin', corsOrigin)
+    res.setHeader('Location', destination)
+    res.end()
+    return true
+  }
+
+  const redirectRenovacaoMatch = url.match(/^\/r\/renovacao\/([^/?#]+)$/)
+  if (method === 'GET' && redirectRenovacaoMatch) {
+    return redirectToLink(redirectRenovacaoMatch[1], 'link_renovacao')
+  }
+
+  const redirectNovaEmissaoMatch = url.match(/^\/r\/nova-emissao\/([^/?#]+)$/)
+  if (method === 'GET' && redirectNovaEmissaoMatch) {
+    return redirectToLink(redirectNovaEmissaoMatch[1], 'link_nova_emissao')
+  }
+
   // GET /api/links-produtos
   if (method === 'GET' && url === '/api/links-produtos') {
     const rows = await repo.findAll()

@@ -5,6 +5,7 @@ import {
   RefreshCw, Save, Send, Trash2, Upload, Users, X, Zap,
   ChevronDown, ChevronUp,
 } from 'lucide-react'
+import { getApiBaseUrl } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
 import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
@@ -239,6 +240,17 @@ function normalizePhoneBR(raw: string | null | undefined): string | null {
   if (digits.length === 10 || digits.length === 11) return `+55${digits}`
   // qualquer outro: apenas adiciona +
   return `+${digits}`
+}
+
+function buildShortLink(path: string, fallback?: string | null): string {
+  try {
+    const apiBaseUrl = getApiBaseUrl()
+    if (!apiBaseUrl) return String(fallback ?? '')
+    const origin = new URL(apiBaseUrl).origin
+    return `${origin}${path}`
+  } catch {
+    return String(fallback ?? '')
+  }
 }
 
 const CSV_FIELDS: { key: keyof RenovacaoV2 | 'produto'; label: string }[] = [
@@ -745,6 +757,12 @@ export default function Renovacoes() {
     const linkData = findLinkForProduto(r.tipo_certificado)
     const nomeCompleto = r.razao_social ?? r.cliente
     const dias = r.dias_restantes
+    const shortRenewalLink = linkData?.id
+      ? buildShortLink(`/r/renovacao/${linkData.id}`, linkData.link_renovacao)
+      : (linkData?.link_renovacao ?? '')
+    const shortNewIssueLink = linkData?.id
+      ? buildShortLink(`/r/nova-emissao/${linkData.id}`, linkData.link_nova_emissao)
+      : (linkData?.link_nova_emissao ?? '')
     return {
       cliente:           nomeCompleto,
       primeiro_nome:     extrairPrimeiroNome(nomeCompleto, r.cnpj),
@@ -760,8 +778,8 @@ export default function Renovacoes() {
       agr:               r.agr ?? '',
       vendedor:          r.vendedor ?? '',
       contador:          r.contador ?? '',
-      link_renovacao:    linkData?.link_renovacao    ?? '',
-      link_nova_emissao: linkData?.link_nova_emissao ?? '',
+      link_renovacao:    shortRenewalLink,
+      link_nova_emissao: shortNewIssueLink,
     }
   }
 
