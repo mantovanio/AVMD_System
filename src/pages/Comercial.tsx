@@ -4771,16 +4771,16 @@ export default function Comercial() {
                           className="rounded cursor-pointer" />
                       </th>
                       <th className="px-3 py-3">Ações</th>
-                      {['Pedido','Protocolo','Tipo Emissão','Tipo Venda','Status Venda','Data Status','Forma Pagamento','Valor Venda','Produto','Doc. Cliente','Cliente','PA','Data Venda','Vendedor','Observação'].map(h => (
+                      {['Pedido','Protocolo','Tipo Emissão','Tipo Venda','Status Venda','Pagamento','Data Status','Forma Pagamento','Valor Venda','Produto','Doc. Cliente','Cliente','PA','Data Venda','Vendedor','Observação'].map(h => (
                         <th key={h} className="px-3 py-3 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                     {loadingV ? (
-                      <LoadingRow colSpan={17} />
+                      <LoadingRow colSpan={18} />
                     ) : vendasPaginadas.length === 0 ? (
-                      <EmptyRow colSpan={17} label="Nenhuma venda encontrada com esses filtros." />
+                      <EmptyRow colSpan={18} label="Nenhuma venda encontrada com esses filtros." />
                     ) : vendasPaginadas.map(v => (
                       <tr key={v.id} className={cn(
                         'hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors',
@@ -4820,6 +4820,17 @@ export default function Comercial() {
                             className={cn('px-2 py-0.5 rounded-full text-xs font-medium border-0 cursor-pointer focus:outline-none whitespace-nowrap', statusVendaV2Cls(v.status_venda))}>
                             {STATUS_VENDA_V2_OPTIONS.map(s => (
                               <option key={s} value={s}>{STATUS_VENDA_LABEL[s]}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <select
+                            title="Status do pagamento"
+                            value={v.status_pagamento}
+                            onChange={e => void atualizarStatusPagamentoV2(v.id, e.target.value as StatusPagamentoVenda)}
+                            className={cn('px-2 py-0.5 rounded-full text-xs font-medium border-0 cursor-pointer focus:outline-none whitespace-nowrap', statusPagamentoCls(v.status_pagamento))}>
+                            {STATUS_PAGAMENTO_OPTIONS.map(s => (
+                              <option key={s} value={s}>{STATUS_PAGAMENTO_LABEL[s]}</option>
                             ))}
                           </select>
                         </td>
