@@ -493,7 +493,7 @@ export class AivenCheckoutRepository implements CheckoutRepository {
            data_pagamento = case when $2 then now() else data_pagamento end,
            status_pagamento = case
              when $2 then 'pago'
-             when $5 = 'failed' then 'recusado'
+             when $5 = 'failed' and status_pagamento is distinct from 'pago' then 'recusado'
              else status_pagamento
            end,
            status_venda = case when $2 then 'vendido' else status_venda end,
