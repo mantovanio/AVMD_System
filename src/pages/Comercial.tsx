@@ -52,7 +52,7 @@ import {
 } from '@/lib/nfse'
 import { getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { getApiUrl } from '@/lib/api'
-import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenTitularByCpf, updateAivenCommercialSaleStatus, updateVenda, type CancelamentoVendaInput, type UpdateVendaInput } from '@/lib/commercialAiven'
+import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenTitularByCpf, updateAivenCommercialSaleStatus, updateAivenCommercialSalePaymentStatus, updateVenda, type CancelamentoVendaInput, type UpdateVendaInput } from '@/lib/commercialAiven'
 import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
 import { useAuth } from '@/contexts/AuthContext'
 import { hasPerfil, isAdminProfile } from '@/lib/security'
@@ -77,6 +77,7 @@ import type {
   NovoCadastroBase,
   PontoAtendimento,
   StatusVendaCertificado,
+  StatusPagamentoVenda,
   StatusAgendamentoValidacao,
   VendaCertificado,
   TabelaPreco,
@@ -356,6 +357,14 @@ const STATUS_VENDA_LABEL: Record<StatusVendaCertificado, string> = {
   em_validacao: 'Em Validação',
   emitido:      'Emitida',
   cancelado:    'Cancelada',
+}
+
+const STATUS_PAGAMENTO_OPTIONS: StatusPagamentoVenda[] = ['em_aberto', 'pago', 'recusado']
+
+const STATUS_PAGAMENTO_LABEL: Record<StatusPagamentoVenda, string> = {
+  em_aberto: 'Em Aberto',
+  pago:      'Pago',
+  recusado:  'Recusado',
 }
 
 const TIPO_VENDA_OPTIONS = [
@@ -2002,6 +2011,15 @@ export default function Comercial() {
       if (vendaAtualizada && podeDispararAutomacaoPorMudanca(vendaAtualizada as VendaRow, vendaAtual ? { pago: Boolean(vendaAtual.pago), status_venda: vendaAtual.status_venda, protocolo_numero: vendaAtual.protocolo_numero ?? null } : null)) {
         void tentarEmitirNfseAutomaticamente(vendaAtualizada as VendaRow, 'mudança de status da venda')
       }
+    }
+  }
+
+  async function atualizarStatusPagamentoV2(id: string, status: StatusPagamentoVenda) {
+    const updated = await updateAivenCommercialSalePaymentStatus(id, status)
+    if (updated) {
+      setVendasV2(prev => prev.map(v => v.id === id
+        ? { ...v, status_pagamento: status, pago: status === 'pago' }
+        : v))
     }
   }
 
@@ -7478,6 +7496,15 @@ function statusVendaV2Cls(s: StatusVendaCertificado) {
     em_validacao: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
     emitido:      'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
     cancelado:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  }
+  return m[s]
+}
+
+function statusPagamentoCls(s: StatusPagamentoVenda) {
+  const m: Record<StatusPagamentoVenda, string> = {
+    em_aberto: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+    pago:      'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    recusado:  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   }
   return m[s]
 }
