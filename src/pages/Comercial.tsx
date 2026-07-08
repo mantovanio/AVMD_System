@@ -412,6 +412,31 @@ const EMPTY_VENDA_V2: LocalFormVenda = {
   ponto_atendimento_id: '',
 }
 
+const NOVA_VENDA_DRAFT_KEY = 'avmd_nova_venda_draft_v1'
+
+type RascunhoVenda = {
+  formV2: LocalFormVenda
+  clienteSelecionadoObj: CadastroBase | null
+  clienteSearch: string
+}
+
+function salvarRascunhoVenda(draft: RascunhoVenda) {
+  try { localStorage.setItem(NOVA_VENDA_DRAFT_KEY, JSON.stringify(draft)) } catch { /* localStorage indisponível */ }
+}
+
+function carregarRascunhoVenda(): RascunhoVenda | null {
+  try {
+    const raw = localStorage.getItem(NOVA_VENDA_DRAFT_KEY)
+    return raw ? JSON.parse(raw) as RascunhoVenda : null
+  } catch {
+    return null
+  }
+}
+
+function limparRascunhoVenda() {
+  try { localStorage.removeItem(NOVA_VENDA_DRAFT_KEY) } catch { /* localStorage indisponível */ }
+}
+
 
 const EMPTY_CLIENTE_BASE: NovoCadastroBase = {
   tipo_cliente: 'pessoa_fisica',
@@ -560,6 +585,7 @@ export default function Comercial() {
   const [vendedorNomes, setVendedorNomes] = useState<Map<string, string>>(new Map())
   const [showFormV, setShowFormV]       = useState(false)
   const [formV2, setFormV2]             = useState<LocalFormVenda>(EMPTY_VENDA_V2)
+  const [rascunhoVendaAtivo, setRascunhoVendaAtivo] = useState(false)
   const [contadorSearch, setContadorSearch] = useState('')
   const [contadorDropdownOpen, setContadorDropdownOpen] = useState(false)
   const [contadorStepHandled, setContadorStepHandled] = useState(false)
@@ -1634,6 +1660,16 @@ export default function Comercial() {
     }
   }, [clienteSelecionadoObj])
 
+  // autosalva rascunho da Nova Venda para não perder o que foi lançado
+  useEffect(() => {
+    if (!showFormV) return
+    if (JSON.stringify(formV2) === JSON.stringify(EMPTY_VENDA_V2)) {
+      limparRascunhoVenda()
+      return
+    }
+    salvarRascunhoVenda({ formV2, clienteSelecionadoObj, clienteSearch })
+  }, [showFormV, formV2, clienteSelecionadoObj, clienteSearch])
+
   // ── V2 mutations ─────────────────────────────────────────────
   function fecharFormVenda() {
     setShowFormV(false)
@@ -1799,6 +1835,8 @@ export default function Comercial() {
       if (nfseAutomationSettings.gatilho_emissao === 'antes_pagamento') {
         void tentarEmitirNfseAutomaticamente(vendaParaLista, 'venda criada antes do pagamento')
       }
+      limparRascunhoVenda()
+      setRascunhoVendaAtivo(false)
       fecharFormVenda()
       setFormV2({ ...EMPTY_VENDA_V2 })
       setVendaFilters(EMPTY_VENDA_FILTERS)
@@ -4083,9 +4121,8 @@ export default function Comercial() {
             {showFormV && createPortal(
               <div
                 className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4 sm:p-6"
-                onClick={fecharFormVenda}
               >
-                <div className="w-full max-w-5xl my-auto" onClick={e => e.stopPropagation()}>
+                <div className="w-full max-w-5xl my-auto">
               <Panel title="Nova Venda" onClose={fecharFormVenda}>
                 {loadingCatalogo ? (
                   <div className="flex items-center gap-2 text-gray-400 text-sm py-8 justify-center">
@@ -4099,6 +4136,20 @@ export default function Comercial() {
                   </div>
                 ) : (
                 <>
+                {rascunhoVendaAtivo && (
+                  <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-blue-200 dark:border-blue-800/40 bg-blue-50 dark:bg-blue-950/20 px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
+                    <span>Rascunho anterior restaurado.</span>
+                    <button type="button" onClick={() => {
+                      limparRascunhoVenda()
+                      setRascunhoVendaAtivo(false)
+                      setFormV2({ ...EMPTY_VENDA_V2 })
+                      setClienteSelecionadoObj(null)
+                      setClienteSearch('')
+                    }} className="font-semibold underline hover:no-underline">
+                      Descartar e começar do zero
+                    </button>
+                  </div>
+                )}
                 {/* ── Aviso de pré-requisitos ausentes ── */}
                 {preflightProblemas.length > 0 && (
                   <div className="mb-5 rounded-xl border border-red-200 dark:border-red-800/40 bg-red-50 dark:bg-red-950/20 p-3 space-y-2">
@@ -4577,9 +4628,19 @@ export default function Comercial() {
                   </button>
                   <button type="button" onClick={() => {
                     if (showFormV) { fecharFormVenda(); return }
-                    setFormV2({ ...EMPTY_VENDA_V2 })
-                    setClienteSelecionadoObj(null)
-                    setClienteSearch('')
+                    const rascunho = carregarRascunhoVenda()
+                    if (rascunho) {
+                      setFormV2(rascunho.formV2)
+                      setClienteSelecionadoObj(rascunho.clienteSelecionadoObj)
+                      setClienteSearch(rascunho.clienteSearch)
+                      setRascunhoVendaAtivo(true)
+                      showMsg('Rascunho anterior restaurado.', 'ok')
+                    } else {
+                      setFormV2({ ...EMPTY_VENDA_V2 })
+                      setClienteSelecionadoObj(null)
+                      setClienteSearch('')
+                      setRascunhoVendaAtivo(false)
+                    }
                     setContadorSearch('')
                     setContadorDropdownOpen(false)
                     setContadorStepHandled(false)
