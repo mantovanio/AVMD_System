@@ -73,10 +73,29 @@ Esse arquivo resume:
 - armadilhas conhecidas do ambiente atual
 
 
-## Regra Operacional do Usuario
-Ao concluir qualquer mudanca solicitada pelo usuario, assumir como padrao operacional:
-- fazer commit das alteracoes realizadas
-- fazer push para origin main
-- executar o deploy conforme DEPLOY-RAPIDO.md
+## Fila de Commits (Pending Queue)
+Para evitar colisoes com outras ferramentas de manutencao, todo commit e interceptado pelo git hook `commit-msg` e redirecionado para `pending-commits/` como patch.
 
-So deixar de seguir esse fluxo quando o usuario disser explicitamente para nao commitar, nao publicar ou apenas preparar as alteracoes localmente.
+### Fluxo
+1. **Qualquer `git commit`** → hook cria patch em `pending-commits/` com hash SHA256 e limpa a working tree
+2. **Para efetivar** todos os patches pendentes em ordem:
+   ```bash
+   PENDING_QUEUE_APPLY=1 bash pending-commits/aplicar-todos.sh
+   ```
+3. **Para ver a fila**: `ls pending-commits/*.patch`
+
+### Como funciona
+- O hook calcula SHA256 do diff e verifica se ja existe patch ou commit com o mesmo hash → se sim, ignora
+- Ao aplicar, o hash e gravado no footer do commit (`Patch-Hash: sha256:...`)
+- O `aplicar-todos.sh` usa env var `PENDING_QUEUE_APPLY=1` para bypassar o proprio hook
+- A working tree e limpa apos cada enfileiramento (as mudancas estao seguras no patch)
+
+### Instalacao dos hooks (uma vez)
+Ja instalados em `.git/hooks/{pre-commit,commit-msg}`. Para reinstalar:
+```bash
+cp pending-commits/pre-commit.sh .git/hooks/pre-commit
+cp pending-commits/commit-msg.sh .git/hooks/commit-msg
+```
+
+### Push e Deploy
+Consulte `DEPLOY-RAPIDO.md` para push e deploy. So fazer push depois que `aplicar-todos.sh` for executado e validado.
