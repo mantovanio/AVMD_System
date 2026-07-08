@@ -52,7 +52,7 @@ import {
 } from '@/lib/nfse'
 import { getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { getApiUrl } from '@/lib/api'
-import { fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenTitularByCpf, updateAivenCommercialSaleStatus } from '@/lib/commercialAiven'
+import { fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenTitularByCpf, updateAivenCommercialSaleStatus } from '@/lib/commercialAiven'
 import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
 import { useAuth } from '@/contexts/AuthContext'
 import { hasPerfil, isAdminProfile } from '@/lib/security'
@@ -1354,7 +1354,8 @@ export default function Comercial() {
     } else {
       setAgendamentoStatusPorVenda({})
     }
-    setVendedorNomes(new Map())
+    const perfis = await fetchAivenCommercialSaleProfiles()
+    setVendedorNomes(new Map(perfis.map(p => [p.id, p.nome])))
     setLoadingV(false)
   }, [])
 

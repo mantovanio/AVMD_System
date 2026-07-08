@@ -49,6 +49,12 @@ export async function fetchAivenCommercialAgents() {
   return response.agentes ?? []
 }
 
+export async function fetchAivenCommercialSaleProfiles() {
+  const response = await fetch(getApiUrl('/comercial/relatorios/comissoes/perfis'))
+  const data = await response.json() as ApiResponse<'perfis', Pick<Profile, 'id' | 'nome'>[]>
+  return data.perfis ?? []
+}
+
 export async function updateAivenCommercialSaleStatus(id: string, status: string) {
   const response = await postJson<ApiResponse<'venda', { id: string; status_venda: string }>>(getApiUrl('/comercial/vendas/status'), { id, status })
   return response.venda ?? null
