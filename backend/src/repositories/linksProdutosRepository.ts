@@ -8,8 +8,21 @@ export interface LinkProdutoRow {
   descricao: string | null
   ativo: boolean
   whatsapp_template_id: string | null
+  slug: string | null
+  vendedor_id: string | null
   created_at: string
   updated_at: string
+}
+
+function gerarSlug(texto: string): string {
+  return texto
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-+/g, '-')
 }
 
 export type CreateLinkInput = Omit<LinkProdutoRow, 'id' | 'created_at' | 'updated_at'>
@@ -17,6 +30,14 @@ export type UpdateLinkInput = Partial<Omit<LinkProdutoRow, 'id' | 'created_at'>>
 
 export class LinksProdutosRepository {
   constructor(private readonly db: AivenSqlClient) {}
+
+  async findBySlug(slug: string): Promise<LinkProdutoRow | null> {
+    const result = await this.db.query<LinkProdutoRow>(
+      `SELECT * FROM links_produtos WHERE slug = $1 AND ativo = true LIMIT 1`,
+      [slug],
+    )
+    return result.rows[0] ?? null
+  }
 
   async findById(id: string): Promise<LinkProdutoRow | null> {
     const result = await this.db.query<LinkProdutoRow>(
@@ -26,14 +47,26 @@ export class LinksProdutosRepository {
     return result.rows[0] ?? null
   }
 
-  async findAll(): Promise<LinkProdutoRow[]> {
+  async findAll(vendedorId?: string | null): Promise<LinkProdutoRow[]> {
+    if (vendedorId) {
+      const result = await this.db.query<LinkProdutoRow>(
+        `SELECT * FROM links_produtos
+          WHERE vendedor_id = $1
+          ORDER BY tipo_certificado ASC`,
+        [vendedorId],
+      )
+      return result.rows
+    }
     const result = await this.db.query<LinkProdutoRow>(
       `SELECT * FROM links_produtos ORDER BY tipo_certificado ASC`,
     )
     return result.rows
   }
 
-  async findBestByTipoCertificado(tipoCertificado: string): Promise<LinkProdutoRow | null> {
+  async findBestByTipoCertificado(
+    tipoCertificado: string,
+    vendedorId?: string | null,
+  ): Promise<LinkProdutoRow | null> {
     const tipo = String(tipoCertificado ?? '').trim()
     if (!tipo) return null
 
@@ -41,24 +74,45 @@ export class LinksProdutosRepository {
       `SELECT *
          FROM links_produtos
         WHERE ativo = true
+          AND (vendedor_id = $2 OR ($2 IS NULL AND vendedor_id IS NULL))
           AND (
             lower(tipo_certificado) = lower($1)
             OR position(lower(tipo_certificado) in lower($1)) > 0
           )
         ORDER BY
+          CASE WHEN vendedor_id = $2 THEN 0 ELSE 1 END,
           CASE WHEN lower(tipo_certificado) = lower($1) THEN 0 ELSE 1 END,
           length(tipo_certificado) DESC,
           updated_at DESC
         LIMIT 1`,
-      [tipo],
+      [tipo, vendedorId ?? null],
     )
     return result.rows[0] ?? null
   }
 
+  private async gerarSlugUnico(base: string, skipId?: string): Promise<string> {
+    let slug = gerarSlug(base)
+    if (!slug) slug = 'produto'
+
+    let tentativa = slug
+    let sufixo = 0
+    for (;;) {
+      const existente = await this.db.query<{ id: string }>(
+        `SELECT id FROM links_produtos WHERE slug = $1 LIMIT 1`,
+        [tentativa],
+      )
+      if (!existente.rows[0] || (skipId && existente.rows[0].id === skipId)) return tentativa
+      sufixo++
+      tentativa = `${slug}-${sufixo}`
+    }
+  }
+
   async create(input: CreateLinkInput): Promise<LinkProdutoRow> {
+    const slug = input.slug?.trim()
+      || await this.gerarSlugUnico(input.tipo_certificado)
     const result = await this.db.query<LinkProdutoRow>(
-      `INSERT INTO links_produtos (tipo_certificado, link_renovacao, link_nova_emissao, descricao, ativo, whatsapp_template_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO links_produtos (tipo_certificado, link_renovacao, link_nova_emissao, descricao, ativo, whatsapp_template_id, slug, vendedor_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
         input.tipo_certificado,
@@ -67,6 +121,8 @@ export class LinksProdutosRepository {
         input.descricao ?? null,
         input.ativo ?? true,
         input.whatsapp_template_id ?? null,
+        slug,
+        input.vendedor_id ?? null,
       ],
     )
     return result.rows[0]
@@ -84,6 +140,14 @@ export class LinksProdutosRepository {
     if (input.descricao !== undefined)           field('descricao', input.descricao)
     if (input.ativo !== undefined)               field('ativo', input.ativo)
     if (input.whatsapp_template_id !== undefined) field('whatsapp_template_id', input.whatsapp_template_id)
+    if (input.vendedor_id !== undefined)         field('vendedor_id', input.vendedor_id ?? null)
+    if (input.slug !== undefined) {
+      const slugVal = String(input.slug ?? '').trim()
+      const slug = slugVal
+        ? await this.gerarSlugUnico(slugVal, id)
+        : null
+      field('slug', slug)
+    }
 
     if (sets.length === 0) return null
 

@@ -1,6 +1,6 @@
 import { getApiUrl } from '@/lib/api'
 import type {
-  AutomationRule, CommunicationTemplate, LinkProduto, RenovacaoV2, StatusRenovacao,
+  AutomationRule, CommunicationTemplate, LinkProduto, Profile, RenovacaoV2, StatusRenovacao,
 } from '@/types'
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -141,15 +141,26 @@ export async function importRenovacoesToCrm(ids?: string[]): Promise<{
 
 // ── WhatsApp ──────────────────────────────────────────────────
 
+export interface SendWhatsAppButton {
+  type: 'linkButton' | 'replyButton'
+  text: string
+  url?: string
+  id?: string
+}
+
 export async function sendWhatsApp(
   phone: string,
   body: string,
-  options?: { canal?: 'atendimento' | 'renovacao'; instance_name?: string },
+  options?: { canal?: 'atendimento' | 'renovacao'; instance_name?: string; buttons?: SendWhatsAppButton[] },
 ): Promise<{ ok: boolean; error?: string }> {
   try {
+    const payload: Record<string, unknown> = { phone, body }
+    if (options?.canal) payload.canal = options.canal
+    if (options?.instance_name) payload.instance_name = options.instance_name
+    if (options?.buttons?.length) payload.buttons = options.buttons
     const data = await apiFetch<{ ok: boolean; error?: string }>('/whatsapp/send', {
       method: 'POST',
-      body: JSON.stringify({ phone, body, canal: options?.canal ?? null, instance_name: options?.instance_name ?? null }),
+      body: JSON.stringify(payload),
     })
     return data
   } catch (err) {
@@ -206,6 +217,13 @@ export async function toggleAutomationRule(id: string, ativo: boolean): Promise<
     body: JSON.stringify({ ativo }),
   })
   return data.rule
+}
+
+// ── Profiles ──────────────────────────────────────────────────
+
+export async function fetchProfiles(): Promise<Profile[]> {
+  const data = await apiFetch<{ ok: boolean; profiles: Profile[] }>('/profiles')
+  return data.profiles ?? []
 }
 
 // ── Links Produtos ────────────────────────────────────────────

@@ -30,6 +30,7 @@ import {
   criarLeadKanban as apiCriarLead,
   cancelarFollowUps as apiCancelarFollowUps,
   sendWhatsApp as apiSendWhatsApp,
+  fetchProfiles as apiFetchProfiles,
   importRenovacoesToBase as apiImportToBase,
   importRenovacoesToCrm as apiImportToCrm,
   enrichRenovacao,
@@ -38,7 +39,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { hasPerfil, isAdminProfile } from '@/lib/security'
 import * as XLSX from 'xlsx'
 import type {
-  AutomationRule, CommunicationTemplate, LinkProduto,
+  AutomationRule, CommunicationTemplate, LinkProduto, Profile,
   PrioridadeRenovacao, RenovacaoV2, StatusRenovacao,
 } from '@/types'
 
@@ -273,7 +274,7 @@ const CSV_FIELDS: { key: keyof RenovacaoV2 | 'produto'; label: string }[] = [
 type ImportColumnKey = keyof RenovacaoV2 | 'produto'
 
 type TplForm  = { name: string; channel: 'whatsapp' | 'email'; subject: string; body: string; template_key: string }
-type LinkForm = { tipo_certificado: string; link_renovacao: string; link_nova_emissao: string; descricao: string; whatsapp_template_id: string }
+type LinkForm = { tipo_certificado: string; link_renovacao: string; link_nova_emissao: string; descricao: string; whatsapp_template_id: string; slug: string; vendedor_id: string }
 type ContatoForm = {
   cliente: string
   email: string
@@ -288,7 +289,7 @@ type ContatoForm = {
 }
 
 const EMPTY_TPL:  TplForm  = { name: '', channel: 'whatsapp', subject: '', body: '', template_key: '' }
-const EMPTY_LINK: LinkForm = { tipo_certificado: '', link_renovacao: '', link_nova_emissao: '', descricao: '', whatsapp_template_id: '' }
+const EMPTY_LINK: LinkForm = { tipo_certificado: '', link_renovacao: '', link_nova_emissao: '', descricao: '', whatsapp_template_id: '', slug: '', vendedor_id: '' }
 const EMPTY_CONTATO: ContatoForm = {
   cliente: '',
   email: '',
@@ -502,6 +503,7 @@ export default function Renovacoes() {
   const [editingLink, setEditingLink]     = useState<LinkProduto | null>(null)
   const [linkForm, setLinkForm]           = useState<LinkForm>(EMPTY_LINK)
   const [savingLink, setSavingLink]       = useState(false)
+  const [vendedores, setVendedores]       = useState<Profile[]>([])
   const linksMap = useMemo(() => new Map(links.map(l => [l.tipo_certificado, l])), [links])
 
   // ── auto-kanban via realtime ──────────────────────────────────
@@ -664,8 +666,12 @@ export default function Renovacoes() {
   const fetchLinks = useCallback(async () => {
     setLoadingLinks(true)
     try {
-      const links = await apiFetchLinks()
+      const [links, allProfiles] = await Promise.all([
+        apiFetchLinks(),
+        apiFetchProfiles(),
+      ])
       setLinks(links)
+      setVendedores(allProfiles.filter(p => p.perfil === 'vendedor' || p.tipo_vinculo === 'vendedor'))
     } catch (err) {
       logger.warn('Renovacoes', `Erro ao carregar links: ${err}`)
     } finally {
@@ -721,16 +727,20 @@ export default function Renovacoes() {
       .trim()
   }
 
-  function findLinkForProduto(tipo: string) {
+  function findLinkForProduto(tipo: string, vendedorId?: string | null): LinkProduto | undefined {
     const tipoNormalizado = normalizeProdutoKey(tipo)
     if (!tipoNormalizado) return undefined
 
-    const exato = links.find(link => normalizeProdutoKey(link.tipo_certificado) === tipoNormalizado)
+    const candidates = vendedorId
+      ? links.filter(l => !l.vendedor_id || l.vendedor_id === vendedorId)
+      : links.filter(l => !l.vendedor_id)
+
+    const exato = candidates.find(link => normalizeProdutoKey(link.tipo_certificado) === tipoNormalizado)
     if (exato) return exato
 
     let best: LinkProduto | undefined
-    for (const [key, link] of linksMap) {
-      const keyNormalizada = normalizeProdutoKey(key)
+    for (const link of candidates) {
+      const keyNormalizada = normalizeProdutoKey(link.tipo_certificado)
       if (!keyNormalizada) continue
       if (tipoNormalizado.includes(keyNormalizada) || keyNormalizada.includes(tipoNormalizado)) {
         if (!best || keyNormalizada.length > normalizeProdutoKey(best.tipo_certificado).length) best = link
@@ -745,7 +755,7 @@ export default function Renovacoes() {
 
   function ensureLinkForTemplate(r: RenovacaoV2, template: string | null | undefined, options?: { silent?: boolean }) {
     if (!templateRequiresLink(template)) return true
-    const link = findLinkForProduto(r.tipo_certificado)?.link_renovacao?.trim()
+    const link = findLinkForProduto(r.tipo_certificado, r.vendedor_fk_id)?.link_renovacao?.trim()
     if (link) return true
     if (!options?.silent) {
       showMsg(`O produto "${r.tipo_certificado}" não tem link de renovação vinculado. Cadastre em "Links de Renovação por Produto".`, 'err')
@@ -754,15 +764,19 @@ export default function Renovacoes() {
   }
 
   function tplValues(r: RenovacaoV2): Record<string, string | number> {
-    const linkData = findLinkForProduto(r.tipo_certificado)
+    const linkData = findLinkForProduto(r.tipo_certificado, r.vendedor_fk_id)
     const nomeCompleto = r.razao_social ?? r.cliente
     const dias = r.dias_restantes
-    const shortRenewalLink = linkData?.id
-      ? buildShortLink(`/r/renovacao/${linkData.id}`, linkData.link_renovacao)
-      : (linkData?.link_renovacao ?? '')
-    const shortNewIssueLink = linkData?.id
-      ? buildShortLink(`/r/nova-emissao/${linkData.id}`, linkData.link_nova_emissao)
-      : (linkData?.link_nova_emissao ?? '')
+    const shortRenewalLink = linkData?.slug
+      ? buildShortLink(`/s/${linkData.slug}`, linkData.link_renovacao)
+      : linkData?.id
+        ? buildShortLink(`/r/renovacao/${linkData.id}`, linkData.link_renovacao)
+        : (linkData?.link_renovacao ?? '')
+    const shortNewIssueLink = linkData?.slug
+      ? buildShortLink(`/s/${linkData.slug}`, linkData.link_nova_emissao)
+      : linkData?.id
+        ? buildShortLink(`/r/nova-emissao/${linkData.id}`, linkData.link_nova_emissao)
+        : (linkData?.link_nova_emissao ?? '')
     return {
       cliente:           nomeCompleto,
       primeiro_nome:     extrairPrimeiroNome(nomeCompleto, r.cnpj),
@@ -864,8 +878,13 @@ export default function Renovacoes() {
     setSendingId(r.id)
     const tpl = getTemplateForRenovacao(r)
     if (!ensureLinkForTemplate(r, tpl?.body ?? WHATSAPP_TPL_DEFAULT)) { setSendingId(null); return }
-    const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
-    const result = await apiSendWhatsApp(r.telefone, body, { canal: 'renovacao' })
+    const values = tplValues(r)
+    const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, values)
+    const linkUrl = values.link_renovacao
+    const buttons = linkUrl
+      ? [{ type: 'linkButton' as const, text: '🔐 Renovar Agora', url: linkUrl as string }]
+      : undefined
+    const result = await apiSendWhatsApp(r.telefone, body, { canal: 'renovacao', buttons })
     if (!result.ok) { setSendingId(null); showMsg('Erro WhatsApp: ' + result.error, 'err'); return }
     const agora = new Date().toISOString()
     await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
@@ -931,8 +950,13 @@ export default function Renovacoes() {
         detalhesErro.push(`${r.razao_social ?? r.cliente}: sem link de renovação vinculado para ${r.tipo_certificado}`)
         continue
       }
-      const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
-      const result = await apiSendWhatsApp(r.telefone!, body, { canal: 'renovacao' })
+      const values = tplValues(r)
+      const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, values)
+      const linkUrl = values.link_renovacao
+      const buttons = linkUrl
+        ? [{ type: 'linkButton' as const, text: '🔐 Renovar Agora', url: linkUrl as string }]
+        : undefined
+      const result = await apiSendWhatsApp(r.telefone!, body, { canal: 'renovacao', buttons })
       if (result.ok) {
         enviados++
         const agora = new Date().toISOString()
@@ -1022,8 +1046,13 @@ export default function Renovacoes() {
     let falhas = 0
     for (const r of alvos) {
       const tpl = getTemplateForRenovacao(r)
-      const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
-      const result = await apiSendWhatsApp(r.telefone!, body, { canal: 'renovacao' })
+      const values = tplValues(r)
+      const body = renderTemplate(tpl?.body ?? WHATSAPP_TPL_DEFAULT, values)
+      const linkUrl = values.link_renovacao
+      const buttons = linkUrl
+        ? [{ type: 'linkButton' as const, text: '🔐 Renovar Agora', url: linkUrl as string }]
+        : undefined
+      const result = await apiSendWhatsApp(r.telefone!, body, { canal: 'renovacao', buttons })
       if (result.ok) {
         enviados++
         const agora = new Date().toISOString()
@@ -1070,6 +1099,8 @@ export default function Renovacoes() {
       link_nova_emissao:    link.link_nova_emissao     ?? '',
       whatsapp_template_id: link.whatsapp_template_id  ?? '',
       descricao:         link.descricao         ?? '',
+      slug:              link.slug              ?? '',
+      vendedor_id:       link.vendedor_id       ?? '',
     })
   }
 
@@ -1089,6 +1120,8 @@ export default function Renovacoes() {
         link_nova_emissao:    linkForm.link_nova_emissao.trim()     || null,
         whatsapp_template_id: linkForm.whatsapp_template_id.trim()  || null,
         descricao:         linkForm.descricao.trim()         || null,
+        slug:              linkForm.slug.trim()              || null,
+        vendedor_id:       linkForm.vendedor_id.trim()       || null,
         ativo: true,
       })
       showMsg('Link salvo!')
@@ -1984,6 +2017,14 @@ export default function Renovacoes() {
                         {link.descricao && (
                           <p className="text-xs text-gray-400">{link.descricao}</p>
                         )}
+                        {link.vendedor_id && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">
+                            Vendedor: {vendedores.find(v => v.id === link.vendedor_id)?.nome ?? link.vendedor_id}
+                          </p>
+                        )}
+                        {!link.vendedor_id && (
+                          <p className="text-xs text-gray-400 italic">Link global</p>
+                        )}
                       </div>
                       <div className="flex gap-1 shrink-0">
                         <button type="button" title="Editar" onClick={() => abrirEditarLink(link)}
@@ -2012,6 +2053,28 @@ export default function Renovacoes() {
                       placeholder="Ex: e-CPF A3"
                       disabled={!!editingLink}
                       className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed" />
+                  </label>
+
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-gray-500">Slug (atalho: /s/<b>slug</b>)</span>
+                    <input type="text" value={linkForm.slug}
+                      onChange={e => setLinkForm(p => ({ ...p, slug: e.target.value }))}
+                      placeholder="ecpf-a3"
+                      className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                    <span className="text-xs text-gray-400">Deixe em branco para gerar automático. Use apenas letras, números e hífens.</span>
+                  </label>
+
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-gray-500">Vendedor (opcional)</span>
+                    <select value={linkForm.vendedor_id}
+                      onChange={e => setLinkForm(p => ({ ...p, vendedor_id: e.target.value }))}
+                      className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                      <option value="">— Link global (todos os vendedores) —</option>
+                      {vendedores.map(v => (
+                        <option key={v.id} value={v.id}>{v.nome}</option>
+                      ))}
+                    </select>
+                    <span className="text-xs text-gray-400">Se definir um vendedor, este link só será usado para clientes deste vendedor.</span>
                   </label>
 
                   <label className="flex flex-col gap-1">

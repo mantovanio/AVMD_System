@@ -7,11 +7,19 @@ import type { RenovacaoRepository, RenovacaoRow } from '../repositories/renovaca
 import { CommunicationEventRepository } from '../repositories/communicationEventRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
 
+interface SendWhatsAppButton {
+  type: 'linkButton' | 'replyButton'
+  text: string
+  url?: string
+  id?: string
+}
+
 interface SendWhatsAppInput {
   phone: string
   body: string
   instance_name?: string
   canal?: 'atendimento' | 'renovacao'
+  buttons?: SendWhatsAppButton[]
 }
 
 type JsonRecord = Record<string, unknown>
@@ -392,7 +400,7 @@ async function forwardInboundToN8n(
   if (canal === 'renovacao' && event.contactDigits) {
     renovacao = await renovacaoRepo.findLatestByPhone(event.contactDigits)
     if (renovacao?.tipo_certificado) {
-      const linkProduto = await linksRepo.findBestByTipoCertificado(renovacao.tipo_certificado)
+      const linkProduto = await linksRepo.findBestByTipoCertificado(renovacao.tipo_certificado, renovacao.vendedor_fk_id)
       linkRenovacao = linkProduto?.link_renovacao ?? null
     }
   }
@@ -462,6 +470,28 @@ async function forwardInboundToN8n(
   } catch (error) {
     return { forwarded: false, error: error instanceof Error ? error.message : String(error) }
   }
+}
+
+async function sendEvolutionButtonMessage(
+  baseUrl: string,
+  instanceName: string,
+  apiToken: string,
+  number: string,
+  body: { text: string; buttons: SendWhatsAppButton[] },
+) {
+  const evolutionUrl = `${baseUrl}/message/sendButtons/${instanceName}`
+  return fetch(evolutionUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: apiToken,
+    },
+    body: JSON.stringify({
+      number,
+      description: body.text,
+      buttons: body.buttons,
+    }),
+  })
 }
 
 export async function handleWhatsappSendRoutes(
@@ -571,17 +601,34 @@ export async function handleWhatsappSendRoutes(
   }
 
   const baseUrl = integration.base_url.replace(/\/$/, '')
-  const evolutionUrl = `${baseUrl}/message/sendText/${integration.instance_name}`
 
   try {
-    const evRes = await fetch(evolutionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: integration.api_token,
-      },
-      body: JSON.stringify({ number: destinationNumber, text: body.body }),
-    })
+    let evRes: Response
+    if (body.buttons?.length) {
+      evRes = await sendEvolutionButtonMessage(baseUrl, integration.instance_name, integration.api_token, destinationNumber, {
+        text: body.body,
+        buttons: body.buttons,
+      })
+      if (!evRes.ok && evRes.status === 404) {
+        evRes = await fetch(`${baseUrl}/message/sendText/${integration.instance_name}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: integration.api_token,
+          },
+          body: JSON.stringify({ number: destinationNumber, text: body.body }),
+        })
+      }
+    } else {
+      evRes = await fetch(`${baseUrl}/message/sendText/${integration.instance_name}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: integration.api_token,
+        },
+        body: JSON.stringify({ number: destinationNumber, text: body.body }),
+      })
+    }
 
     const payload = await evRes.json().catch(() => ({ status: evRes.status })) as Record<string, unknown>
 

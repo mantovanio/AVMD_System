@@ -343,6 +343,8 @@ export interface LinkProduto {
   descricao: string | null
   ativo: boolean
   whatsapp_template_id: string | null
+  slug: string | null
+  vendedor_id: string | null
   created_at: string
   updated_at: string
 }

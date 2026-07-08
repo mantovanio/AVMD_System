@@ -44,9 +44,32 @@ export async function handleLinksProdutosRoutes(
     return redirectToLink(redirectNovaEmissaoMatch[1], 'link_nova_emissao')
   }
 
-  // GET /api/links-produtos
-  if (method === 'GET' && url === '/api/links-produtos') {
-    const rows = await repo.findAll()
+  // GET /s/{slug} — redireciona via slug curto
+  const redirectSlugMatch = url.match(/^\/s\/([a-z0-9][a-z0-9-]*)$/)
+  if (method === 'GET' && redirectSlugMatch) {
+    const slug = redirectSlugMatch[1]
+    const row = await repo.findBySlug(slug)
+    if (!row || !row.ativo) {
+      writeJson(res, 404, { ok: false, error: 'Link nao encontrado' }, corsOrigin)
+      return true
+    }
+    const destination = String(row.link_renovacao ?? '').trim()
+    if (!destination) {
+      writeJson(res, 404, { ok: false, error: 'Destino nao configurado para este link' }, corsOrigin)
+      return true
+    }
+    res.statusCode = 302
+    res.setHeader('Access-Control-Allow-Origin', corsOrigin)
+    res.setHeader('Location', destination)
+    res.end()
+    return true
+  }
+
+  // GET /api/links-produtos[?vendedor_id=X]
+  if (method === 'GET' && url.startsWith('/api/links-produtos')) {
+    const parsedUrl = new URL(url, 'http://localhost')
+    const vendedorId = parsedUrl.searchParams.get('vendedor_id') || undefined
+    const rows = await repo.findAll(vendedorId)
     writeJson(res, 200, { ok: true, links: rows }, corsOrigin)
     return true
   }
