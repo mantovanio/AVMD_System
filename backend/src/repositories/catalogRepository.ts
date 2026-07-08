@@ -379,7 +379,7 @@ export class CatalogRepository {
   // ── Bulk venda update ─────────────────────────────────────────────────
   async batchUpdateVendasByProtocolo(updates: { protocolo_numero: string; [key: string]: unknown }[]) {
     const fields = ['status_venda','tipo_produto','tipo_venda','tipo_emissao','valor_venda','valor_custo',
-      'pago','data_pagamento','data_vencimento','agente_registro_id','ponto_atendimento_id',
+      'pago','status_pagamento','data_pagamento','data_vencimento','agente_registro_id','ponto_atendimento_id',
       'parceiro_id','vendedor_id']
     let updated = 0
     for (const u of updates) {

@@ -2994,6 +2994,7 @@ export default function Comercial() {
           valor_venda:            parseNum(r['valor_do_boleto'] ?? r['valor_boleto'] ?? r['valor'] ?? '0'),
           status_venda:           'emitido' as StatusVendaCertificado,
           pago:                   true,
+          status_pagamento:       'pago' as StatusPagamentoVenda,
           validado_safeweb:       true,
           data_vencimento:        parseDate(r['data_fim_validade'] ?? r['data_vencimento'] ?? ''),
           data_inicio_validade:   parseDate(r['data_inicio_validade'] ?? r['data_inicio'] ?? ''),
