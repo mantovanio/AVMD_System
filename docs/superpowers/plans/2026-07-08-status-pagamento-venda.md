@@ -15,7 +15,7 @@ Este projeto não tem suite de testes automatizada (ver `CLAUDE.md`). A validaç
 ### Task 1: Migração SQL — coluna `status_pagamento` + trigger de sincronia
 
 **Files:**
-- Create: `backend/sql/043_add_status_pagamento_vendas.sql`
+- Create: `backend/sql/044_add_status_pagamento_vendas.sql`
 
 - [ ] **Step 1: Escrever a migração**
 
@@ -55,7 +55,7 @@ create trigger trg_sync_pago_from_status_pagamento
 - [ ] **Step 2: Commit**
 
 ```bash
-git add backend/sql/043_add_status_pagamento_vendas.sql
+git add backend/sql/044_add_status_pagamento_vendas.sql
 git commit -m "feat: adiciona status_pagamento em vendas_certificados com sincronia de pago"
 ```
 
@@ -399,7 +399,7 @@ git push origin main
 - [ ] **Step 2: Aplicar a migração na VPS via SSH** (nunca rodar `db:apply-sql` da máquina local — aponta pro banco errado, ver lição registrada em `DEPLOY-RAPIDO.md`)
 
 ```bash
-ssh root@147.79.111.76 "cd /opt/avmd/AVMD_System && git pull --ff-only origin main && npm run db:apply-sql -- backend/sql/043_add_status_pagamento_vendas.sql"
+ssh root@147.79.111.76 "cd /opt/avmd/AVMD_System && git pull --ff-only origin main && npm run db:apply-sql -- backend/sql/044_add_status_pagamento_vendas.sql"
 ```
 
 Expected: JSON de resposta com `"applied": true`.

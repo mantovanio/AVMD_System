@@ -52,7 +52,7 @@ import {
 } from '@/lib/nfse'
 import { getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { getApiUrl } from '@/lib/api'
-import { fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenTitularByCpf, updateAivenCommercialSaleStatus } from '@/lib/commercialAiven'
+import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenTitularByCpf, updateAivenCommercialSaleStatus, type CancelamentoVendaInput } from '@/lib/commercialAiven'
 import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
 import { useAuth } from '@/contexts/AuthContext'
 import { hasPerfil, isAdminProfile } from '@/lib/security'
@@ -611,6 +611,11 @@ export default function Comercial() {
   const [emitindoNfseLote, setEmitindoNfseLote] = useState(false)
   const [itensPorPagina, setItensPorPagina]     = useState(50)
   const [paginaAtual, setPaginaAtual]           = useState(1)
+
+  // ── cancelamento state ────────────────────────────────────────
+  const [cancelandoVenda, setCancelandoVenda] = useState<VendaRow | null>(null)
+  const [cancelForm, setCancelForm] = useState({ motivo: '', dentro_prazo_30d: true, custo_operacional: 0, observacoes: '' })
+  const [cancelSaving, setCancelSaving] = useState(false)
 
   // ── agenda state ─────────────────────────────────────────────
   const [agenda, setAgenda]             = useState<AgendaItem[]>([])
@@ -4769,6 +4774,7 @@ export default function Comercial() {
                             <VendaIconBtn title="Agendar"           icon={Calendar}      color="emerald" onClick={() => prepararAgendamento(v)} />
                             <VendaIconBtn title="Upload Documentos" icon={Upload}        color="orange"  onClick={() => openFeatureNotice('Upload de documentos', 'A estrutura de documentos financeiros existe, mas o fluxo de upload desta tela ainda não foi conectado.', 'Próximo bloco: ligar `documentos_financeiros` a esta venda.')} />
                             <VendaIconBtn title="Fatura"            icon={Receipt}       color="teal"    onClick={() => void abrirFaturaVenda(v)} />
+                            {isAdmin && <VendaIconBtn title="Cancelar Venda" icon={XCircle} color="red" onClick={() => setCancelandoVenda(v)} />}
                             <VendaIconBtn title="Excluir"           icon={Trash2}        color="red"     onClick={() => void excluirVenda(v.id)} />
                             {nfseAutomationSettings.permitir_emissao_manual_rapida && (
                               <VendaIconBtn title="Emitir NFS-e"      icon={FileText}      color="gray"    onClick={() => void emitirNfseParaVenda(v)} />
@@ -7000,6 +7006,95 @@ export default function Comercial() {
           <button type="button" title="Fechar" onClick={() => setToast(null)} className="ml-1 opacity-80 hover:opacity-100">
             <X size={14} />
           </button>
+        </div>,
+        document.body
+      )}
+
+      {/* ── Modal de Cancelamento de Venda ── */}
+      {cancelandoVenda && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40"
+          onClick={() => { if (!cancelSaving) setCancelandoVenda(null) }}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6"
+            onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Cancelar Venda</h2>
+
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-4 space-y-1">
+              <p><span className="font-medium">Pedido:</span> {cancelandoVenda.pedido_numero ?? '—'}</p>
+              <p><span className="font-medium">Cliente:</span> {(cancelandoVenda.cadastros_base as { nome?: string } | null)?.nome ?? cancelandoVenda.nome_faturamento ?? '—'}</p>
+              <p><span className="font-medium">Valor:</span> R$ {(cancelandoVenda.valor_venda ?? 0).toFixed(2).replace('.', ',')}</p>
+              <p><span className="font-medium">Comissão Vend.:</span> R$ {(cancelandoVenda.comissao_vendedor_valor ?? 0).toFixed(2).replace('.', ',')}</p>
+              <p><span className="font-medium">Comissão Agente:</span> R$ {(cancelandoVenda.comissao_agente_valor ?? 0).toFixed(2).replace('.', ',')}</p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Motivo do cancelamento *</label>
+                <textarea value={cancelForm.motivo} onChange={e => setCancelForm(f => ({ ...f, motivo: e.target.value }))}
+                  className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-red-400"
+                  rows={3} placeholder="Ex: Cliente desistiu dentro do prazo de 30 dias" />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="prazo30" checked={cancelForm.dentro_prazo_30d}
+                  onChange={e => setCancelForm(f => ({ ...f, dentro_prazo_30d: e.target.checked }))}
+                  className="rounded" />
+                <label htmlFor="prazo30" className="text-sm text-gray-700 dark:text-gray-300">Dentro do prazo de 30 dias (reembolso integral)</label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Custo operacional (taxas não recuperáveis)</label>
+                <input type="number" min={0} step={0.01} value={cancelForm.custo_operacional}
+                  onChange={e => setCancelForm(f => ({ ...f, custo_operacional: Number(e.target.value) }))}
+                  className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-red-400" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Observações</label>
+                <input type="text" value={cancelForm.observacoes} onChange={e => setCancelForm(f => ({ ...f, observacoes: e.target.value }))}
+                  className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-red-400"
+                  placeholder="Observações adicionais" />
+              </div>
+
+              {cancelForm.dentro_prazo_30d && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-xs text-blue-700 dark:text-blue-300">
+                  Valor a reembolsar: <strong>R$ {Math.max(0, (cancelandoVenda.valor_venda ?? 0) - cancelForm.custo_operacional).toFixed(2).replace('.', ',')}</strong>
+                  {cancelForm.custo_operacional > 0 && <span> (deduzido R$ {cancelForm.custo_operacional.toFixed(2).replace('.', ',')} de custo operacional)</span>}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button type="button" onClick={() => setCancelandoVenda(null)} disabled={cancelSaving}
+                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50">
+                Voltar
+              </button>
+              <button type="button" onClick={async () => {
+                if (!cancelForm.motivo.trim()) { showMsg('Informe o motivo do cancelamento.'); return }
+                setCancelSaving(true)
+                const result = await cancelarVenda({
+                  venda_id: cancelandoVenda.id,
+                  motivo: cancelForm.motivo.trim(),
+                  dentro_prazo_30d: cancelForm.dentro_prazo_30d,
+                  custo_operacional: cancelForm.custo_operacional,
+                  observacoes: cancelForm.observacoes.trim() || undefined,
+                  cancelado_por: profile?.id ?? '',
+                })
+                setCancelSaving(false)
+                if (result) {
+                  showMsg('Venda cancelada com sucesso!', 'ok')
+                  setCancelandoVenda(null)
+                  setCancelForm({ motivo: '', dentro_prazo_30d: true, custo_operacional: 0, observacoes: '' })
+                  setVendasV2(prev => prev.map(v => v.id === cancelandoVenda.id ? { ...v, status_venda: 'cancelado' } : v))
+                } else {
+                  showMsg('Erro ao cancelar venda. Tente novamente.')
+                }
+              }} disabled={cancelSaving || !cancelForm.motivo.trim()}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
+                {cancelSaving && <Loader2 size={14} className="animate-spin" />}
+                Confirmar Cancelamento
+              </button>
+            </div>
+          </div>
         </div>,
         document.body
       )}

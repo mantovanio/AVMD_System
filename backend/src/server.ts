@@ -45,6 +45,8 @@ import { handleClaraAutomationRoutes } from './routes/claraAutomationRoutes.js'
 import { handleChatRoutes } from './routes/chatRoutes.js'
 import { PermissoesRepository } from './repositories/permissoesRepository.js'
 import { handlePermissoesRoutes } from './routes/permissoesRoutes.js'
+import { CancelamentoRepository } from './repositories/cancelamentoRepository.js'
+import { handleCancelamentoRoutes } from './routes/cancelamentoRoutes.js'
 import { writeJson } from './utils/http.js'
 
 const config = loadConfig()
@@ -177,6 +179,10 @@ const server = createServer(async (req, res) => {
 
     const handledCommercial = await handleCommercialRoutes(req, res, commercialRepository, config.corsOrigin)
     if (handledCommercial) return
+
+    const cancelamentoRepository = new CancelamentoRepository(db)
+    const handledCancelamento = await handleCancelamentoRoutes(req, res, cancelamentoRepository, commercialRepository, config.corsOrigin)
+    if (handledCancelamento) return
 
     const handledIntegration = await handleIntegrationRoutes(
       req,

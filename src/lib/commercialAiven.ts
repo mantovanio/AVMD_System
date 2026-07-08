@@ -120,6 +120,36 @@ export async function getAivenTitularByCpf(cpf: string) {
   return response.titular ?? null
 }
 
+export type CancelamentoVendaInput = {
+  venda_id: string
+  motivo: string
+  dentro_prazo_30d: boolean
+  custo_operacional?: number
+  observacoes?: string
+  cancelado_por: string
+}
+
+export type CancelamentoVendaRow = {
+  id: string
+  venda_id: string
+  motivo: string
+  dentro_prazo_30d: boolean
+  valor_reembolsado: number | null
+  custo_operacional: number
+  comissao_vendedor_revertida: number
+  comissao_agente_revertida: number
+  estorno_gateway_ref: string | null
+  estorno_realizado: boolean
+  observacoes: string | null
+  cancelado_por: string | null
+  created_at: string
+}
+
+export async function cancelarVenda(payload: CancelamentoVendaInput) {
+  const response = await postJson<ApiResponse<'cancelamento', CancelamentoVendaRow>>(getApiUrl('/cancelamentos'), payload)
+  return response.cancelamento ?? null
+}
+
 export async function saveAivenCommercialCustomer(payload: {
   id?: string | null
   tipo_cliente?: string | null
