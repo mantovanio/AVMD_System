@@ -33,3 +33,6 @@ temp/
 *.backup
 subject
 
+# Brainstorming visual companion (mockups locais, nao versionar)
+.superpowers/
+
