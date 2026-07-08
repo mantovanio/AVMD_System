@@ -16,6 +16,11 @@ export type UpdateCommercialSaleStatusInput = {
   status: string
 }
 
+export type UpdateCommercialSalePaymentStatusInput = {
+  id: string
+  status: 'em_aberto' | 'pago' | 'recusado'
+}
+
 export type SaveCommercialAgendaInput = {
   agendaId?: string | null
   vendaId?: string | null
@@ -80,6 +85,26 @@ export class CommercialRepository {
         entityType: 'vendas_certificados',
         entityId: venda.id,
         payload: { status_venda: venda.status_venda },
+      })
+    }
+    return venda
+  }
+
+  async updateSalePaymentStatus(input: UpdateCommercialSalePaymentStatusInput) {
+    const result = await this.db.query<{ id: string; status_pagamento: string }>(`
+      update vendas_certificados
+      set status_pagamento = $2,
+          updated_at = now()
+      where id = $1
+      returning id, status_pagamento
+    `, [input.id, input.status])
+    const venda = result.rows[0] ?? null
+    if (venda?.id) {
+      await this.recordIntegrationEvent({
+        eventType: 'commercial.sale.payment_status.updated',
+        entityType: 'vendas_certificados',
+        entityId: venda.id,
+        payload: { status_pagamento: venda.status_pagamento },
       })
     }
     return venda

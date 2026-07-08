@@ -145,6 +145,32 @@ export type CancelamentoVendaRow = {
   created_at: string
 }
 
+export type UpdateVendaInput = {
+  id: string
+  tipo_produto?: string
+  tipo_venda?: string
+  tipo_emissao?: string
+  tabela_preco_id?: string
+  tabela_preco_item_id?: string
+  forma_pagamento_id?: string
+  valor_venda?: number
+  desconto?: number
+  observacoes?: string
+  data_vencimento?: string
+  vendedor_id?: string | null
+  contador_id?: string | null
+}
+
+export async function updateVenda(input: UpdateVendaInput) {
+  const response = await fetch(getApiUrl(`/comercial/vendas/${input.id}`), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  const data = await response.json() as ApiResponse<'venda', Record<string, unknown>>
+  return data.venda ?? null
+}
+
 export async function cancelarVenda(payload: CancelamentoVendaInput) {
   const response = await postJson<ApiResponse<'cancelamento', CancelamentoVendaRow>>(getApiUrl('/cancelamentos'), payload)
   return response.cancelamento ?? null

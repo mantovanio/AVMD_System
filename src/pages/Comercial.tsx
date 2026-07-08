@@ -52,7 +52,7 @@ import {
 } from '@/lib/nfse'
 import { getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { getApiUrl } from '@/lib/api'
-import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenTitularByCpf, updateAivenCommercialSaleStatus, type CancelamentoVendaInput } from '@/lib/commercialAiven'
+import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenTitularByCpf, updateAivenCommercialSaleStatus, updateVenda, type CancelamentoVendaInput, type UpdateVendaInput } from '@/lib/commercialAiven'
 import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
 import { useAuth } from '@/contexts/AuthContext'
 import { hasPerfil, isAdminProfile } from '@/lib/security'
@@ -616,6 +616,11 @@ export default function Comercial() {
   const [cancelandoVenda, setCancelandoVenda] = useState<VendaRow | null>(null)
   const [cancelForm, setCancelForm] = useState({ motivo: '', dentro_prazo_30d: true, custo_operacional: 0, observacoes: '' })
   const [cancelSaving, setCancelSaving] = useState(false)
+
+  // ── editar venda state ────────────────────────────────────────
+  const [editandoVenda, setEditandoVenda] = useState<VendaRow | null>(null)
+  const [editForm, setEditForm] = useState<UpdateVendaInput & { tipo_produto_label?: string }>({ id: '' })
+  const [editSaving, setEditSaving] = useState(false)
 
   // ── agenda state ─────────────────────────────────────────────
   const [agenda, setAgenda]             = useState<AgendaItem[]>([])
@@ -4774,6 +4779,7 @@ export default function Comercial() {
                             <VendaIconBtn title="Agendar"           icon={Calendar}      color="emerald" onClick={() => prepararAgendamento(v)} />
                             <VendaIconBtn title="Upload Documentos" icon={Upload}        color="orange"  onClick={() => openFeatureNotice('Upload de documentos', 'A estrutura de documentos financeiros existe, mas o fluxo de upload desta tela ainda não foi conectado.', 'Próximo bloco: ligar `documentos_financeiros` a esta venda.')} />
                             <VendaIconBtn title="Fatura"            icon={Receipt}       color="teal"    onClick={() => void abrirFaturaVenda(v)} />
+                            {isAdmin && <VendaIconBtn title="Editar Venda" icon={Edit3} color="blue" onClick={() => { const vo = v as unknown as Record<string, unknown>; setEditForm({ id: v.id, tipo_produto: v.tipo_produto, tipo_venda: v.tipo_venda ?? '', tipo_emissao: v.tipo_emissao ?? '', tabela_preco_id: v.tabela_preco_id ?? '', tabela_preco_item_id: v.tabela_preco_item_id ?? '', forma_pagamento_id: v.forma_pagamento_id ?? '', valor_venda: v.valor_venda ?? 0, desconto: (vo.desconto as number) ?? 0, observacoes: v.observacoes ?? '', data_vencimento: v.data_vencimento ?? '', vendedor_id: v.vendedor_id ?? null, contador_id: v.contador_id ?? null }); setEditandoVenda(v) }} />}
                             {isAdmin && <VendaIconBtn title="Cancelar Venda" icon={XCircle} color="red" onClick={() => setCancelandoVenda(v)} />}
                             <VendaIconBtn title="Excluir"           icon={Trash2}        color="red"     onClick={() => void excluirVenda(v.id)} />
                             {nfseAutomationSettings.permitir_emissao_manual_rapida && (
@@ -7006,6 +7012,121 @@ export default function Comercial() {
           <button type="button" title="Fechar" onClick={() => setToast(null)} className="ml-1 opacity-80 hover:opacity-100">
             <X size={14} />
           </button>
+        </div>,
+        document.body
+      )}
+
+      {/* ── Modal de Editar Venda ── */}
+      {editandoVenda && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40"
+          onClick={() => { if (!editSaving) setEditandoVenda(null) }}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Editar Venda</h2>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Produto</label>
+                <select value={editForm.tipo_produto ?? ''} onChange={e => setEditForm(f => ({ ...f, tipo_produto: e.target.value }))}
+                  className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800">
+                  {certificadosAtivos.length > 0 ? certificadosAtivos.map(c => (
+                    <option key={c.id} value={c.tipo}>{c.tipo}</option>
+                  )) : FALLBACK_CERTS.map(nome => (
+                    <option key={nome} value={nome}>{nome}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo Venda</label>
+                  <select value={editForm.tipo_venda ?? ''} onChange={e => setEditForm(f => ({ ...f, tipo_venda: e.target.value }))}
+                    className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800">
+                    <option value="">Selecione</option>
+                    {TIPO_VENDA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo Emissão</label>
+                  <select value={editForm.tipo_emissao ?? ''} onChange={e => setEditForm(f => ({ ...f, tipo_emissao: e.target.value }))}
+                    className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800">
+                    <option value="">Selecione</option>
+                    {TIPO_EMISSAO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Valor Venda (R$)</label>
+                  <input type="number" min={0} step={0.01} value={editForm.valor_venda ?? 0}
+                    onChange={e => setEditForm(f => ({ ...f, valor_venda: Number(e.target.value) }))}
+                    className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Desconto (R$)</label>
+                  <input type="number" min={0} step={0.01} value={editForm.desconto ?? 0}
+                    onChange={e => setEditForm(f => ({ ...f, desconto: Number(e.target.value) }))}
+                    className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tabela de Preço</label>
+                <select value={editForm.tabela_preco_id ?? ''} onChange={e => setEditForm(f => ({ ...f, tabela_preco_id: e.target.value }))}
+                  className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800">
+                  <option value="">Selecione</option>
+                  {tabelasAtivas.map(t => (
+                    <option key={t.id} value={t.id}>{t.nome}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Forma de Pagamento</label>
+                <select value={editForm.forma_pagamento_id ?? ''} onChange={e => setEditForm(f => ({ ...f, forma_pagamento_id: e.target.value }))}
+                  className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800">
+                  <option value="">Selecione</option>
+                  {pagamentosAtivos.map(p => (
+                    <option key={p.id} value={p.id}>{p.nome}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Observações</label>
+                <input type="text" value={editForm.observacoes ?? ''} onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))}
+                  className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data Vencimento</label>
+                <input type="date" value={editForm.data_vencimento?.slice(0, 10) ?? ''} onChange={e => setEditForm(f => ({ ...f, data_vencimento: e.target.value }))}
+                  className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800" />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button type="button" onClick={() => setEditandoVenda(null)} disabled={editSaving}
+                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50">Cancelar</button>
+              <button type="button" onClick={async () => {
+                setEditSaving(true)
+                const result = await updateVenda(editForm)
+                setEditSaving(false)
+                if (result) {
+                  showMsg('Venda atualizada!', 'ok')
+                  setEditandoVenda(null)
+                  void fetchVendasV2()
+                } else {
+                  showMsg('Erro ao atualizar venda.')
+                }
+              }} disabled={editSaving}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
+                {editSaving && <Loader2 size={14} className="animate-spin" />}
+                Salvar
+              </button>
+            </div>
+          </div>
         </div>,
         document.body
       )}

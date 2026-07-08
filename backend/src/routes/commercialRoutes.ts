@@ -4,6 +4,7 @@ import { CommercialRepository } from '../repositories/commercialRepository.js'
 
 type SalesRequest = { limit?: number }
 type SaleStatusRequest = { id: string; status: string }
+type SalePaymentStatusRequest = { id: string; status: string }
 type ScheduleRequest = { dataBase?: string | null; status?: string | null; agenteId?: string | null }
 type SaveAgendaRequest = {
   agendaId?: string | null
@@ -107,6 +108,13 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
   if (req.method === 'POST' && req.url === '/api/comercial/vendas/status') {
     const body = await readJson<SaleStatusRequest>(req)
     const venda = await repository.updateSaleStatus(body)
+    writeJson(res, 200, { ok: true, venda }, corsOrigin)
+    return true
+  }
+
+  if (req.method === 'POST' && req.url === '/api/comercial/vendas/pagamento') {
+    const body = await readJson<SalePaymentStatusRequest>(req)
+    const venda = await repository.updateSalePaymentStatus(body as { id: string; status: 'em_aberto' | 'pago' | 'recusado' })
     writeJson(res, 200, { ok: true, venda }, corsOrigin)
     return true
   }
