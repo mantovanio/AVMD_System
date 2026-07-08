@@ -6,6 +6,21 @@ type SalesRequest = { limit?: number }
 type SaleStatusRequest = { id: string; status: string }
 type SalePaymentStatusRequest = { id: string; status: string }
 type ScheduleRequest = { dataBase?: string | null; status?: string | null; agenteId?: string | null }
+type UpdateVendaRequest = {
+  id: string
+  tipo_produto?: string
+  tipo_venda?: string
+  tipo_emissao?: string
+  tabela_preco_id?: string
+  tabela_preco_item_id?: string
+  forma_pagamento_id?: string
+  valor_venda?: number
+  desconto?: number
+  observacoes?: string
+  data_vencimento?: string
+  vendedor_id?: string | null
+  contador_id?: string | null
+}
 type SaveAgendaRequest = {
   agendaId?: string | null
   vendaId?: string | null
@@ -115,6 +130,19 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
   if (req.method === 'POST' && req.url === '/api/comercial/vendas/pagamento') {
     const body = await readJson<SalePaymentStatusRequest>(req)
     const venda = await repository.updateSalePaymentStatus(body as { id: string; status: 'em_aberto' | 'pago' | 'recusado' })
+    writeJson(res, 200, { ok: true, venda }, corsOrigin)
+    return true
+  }
+
+  const vendaUpdateMatch = url.match(/^\/api\/comercial\/vendas\/([^/]+)$/)
+  if (method === 'PATCH' && vendaUpdateMatch) {
+    const body = await readJson<UpdateVendaRequest>(req)
+    body.id = vendaUpdateMatch[1]
+    const venda = await repository.updateVenda(body)
+    if (!venda) {
+      writeJson(res, 404, { ok: false, error: 'Venda nao encontrada.' }, corsOrigin)
+      return true
+    }
     writeJson(res, 200, { ok: true, venda }, corsOrigin)
     return true
   }

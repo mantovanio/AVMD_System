@@ -21,6 +21,22 @@ export type UpdateCommercialSalePaymentStatusInput = {
   status: 'em_aberto' | 'pago' | 'recusado'
 }
 
+export type UpdateVendaInput = {
+  id: string
+  tipo_produto?: string
+  tipo_venda?: string
+  tipo_emissao?: string
+  tabela_preco_id?: string
+  tabela_preco_item_id?: string
+  forma_pagamento_id?: string
+  valor_venda?: number
+  desconto?: number
+  observacoes?: string
+  data_vencimento?: string
+  vendedor_id?: string | null
+  contador_id?: string | null
+}
+
 export type SaveCommercialAgendaInput = {
   agendaId?: string | null
   vendaId?: string | null
@@ -108,6 +124,33 @@ export class CommercialRepository {
       })
     }
     return venda
+  }
+
+  async updateVenda(input: UpdateVendaInput) {
+    const allowedFields = [
+      'tipo_produto', 'tipo_venda', 'tipo_emissao',
+      'tabela_preco_id', 'tabela_preco_item_id', 'forma_pagamento_id',
+      'valor_venda', 'desconto', 'observacoes', 'data_vencimento',
+      'vendedor_id', 'contador_id',
+    ] as const
+    const setClauses: string[] = []
+    const params: unknown[] = [input.id]
+    let idx = 2
+    for (const field of allowedFields) {
+      const value = (input as Record<string, unknown>)[field]
+      if (value !== undefined) {
+        setClauses.push(`${field} = $${idx}`)
+        params.push(value)
+        idx++
+      }
+    }
+    if (setClauses.length === 0) throw new Error('Nenhum campo para atualizar.')
+    setClauses.push('updated_at = now()')
+    const result = await this.db.query<Record<string, unknown>>(
+      `update vendas_certificados set ${setClauses.join(', ')} where id = $1 returning *`,
+      params,
+    )
+    return result.rows[0] ?? null
   }
 
   async listSchedule(input: CommercialAgendaInput = {}) {
