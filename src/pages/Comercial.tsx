@@ -7171,9 +7171,9 @@ export default function Comercial() {
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-4 space-y-1">
               <p><span className="font-medium">Pedido:</span> {cancelandoVenda.pedido_numero ?? '—'}</p>
               <p><span className="font-medium">Cliente:</span> {(cancelandoVenda.cadastros_base as { nome?: string } | null)?.nome ?? cancelandoVenda.nome_faturamento ?? '—'}</p>
-              <p><span className="font-medium">Valor:</span> R$ {(cancelandoVenda.valor_venda ?? 0).toFixed(2).replace('.', ',')}</p>
-              <p><span className="font-medium">Comissão Vend.:</span> R$ {(cancelandoVenda.comissao_vendedor_valor ?? 0).toFixed(2).replace('.', ',')}</p>
-              <p><span className="font-medium">Comissão Agente:</span> R$ {(cancelandoVenda.comissao_agente_valor ?? 0).toFixed(2).replace('.', ',')}</p>
+              <p><span className="font-medium">Valor:</span> R$ {Number(cancelandoVenda.valor_venda ?? 0).toFixed(2).replace('.', ',')}</p>
+              <p><span className="font-medium">Comissão Vend.:</span> R$ {Number(cancelandoVenda.comissao_vendedor_valor ?? 0).toFixed(2).replace('.', ',')}</p>
+              <p><span className="font-medium">Comissão Agente:</span> R$ {Number(cancelandoVenda.comissao_agente_valor ?? 0).toFixed(2).replace('.', ',')}</p>
             </div>
 
             <div className="space-y-3">
