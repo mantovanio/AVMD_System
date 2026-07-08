@@ -536,9 +536,13 @@ export class CatalogRepository {
       ...metadataBase,
       estrutura_comercial: estruturaSnapshot,
     }
-    const payload = {
+    const payload: Record<string, unknown> = {
       ...input,
       metadata: metadataFinal,
+    }
+    if (!payload.pedido_numero) {
+      const seq = await this.db.query<{ nextval: string }>(`select nextval('vendas_pedido_numero_seq') as nextval`)
+      payload.pedido_numero = seq.rows[0].nextval
     }
 
     const fields = ['cadastro_base_id','empresa_id','vendedor_id','agente_registro_id',
