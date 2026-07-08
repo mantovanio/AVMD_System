@@ -491,6 +491,11 @@ export class AivenCheckoutRepository implements CheckoutRepository {
       `update vendas_certificados
        set pago = case when $2 then true else pago end,
            data_pagamento = case when $2 then now() else data_pagamento end,
+           status_pagamento = case
+             when $2 then 'pago'
+             when $5 = 'failed' then 'recusado'
+             else status_pagamento
+           end,
            status_venda = case when $2 then 'vendido' else status_venda end,
            metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
              'payment_charge', coalesce(metadata->'payment_charge', '{}'::jsonb) || jsonb_build_object(
