@@ -135,8 +135,16 @@ function chooseIntegrationByCanal(
   return target ?? integrations[0] ?? null
 }
 
-function calculateDiasRestantes(dataVencimento: string | null | undefined) {
-  const dateStr = String(dataVencimento ?? '').slice(0, 10)
+// Colunas Postgres do tipo `date` chegam como objeto Date (nao string) via node-postgres,
+// apesar do tipo RenovacaoRow declarar `string` - normaliza os dois formatos possiveis.
+function formatDateOnly(value: unknown): string | null {
+  if (!value) return null
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  return String(value).slice(0, 10) || null
+}
+
+function calculateDiasRestantes(dataVencimento: unknown) {
+  const dateStr = formatDateOnly(dataVencimento)
   if (!dateStr) return null
   const hoje = new Date()
   hoje.setHours(0, 0, 0, 0)
@@ -421,7 +429,7 @@ async function forwardInboundToN8n(
     pedido: renovacao?.pedido ?? null,
     protocolo: renovacao?.protocolo ?? null,
     tipo_certificado: renovacao?.tipo_certificado ?? null,
-    data_vencimento: renovacao?.data_vencimento?.slice(0, 10) ?? null,
+    data_vencimento: formatDateOnly(renovacao?.data_vencimento),
     dias_restantes: calculateDiasRestantes(renovacao?.data_vencimento),
     valor: renovacao?.valor ?? null,
     cpf: renovacao?.cpf ?? null,
