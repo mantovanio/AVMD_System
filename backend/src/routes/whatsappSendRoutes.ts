@@ -401,50 +401,43 @@ async function forwardInboundToN8n(
 ) {
   if (!config.n8nWebhookUrl || event.fromMe) return { forwarded: false, error: null as string | null }
 
-  console.log('[DEBUG forwardInboundToN8n] entrou na funcao')
-
   try {
+    const canal = inferCanalFromInstance(event.instanceName)
+    let renovacao: RenovacaoRow | null = null
+    let linkRenovacao: string | null = null
 
-  const canal = inferCanalFromInstance(event.instanceName)
-  let renovacao: RenovacaoRow | null = null
-  let linkRenovacao: string | null = null
-
-  if (canal === 'renovacao' && event.contactDigits) {
-    renovacao = await renovacaoRepo.findLatestByPhone(event.contactDigits)
-    console.log('[DEBUG forwardInboundToN8n] renovacao encontrada', Boolean(renovacao))
-    if (renovacao?.tipo_certificado) {
-      const linkProduto = await linksRepo.findBestByTipoCertificado(renovacao.tipo_certificado, renovacao.vendedor_fk_id)
-      linkRenovacao = linkProduto?.link_renovacao ?? null
+    if (canal === 'renovacao' && event.contactDigits) {
+      renovacao = await renovacaoRepo.findLatestByPhone(event.contactDigits)
+      if (renovacao?.tipo_certificado) {
+        const linkProduto = await linksRepo.findBestByTipoCertificado(renovacao.tipo_certificado, renovacao.vendedor_fk_id)
+        linkRenovacao = linkProduto?.link_renovacao ?? null
+      }
     }
-  }
 
-  const customerName = renovacao?.razao_social ?? renovacao?.cliente ?? event.pushName ?? null
-  const customerEmail = renovacao?.email ?? null
-  const messageText = event.content ?? ''
-  const context = {
-    tipo_fluxo: canal === 'renovacao' ? 'renovacao' : 'atendimento',
-    flow_type: canal === 'renovacao' ? 'renovacao' : 'atendimento',
-    channel: 'whatsapp',
-    source: 'evolution',
-    conversation_id: event.conversationId,
-    customer_phone: event.contactDigits,
-    customer_name: customerName,
-    customer_email: customerEmail,
-    renovacao_id: renovacao?.id ?? null,
-    pedido: renovacao?.pedido ?? null,
-    protocolo: renovacao?.protocolo ?? null,
-    tipo_certificado: renovacao?.tipo_certificado ?? null,
-    data_vencimento: formatDateOnly(renovacao?.data_vencimento),
-    dias_restantes: calculateDiasRestantes(renovacao?.data_vencimento),
-    valor: renovacao?.valor ?? null,
-    cpf: renovacao?.cpf ?? null,
-    cnpj: renovacao?.cnpj ?? null,
-    link_renovacao: linkRenovacao,
-  }
+    const customerName = renovacao?.razao_social ?? renovacao?.cliente ?? event.pushName ?? null
+    const customerEmail = renovacao?.email ?? null
+    const messageText = event.content ?? ''
+    const context = {
+      tipo_fluxo: canal === 'renovacao' ? 'renovacao' : 'atendimento',
+      flow_type: canal === 'renovacao' ? 'renovacao' : 'atendimento',
+      channel: 'whatsapp',
+      source: 'evolution',
+      conversation_id: event.conversationId,
+      customer_phone: event.contactDigits,
+      customer_name: customerName,
+      customer_email: customerEmail,
+      renovacao_id: renovacao?.id ?? null,
+      pedido: renovacao?.pedido ?? null,
+      protocolo: renovacao?.protocolo ?? null,
+      tipo_certificado: renovacao?.tipo_certificado ?? null,
+      data_vencimento: formatDateOnly(renovacao?.data_vencimento),
+      dias_restantes: calculateDiasRestantes(renovacao?.data_vencimento),
+      valor: renovacao?.valor ?? null,
+      cpf: renovacao?.cpf ?? null,
+      cnpj: renovacao?.cnpj ?? null,
+      link_renovacao: linkRenovacao,
+    }
 
-  console.log('[DEBUG forwardInboundToN8n] antes do fetch pro n8n')
-
-  {
     const response = await fetch(config.n8nWebhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -491,9 +484,8 @@ async function forwardInboundToN8n(
     }
 
     return { forwarded: true, error: null }
-  }
   } catch (error) {
-    console.error('[DEBUG forwardInboundToN8n] erro capturado', error instanceof Error ? error.stack : String(error))
+    console.error('[forwardInboundToN8n] falha ao encaminhar mensagem para o n8n', error instanceof Error ? error.message : String(error))
     return { forwarded: false, error: error instanceof Error ? error.message : String(error) }
   }
 }
@@ -548,13 +540,6 @@ export async function handleWhatsappSendRoutes(
   if (method === 'POST' && url === '/api/webhooks/evolution') {
     const body = await readJson<JsonRecord>(req)
     const normalized = normalizeEvolutionEvent(body)
-    console.log('[DEBUG evolution webhook]', JSON.stringify({
-      eventType: normalized.eventType,
-      content: normalized.content,
-      fromMe: normalized.fromMe,
-      contactDigits: normalized.contactDigits,
-      n8nWebhookUrlConfigured: Boolean(config.n8nWebhookUrl),
-    }))
 
     if (normalized.conversationId && /@(g\.us|broadcast|newsletter)$/i.test(normalized.conversationId)) {
       writeJson(res, 200, { ok: true, skipped: true, reason: 'non-personal chat' }, corsOrigin)
@@ -596,7 +581,6 @@ export async function handleWhatsappSendRoutes(
     })
 
     const forwarded = await forwardInboundToN8n(normalized, lead?.id ?? null, renovacaoRepo, linksRepo)
-    console.log('[DEBUG evolution webhook] forward result', JSON.stringify(forwarded))
 
     writeJson(res, 200, {
       ok: true,
