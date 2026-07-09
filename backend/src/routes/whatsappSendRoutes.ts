@@ -401,12 +401,17 @@ async function forwardInboundToN8n(
 ) {
   if (!config.n8nWebhookUrl || event.fromMe) return { forwarded: false, error: null as string | null }
 
+  console.log('[DEBUG forwardInboundToN8n] entrou na funcao')
+
+  try {
+
   const canal = inferCanalFromInstance(event.instanceName)
   let renovacao: RenovacaoRow | null = null
   let linkRenovacao: string | null = null
 
   if (canal === 'renovacao' && event.contactDigits) {
     renovacao = await renovacaoRepo.findLatestByPhone(event.contactDigits)
+    console.log('[DEBUG forwardInboundToN8n] renovacao encontrada', Boolean(renovacao))
     if (renovacao?.tipo_certificado) {
       const linkProduto = await linksRepo.findBestByTipoCertificado(renovacao.tipo_certificado, renovacao.vendedor_fk_id)
       linkRenovacao = linkProduto?.link_renovacao ?? null
@@ -437,10 +442,13 @@ async function forwardInboundToN8n(
     link_renovacao: linkRenovacao,
   }
 
-  try {
+  console.log('[DEBUG forwardInboundToN8n] antes do fetch pro n8n')
+
+  {
     const response = await fetch(config.n8nWebhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
       body: JSON.stringify({
         mensagem: messageText,
         whatsapp_lead: event.contactDigits,
@@ -483,7 +491,9 @@ async function forwardInboundToN8n(
     }
 
     return { forwarded: true, error: null }
+  }
   } catch (error) {
+    console.error('[DEBUG forwardInboundToN8n] erro capturado', error instanceof Error ? error.stack : String(error))
     return { forwarded: false, error: error instanceof Error ? error.message : String(error) }
   }
 }
