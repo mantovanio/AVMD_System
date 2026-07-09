@@ -530,6 +530,13 @@ export async function handleWhatsappSendRoutes(
   if (method === 'POST' && url === '/api/webhooks/evolution') {
     const body = await readJson<JsonRecord>(req)
     const normalized = normalizeEvolutionEvent(body)
+    console.log('[DEBUG evolution webhook]', JSON.stringify({
+      eventType: normalized.eventType,
+      content: normalized.content,
+      fromMe: normalized.fromMe,
+      contactDigits: normalized.contactDigits,
+      n8nWebhookUrlConfigured: Boolean(config.n8nWebhookUrl),
+    }))
 
     if (normalized.conversationId && /@(g\.us|broadcast|newsletter)$/i.test(normalized.conversationId)) {
       writeJson(res, 200, { ok: true, skipped: true, reason: 'non-personal chat' }, corsOrigin)
@@ -571,6 +578,7 @@ export async function handleWhatsappSendRoutes(
     })
 
     const forwarded = await forwardInboundToN8n(normalized, lead?.id ?? null, renovacaoRepo, linksRepo)
+    console.log('[DEBUG evolution webhook] forward result', JSON.stringify(forwarded))
 
     writeJson(res, 200, {
       ok: true,
