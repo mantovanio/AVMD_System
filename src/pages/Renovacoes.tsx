@@ -8,7 +8,7 @@ import {
 import { getApiBaseUrl } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
-import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
+import { queueEmailMessage, queueWhatsAppMessage, queueWhatsAppFollowUp, renderTemplate } from '@/lib/communication'
 import { openCentralChat } from '@/lib/chatNavigation'
 import {
   fetchRenovacoes as apiFetchRenovacoes,
@@ -890,6 +890,12 @@ export default function Renovacoes() {
     await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
     setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
     await criarLeadKanban(r)
+    void queueWhatsAppFollowUp({
+      to: r.telefone,
+      body: renderTemplate(`Olá {{primeiro_nome}}! Enviamos uma mensagem sobre a renovação do seu certificado {{tipo_certificado}}. Podemos ajudar?`, tplValues(r)),
+      renovacaoId: r.id,
+      round: 1,
+    }).catch(() => {})
     setSendingId(null)
     showMsg('WhatsApp enviado com sucesso!')
   }
@@ -912,6 +918,14 @@ export default function Renovacoes() {
     await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
     setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
     await criarLeadKanban(r)
+    if (r.telefone) {
+      void queueWhatsAppFollowUp({
+        to: r.telefone,
+        body: renderTemplate(`Olá {{primeiro_nome}}! Enviamos uma mensagem sobre a renovação do seu certificado {{tipo_certificado}}. Podemos ajudar?`, tplValues(r)),
+        renovacaoId: r.id,
+        round: 1,
+      }).catch(() => {})
+    }
     setSendingId(null)
     if (waResult?.error) showMsg('E-mail enviado, mas WhatsApp falhou: ' + waResult.error, 'err')
   }
@@ -962,6 +976,12 @@ export default function Renovacoes() {
         const agora = new Date().toISOString()
         await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
         setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
+        void queueWhatsAppFollowUp({
+          to: r.telefone!,
+          body: renderTemplate(`Olá {{primeiro_nome}}! Enviamos uma mensagem sobre a renovação do seu certificado {{tipo_certificado}}. Podemos ajudar?`, tplValues(r)),
+          renovacaoId: r.id,
+          round: 1,
+        }).catch(() => {})
       } else {
         erros++
         const motivo = result.error || 'falha no envio'
@@ -1058,6 +1078,12 @@ export default function Renovacoes() {
         const agora = new Date().toISOString()
         await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
         setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
+        void queueWhatsAppFollowUp({
+          to: r.telefone!,
+          body: renderTemplate(`Olá {{primeiro_nome}}! Enviamos uma mensagem sobre a renovação do seu certificado {{tipo_certificado}}. Podemos ajudar?`, tplValues(r)),
+          renovacaoId: r.id,
+          round: 1,
+        }).catch(() => {})
       } else {
         falhas++
       }

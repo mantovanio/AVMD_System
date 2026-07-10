@@ -35,6 +35,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { applyOutgoingSignature, DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings } from '@/lib/crmChatSettings'
 import { normalizeStructuredMessage } from '@/lib/messageFormatting'
 import { normalizePhoneBR } from '@/lib/phone'
+import MediaPreview from '@/components/MediaPreview'
 
 type QueueType = 'atendimento' | 'renovacao' | 'email' | 'agendamento'
 type DirectionType = 'incoming' | 'outgoing'
@@ -3193,6 +3194,7 @@ function MessageRow({
     const hasMedia = isImage || isAudio || isVideo || isDocument
     const mediaLabel = message.file_name || message.mensagem || (isAudio ? 'Audio' : isImage ? 'Imagem' : isVideo ? 'Video' : isDocument ? 'Arquivo' : '')
     const resolvedMediaUrl = resolveChatMediaUrl(message.media_url, conversation?.whatsapp_instance)
+    const [imagePreviewOpen, setImagePreviewOpen] = useState(false)
     const receiptStatus = String(message.delivery_status ?? '').trim().toLowerCase()
     const receiptLabel = receiptStatus === 'read'
       ? 'Lida'
@@ -3221,9 +3223,9 @@ function MessageRow({
             <span>{detailLabel}</span>
           </div>
           {isImage && resolvedMediaUrl ? (
-            <a href={resolvedMediaUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl">
+            <button type="button" onClick={() => setImagePreviewOpen(true)} className="block w-full overflow-hidden rounded-xl text-left">
               <img src={resolvedMediaUrl} alt={mediaLabel} className="max-w-full rounded-xl" />
-            </a>
+            </button>
           ) : isAudio && resolvedMediaUrl ? (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-violet-700">Audio anexado</p>
@@ -3253,6 +3255,13 @@ function MessageRow({
             )}
           </div>
         </div>
+      {isImage && resolvedMediaUrl && imagePreviewOpen && (
+        <MediaPreview
+          url={resolvedMediaUrl}
+          fileName={mediaLabel}
+          onClose={() => setImagePreviewOpen(false)}
+        />
+      )}
     </div>
   )
 }

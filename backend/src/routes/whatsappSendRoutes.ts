@@ -4,6 +4,7 @@ import { createAivenSqlClient } from '../db/aivenClient.js'
 import type { ExternalIntegrationRepository } from '../repositories/externalIntegrationRepository.js'
 import type { LinksProdutosRepository } from '../repositories/linksProdutosRepository.js'
 import type { RenovacaoRepository, RenovacaoRow } from '../repositories/renovacaoRepository.js'
+import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
 import { CommunicationEventRepository } from '../repositories/communicationEventRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
 
@@ -518,6 +519,7 @@ export async function handleWhatsappSendRoutes(
   integrationRepo: ExternalIntegrationRepository,
   renovacaoRepo: RenovacaoRepository,
   linksRepo: LinksProdutosRepository,
+  outboxRepo: CommunicationOutboxRepository,
   corsOrigin: string,
 ): Promise<boolean> {
   const url = req.url ?? ''
@@ -552,6 +554,12 @@ export async function handleWhatsappSendRoutes(
     }
 
     const lead = await upsertLeadFromEvolutionEvent(normalized)
+
+    if (!normalized.fromMe && normalized.contactDigits) {
+      try {
+        await outboxRepo.cancelPendingFollowUpsByPhone(normalized.contactDigits)
+      } catch { /* best effort */ }
+    }
 
     const payload: JsonRecord = {
       ...normalized.raw,

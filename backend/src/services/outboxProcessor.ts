@@ -15,6 +15,8 @@ function pickInstance(config: BackendConfig, payload: Record<string, unknown>) {
     : config.evolutionAtendimento
 }
 
+const MAX_FOLLOWUP_ROUNDS = 3
+
 export class OutboxProcessor {
   private intervalId: ReturnType<typeof setInterval> | null = null
 
@@ -96,6 +98,41 @@ export class OutboxProcessor {
       error: result.error ?? null,
       externalId: result.external_id ?? null,
     })
+
+    if (result.ok) {
+      await this.scheduleNextFollowUpIfNeeded(item)
+    }
+  }
+
+  private async scheduleNextFollowUpIfNeeded(item: { to_address: string; payload: Record<string, unknown> }) {
+    const tipo = typeof item.payload.tipo === 'string' ? item.payload.tipo : ''
+    if (tipo !== 'renovacao_followup_auto') return
+    const currentRound = typeof item.payload.followup_round === 'number' ? item.payload.followup_round : 1
+    if (currentRound >= MAX_FOLLOWUP_ROUNDS) return
+    const renovacaoId = typeof item.payload.renovacao_id === 'string' ? item.payload.renovacao_id : null
+    if (!renovacaoId) return
+    const nextRound = currentRound + 1
+    const delayMs = nextRound * 24 * 3600 * 1000
+    try {
+      await this.outboxRepo.create({
+        channel: 'whatsapp',
+        provider: String(item.payload.provider ?? 'evolution'),
+        to_address: item.to_address,
+        body: 'Olá! Ainda aguardamos sua resposta sobre a renovação do seu certificado. Podemos ajudar?',
+        payload: {
+          renovacao_id: renovacaoId,
+          canal: 'renovacao',
+          tipo: 'renovacao_followup_auto',
+          followup_round: nextRound,
+          instance_name: item.payload.instance_name ?? null,
+          integration_id: item.payload.integration_id ?? null,
+          whatsapp_engine: item.payload.whatsapp_engine ?? null,
+        },
+        scheduled_for: new Date(Date.now() + delayMs).toISOString(),
+      })
+    } catch (err) {
+      console.error('[OutboxProcessor] Erro ao agendar proximo follow-up:', err)
+    }
   }
 
   private async sendEmail(item: {

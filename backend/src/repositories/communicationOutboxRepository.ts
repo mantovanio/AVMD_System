@@ -34,8 +34,10 @@ export class CommunicationOutboxRepository {
     const scheduledFor = input.scheduled_for ?? new Date().toISOString()
     const renovacaoId = typeof payload.renovacao_id === 'string' ? payload.renovacao_id : null
     const tipo = typeof payload.tipo === 'string' ? payload.tipo : null
+    const followupRound = typeof payload.followup_round === 'number' ? payload.followup_round : null
 
     if (renovacaoId && tipo && tipo.startsWith('renovacao')) {
+      const isFollowup = tipo === 'renovacao_followup_auto' && followupRound !== null
       const existing = await this.db.query<OutboxRow>(
         `SELECT *
            FROM communication_outbox
@@ -44,11 +46,14 @@ export class CommunicationOutboxRepository {
             AND body = $3
             AND payload->>'renovacao_id' = $4
             AND payload->>'tipo' = $5
+            ${isFollowup ? 'AND (payload->>\'followup_round\')::int = $6' : ''}
             AND status IN ('pending', 'sent')
             AND scheduled_for >= NOW() - INTERVAL '2 hours'
           ORDER BY created_at DESC
           LIMIT 1`,
-        [input.channel, input.to_address, input.body, renovacaoId, tipo],
+        isFollowup
+          ? [input.channel, input.to_address, input.body, renovacaoId, tipo, followupRound]
+          : [input.channel, input.to_address, input.body, renovacaoId, tipo],
       )
       if (existing.rows[0]) return existing.rows[0]
     }
@@ -113,6 +118,19 @@ export class CommunicationOutboxRepository {
          AND scheduled_for > NOW()
        RETURNING id`,
       [renovacaoId, tipo],
+    )
+    return result.rows.length
+  }
+
+  async cancelPendingFollowUpsByPhone(phoneDigits: string): Promise<number> {
+    const result = await this.db.query<{ id: string }>(
+      `DELETE FROM communication_outbox
+       WHERE status = 'pending'
+         AND payload->>'tipo' = 'renovacao_followup_auto'
+         AND to_address LIKE '%' || $1 || '%'
+         AND scheduled_for > NOW()
+       RETURNING id`,
+      [phoneDigits],
     )
     return result.rows.length
   }

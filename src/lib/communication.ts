@@ -95,15 +95,23 @@ export function renderTemplate(template: string, values: Record<string, string |
   return template.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => String(values[key] ?? ''))
 }
 
+const FOLLOWUP_DELAY_MS: Record<number, number> = {
+  1: 24 * 3600 * 1000,
+  2: 48 * 3600 * 1000,
+  3: 72 * 3600 * 1000,
+}
+const MAX_FOLLOWUP_ROUNDS = 3
+
 export async function queueWhatsAppFollowUp(input: {
   to: string
   body: string
   renovacaoId: string
   instanceName?: string
-  delayHours?: number
+  round?: number
 }) {
-  const active = await loadActiveWhatsAppIntegration().catch(() => null)
-  const delayMs = (input.delayHours ?? 48) * 3600 * 1000
+  const round = Math.max(1, Math.min(input.round ?? 1, MAX_FOLLOWUP_ROUNDS))
+  const delayMs = FOLLOWUP_DELAY_MS[round] ?? FOLLOWUP_DELAY_MS[1]
+  const active = await loadActiveWhatsAppIntegration('renovacao').catch(() => null)
   return queueCommunication({
     channel: 'whatsapp',
     provider: communicationProviderFromWhatsAppEngine(active?.engine ?? null, active?.provider),
@@ -116,7 +124,37 @@ export async function queueWhatsAppFollowUp(input: {
       integration_id: active?.id ?? null,
       whatsapp_engine: active?.engine ?? null,
       tipo:          'renovacao_followup_auto',
-      followup_round: 1,
+      followup_round: round,
+    },
+    scheduledFor: new Date(Date.now() + delayMs).toISOString(),
+  })
+}
+
+export async function scheduleNextFollowUp(input: {
+  to: string
+  renovacaoId: string
+  currentRound: number
+  instanceName?: string
+}) {
+  const nextRound = input.currentRound + 1
+  if (nextRound > MAX_FOLLOWUP_ROUNDS) return null
+  const round = nextRound
+  const delayMs = FOLLOWUP_DELAY_MS[round] ?? FOLLOWUP_DELAY_MS[1]
+  const active = await loadActiveWhatsAppIntegration('renovacao').catch(() => null)
+  const body = `Olá! Ainda aguardamos sua resposta sobre a renovação do seu certificado. Podemos ajudar?`
+  return queueCommunication({
+    channel: 'whatsapp',
+    provider: communicationProviderFromWhatsAppEngine(active?.engine ?? null, active?.provider),
+    to: input.to,
+    body,
+    payload: {
+      renovacao_id:  input.renovacaoId,
+      canal: 'renovacao',
+      instance_name: input.instanceName ?? active?.instance_name ?? null,
+      integration_id: active?.id ?? null,
+      whatsapp_engine: active?.engine ?? null,
+      tipo:          'renovacao_followup_auto',
+      followup_round: round,
     },
     scheduledFor: new Date(Date.now() + delayMs).toISOString(),
   })

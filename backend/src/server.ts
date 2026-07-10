@@ -125,6 +125,7 @@ const server = createServer(async (req, res) => {
       externalIntegrationRepository,
       renovacaoRepository,
       linksProdutosRepository,
+      communicationOutboxRepository,
       config.corsOrigin,
     )
     if (handledWhatsapp) return
