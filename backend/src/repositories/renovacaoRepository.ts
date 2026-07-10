@@ -293,4 +293,75 @@ export class RenovacaoRepository {
     )
     return result.rows.length
   }
+
+  async handleSaleRenewal(input: {
+    cadastro_base_id: string | null
+    tipo_produto: string
+    certificado_id: string | null
+    cliente_nome: string | null
+    cpf: string | null
+    cnpj: string | null
+    email: string | null
+    telefone: string | null
+    valor_venda: number | null
+    venda_id: string
+  }): Promise<{ converted: boolean; newRenewalId: string | null }> {
+    let converted = false
+
+    if (input.cadastro_base_id && input.tipo_produto) {
+      const existing = await this.db.query<{ id: string }>(
+        `SELECT id FROM renovacoes
+         WHERE cadastro_base_id = $1
+           AND tipo_certificado = $2
+           AND deleted_at IS NULL
+           AND status NOT IN ('convertido', 'perdido')
+         ORDER BY data_vencimento DESC
+         LIMIT 1`,
+        [input.cadastro_base_id, input.tipo_produto],
+      )
+      if (existing.rows[0]) {
+        await this.update(existing.rows[0].id, { status: 'convertido', renovado: true })
+        converted = true
+      }
+    }
+
+    let validadeMeses = 12
+    if (input.certificado_id) {
+      const cert = await this.db.query<{ validade_meses: number | null }>(
+        `SELECT validade_meses FROM certificados WHERE id = $1 AND ativo = true LIMIT 1`,
+        [input.certificado_id],
+      )
+      if (cert.rows[0]?.validade_meses && cert.rows[0].validade_meses > 0) {
+        validadeMeses = cert.rows[0].validade_meses
+      }
+    }
+
+    const dataVencimento = new Date()
+    dataVencimento.setMonth(dataVencimento.getMonth() + validadeMeses)
+
+    const result = await this.db.query<{ id: string }>(
+      `INSERT INTO renovacoes (
+        data_vencimento, cliente, tipo_certificado, valor, status, renovado,
+        cpf, cnpj, email, telefone, venda_certificado_id, cadastro_base_id,
+        observacoes, snapshot_json
+      ) VALUES ($1, $2, $3, $4, 'pendente', false, $5, $6, $7, $8, $9, $10,
+        'Renovação automática criada na venda', $11)
+      RETURNING id`,
+      [
+        dataVencimento.toISOString().slice(0, 10),
+        input.cliente_nome ?? 'Cliente',
+        input.tipo_produto,
+        input.valor_venda ?? null,
+        input.cpf ?? null,
+        input.cnpj ?? null,
+        input.email ?? null,
+        input.telefone ?? null,
+        input.venda_id,
+        input.cadastro_base_id ?? null,
+        JSON.stringify({ origem: 'venda_automatica', validade_meses: validadeMeses }),
+      ],
+    )
+
+    return { converted, newRenewalId: result.rows[0]?.id ?? null }
+  }
 }
