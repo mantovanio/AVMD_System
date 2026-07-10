@@ -214,7 +214,7 @@ function normalizeEvolutionEvent(body: JsonRecord): NormalizedEvolutionEvent {
     instanceName: pickString(body, 'instance', 'instanceName') || pickString(data, 'instance', 'instanceName') || null,
     conversationId: rawConversationId || buildRemoteJid(contactDigits),
     contactDigits,
-    externalMessageId: pickString(body, 'messageId', 'externalId') || pickString(data, 'id', 'messageId') || pickString(key, 'id') || null,
+    externalMessageId: pickString(data, 'keyId') || pickString(body, 'messageId', 'externalId') || pickString(data, 'id', 'messageId') || pickString(key, 'id') || null,
     pushName: pickString(body, 'pushName') || pickString(data, 'pushName') || pickString(key, 'pushName') || null,
     fromMe: Boolean(body.fromMe ?? data?.fromMe ?? key?.fromMe ?? false),
     messageType: pickString(body, 'messageType') || pickString(data, 'messageType') || extracted.messageType,
@@ -551,7 +551,30 @@ export async function handleWhatsappSendRoutes(
     }
 
     if (normalized.eventType === 'messages.update') {
-      writeJson(res, 200, { ok: true, skipped: true, reason: 'status update' }, corsOrigin)
+      // Recibo de entrega/leitura: nao gera lead nem forward pro n8n, mas
+      // precisa ser gravado para o trigger fn_sync_communication_event
+      // atualizar delivery_status/read_at da mensagem original.
+      const receiptPayload: JsonRecord = {
+        ...normalized.raw,
+        content: normalized.content,
+        fromMe: normalized.fromMe,
+        messageId: normalized.externalMessageId,
+        messageType: normalized.messageType,
+        conversationId: normalized.conversationId,
+        documentKey: normalized.contactDigits,
+        instanceName: normalized.instanceName,
+        instance_name: normalized.instanceName,
+      }
+      await communicationEventRepository.create({
+        source: 'evolution',
+        event_type: normalized.eventType,
+        external_id: normalized.externalMessageId,
+        conversation_id: normalized.conversationId,
+        lead_id: null,
+        contact: normalized.contactDigits,
+        payload: receiptPayload,
+      })
+      writeJson(res, 200, { ok: true, receipt: true }, corsOrigin)
       return true
     }
 
