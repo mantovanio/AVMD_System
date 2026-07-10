@@ -573,6 +573,8 @@ export default function ChatInboxCRM() {
   const [kanbanOpen, setKanbanOpen] = useState(false)
   const [selectedAgentId, setSelectedAgentId] = useState('')
   const [draggedConversationId, setDraggedConversationId] = useState<string | null>(null)
+  const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(new Set())
+  const [selectionAnchors, setSelectionAnchors] = useState<Record<string, string>>({})
   const [humanMessage, setHumanMessage] = useState('')
   const [sendingHumanMessage, setSendingHumanMessage] = useState(false)
   const [emailSubject, setEmailSubject] = useState('')
@@ -1339,6 +1341,51 @@ export default function ChatInboxCRM() {
     }
   }
 
+  function toggleConversationSelection(listKey: string, itemId: string, orderedIds: string[], shiftKey: boolean) {
+    const anchorId = selectionAnchors[listKey]
+    setSelectedConversationIds(prev => {
+      const next = new Set(prev)
+      if (shiftKey && anchorId) {
+        const anchorIndex = orderedIds.indexOf(anchorId)
+        const clickedIndex = orderedIds.indexOf(itemId)
+        if (anchorIndex !== -1 && clickedIndex !== -1) {
+          const [start, end] = anchorIndex < clickedIndex ? [anchorIndex, clickedIndex] : [clickedIndex, anchorIndex]
+          for (let i = start; i <= end; i += 1) next.add(orderedIds[i])
+          return next
+        }
+      }
+      if (next.has(itemId)) next.delete(itemId)
+      else next.add(itemId)
+      return next
+    })
+    setSelectionAnchors(prev => ({ ...prev, [listKey]: itemId }))
+  }
+
+  function clearConversationSelection() {
+    setSelectedConversationIds(new Set())
+    setSelectionAnchors({})
+  }
+
+  async function bulkDeleteSelectedConversations() {
+    const ids = Array.from(selectedConversationIds)
+    if (ids.length === 0) return
+    if (!confirm(`Tem certeza que deseja apagar ${ids.length} conversa${ids.length > 1 ? 's' : ''}? Essa acao nao pode ser desfeita.`)) return
+    try {
+      const response = await fetch(getApiUrl('/chat/crm/conversations/bulk'), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      const data = await response.json()
+      if (!data.ok) throw new Error(data.error || 'Falha ao apagar conversas selecionadas')
+      clearConversationSelection()
+      await loadConversations(false)
+      if (selectedId && ids.includes(selectedId)) setSelectedId(null)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   async function saveContactFromConversation(conversationId: string) {
     const conv = activeConversations.find(c => c.id === conversationId) || selectedConversation
     if (!conv) return
@@ -2000,6 +2047,16 @@ export default function ChatInboxCRM() {
     closedConversations.filter(matchesOperationalFilters)
   ), [closedConversations, queueFilter, humanFilter, humanOverrideIds])
 
+  const filteredConversationIds = useMemo(
+    () => filteredConversations.map(item => item.id),
+    [filteredConversations],
+  )
+
+  const filteredClosedConversationIds = useMemo(
+    () => filteredClosedConversations.map(item => item.id),
+    [filteredClosedConversations],
+  )
+
   const visibleConversations = useMemo(() => (
     search.trim() || showClosedConversations
       ? [...filteredConversations, ...filteredClosedConversations]
@@ -2191,6 +2248,11 @@ export default function ChatInboxCRM() {
                     {unreadTotal} nao lidas
                   </div>
                 </div>
+                <BulkActionBar
+                  count={selectedConversationIds.size}
+                  onClear={clearConversationSelection}
+                  onDelete={() => void bulkDeleteSelectedConversations()}
+                />
               </div>
 
                 <div ref={inboxListRef} className="h-[calc(100%-73px)] overflow-y-auto p-3">
@@ -2206,6 +2268,8 @@ export default function ChatInboxCRM() {
                       onArchive={() => void updateConversationStatusById(item.id, 'arquivado')}
                       onDelete={() => void deleteConversation(item.id)}
                       onSaveContact={() => void saveContactFromConversation(item.id)}
+                      checked={selectedConversationIds.has(item.id)}
+                      onCheckToggle={event => toggleConversationSelection('inbox-ativas', item.id, filteredConversationIds, event.shiftKey)}
                     />
                   ))}
                   {filteredConversations.length === 0 && <EmptyState text="Nenhuma conversa encontrada com os filtros atuais." />}
@@ -2230,6 +2294,8 @@ export default function ChatInboxCRM() {
                             closed
                             onDelete={() => void deleteConversation(item.id)}
                             onSaveContact={() => void saveContactFromConversation(item.id)}
+                            checked={selectedConversationIds.has(item.id)}
+                            onCheckToggle={event => toggleConversationSelection('inbox-encerradas', item.id, filteredClosedConversationIds, event.shiftKey)}
                           />
                         ))}
                         {filteredClosedConversations.length === 0 && <EmptyState text="Nenhuma conversa encerrada com os filtros atuais." compact />}
@@ -2905,14 +2971,21 @@ export default function ChatInboxCRM() {
       {kanbanOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]">
           <div className="flex h-[min(92vh,960px)] w-[min(98vw,1720px)] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Kanban operacional</h3>
                 <p className="text-sm text-slate-500">Janela ampla para organizar as filas. Ao clicar no card, voce volta direto para o chat.</p>
               </div>
-              <button type="button" onClick={closeKanban} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                <X size={15} /> Fechar
-              </button>
+              <div className="flex flex-1 items-center justify-end gap-4">
+                <BulkActionBar
+                  count={selectedConversationIds.size}
+                  onClear={clearConversationSelection}
+                  onDelete={() => void bulkDeleteSelectedConversations()}
+                />
+                <button type="button" onClick={closeKanban} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                  <X size={15} /> Fechar
+                </button>
+              </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden p-4">
@@ -2953,6 +3026,8 @@ export default function ChatInboxCRM() {
                             onDragEnd={() => setDraggedConversationId(null)}
                             onDelete={() => void deleteConversation(item.id)}
                             onSaveContact={() => void saveContactFromConversation(item.id)}
+                            checked={selectedConversationIds.has(item.id)}
+                            onCheckToggle={event => toggleConversationSelection(`kanban:${column.key}`, item.id, column.items.map(i => i.id), event.shiftKey)}
                           />
                         ))}
                         {column.items.length === 0 && <EmptyState text="Sem conversas" compact />}
@@ -3005,6 +3080,39 @@ function SummaryCard({
   )
 }
 
+function BulkActionBar({
+  count,
+  onClear,
+  onDelete,
+}: {
+  count: number
+  onClear: () => void
+  onDelete: () => void
+}) {
+  if (count === 0) return null
+  return (
+    <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2">
+      <span className="text-sm font-semibold text-sky-900">{count} selecionada{count > 1 ? 's' : ''}</span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onClear}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+        >
+          <X size={13} /> Limpar selecao
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+        >
+          <Trash2 size={13} /> Apagar selecionadas
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function ConversationCard({
   item,
   selected,
@@ -3015,6 +3123,8 @@ function ConversationCard({
   onArchive,
   onDelete,
   onSaveContact,
+  checked = false,
+  onCheckToggle,
 }: {
   item: ConversationRow
   selected: boolean
@@ -3025,6 +3135,8 @@ function ConversationCard({
   onArchive?: () => void
   onDelete?: () => void
   onSaveContact?: () => void
+  checked?: boolean
+  onCheckToggle?: (event: React.MouseEvent<HTMLButtonElement>) => void
 }) {
     const urgency = getUrgencyMeta(item, human)
     const hasCrmCustomer = hasRegisteredCustomer(item)
@@ -3037,6 +3149,16 @@ function ConversationCard({
     return (
       <div className={`w-full rounded-2xl border px-4 py-3 text-left transition ${selectedClass}`}>
         <div className="flex items-start justify-between gap-3">
+          {onCheckToggle && (
+            <button
+              type="button"
+              onClick={event => { event.stopPropagation(); onCheckToggle(event) }}
+              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${checked ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-300 bg-white text-transparent hover:border-sky-400'}`}
+              title="Selecionar conversa"
+            >
+              <Check size={13} />
+            </button>
+          )}
           <button type="button" onClick={onClick} className="min-w-0 flex-1 text-left">
             <p className="truncate text-sm font-semibold text-slate-900">{normalizeDisplaySenderName(item.cliente_nome || item.nome_crm) || contactPhone(item)}</p>
             <p className="mt-1 truncate text-xs text-slate-500">{contactPhone(item)}</p>
@@ -3130,6 +3252,8 @@ function ConversationMiniCard({
   onDragEnd,
   onDelete,
   onSaveContact,
+  checked = false,
+  onCheckToggle,
 }: {
   item: ConversationRow
   selected: boolean
@@ -3141,12 +3265,24 @@ function ConversationMiniCard({
   onDragEnd?: () => void
   onDelete?: () => void
   onSaveContact?: () => void
+  checked?: boolean
+  onCheckToggle?: (event: React.MouseEvent<HTMLButtonElement>) => void
 }) {
     const urgency = getUrgencyMeta(item, human)
     const hasCrmCustomer = !!item.crm_customer_id
     return (
       <div className={`group relative w-full rounded-xl border ${selected ? 'border-slate-900 bg-slate-900 text-white' : 'border-white/70 bg-white hover:border-slate-300'}`}>
-        <button type="button" onClick={onClick} draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd} className="w-full px-3 py-3 text-left">
+        {onCheckToggle && (
+          <button
+            type="button"
+            onClick={event => { event.stopPropagation(); onCheckToggle(event) }}
+            className={`absolute left-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-md border transition ${checked ? 'border-sky-500 bg-sky-500 text-white' : 'border-slate-300 bg-white/90 text-transparent hover:border-sky-400'}`}
+            title="Selecionar conversa"
+          >
+            <Check size={12} />
+          </button>
+        )}
+        <button type="button" onClick={onClick} draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd} className={`w-full py-3 text-left ${onCheckToggle ? 'pl-7 pr-3' : 'px-3'}`}>
           <div className="flex items-center justify-between gap-2">
             <p className="truncate text-sm font-semibold">{normalizeDisplaySenderName(item.cliente_nome || item.nome_crm) || contactPhone(item)}</p>
             <div className="flex items-center gap-2">

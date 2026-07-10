@@ -1252,6 +1252,29 @@ export async function handleChatRoutes(
     return true
   }
 
+  if (method === 'DELETE' && url === '/api/chat/crm/conversations/bulk') {
+    const body = await readJson<{ ids?: string[] }>(req)
+    const ids = Array.isArray(body.ids)
+      ? body.ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      : []
+    if (ids.length === 0) {
+      writeJson(res, 400, { ok: false, error: 'ids obrigatorio.' }, corsOrigin)
+      return true
+    }
+    if (ids.length > 200) {
+      writeJson(res, 400, { ok: false, error: 'Maximo de 200 conversas por chamada.' }, corsOrigin)
+      return true
+    }
+    await db.query('DELETE FROM crm_chat_messages WHERE conversation_id = ANY($1::uuid[])', [ids])
+    await db.query('DELETE FROM crm_chat_assignments WHERE conversation_id::text = ANY($1::text[])', [ids])
+    const result = await db.query<{ id: string }>(
+      'DELETE FROM crm_chat_conversations WHERE id = ANY($1::uuid[]) RETURNING id',
+      [ids],
+    )
+    writeJson(res, 200, { ok: true, deleted: result.rows.length }, corsOrigin)
+    return true
+  }
+
   if (method === 'DELETE' && url.startsWith('/api/chat/crm/conversations/')) {
     const id = url.replace('/api/chat/crm/conversations/', '')
     if (!id) {
