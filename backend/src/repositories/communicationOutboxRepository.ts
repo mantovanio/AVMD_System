@@ -71,6 +71,39 @@ export class CommunicationOutboxRepository {
     return result.rows[0]
   }
 
+  async listPending(limit = 10): Promise<OutboxRow[]> {
+    const result = await this.db.query<OutboxRow>(
+      `UPDATE communication_outbox
+          SET status = 'processing',
+              updated_at = NOW()
+        WHERE id IN (
+          SELECT id
+            FROM communication_outbox
+           WHERE status = 'pending'
+             AND scheduled_for <= NOW()
+           ORDER BY scheduled_for ASC
+           LIMIT $1
+             FOR UPDATE SKIP LOCKED
+        )
+        RETURNING *`,
+      [limit],
+    )
+    return result.rows
+  }
+
+  async markProcessed(input: { id: string; status: string; error?: string | null; externalId?: string | null }): Promise<void> {
+    await this.db.query(
+      `UPDATE communication_outbox
+          SET status = $2,
+              sent_at = CASE WHEN $2 = 'sent' THEN NOW() ELSE sent_at END,
+              error = $3,
+              external_id = coalesce($4, external_id),
+              updated_at = NOW()
+        WHERE id = $1`,
+      [input.id, input.status, input.error ?? null, input.externalId ?? null],
+    )
+  }
+
   async cancelPendingByRenovacaoId(renovacaoId: string, tipo: string): Promise<number> {
     const result = await this.db.query<{ id: string }>(
       `DELETE FROM communication_outbox

@@ -1,4 +1,5 @@
 import type { AivenSqlClient } from '../db/aivenClient.js'
+import { normalizePhoneBR } from '../utils/phone.js'
 
 export interface RenovacaoRow {
   id: string
@@ -134,6 +135,8 @@ export class RenovacaoRepository {
 
   async findLatestByPhone(phoneDigits: string): Promise<RenovacaoRow | null> {
     if (!phoneDigits) return null
+    const normalized = normalizePhoneBR(phoneDigits)
+    if (!normalized) return null
     const result = await this.db.query<RenovacaoRow>(
       `SELECT *
          FROM renovacoes
@@ -148,7 +151,7 @@ export class RenovacaoRepository {
           ABS(EXTRACT(EPOCH FROM (data_vencimento::timestamp - CURRENT_DATE::timestamp))) ASC,
           updated_at DESC
         LIMIT 1`,
-      [phoneDigits],
+      [normalized],
     )
     return result.rows[0] ?? null
   }

@@ -6,7 +6,7 @@ function cleanBaseUrl(value: string) {
   return value.replace(/\/$/, '')
 }
 
-async function sendEvolutionMessage(
+export async function sendEvolutionMessage(
   instance: EvolutionInstanceConfig,
   to: string,
   body: string,

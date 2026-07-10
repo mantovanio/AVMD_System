@@ -272,45 +272,11 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.AVMD_API_BASE_URL }}/integrations/events",
+        "url": "={{ $env.AVMD_API_BASE_URL }}/communication/outbox",
         "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "x-n8n-secret",
-              "value": "certiid-n8n-2026"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "_action",
-              "value": "send_message_by_instance"
-            },
-            {
-              "name": "instance_name",
-              "value": "={{ $('setar_informacoes1').first().json.instance }}"
-            },
-            {
-              "name": "number",
-              "value": "={{ $('setar_informacoes1').first().json.msg.whatsapp_lead }}"
-            },
-            {
-              "name": "content",
-              "value": "={{ $json.output }}"
-            },
-            {
-              "name": "lead_id",
-              "value": "={{ $('setar_informacoes1').first().json.leadId }}"
-            }
-          ]
-        },
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ channel: 'whatsapp', provider: 'n8n', to_address: $('setar_informacoes1').first().json.msg.whatsapp_lead || '00000000000', subject: null, body: $json.output, payload: { source: 'clara', lead_id: $('setar_informacoes1').first().json.leadId || null, instance: $('setar_informacoes1').first().json.instance || null, conversation_id: $('setar_informacoes1').first().json.leadId || null, pushName: $('setar_informacoes1').first().json.pushName || null } }) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",

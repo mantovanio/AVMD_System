@@ -33,6 +33,7 @@ import { CommunicationEventRepository } from './repositories/communicationEventR
 import { ConfigRepository } from './repositories/configRepository.js'
 import { FileRepository } from './repositories/fileRepository.js'
 import { ScheduleAutomationRepository } from './repositories/scheduleAutomationRepository.js'
+import { OutboxProcessor } from './services/outboxProcessor.js'
 import { handleRenovacaoRoutes } from './routes/renovacaoRoutes.js'
 import { handleCommunicationTemplateRoutes } from './routes/communicationTemplateRoutes.js'
 import { handleAutomationRulesRoutes } from './routes/automationRulesRoutes.js'
@@ -71,6 +72,7 @@ const scheduleAutomationRepository = new ScheduleAutomationRepository(db)
 const permissoesRepository = new PermissoesRepository(db)
 const integrationRegistry = createIntegrationRegistry(config)
 const integrationEventProcessor = new IntegrationEventProcessor(integrationEventRepository, integrationRegistry)
+const outboxProcessor = new OutboxProcessor(communicationOutboxRepository, config)
 const checkoutPaymentService = new CheckoutPaymentService(checkoutRepository)
 const portalRepository = new PortalRepository(db, checkoutRepository, commercialRepository)
 const service = new CheckoutService(checkoutRepository, checkoutPaymentService, profileRepository, config.clerkSecretKey)
@@ -199,6 +201,8 @@ const server = createServer(async (req, res) => {
     writeJson(res, 500, { ok: false, error: message }, config.corsOrigin)
   }
 })
+
+outboxProcessor.start()
 
 server.listen(config.port, () => {
   process.stdout.write(`Backend Aiven do checkout escutando na porta ${config.port}\n`)

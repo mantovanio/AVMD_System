@@ -1,0 +1,324 @@
+# Mapa Mental N8N — Rotas, Gatilhos e Conexões
+
+> Use este mapa para entender o que aciona o que, para onde cada rota leva,
+> e quais serviços externos estão envolvidos. Mantenha atualizado.
+
+---
+
+## Legenda
+
+```
+[Webhook]     → gatilho HTTP POST/GET
+[Schedule]    → gatilho temporal
+[Workflow]    → sub-workflow chamado por outro
+[DB]          → tabela no banco (Postgres)
+[API]         → endpoint do backend AVMD
+[Ext]         → serviço externo
+```
+
+---
+
+## 1. FLUXO PRINCIPAL — MENSAGEM WHATSAPP
+
+### Caminho da mensagem (da Evolution API até a resposta)
+
+```
+Cliente envia WhatsApp
+       │
+       ▼
+[Ext] Evolution API
+  POST /api/webhooks/evolution
+       │
+       ▼
+[API] backend: evolutionWebhookRoutes.ts
+  ├─ normaliza evento
+  ├─ upsert lead
+  ├─ registra communication_event
+  └─ forwardInboundToN8n()
+       │
+       ▼  POST N8N_WEBHOOK_URL
+[Webhook] /webhook/avmd-clara-inbound
+       │
+       ▼
+Workflow: AVMD - Clara Inbound Router
+  ├─ Normalize Clara Message → infere intent por regex
+  └─ Dispatch To Clara Handler → POST p/ handler específico
+       │
+       ├── intent = seguir_renovacao
+       │   └─► [Webhook] /webhook/avmd-clara-renovacao
+       │       └─ Workflow: AVMD - Clara Renovacao Handler
+       │           ├─ [API] POST /api/communication/outbox     (enfileira WhatsApp)
+       │           └─ [API] POST /api/integrations/events      (log)
+       │
+       ├── intent = cancelar|reagendar|enviar_documentos|link_videoconferencia|seguir_agendamento
+       │   └─► [Webhook] /webhook/avmd-clara-agendamento
+       │       └─ Workflow: AVMD - Clara Agendamento Handler
+       │           ├─ [API] POST /api/communication/outbox
+       │           └─ [API] POST /api/integrations/events
+       │
+       ├── intent = link_resend
+       │   └─► [Webhook] /webhook/avmd-clara-link-resender
+       │       └─ Workflow: AVMD - Clara Link Resender
+       │           ├─ [API] POST /api/communication/outbox
+       │           └─ [API] POST /api/integrations/events
+       │
+       └── intent = human_handoff
+           └─► [Webhook] /webhook/avmd-clara-human-handoff
+               └─ Workflow: AVMD - Clara Human Handoff
+                   ├─ [API] POST /api/automation/clara-handoff  (registra transferência)
+                   ├─ [API] POST /api/communication/outbox
+                   └─ [API] POST /api/integrations/events
+```
+
+### Regras de intent (regex no router)
+
+| Intent | Regex | Handler |
+|---|---|---|
+| `human_handoff` | `/humano\|atendente\|pessoa\|suporte\|falar com/` | avmd-clara-human-handoff |
+| `link_resend` | `/link\|boleto\|pagamento\|pix\|2 via\|segunda via\|reenvia/` | avmd-clara-link-resender |
+| `cancelar_agendamento` | `/cancelar\|cancelamento/` | avmd-clara-agendamento |
+| `reagendar_agendamento` | `/reagendar\|remarcar\|trocar horario/` | avmd-clara-agendamento |
+| `enviar_documentos` | `/documento\|documentos\|anexo\|arquivo\|rg\|cnh\|contrato/` | avmd-clara-agendamento |
+| `link_videoconferencia` | `/videoconferencia\|videochamada\|link da reuniao/` | avmd-clara-agendamento |
+| `seguir_renovacao` | `/renovar\|renovacao\|quero seguir\|continuar/` (e flow != agendamento) | avmd-clara-renovacao |
+| `seguir_agendamento` | `/agendamento\|agendar\|horario/` (ou flow == agendamento) | avmd-clara-agendamento |
+
+---
+
+## 2. WORKFLOWS LEGADOS CertiID (ATIVOS)
+
+Estes workflows compartilham o mesmo webhook de entrada que o router novo,
+mas são independentes — tratam mensagens do fluxo CertiID.
+
+### Arquitetura
+
+```
+[Webhook] /webhook/avmd-clara-inbound
+       │
+       ▼
+Workflow: 1- Clara | CertiID v2  (~40 nodes)
+  │
+  ├── Mídia: áudio → [Ext] OpenAI Whisper (transcrição)
+  │           imagem → [Ext] OpenAI GPT-4o-mini vision
+  │
+  ├── Redis debounce (buffer de mensagens por número, 1s wait)
+  │
+  ├── [Ext] OpenAI GPT-4.1-mini → agente principal (LangChain)
+  │   ├─ tools → Workflow: 6- consultaCRM | CertiID
+  │   │            └─ [DB] crm_customers (SELECT)
+  │   ├─ tools → Workflow: 2- sobreEmpresa | CertiID
+  │   │            └─ [Ext] GPT-4o-mini (primary) / Claude 3.5 Haiku (fallback)
+  │   ├─ tools → Workflow: 3- renovaCertiID | CertiID
+  │   │            └─ [Ext] GPT-4o-mini (primary) / Claude 3.5 Haiku (fallback)
+  │   ├─ tools → Workflow: 4- suporteCertiID | CertiID
+  │   │            └─ [Ext] GPT-4o-mini (primary) / Claude Opus 4.5 (fallback)
+  │   └─ tools → Workflow: 6- consultaCRM | CertiID (já listado)
+  │
+  ├── Se resposta contém "TRANSFERINDO":
+  │   └─ Workflow: 5- alertaHumano | CertiID
+  │       └─ [Ext] Evolution API → alertas para equipe (3 níveis, 10min intervalo)
+  │
+  └── Workflow: 3- CRM | CertiID (pós-atendimento)
+      └─ [DB] crm_customers (INSERT/UPDATE)
+      └─ [DB] crm_chat_conversations (INSERT/UPDATE)
+      └─ [DB] crm_chat_messages (INSERT)
+      └─ [DB] n8n_chat_histories (memória LangChain)
+```
+
+### Workflows filhos (tools)
+
+| Workflow | Gatilho | O que faz | LLMs | DB |
+|---|---|---|---|---|
+| `6- consultaCRM` | Workflow (tool) | Busca cliente por telefone em crm_customers | — | crm_customers |
+| `2- sobreEmpresa` | Workflow (tool) | Responde dúvidas institucionais sobre a CertiID | GPT-4o-mini → Claude 3.5 Haiku | n8n_chat_histories |
+| `3- renovaCertiID` | Workflow (tool) | Orienta sobre renovação de certificado | GPT-4o-mini → Claude 3.5 Haiku | n8n_chat_histories |
+| `4- suporteCertiID` | Workflow (tool) | Suporte técnico (videoconferência, token A3, eCAC) | GPT-4o-mini → Claude Opus 4.5 | n8n_chat_histories |
+| `5- alertaHumano` | Workflow (tool) | Envia 3 alertas via Evolution (0min, 10min, 20min) | — | — |
+| `3- CRM` | Workflow (tool) | Persiste conversa no CRM (mensagens, atualiza resumo) | GPT-4.1-mini (resumo) | crm_customers, crm_chat_conversations, crm_chat_messages, n8n_chat_histories |
+
+---
+
+## 3. AGENDAMENTO DE EMAIL
+
+```
+[Webhook] /webhook/avmd-schedule-email
+       │
+       ▼
+Workflow: AVMD - Schedule Email Router
+  ├─ Normalize Schedule Email
+  │   └─ infere source: certifast | certiid | certisign (por assunto/remetente)
+  └─ [API] POST /api/automation/schedule-email
+       │
+       ▼
+[API] backend: scheduleAutomationRoutes.ts
+  ├─ infere source
+  ├─ verifica duplicata (external_id / message_id)
+  ├─ cria schedule_email_events
+  ├─ busca venda/agendamento correspondente
+  ├─ atualiza kanban de schedule
+  ├─ upsert validation schedule
+  ├─ atualiza status da venda
+  ├─ sincroniza lead kanban
+  └─ gera mensagens na outbox (WhatsApp + Email)
+```
+
+### Fontes de email (inferidas por padrão no subject/remetente)
+
+| Source | Origem | Exemplo de assunto |
+|---|---|---|
+| `certifast` | Plataforma Certifast | "Novo pedido - 26390716" |
+| `certiid` | Plataforma CertiID | "Novo agendamento - 17706" |
+| `certisign` | Certisign (via subject) | — |
+
+---
+
+## 4. EMAIL SEND (SMTP)
+
+```
+[API] backend → POST N8N_EMAIL_SEND_URL
+       │
+       ▼
+[Webhook] /webhook/avmd-email-send
+       │
+       ▼
+Workflow: AVMD - Email Send (SMTP)
+  └─ [Ext] SMTP contato@certifast.com.br
+```
+
+---
+
+## 5. TIMEOUT CHECKER (conversas paradas)
+
+```
+[Schedule] a cada 2 minutos
+       │
+       ▼
+Workflow: AVMD - Timeout Checker
+  └─ [API] POST /api/chat/crm/check-timeout
+```
+
+---
+
+## 6. LEGACY — Email → CRM Kanban (NÃO REATIVAR)
+
+```
+[Schedule] IMAP Polling (caixa de email)
+       │
+       ▼
+Workflow: AVMD - Email to CRM Kanban
+  ├─ Lê emails da caixa de entrada
+  ├─ classifica: "Novo pedido" vs "Cancelamento"
+  ├─ [API] POST /api/chat/crm/events (cria conversa no kanban)
+  └─ [Webhook] POST /webhook/avmd-clara-inbound (só agendados)
+```
+
+> ⚠️ **Este workflow está documentado como NÃO REATIVAR** porque duplica entradas no CRM Chat.
+
+---
+
+## 7. TABELAS DE BANCO USADAS
+
+| Tabela | Workflows | Operação |
+|---|---|---|
+| `crm_customers` | consultaCRM, CertiID v2, 3-CRM | SELECT, INSERT, UPDATE |
+| `crm_chat_conversations` | CertiID v2, 3-CRM | SELECT, INSERT, UPDATE |
+| `crm_chat_messages` | CertiID v2, 3-CRM | INSERT |
+| `n8n_chat_histories` | CertiID v2, 2-sobreEmpresa, 3-renova, 4-suporte, 3-CRM | INSERT, DELETE (reset) |
+| `schedule_email_events` | Schedule Email Router (via backend) | INSERT, UPDATE |
+| `communication_outbox` | Clara handlers, Schedule Email Router (via backend) | INSERT |
+| `integration_events` | Clara handlers | INSERT |
+| `leads_contabilidade` | Clara Human Handoff (via backend) | INSERT/UPDATE |
+
+---
+
+## 8. SERVIÇOS EXTERNOS
+
+| Serviço | URL | Usado por | Finalidade |
+|---|---|---|---|
+| OpenAI | api.openai.com | CertiID v2, 2, 3, 4, 3-CRM | LLM (GPT-4.1-mini, GPT-4o-mini, Whisper, Vision) |
+| OpenRouter | openrouter.ai | 2, 3, 4 (fallback) | LLM fallback (Claude 3.5 Haiku, Opus 4.5) |
+| Evolution API | api.mantovan.com.br | CertiID v2, alertaHumano, backend | Gateway WhatsApp |
+| Redis | — | CertiID v2 | Debounce de mensagens |
+| Postgres (Aiven) | — | Todos workflows CertiID + backend | Banco principal |
+| SMTP | contato@certifast.com.br | avmd-email-send | Envio de email |
+
+---
+
+## 9. VARIÁVEIS DE AMBIENTE (n8n)
+
+| Variável | Valor | Usado em |
+|---|---|---|
+| `AVMD_API_BASE_URL` | `https://api.certiid.mantovan.com.br/api` | Todos handlers |
+| `N8N_CLARA_INBOUND_URL` | `https://auto.mantovan.com.br/webhook/avmd-clara-inbound` | Router |
+| `N8N_CLARA_RENOVACAO_URL` | `https://auto.mantovan.com.br/webhook/avmd-clara-renovacao` | Renovacao Handler |
+| `N8N_CLARA_AGENDAMENTO_URL` | `https://auto.mantovan.com.br/webhook/avmd-clara-agendamento` | Agendamento Handler |
+| `N8N_CLARA_LINK_URL` | `https://auto.mantovan.com.br/webhook/avmd-clara-link-resender` | Link Resender |
+| `N8N_CLARA_HUMAN_URL` | `https://auto.mantovan.com.br/webhook/avmd-clara-human-handoff` | Human Handoff |
+| `AVMD_SCHEDULE_API_URL` | `https://api.certiid.mantovan.com.br/api/automation/schedule-email` | Schedule Router |
+| `N8N_SCHEDULE_ROUTER_URL` | `https://auto.mantovan.com.br/webhook/avmd-schedule-email` | Schedule Router |
+
+### No backend (.env)
+
+| Variável | Valor |
+|---|---|
+| `N8N_WEBHOOK_URL` | `https://auto.mantovan.com.br/webhook/avmd-clara-inbound` |
+| `N8N_EMAIL_SEND_URL` | `https://auto.mantovan.com.br/webhook/avmd-email-send` |
+
+---
+
+## 10. ARQUIVOS DE WORKFLOW NO REPO
+
+| Arquivo | Workflow | Status |
+|---|---|---|
+| `n8n/avmd-clara-inbound-router.workflow.json` | AVMD - Clara Inbound Router | ⏸ inativo no repo |
+| `n8n/avmd-clara-renovacao-handler.workflow.json` | AVMD - Clara Renovacao Handler | ⏸ inativo no repo |
+| `n8n/avmd-clara-agendamento-handler.workflow.json` | AVMD - Clara Agendamento Handler | ⏸ inativo no repo |
+| `n8n/avmd-clara-link-resender.workflow.json` | AVMD - Clara Link Resender | ⏸ inativo no repo |
+| `n8n/avmd-clara-human-handoff.workflow.json` | AVMD - Clara Human Handoff | ⏸ inativo no repo |
+| `n8n/avmd-clara-inbound-smoketest.workflow.json` | Smoke Test (manual) | ⏸ inativo no repo |
+| `n8n/avmd-schedule-email-router.workflow.json` | AVMD - Schedule Email Router | ⏸ inativo no repo |
+| `n8n/avmd-schedule-email-smoketest-certiid.workflow.json` | Smoke Test CertiID | ⏸ inativo no repo |
+| `n8n/avmd-schedule-email-smoketest-certifast.workflow.json` | Smoke Test Certifast | ⏸ inativo no repo |
+| `n8n/avmd-email-crm-kanban.workflow.json` | Email → CRM Kanban (LEGACY) | ⏸ não reativar |
+| `n8n/avmd-email-send.workflow.json` | AVMD - Email Send (SMTP) | ⏸ inativo no repo |
+| `n8n/avmd-timeout-checker.workflow.json` | AVMD - Timeout Checker | ⏸ inativo no repo |
+| `n8n/avmd-event-receiver.workflow.json` | AVMD - Event Receiver | ⏸ inativo no repo |
+| `n8n/avmd-clara-logger.workflow.json` | Clara Logger (DEPRECATED) | ⏸ inativo no repo |
+| `n8n/avmd-clara-certiid-handler.workflow.json` | 1- Clara \| CertiID v2 | ✅ ativo |
+| `n8n/avmd-consultaCRM-CertiID.json` | 6- consultaCRM \| CertiID | ✅ ativo |
+| `n8n/sobreEmpresa-CertiID.json` | 2- sobreEmpresa \| CertiID | ✅ ativo |
+| `n8n/renovaCertiID-CertiID.json` | 3- renovaCertiID \| CertiID | ✅ ativo |
+| `n8n/suporteCertiID-CertiID.json` | 4- suporteCertiID \| CertiID | ✅ ativo |
+| `n8n/alertaHumano-CertiID.json` | 5- alertaHumano \| CertiID | ✅ ativo |
+| `n8n/CRM-CertiID.json` | 3- CRM \| CertiID | ✅ ativo |
+| `n8n/certisign-recebimento-agendamento.workflow.json` | (vazio — 0 bytes) | 🗑 pode remover |
+
+> **Nota:** Workflows com `active: false` no repo são ativados manualmente na UI do n8n.
+> Os workflows CertiID (1- a 6-) estão `active: true` diretamente no JSON.
+
+---
+
+## 11. SCRIPTS DE MANUTENÇÃO NO REPO
+
+| Script | O que faz |
+|---|---|
+| `n8n/migrate-workflows.mjs` | Substitui nós Supabase por Postgres nos workflows CertiID |
+| `n8n/migrate-supabase-to-postgres.mjs` | Outra versão da migração Supabase → Postgres |
+| `n8n/fix-system-prompts.mjs` | Remove referências à tool `catalogo_ia` dos system prompts |
+| `scripts/import-n8n-workflows.mjs` | Importa workflows do diretório `n8n/` para o n8n via API |
+
+---
+
+## 12. PONTOS DE ATENÇÃO PARA MANUTENÇÃO
+
+1. **Webhook compartilhado**: O router novo e o workflow CertiID v2 usam o **mesmo webhook** `/webhook/avmd-clara-inbound`. A diferenciação de fluxo é feita internamente por cada workflow.
+
+2. **Active flag offline**: Os workflows no repo estão com `active: false`. A ativação real é feita pela UI do n8n. **Sempre verificar o status real na UI antes de mexer.**
+
+3. **IMAP legacy**: O workflow `avmd-email-crm-kanban` faz polling IMAP e **duplica entradas** se reativado. Não religar.
+
+4. **Supabase residual**: O workflow CertiID v2 ainda referencia Supabase em alguns nós (`buscarResumoCliente`, `ZerarCRMCustomer`). A migração para Postgres está em andamento.
+
+5. **Redis**: O debounce no CertiID v2 usa Redis. Se o Redis cair, mensagens podem ser processadas duplicadas.
+
+6. **Fallback LLM**: Cada tool tem fallback via OpenRouter. Se OpenAI cair, o sistema degrada para Claude (mais lento).
