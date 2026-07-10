@@ -1,8 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { readJson, writeJson } from '../utils/http.js'
 import { CatalogRepository } from '../repositories/catalogRepository.js'
+import { RenovacaoRepository } from '../repositories/renovacaoRepository.js'
 
-export async function handleCatalogRoutes(req: IncomingMessage, res: ServerResponse, repo: CatalogRepository, corsOrigin: string): Promise<boolean> {
+export async function handleCatalogRoutes(req: IncomingMessage, res: ServerResponse, repo: CatalogRepository, renovacaoRepo: RenovacaoRepository | null, corsOrigin: string): Promise<boolean> {
   const method = req.method ?? ''
   const url = req.url ?? ''
 
@@ -367,6 +368,22 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   if (method === 'POST' && url === '/api/comercial/vendas/criar') {
     const body = await readJson<Record<string, unknown>>(req)
     const venda = await repo.createVenda(body)
+
+    if (renovacaoRepo && venda?.id) {
+      void renovacaoRepo.handleSaleRenewal({
+        cadastro_base_id: String(body.cadastro_base_id ?? ''),
+        tipo_produto: String(body.tipo_produto ?? ''),
+        certificado_id: body.certificado_id ? String(body.certificado_id) : null,
+        cliente_nome: String(body.nome_faturamento ?? body.cliente ?? ''),
+        cpf: body.documento_faturamento ? String(body.documento_faturamento) : null,
+        cnpj: null,
+        email: String(body.email_faturamento ?? ''),
+        telefone: String(body.telefone_faturamento ?? ''),
+        valor_venda: Number(body.valor_venda ?? 0),
+        venda_id: String(venda.id),
+      }).catch(err => console.error('[catalog] handleSaleRenewal failed', err))
+    }
+
     writeJson(res, 200, { ok: true, venda }, corsOrigin)
     return true
   }

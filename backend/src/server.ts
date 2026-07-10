@@ -177,7 +177,7 @@ const server = createServer(async (req, res) => {
     )
     if (handledChat) return
 
-    const handledCatalog = await handleCatalogRoutes(req, res, catalogRepository, config.corsOrigin)
+    const handledCatalog = await handleCatalogRoutes(req, res, catalogRepository, renovacaoRepository, config.corsOrigin)
     if (handledCatalog) return
 
     const handledCommercial = await handleCommercialRoutes(req, res, commercialRepository, config.corsOrigin)
