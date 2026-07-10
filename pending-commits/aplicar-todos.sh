@@ -43,6 +43,7 @@ for PATCH in "${PATCHES[@]}"; do
     echo "  (dry-run — nao aplicado)"
   else
     PENDING_QUEUE_APPLY=1 git apply "${PATCH}"
+    rm "${PATCH}"
     git add -A
     BUILD_MSG="${SUBJECT}"
     if [ -n "${HASH_LINE}" ]; then
@@ -51,7 +52,6 @@ for PATCH in "${PATCHES[@]}"; do
 ${HASH_LINE}"
     fi
     PENDING_QUEUE_APPLY=1 git commit -m "${BUILD_MSG}"
-    rm "${PATCH}"
     echo "  Aplicado e commitado. Patch removido da fila."
   fi
 done
