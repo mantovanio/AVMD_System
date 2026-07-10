@@ -20,8 +20,7 @@ if [ -n "${PENDING_QUEUE_APPLY:-}" ]; then exit 0; fi
 # Nada staged → deixa passar
 if [ -z "$(git diff --cached)" ]; then exit 0; fi
 
-HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "${HOOK_DIR}/../.." && pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
 ENFILEIRAR="${REPO_ROOT}/pending-commits/enfileirar.sh"
 
 if [ ! -f "$ENFILEIRAR" ]; then
