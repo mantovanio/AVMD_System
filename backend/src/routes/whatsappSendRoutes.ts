@@ -167,7 +167,9 @@ function extractMessageContent(message: JsonRecord | null) {
     }
   }
 
-  const entry = Object.entries(message).find(([, value]) => value !== null && value !== undefined)
+  const entry = Object.entries(message).find(([key, value]) =>
+    value !== null && value !== undefined && key !== 'messageContextInfo',
+  )
   const messageType = entry?.[0] ?? 'conversation'
   const payload = asRecord(entry?.[1])
   const context = asRecord(payload?.contextInfo)
