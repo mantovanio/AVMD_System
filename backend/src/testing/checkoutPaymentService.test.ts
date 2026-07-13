@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { createHmac } from 'node:crypto'
 import { CheckoutPaymentService } from '../services/checkoutPaymentService.js'
 
 test('gera cobranca mock quando integracoes reais estao bloqueadas', async () => {
@@ -43,6 +44,7 @@ test('gera cobranca mock quando integracoes reais estao bloqueadas', async () =>
       telefone: '31999999999',
       documento: '12345678901',
     },
+    fiscal: { cep: '01001000', logradouro: 'Praça da Sé', numero: '1', bairro: 'Sé', cidade: 'São Paulo', uf: 'SP' },
   })
 
   assert.equal(result.ok, true)
@@ -106,6 +108,7 @@ test('cria preferencia do Mercado Pago e devolve link de pagamento', async () =>
   const result = await service.createChargeForSale({
     vendaId: 'venda-mp', formaPagamentoId: 'mp1', valor: 149.9, descricao: 'Certificado A1',
     comprador: { nome: 'Cliente', email: 'cliente@teste.com', telefone: '11999999999', documento: '12345678901' },
+    fiscal: { cep: '01001000', logradouro: 'Praça da Sé', numero: '1', bairro: 'Sé', cidade: 'São Paulo', uf: 'SP' },
   })
   assert.equal(result.ok, true)
   assert.equal(result.externalId, 'pref-1')
@@ -136,4 +139,70 @@ test('consulta pagamento do Mercado Pago antes de confirmar webhook', async () =
   assert.equal(result.paid, true)
   assert.equal(applied[0].vendaId, 'venda-mp')
   assert.equal(applied[0].gateway, 'mercado_pago')
+})
+
+test('cria order Pix e retorna QR Code para o checkout', async () => {
+  const service = new CheckoutPaymentService({
+    async getCheckoutPaymentMethodConfig() {
+      return {
+        id: 'mp-pix', nome: 'Pix - Mercado Pago', codigo: 'pix', tipo: 'pix', gateway: 'mercado_pago', ambiente: 'sandbox',
+        client_id: null, secret_key: null, webhook_url: null, provider_base_url: null, provider_api_token: 'APP_USR-token',
+        provider_metadata: {}, runtime: { modo_teste_geral: true, bloquear_integracoes_reais: false, aviso_checkout: '' },
+      }
+    },
+    async attachPaymentChargeToSale() {},
+    async applyPaymentWebhook() {},
+  } as never, async (url, init) => {
+    assert.match(String(url), /\/v1\/orders$/)
+    const body = JSON.parse(String(init?.body))
+    assert.equal(body.processing_mode, 'automatic')
+    assert.equal(body.transactions.payments[0].payment_method.id, 'pix')
+    return new Response(JSON.stringify({
+      id: 'ORD-PIX-1', status: 'action_required', status_detail: 'waiting_transfer',
+      transactions: { payments: [{ id: 'PAY-PIX-1', status: 'action_required', payment_method: { id: 'pix', type: 'bank_transfer', qr_code: 'copia-cola', qr_code_base64: 'base64', ticket_url: 'https://mp/pix' } }] },
+    }), { status: 201 })
+  })
+  const result = await service.createChargeForSale({
+    vendaId: 'venda-pix', formaPagamentoId: 'mp-pix', valor: 50, descricao: 'Certificado',
+    comprador: { nome: 'Cliente Teste', email: 'cliente@teste.com', telefone: '11999999999', documento: '12345678901' },
+    fiscal: { cep: '01001000', logradouro: 'Praça da Sé', numero: '1', bairro: 'Sé', cidade: 'São Paulo', uf: 'SP' },
+  })
+  assert.equal(result.status, 'pending')
+  assert.equal(result.externalId, 'ORD-PIX-1')
+  assert.equal(result.details?.qr_code, 'copia-cola')
+})
+
+test('valida HMAC e consulta order antes de confirmar pagamento', async () => {
+  const applied: Array<Record<string, unknown>> = []
+  const secret = 'webhook-secret'
+  const dataId = 'ORD01ABC'
+  const requestId = 'request-1'
+  const ts = '1742505638683'
+  const manifest = `id:${dataId.toLowerCase()};request-id:${requestId};ts:${ts};`
+  const signature = createHmac('sha256', secret).update(manifest).digest('hex')
+  const service = new CheckoutPaymentService({
+    async getCheckoutPaymentMethodConfig() { return null },
+    async getCheckoutPaymentMethodConfigByGateway() {
+      return {
+        id: 'mp', nome: 'MP', codigo: 'pix', tipo: 'pix', gateway: 'mercado_pago', ambiente: 'sandbox',
+        client_id: null, secret_key: null, webhook_url: null, provider_base_url: null, provider_api_token: 'APP_USR-token',
+        provider_metadata: {}, webhook_secret: secret,
+        runtime: { modo_teste_geral: true, bloquear_integracoes_reais: false, aviso_checkout: '' },
+      }
+    },
+    async attachPaymentChargeToSale() {},
+    async applyPaymentWebhook(input: unknown) { applied.push(input as Record<string, unknown>) },
+  } as never, async url => {
+    assert.match(String(url), /\/v1\/orders\/ORD01ABC$/)
+    return new Response(JSON.stringify({
+      id: dataId, external_reference: 'venda-1', status: 'processed', status_detail: 'accredited',
+      transactions: { payments: [{ id: 'PAY-1', status: 'processed', status_detail: 'accredited' }] },
+    }), { status: 200 })
+  })
+  const result = await service.applyMercadoPagoOrderWebhook({
+    payload: { type: 'order', data: { id: dataId } }, dataId,
+    xSignature: `ts=${ts},v1=${signature}`, xRequestId: requestId,
+  })
+  assert.equal(result.paid, true)
+  assert.equal(applied[0].vendaId, 'venda-1')
 })

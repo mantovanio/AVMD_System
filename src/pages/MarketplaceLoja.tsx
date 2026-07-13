@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { CardPayment, initMercadoPago } from '@mercadopago/sdk-react'
 import {
   AlertTriangle,
   Building2,
@@ -278,6 +279,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [focusedField, setFocusedField] = useState<string | null>(null)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutSuccess, setCheckoutSuccess] = useState<string | null>(null)
+  const [paymentDetails, setPaymentDetails] = useState<NonNullable<import('@/lib/checkoutContract').CheckoutSubmitResponse['payment_details']> | null>(null)
   const [isSchedulingOpen, setIsSchedulingOpen] = useState(false)
   const [selectedSlotKey, setSelectedSlotKey] = useState('')
   const [draftSlotKey, setDraftSlotKey] = useState('')
@@ -353,6 +355,18 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     () => produtosAtivos.find(item => item.id === selectedItemId) ?? null,
     [produtosAtivos, selectedItemId]
   )
+  const pagamentoSelecionado = useMemo(
+    () => pagamentos.find(item => item.id === form.forma_pagamento_id) ?? null,
+    [form.forma_pagamento_id, pagamentos]
+  )
+  const isMercadoPagoCard = pagamentoSelecionado?.gateway === 'mercado_pago'
+    && /card|cart/i.test(`${pagamentoSelecionado.codigo ?? ''} ${pagamentoSelecionado.tipo ?? ''} ${pagamentoSelecionado.nome}`)
+
+  useEffect(() => {
+    if (isMercadoPagoCard && pagamentoSelecionado?.public_key) {
+      initMercadoPago(pagamentoSelecionado.public_key, { locale: 'pt-BR' })
+    }
+  }, [isMercadoPagoCard, pagamentoSelecionado?.public_key])
 
   useEffect(() => {
     if (!loja) return
@@ -710,11 +724,19 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     setIsSchedulingOpen(false)
   }
 
-  async function iniciarCheckout() {
+  async function iniciarCheckout(card?: {
+    token: string
+    payment_method_id: string
+    payment_type_id: 'credit_card' | 'debit_card'
+    installments: number
+    identification_type: string
+    identification_number: string
+  }) {
     const errors = validateForm(form, itemSelecionado)
     setFieldErrors(errors)
     setError(null)
     setCheckoutSuccess(null)
+    setPaymentDetails(null)
 
     if (Object.keys(errors).length > 0) {
       const firstFieldId = Object.keys(errors)[0]
@@ -764,6 +786,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
         },
         pagamento: {
           forma_pagamento_id: form.forma_pagamento_id,
+          card: card ?? null,
         },
         acesso: {
           senha: form.acesso.senha,
@@ -778,17 +801,20 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
 
       const mensagens = [result.message, result.access_message].filter(Boolean)
       setCheckoutSuccess(mensagens.join(' ') || 'Compra concluída com sucesso.')
+      setPaymentDetails(result.payment_details ?? null)
       if (result.redirect_url) {
         window.open(result.redirect_url, '_blank', 'noopener,noreferrer')
       }
       setFieldErrors({})
-      setForm({
-        ...INITIAL_FORM,
-        comprador: {
-          ...INITIAL_FORM.comprador,
-          tipo: form.comprador.tipo,
-        },
-      })
+      if (!result.payment_details || result.payment_details.kind === 'card' || result.payment_details.kind === 'link') {
+        setForm({
+          ...INITIAL_FORM,
+          comprador: {
+            ...INITIAL_FORM.comprador,
+            tipo: form.comprador.tipo,
+          },
+        })
+      }
       setSelectedSlotKey('')
       setDraftSlotKey('')
       setSelectedDay(slotsByDay[0]?.day ?? '')
@@ -1402,6 +1428,29 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
               {fieldErrors['forma_pagamento_id'] && (
                 <p className="mt-3 text-sm text-red-600">{fieldErrors['forma_pagamento_id']}</p>
               )}
+              {isMercadoPagoCard && pagamentoSelecionado?.public_key && itemSelecionado && (
+                <div className="mt-5 rounded-[24px] border border-slate-200 bg-white p-4">
+                  <CardPayment
+                    initialization={{ amount: Number(itemSelecionado.valor) }}
+                    onSubmit={async formData => {
+                      const paymentType = (formData as unknown as { payment_type_id?: string }).payment_type_id
+                      await iniciarCheckout({
+                        token: String(formData.token ?? ''),
+                        payment_method_id: String(formData.payment_method_id ?? ''),
+                        payment_type_id: paymentType === 'debit_card' ? 'debit_card' : 'credit_card',
+                        installments: Number(formData.installments ?? 1),
+                        identification_type: String(formData.payer?.identification?.type ?? 'CPF'),
+                        identification_number: String(formData.payer?.identification?.number ?? onlyDigits(form.comprador.cpf_cnpj)),
+                      })
+                    }}
+                    onReady={() => undefined}
+                    onError={brickError => setError(brickError instanceof Error ? brickError.message : 'Falha ao carregar o formulário seguro do cartão.')}
+                  />
+                </div>
+              )}
+              {isMercadoPagoCard && !pagamentoSelecionado?.public_key && (
+                <p className="mt-3 text-sm text-amber-700">A Public Key do Mercado Pago ainda não foi configurada.</p>
+              )}
             </SectionCard>
             )}
 
@@ -1580,10 +1629,30 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
               </div>
             )}
 
+            {paymentDetails?.kind === 'pix' && (
+              <div className="rounded-[24px] border border-blue-200 bg-white px-4 py-5 text-sm shadow-sm">
+                <p className="font-semibold text-slate-900">Pix gerado</p>
+                {paymentDetails.qr_code_base64 && <img className="mx-auto my-4 h-56 w-56" alt="QR Code Pix" src={`data:image/png;base64,${paymentDetails.qr_code_base64}`} />}
+                {paymentDetails.qr_code && (
+                  <button type="button" onClick={() => void navigator.clipboard.writeText(paymentDetails.qr_code!)} className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white">Copiar código Pix</button>
+                )}
+                {paymentDetails.ticket_url && <a className="mt-3 block text-center text-blue-700 underline" href={paymentDetails.ticket_url} target="_blank" rel="noreferrer">Abrir instruções do Pix</a>}
+              </div>
+            )}
+
+            {paymentDetails?.kind === 'boleto' && (
+              <div className="rounded-[24px] border border-amber-200 bg-white px-4 py-5 text-sm shadow-sm">
+                <p className="font-semibold text-slate-900">Boleto gerado</p>
+                {paymentDetails.digitable_line && <p className="my-3 break-all rounded-xl bg-slate-50 p-3 text-xs">{paymentDetails.digitable_line}</p>}
+                {paymentDetails.digitable_line && <button type="button" onClick={() => void navigator.clipboard.writeText(paymentDetails.digitable_line!)} className="w-full rounded-xl bg-amber-600 px-4 py-3 font-semibold text-white">Copiar linha digitável</button>}
+                {paymentDetails.ticket_url && <a className="mt-3 block text-center text-amber-700 underline" href={paymentDetails.ticket_url} target="_blank" rel="noreferrer">Abrir boleto</a>}
+              </div>
+            )}
+
             <button
               type="button"
               onClick={() => void iniciarCheckout()}
-              disabled={checkoutLoading || !itemSelecionado}
+              disabled={checkoutLoading || !itemSelecionado || isMercadoPagoCard}
               className="hidden xl:inline-flex w-full items-center justify-center rounded-[22px] px-5 py-4 bg-[#ea7b18] text-white text-sm font-semibold hover:bg-[#cf6611] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#fde4cf]"
             >
               {checkoutLoading ? (
@@ -1608,7 +1677,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
           <button
             type="button"
             onClick={() => void iniciarCheckout()}
-            disabled={checkoutLoading || !itemSelecionado}
+            disabled={checkoutLoading || !itemSelecionado || isMercadoPagoCard}
             className="inline-flex items-center justify-center rounded-2xl px-4 py-3 bg-[#ea7b18] text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed min-w-[160px]"
           >
             {checkoutLoading ? (

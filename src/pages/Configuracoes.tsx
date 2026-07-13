@@ -4162,6 +4162,7 @@ type PaymentMethodConfig = {
   client_id: string
   secret_key: string
   webhook_url: string
+  webhook_secret: string
   observacoes: string
 }
 
@@ -4178,11 +4179,11 @@ const DEFAULT_PAYMENT_RUNTIME: PaymentRuntimeConfig = {
 }
 
 const PAYMENT_METHOD_PRESETS: PaymentMethodConfig[] = [
-  { id: 'safe2pay',      label: 'Safe2Pay',      categoria: 'gateway', enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', observacoes: '' },
-  { id: 'mercado_pago', label: 'Mercado Pago', categoria: 'gateway', enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', observacoes: '' },
-  { id: 'itau',         label: 'Itaú',         categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', observacoes: '' },
-  { id: 'inter',        label: 'Inter',        categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', observacoes: '' },
-  { id: 'c6',           label: 'C6 Bank',      categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', observacoes: '' },
+  { id: 'safe2pay',      label: 'Safe2Pay',      categoria: 'gateway', enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
+  { id: 'mercado_pago', label: 'Mercado Pago', categoria: 'gateway', enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
+  { id: 'itau',         label: 'Itaú',         categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
+  { id: 'inter',        label: 'Inter',        categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
+  { id: 'c6',           label: 'C6 Bank',      categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
 ]
 
 // ── Aba Pagamentos (Safe2Pay) ─────────────────────────────────
@@ -4288,7 +4289,6 @@ function AbaPagamentos() {
       const safe2payGateway = merged.find(item => item.id === 'safe2pay')
       if (safe2payGateway) {
         safe2payGateway.enabled = !!data
-        safe2payGateway.is_default = true
         safe2payGateway.ambiente = (data?.metadata?.is_sandbox === true ? 'sandbox' : 'producao') as PaymentMethodEnv
         safe2payGateway.client_id = data?.metadata?.is_sandbox === true
           ? String(metadata.api_key_sandbox ?? safe2payGateway.client_id ?? '')
@@ -4307,7 +4307,7 @@ function AbaPagamentos() {
         return {
           ...item,
           enabled: !!data,
-          is_default: true,
+          is_default: item.is_default,
           ambiente: (data?.metadata?.is_sandbox === true ? 'sandbox' : 'producao') as PaymentMethodEnv,
         }
       })
@@ -4365,7 +4365,7 @@ function AbaPagamentos() {
       return {
         ...method,
         enabled: method.enabled || !!(prodKey || sandboxKey || integration),
-        is_default: method.is_default || true,
+        is_default: method.is_default,
         ambiente: (isSandbox ? 'sandbox' : 'producao') as PaymentMethodEnv,
         client_id: isSandbox
           ? (editingSandbox ? sandboxKey.trim() : String(meta.api_key_sandbox ?? method.client_id ?? ''))
@@ -4672,8 +4672,9 @@ function AbaPagamentos() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <ConfigInput label="Client ID / Chave pública" value={selectedMethod.client_id} onChange={v => updateMethod(selectedMethod.id, { client_id: v })} placeholder="Ex: APP_USR..." />
-              <ConfigInput label="Token secreto" value={selectedMethod.secret_key} onChange={v => updateMethod(selectedMethod.id, { secret_key: v })} placeholder="Ex: EAA..." />
+              <ConfigInput type="password" label="Token secreto" value={selectedMethod.secret_key} onChange={v => updateMethod(selectedMethod.id, { secret_key: v })} placeholder="Ex: APP_USR..." />
               <ConfigInput label="Webhook / retorno" value={selectedMethod.webhook_url} onChange={v => updateMethod(selectedMethod.id, { webhook_url: v })} placeholder="https://..." />
+              <ConfigInput type="password" label="Chave secreta do webhook" value={selectedMethod.webhook_secret} onChange={v => updateMethod(selectedMethod.id, { webhook_secret: v })} placeholder="Gerada no painel do Mercado Pago" />
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-gray-500 dark:text-gray-400">Ambiente</span>
                 <select

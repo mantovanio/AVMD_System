@@ -63,6 +63,14 @@ export type CheckoutSubmitRequest = {
   }
   pagamento: {
     forma_pagamento_id: string
+    card?: {
+      token: string
+      payment_method_id: string
+      payment_type_id: 'credit_card' | 'debit_card'
+      installments: number
+      identification_type: string
+      identification_number: string
+    } | null
   }
   acesso: {
     senha: string
@@ -83,6 +91,18 @@ export type CheckoutSubmitResponse = {
   protocolo_numero?: string | null
   redirect_url?: string | null
   payment_status?: string | null
+  payment_details?: {
+    gateway: string
+    order_id?: string | null
+    payment_id?: string | null
+    kind?: 'pix' | 'boleto' | 'card' | 'link' | null
+    ticket_url?: string | null
+    qr_code?: string | null
+    qr_code_base64?: string | null
+    digitable_line?: string | null
+    barcode_content?: string | null
+    expires_at?: string | null
+  } | null
   access_status?: 'created' | 'existing' | 'linked'
   access_message?: string | null
 }

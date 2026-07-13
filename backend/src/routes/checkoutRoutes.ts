@@ -36,10 +36,20 @@ export async function handleCheckoutRoutes(req: IncomingMessage, res: ServerResp
       return
     }
     try {
-      const result = await paymentService.applyMercadoPagoWebhook(body)
+      const url = new URL(req.url, 'http://localhost')
+      const isOrder = url.pathname.endsWith('/orders') || String(body.type ?? '') === 'order'
+      const result = isOrder
+        ? await paymentService.applyMercadoPagoOrderWebhook({
+            payload: body,
+            dataId: url.searchParams.get('data.id') || String((body.data as Record<string, unknown> | undefined)?.id ?? ''),
+            xSignature: String(req.headers['x-signature'] ?? ''),
+            xRequestId: String(req.headers['x-request-id'] ?? ''),
+          })
+        : await paymentService.applyMercadoPagoWebhook(body)
       writeJson(res, 200, { ok: true, result }, corsOrigin)
     } catch (error) {
-      writeJson(res, 502, { ok: false, error: error instanceof Error ? error.message : 'Falha ao processar webhook.' }, corsOrigin)
+      const statusCode = error instanceof Error && 'statusCode' in error ? Number((error as Error & { statusCode?: number }).statusCode) : 502
+      writeJson(res, statusCode, { ok: false, error: error instanceof Error ? error.message : 'Falha ao processar webhook.' }, corsOrigin)
     }
     return
   }

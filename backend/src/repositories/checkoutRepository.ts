@@ -21,6 +21,7 @@ export type PaymentOptionRow = {
   codigo: string | null
   tipo: string | null
   gateway?: string | null
+  public_key?: string | null
 }
 
 export type CheckoutPaymentMethodConfig = {
@@ -36,6 +37,7 @@ export type CheckoutPaymentMethodConfig = {
   provider_base_url: string | null
   provider_api_token: string | null
   provider_metadata: Record<string, unknown>
+  webhook_secret?: string | null
   runtime: PaymentRuntimeSetting
 }
 
@@ -81,6 +83,7 @@ export interface CheckoutRepository {
     chargeUrl?: string | null
     status: string
     payload?: Record<string, unknown> | null
+    details?: Record<string, unknown> | null
   }): Promise<void>
   applyPaymentWebhook(input: {
     vendaId?: string | null

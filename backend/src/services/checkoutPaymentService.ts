@@ -1,4 +1,5 @@
 import type { CheckoutPaymentMethodConfig, CheckoutRepository } from '../repositories/checkoutRepository.js'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 
 type FetchLike = typeof fetch
 
@@ -12,6 +13,22 @@ type ChargeRequestInput = {
     telefone: string
     documento: string
   }
+  fiscal: {
+    cep: string
+    logradouro: string
+    numero: string
+    bairro: string
+    cidade: string
+    uf: string
+  }
+  card?: {
+    token: string
+    payment_method_id: string
+    payment_type_id: 'credit_card' | 'debit_card'
+    installments: number
+    identification_type: string
+    identification_number: string
+  } | null
 }
 
 type ChargeResult = {
@@ -22,6 +39,7 @@ type ChargeResult = {
   payload?: Record<string, unknown> | null
   error?: string | null
   mocked?: boolean
+  details?: Record<string, unknown> | null
 }
 
 export class CheckoutPaymentService {
@@ -41,6 +59,8 @@ export class CheckoutPaymentService {
       telefone: string
       documento: string
     }
+    fiscal: ChargeRequestInput['fiscal']
+    card?: ChargeRequestInput['card']
   }): Promise<ChargeResult> {
     const config = await this.repository.getCheckoutPaymentMethodConfig(input.formaPagamentoId)
     if (!config) {
@@ -55,6 +75,7 @@ export class CheckoutPaymentService {
       chargeUrl: result.chargeUrl ?? null,
       status: result.status,
       payload: result.payload ?? (result.error ? { error: result.error } : {}),
+      details: result.details ?? null,
     })
     return result
   }
@@ -76,7 +97,7 @@ export class CheckoutPaymentService {
   }
 
   private async createCharge(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): Promise<ChargeResult> {
-    if (config.runtime.bloquear_integracoes_reais || config.runtime.modo_teste_geral || !config.provider_api_token || !config.gateway) {
+    if (config.runtime.bloquear_integracoes_reais || !config.provider_api_token || !config.gateway) {
       return this.buildMockCharge(config, input)
     }
 
@@ -98,6 +119,11 @@ export class CheckoutPaymentService {
   }
 
   private async createMercadoPagoCharge(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): Promise<ChargeResult> {
+    const method = String(config.codigo || config.tipo || '').toLowerCase()
+    if (method === 'pix' || method === 'boleto' || method === 'card' || method.includes('cart')) {
+      return this.createMercadoPagoOrder(config, input, method)
+    }
+
     const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/checkout/preferences`
     const callbackUrl = this.resolveMercadoPagoCallbackUrl(config)
     const document = input.comprador.documento.replace(/\D/g, '')
@@ -142,6 +168,94 @@ export class CheckoutPaymentService {
       externalId: this.pickString(payload, ['id']),
       chargeUrl: this.pickString(payload, config.ambiente === 'sandbox' ? ['sandbox_init_point', 'init_point'] : ['init_point']),
       payload,
+    }
+  }
+
+  private async createMercadoPagoOrder(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput, method: string): Promise<ChargeResult> {
+    const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/v1/orders`
+    const amount = input.valor.toFixed(2)
+    const isPix = method === 'pix'
+    const isBoleto = method === 'boleto'
+    if (!isPix && !isBoleto && !input.card?.token) {
+      return { ok: false, status: 'error', error: 'Token seguro do cartão não informado.' }
+    }
+    const nameParts = input.comprador.nome.trim().split(/\s+/)
+    const firstName = nameParts.shift() || input.comprador.nome
+    const lastName = nameParts.join(' ') || firstName
+    const paymentMethod = isPix
+      ? { id: 'pix', type: 'bank_transfer' }
+      : isBoleto
+        ? { id: 'boleto', type: 'ticket' }
+        : {
+            id: input.card!.payment_method_id,
+            type: input.card!.payment_type_id,
+            token: input.card!.token,
+            installments: Math.max(1, Number(input.card!.installments || 1)),
+          }
+    const payment: Record<string, unknown> = { amount, payment_method: paymentMethod }
+    if (isPix) payment.expiration_time = 'P1D'
+    if (isBoleto) payment.expiration_time = 'P3D'
+    const payer: Record<string, unknown> = {
+      email: input.comprador.email,
+      first_name: firstName,
+      last_name: lastName,
+      identification: {
+        type: input.card?.identification_type || (input.comprador.documento.replace(/\D/g, '').length === 14 ? 'CNPJ' : 'CPF'),
+        number: input.card?.identification_number || input.comprador.documento.replace(/\D/g, ''),
+      },
+    }
+    if (isBoleto) {
+      payer.address = {
+        street_name: input.fiscal.logradouro,
+        street_number: input.fiscal.numero || 'S/N',
+        zip_code: input.fiscal.cep.replace(/\D/g, ''),
+        neighborhood: input.fiscal.bairro,
+        state: input.fiscal.uf,
+        city: input.fiscal.cidade,
+      }
+    }
+    const body = {
+      type: 'online',
+      processing_mode: 'automatic',
+      total_amount: amount,
+      external_reference: input.vendaId,
+      description: input.descricao,
+      payer,
+      transactions: { payments: [payment] },
+    }
+    const idempotencyKey = `avmd-${input.vendaId}-${isPix ? 'pix' : isBoleto ? 'boleto' : 'card'}`
+    const response = await this.fetchImpl(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.provider_api_token}`,
+        'X-Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify(body),
+    })
+    const payload = await response.json().catch(() => ({})) as Record<string, unknown>
+    if (!response.ok) throw new Error(String(payload.message || payload.error || `Mercado Pago respondeu ${response.status}`))
+    const transaction = this.firstPayment(payload)
+    const paymentMethodResponse = this.asObject(transaction.payment_method)
+    const status = this.normalizeOrderStatus(payload, transaction)
+    const details = {
+      gateway: 'mercado_pago',
+      order_id: this.pickString(payload, ['id']),
+      payment_id: this.pickString(transaction, ['id']),
+      kind: isPix ? 'pix' : isBoleto ? 'boleto' : 'card',
+      ticket_url: this.pickString(paymentMethodResponse, ['ticket_url']),
+      qr_code: this.pickString(paymentMethodResponse, ['qr_code']),
+      qr_code_base64: this.pickString(paymentMethodResponse, ['qr_code_base64']),
+      digitable_line: this.pickString(paymentMethodResponse, ['digitable_line']),
+      barcode_content: this.pickString(paymentMethodResponse, ['barcode_content']),
+    }
+    return {
+      ok: true,
+      status,
+      externalId: details.order_id,
+      chargeUrl: details.ticket_url,
+      payload,
+      details,
     }
   }
 
@@ -281,6 +395,73 @@ export class CheckoutPaymentService {
 
     if (['paid', 'approved', 'completed', 'success', 'available', 'confirmado', 'compensado'].includes(raw)) return 'paid'
     if (['failed', 'error', 'denied', 'cancelled', 'canceled', 'refused'].includes(raw)) return 'failed'
+    return 'pending'
+  }
+
+  async applyMercadoPagoOrderWebhook(input: {
+    payload: Record<string, unknown>
+    dataId: string
+    xSignature: string
+    xRequestId: string
+  }) {
+    const orderId = input.dataId || this.pickString(this.asObject(input.payload.data), ['id'])
+    if (!orderId) throw new Error('Webhook sem identificador da order.')
+    const config = await this.repository.getCheckoutPaymentMethodConfigByGateway?.('mercado_pago')
+    if (!config?.provider_api_token) throw new Error('Credencial do Mercado Pago não configurada.')
+    if (!config.webhook_secret) throw new Error('Chave secreta do webhook do Mercado Pago não configurada.')
+    if (!this.validateWebhookSignature({ ...input, dataId: orderId, secret: config.webhook_secret })) {
+      const error = new Error('Assinatura do webhook inválida.') as Error & { statusCode?: number }
+      error.statusCode = 401
+      throw error
+    }
+    const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/v1/orders/${encodeURIComponent(orderId)}`
+    const response = await this.fetchImpl(endpoint, { headers: { 'Authorization': `Bearer ${config.provider_api_token}` } })
+    const order = await response.json().catch(() => ({})) as Record<string, unknown>
+    if (!response.ok) throw new Error(String(order.message || order.error || `Mercado Pago respondeu ${response.status}`))
+    const payment = this.firstPayment(order)
+    const normalizedStatus = this.normalizeOrderStatus(order, payment)
+    const vendaId = this.pickString(order, ['external_reference'])
+    const paymentId = this.pickString(payment, ['id'])
+    await this.repository.applyPaymentWebhook({
+      vendaId,
+      externalId: orderId,
+      gateway: 'mercado_pago',
+      status: normalizedStatus,
+      paid: normalizedStatus === 'paid',
+      payload: order,
+    })
+    return { orderId, paymentId, vendaId, status: normalizedStatus, paid: normalizedStatus === 'paid' }
+  }
+
+  private validateWebhookSignature(input: { dataId: string; xSignature: string; xRequestId: string; secret: string }) {
+    let ts = ''
+    let hash = ''
+    for (const part of input.xSignature.split(',')) {
+      const [key, value] = part.split('=', 2).map(item => item.trim())
+      if (key === 'ts') ts = value || ''
+      if (key === 'v1') hash = value || ''
+    }
+    if (!ts || !hash) return false
+    const parts = [`id:${input.dataId.toLowerCase()}`]
+    if (input.xRequestId) parts.push(`request-id:${input.xRequestId}`)
+    parts.push(`ts:${ts}`)
+    const computed = createHmac('sha256', input.secret).update(`${parts.join(';')};`).digest('hex')
+    const computedBuffer = Buffer.from(computed)
+    const hashBuffer = Buffer.from(hash)
+    return computedBuffer.length === hashBuffer.length && timingSafeEqual(computedBuffer, hashBuffer)
+  }
+
+  private firstPayment(payload: Record<string, unknown>) {
+    const transactions = this.asObject(payload.transactions)
+    const payments = Array.isArray(transactions.payments) ? transactions.payments : []
+    return this.asObject(payments[0])
+  }
+
+  private normalizeOrderStatus(payload: Record<string, unknown>, payment = this.firstPayment(payload)) {
+    const status = String(payment.status || payload.status || '').toLowerCase()
+    const detail = String(payment.status_detail || payload.status_detail || '').toLowerCase()
+    if (status === 'processed' && detail === 'accredited') return 'paid'
+    if (['failed', 'rejected', 'cancelled', 'canceled', 'expired', 'charged_back'].includes(status)) return 'failed'
     return 'pending'
   }
 

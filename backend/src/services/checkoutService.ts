@@ -115,6 +115,8 @@ export class CheckoutService {
         telefone: body.comprador.telefone,
         documento: body.comprador.cpf_cnpj,
       },
+      fiscal: body.fiscal,
+      card: body.pagamento.card ?? null,
     })
 
     const chargeLink = charge.chargeUrl ?? null
@@ -133,6 +135,7 @@ export class CheckoutService {
       protocolo_numero: venda.protocolo_numero,
       redirect_url: chargeLink,
       payment_status: charge.status,
+      payment_details: charge.details as CheckoutSubmitResponse['payment_details'],
       access_status: access.status,
       access_message: access.message,
     }

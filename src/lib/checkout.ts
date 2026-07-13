@@ -19,6 +19,8 @@ export type PaymentOption = {
   nome: string
   codigo: string | null
   tipo: string | null
+  gateway?: string | null
+  public_key?: string | null
 }
 
 export type AgendaSlot = {

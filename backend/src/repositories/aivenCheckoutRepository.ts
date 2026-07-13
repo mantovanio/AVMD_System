@@ -117,7 +117,22 @@ export class AivenCheckoutRepository implements CheckoutRepository {
       order by nome asc
     `
     const result = await this.db.query<PaymentOptionRow>(sql)
-    return result.rows
+    const settings = await this.db.query<{ value: { methods?: Array<Record<string, unknown>>; default_method_id?: string | null } | null }>(
+      `select value from app_settings where key = 'payment_methods' limit 1`,
+    )
+    const methods = settings.rows[0]?.value?.methods ?? []
+    const configuredDefault = String(settings.rows[0]?.value?.default_method_id ?? '')
+    const activeGateway = configuredDefault || String(methods.find(item => item.is_default === true)?.id ?? '')
+    const visibleRows = activeGateway
+      ? result.rows.filter(row => String(row.gateway ?? 'manual') === activeGateway)
+      : result.rows
+    return visibleRows.map(row => {
+      const configured = methods.find(item => String(item.id ?? '') === String(row.gateway ?? ''))
+      return {
+        ...row,
+        public_key: configured ? String(configured.client_id ?? '') || null : null,
+      }
+    })
   }
 
   async getPaymentRuntime(): Promise<PaymentRuntimeSetting> {
@@ -187,6 +202,7 @@ export class AivenCheckoutRepository implements CheckoutRepository {
       provider_base_url: integration?.base_url ?? null,
       provider_api_token: String(appMethod?.secret_key ?? appMethod?.client_id ?? integration?.api_token ?? '') || null,
       provider_metadata: integration?.metadata ?? {},
+      webhook_secret: appMethod ? String(appMethod.webhook_secret ?? '') || null : null,
       runtime,
     }
   }
@@ -468,6 +484,7 @@ export class AivenCheckoutRepository implements CheckoutRepository {
     chargeUrl?: string | null
     status: string
     payload?: Record<string, unknown> | null
+    details?: Record<string, unknown> | null
   }): Promise<void> {
     await this.db.query(
       `update vendas_certificados
@@ -478,12 +495,13 @@ export class AivenCheckoutRepository implements CheckoutRepository {
            'charge_url', $4,
            'status', $5,
            'payload', $6::jsonb,
-           'updated_at', now()
+           'updated_at', now(),
+           'details', $7::jsonb
          )
        ),
            updated_at = now()
        where id = $1::uuid`,
-      [input.vendaId, input.gateway, input.externalId ?? null, input.chargeUrl ?? null, input.status, JSON.stringify(input.payload ?? {})],
+      [input.vendaId, input.gateway, input.externalId ?? null, input.chargeUrl ?? null, input.status, JSON.stringify(input.payload ?? {}), JSON.stringify(input.details ?? {})],
     )
   }
 
