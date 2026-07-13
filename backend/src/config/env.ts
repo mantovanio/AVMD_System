@@ -30,6 +30,7 @@ function env(name: string, fallback = '') {
 
 export function loadConfig(): BackendConfig {
   const baseUrl = env('EVOLUTION_BASE_URL')
+  const defaultToken = env('EVOLUTION_API_TOKEN')
   return {
     port: Number(env('PORT', '8787')),
     databaseUrl: env('DATABASE_URL'),
@@ -40,12 +41,12 @@ export function loadConfig(): BackendConfig {
     publicApiBaseUrl: env('PUBLIC_API_BASE_URL', 'https://api.certiid.mantovan.com.br'),
     evolutionAtendimento: {
       baseUrl,
-      apiToken: env('EVOLUTION_ATENDIMENTO_API_TOKEN'),
+      apiToken: env('EVOLUTION_ATENDIMENTO_API_TOKEN') || defaultToken,
       instanceName: env('EVOLUTION_ATENDIMENTO_INSTANCE_NAME', 'atendimento'),
     },
     evolutionCertiid: {
       baseUrl,
-      apiToken: env('EVOLUTION_CERTIID_API_TOKEN'),
+      apiToken: env('EVOLUTION_CERTIID_API_TOKEN') || defaultToken,
       instanceName: env('EVOLUTION_CERTIID_INSTANCE_NAME', 'CertiID'),
     },
   }
