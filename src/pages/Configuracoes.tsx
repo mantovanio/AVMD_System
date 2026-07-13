@@ -4216,12 +4216,12 @@ function AbaPagamentos() {
     setErro(null)
     const [integrationRes, methodsRes, runtimeRes] = await Promise.all([
       supabase.from('external_integrations').select('*').eq('provider', 'safe2pay').maybeSingle(),
-      supabase.from('app_settings').select('value').eq('key', 'payment_methods').maybeSingle(),
-      supabase.from('app_settings').select('value').eq('key', 'payment_runtime').maybeSingle(),
+      fetch(getApiUrl('/app-settings?keys=payment_methods')).then(response => response.json()),
+      fetch(getApiUrl('/app-settings?keys=payment_runtime')).then(response => response.json()),
     ])
 
-    if (integrationRes.error) {
-      setErro(integrationRes.error.message)
+    if (integrationRes.error || !methodsRes.ok || !runtimeRes.ok) {
+      setErro(integrationRes.error?.message ?? methodsRes.error ?? runtimeRes.error ?? 'Erro ao carregar gateways.')
       setLoading(false)
       return
     }
@@ -4279,9 +4279,10 @@ function AbaPagamentos() {
       setEditingSandboxSecret(true)
     }
 
-    if (methodsRes.data?.value && Array.isArray(methodsRes.data.value.methods)) {
+    const savedPaymentMethods = methodsRes.settings?.payment_methods?.methods
+    if (Array.isArray(savedPaymentMethods)) {
       const merged = PAYMENT_METHOD_PRESETS.map(preset => {
-        const saved = methodsRes.data?.value.methods.find((item: PaymentMethodConfig) => item.id === preset.id)
+        const saved = savedPaymentMethods.find((item: PaymentMethodConfig) => item.id === preset.id)
         return saved ? { ...preset, ...saved } : preset
       })
       const safe2payGateway = merged.find(item => item.id === 'safe2pay')
@@ -4314,7 +4315,7 @@ function AbaPagamentos() {
       setSelectedMethodId(PAYMENT_METHOD_PRESETS[0].id)
     }
 
-    const runtimeValue = runtimeRes.data?.value
+    const runtimeValue = runtimeRes.settings?.payment_runtime
     setPaymentRuntime({
       modo_teste_geral: runtimeValue?.modo_teste_geral ?? DEFAULT_PAYMENT_RUNTIME.modo_teste_geral,
       bloquear_integracoes_reais: runtimeValue?.bloquear_integracoes_reais ?? DEFAULT_PAYMENT_RUNTIME.bloquear_integracoes_reais,
@@ -4381,23 +4382,21 @@ function AbaPagamentos() {
         .from('external_integrations')
         .update(payload)
         .eq('provider', 'safe2pay'),
-      supabase
-        .from('app_settings')
-        .upsert({
+      fetch(getApiUrl('/app-settings'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
           key: 'payment_methods',
           value: {
             methods: paymentMethodsToSave,
             default_method_id: paymentMethodsToSave.find(item => item.is_default)?.id ?? null,
           },
-          updated_by: profile?.id ?? null,
-        }, { onConflict: 'key' }),
-      supabase
-        .from('app_settings')
-        .upsert({
+        }),
+      }).then(async response => ({ error: response.ok ? null : new Error((await response.json()).error ?? 'Erro ao salvar meios de pagamento') })),
+      fetch(getApiUrl('/app-settings'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
           key: 'payment_runtime',
           value: paymentRuntime,
-          updated_by: profile?.id ?? null,
-        }, { onConflict: 'key' }),
+        }),
+      }).then(async response => ({ error: response.ok ? null : new Error((await response.json()).error ?? 'Erro ao salvar ambiente de pagamento') })),
     ])
 
     setSaving(false)

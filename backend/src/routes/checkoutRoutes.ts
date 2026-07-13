@@ -29,6 +29,21 @@ export async function handleCheckoutRoutes(req: IncomingMessage, res: ServerResp
     return
   }
 
+  if (req.method === 'POST' && req.url?.startsWith('/api/checkout/webhook/mercado-pago')) {
+    const body = await readJson<Record<string, unknown>>(req)
+    if (!paymentService) {
+      writeJson(res, 500, { ok: false, error: 'Servico de pagamento indisponivel.' }, corsOrigin)
+      return
+    }
+    try {
+      const result = await paymentService.applyMercadoPagoWebhook(body)
+      writeJson(res, 200, { ok: true, result }, corsOrigin)
+    } catch (error) {
+      writeJson(res, 502, { ok: false, error: error instanceof Error ? error.message : 'Falha ao processar webhook.' }, corsOrigin)
+    }
+    return
+  }
+
   if (req.method === 'POST' && req.url === '/api/checkout/submit') {
     const body = await readJson<CheckoutSubmitRequest>(req)
     const response = await service.submit(body)

@@ -138,7 +138,7 @@ export class AivenCheckoutRepository implements CheckoutRepository {
 
 
   async getCheckoutPaymentMethodConfig(formaPagamentoId: string): Promise<CheckoutPaymentMethodConfig | null> {
-    const [methodsResult, paymentMethodResult, integrationResult, runtime] = await Promise.all([
+    const [methodsResult, paymentMethodResult, runtime] = await Promise.all([
       this.db.query<{ value: { methods?: Array<Record<string, unknown>> } | null }>(
         `select value from app_settings where key = 'payment_methods' limit 1`,
       ),
@@ -149,18 +149,6 @@ export class AivenCheckoutRepository implements CheckoutRepository {
          limit 1`,
         [formaPagamentoId],
       ),
-      this.db.query<{
-        base_url: string | null
-        webhook_url: string | null
-        api_token: string | null
-        metadata: Record<string, unknown> | null
-        status: string
-      }>(
-        `select base_url, webhook_url, api_token, metadata, status
-         from external_integrations
-         where provider = 'safe2pay'
-         limit 1`,
-      ),
       this.getPaymentRuntime(),
     ])
 
@@ -168,7 +156,22 @@ export class AivenCheckoutRepository implements CheckoutRepository {
     if (!catalogMethod) return null
 
     const methods = methodsResult.rows[0]?.value?.methods ?? []
-    const appMethod = methods.find(item => String(item.id ?? '') === formaPagamentoId) ?? null
+    const catalogGateway = String(catalogMethod.gateway ?? 'safe2pay').trim() || 'safe2pay'
+    const appMethod = methods.find(item => String(item.id ?? '') === formaPagamentoId || String(item.id ?? '') === catalogGateway) ?? null
+    const gateway = String(appMethod?.gateway ?? catalogGateway).trim() || 'safe2pay'
+    const integrationResult = await this.db.query<{
+      base_url: string | null
+      webhook_url: string | null
+      api_token: string | null
+      metadata: Record<string, unknown> | null
+      status: string
+    }>(
+      `select base_url, webhook_url, api_token, metadata, status
+       from external_integrations
+       where provider = $1
+       limit 1`,
+      [gateway],
+    )
     const integration = integrationResult.rows[0] ?? null
 
     return {
@@ -176,16 +179,24 @@ export class AivenCheckoutRepository implements CheckoutRepository {
       nome: catalogMethod.nome,
       codigo: catalogMethod.codigo ?? null,
       tipo: catalogMethod.tipo ?? null,
-      gateway: String(appMethod?.gateway ?? catalogMethod.gateway ?? 'safe2pay') || null,
+      gateway,
       ambiente: String(appMethod?.ambiente ?? (integration?.metadata?.is_sandbox === true ? 'sandbox' : 'producao')) === 'sandbox' ? 'sandbox' : 'producao',
       client_id: appMethod ? String(appMethod.client_id ?? '') || null : null,
       secret_key: appMethod ? String(appMethod.secret_key ?? '') || null : null,
       webhook_url: appMethod ? String(appMethod.webhook_url ?? integration?.webhook_url ?? '') || null : (integration?.webhook_url ?? null),
       provider_base_url: integration?.base_url ?? null,
-      provider_api_token: integration?.api_token ?? null,
+      provider_api_token: String(appMethod?.secret_key ?? appMethod?.client_id ?? integration?.api_token ?? '') || null,
       provider_metadata: integration?.metadata ?? {},
       runtime,
     }
+  }
+
+  async getCheckoutPaymentMethodConfigByGateway(gateway: string): Promise<CheckoutPaymentMethodConfig | null> {
+    const result = await this.db.query<{ id: string }>(
+      `select id from formas_pagamento_v2 where gateway = $1 and ativo = true order by created_at asc limit 1`,
+      [gateway],
+    )
+    return result.rows[0]?.id ? this.getCheckoutPaymentMethodConfig(result.rows[0].id) : null
   }
 
   async getCheckoutScheduleContext(input: CheckoutScheduleContextInput): Promise<{ agentes: AgendaAgent[]; pontos: AgendaPoint[]; slots: AgendaSlot[] }> {

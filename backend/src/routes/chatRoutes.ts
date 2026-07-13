@@ -796,6 +796,15 @@ export async function handleChatRoutes(
       },
     })
 
+    if (conversationId) {
+      try {
+        await db.query(
+          `UPDATE crm_chat_conversations SET fila = 'email', ultima_mensagem = $1, ultima_mensagem_direcao = 'outgoing', ultima_interacao_em = NOW() WHERE id::text = $2 OR document_key = $3`,
+          [`${subject} - ${textBody.slice(0, 120)}`, conversationId, to],
+        )
+      } catch {}
+    }
+
     // Tenta enviar via n8n webhook (nao bloqueante)
     const n8nUrl = config.n8nEmailSendUrl
     let n8nSent = false
@@ -1130,7 +1139,7 @@ export async function handleChatRoutes(
       return true
     }
     const body = await readJson<JsonRecord>(req)
-    const allowedFields = ['kanban_status', 'atendimento_humano', 'agente_nome', 'cliente_nome', 'telefone']
+    const allowedFields = ['kanban_status', 'atendimento_humano', 'agente_nome', 'cliente_nome', 'telefone', 'fila']
     const updates: string[] = []
     const values: unknown[] = []
     let idx = 1

@@ -68,6 +68,7 @@ export interface CheckoutRepository {
   findActivePaymentMethods(): Promise<PaymentOptionRow[]>
   getPaymentRuntime(): Promise<PaymentRuntimeSetting>
   getCheckoutPaymentMethodConfig(formaPagamentoId: string): Promise<CheckoutPaymentMethodConfig | null>
+  getCheckoutPaymentMethodConfigByGateway?(gateway: string): Promise<CheckoutPaymentMethodConfig | null>
   getCheckoutScheduleContext(input: CheckoutScheduleContextInput): Promise<{ agentes: AgendaAgent[]; pontos: AgendaPoint[]; slots: AgendaSlot[] }>
   findLatestActiveCustomerByDocument(documento: string): Promise<CheckoutExistingCustomerLookup | null>
   upsertCheckoutCustomer(payload: CheckoutSubmitRequest): Promise<{ id: string }>

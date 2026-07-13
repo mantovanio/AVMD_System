@@ -26,7 +26,7 @@ type ChargeResult = {
 
 export class CheckoutPaymentService {
   constructor(
-    private readonly repository: Pick<CheckoutRepository, 'getCheckoutPaymentMethodConfig' | 'attachPaymentChargeToSale' | 'applyPaymentWebhook'>,
+    private readonly repository: Pick<CheckoutRepository, 'getCheckoutPaymentMethodConfig' | 'getCheckoutPaymentMethodConfigByGateway' | 'attachPaymentChargeToSale' | 'applyPaymentWebhook'>,
     private readonly fetchImpl: FetchLike = fetch,
   ) {}
 
@@ -80,12 +80,14 @@ export class CheckoutPaymentService {
       return this.buildMockCharge(config, input)
     }
 
-    if (config.gateway !== 'safe2pay') {
-      return this.buildMockCharge(config, input)
-    }
-
     try {
-      return await this.createSafe2PayCharge(config, input)
+      if (config.gateway === 'safe2pay') return await this.createSafe2PayCharge(config, input)
+      if (config.gateway === 'mercado_pago') return await this.createMercadoPagoCharge(config, input)
+      return {
+        ok: false,
+        status: 'error',
+        error: `Gateway ${config.gateway} ainda não possui integração de cobrança.`,
+      }
     } catch (error) {
       return {
         ok: false,
@@ -93,6 +95,91 @@ export class CheckoutPaymentService {
         error: error instanceof Error ? error.message : 'Falha ao criar cobrança no gateway.',
       }
     }
+  }
+
+  private async createMercadoPagoCharge(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): Promise<ChargeResult> {
+    const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/checkout/preferences`
+    const callbackUrl = this.resolveMercadoPagoCallbackUrl(config)
+    const document = input.comprador.documento.replace(/\D/g, '')
+    const phone = input.comprador.telefone.replace(/\D/g, '')
+    const body = {
+      items: [{
+        id: input.vendaId,
+        title: input.descricao,
+        description: input.descricao,
+        quantity: 1,
+        currency_id: 'BRL',
+        unit_price: Number(input.valor.toFixed(2)),
+      }],
+      payer: {
+        name: input.comprador.nome,
+        email: input.comprador.email,
+        phone: phone ? { area_code: phone.slice(0, 2), number: phone.slice(2) } : undefined,
+        identification: document ? { type: document.length === 14 ? 'CNPJ' : 'CPF', number: document } : undefined,
+      },
+      external_reference: input.vendaId,
+      notification_url: callbackUrl,
+      metadata: { venda_id: input.vendaId, gateway: 'mercado_pago' },
+    }
+
+    const response = await this.fetchImpl(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.provider_api_token}`,
+        'X-Idempotency-Key': input.vendaId,
+      },
+      body: JSON.stringify(body),
+    })
+    const payload = await response.json().catch(() => ({})) as Record<string, unknown>
+    if (!response.ok) {
+      throw new Error(String(payload.message || payload.error || `Mercado Pago respondeu ${response.status}`))
+    }
+
+    return {
+      ok: true,
+      status: 'pending',
+      externalId: this.pickString(payload, ['id']),
+      chargeUrl: this.pickString(payload, config.ambiente === 'sandbox' ? ['sandbox_init_point', 'init_point'] : ['init_point']),
+      payload,
+    }
+  }
+
+  private resolveMercadoPagoCallbackUrl(config: CheckoutPaymentMethodConfig) {
+    const metadataUrl = this.pickString(config.provider_metadata, ['public_webhook_url', 'notification_url'])
+    if (metadataUrl) return metadataUrl
+    if (config.webhook_url) return config.webhook_url
+    return 'https://api.certiid.mantovan.com.br/api/checkout/webhook/mercado-pago'
+  }
+
+  private async fetchMercadoPagoPayment(config: CheckoutPaymentMethodConfig, paymentId: string) {
+    const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/v1/payments/${encodeURIComponent(paymentId)}`
+    const response = await this.fetchImpl(endpoint, {
+      headers: { 'Authorization': `Bearer ${config.provider_api_token}` },
+    })
+    const payload = await response.json().catch(() => ({})) as Record<string, unknown>
+    if (!response.ok) throw new Error(String(payload.message || payload.error || `Mercado Pago respondeu ${response.status}`))
+    return payload
+  }
+
+  async applyMercadoPagoWebhook(payload: Record<string, unknown>) {
+    const data = this.asObject(payload.data)
+    const paymentId = this.pickString(data, ['id']) || this.pickString(payload, ['id'])
+    if (!paymentId) return { externalId: null, vendaId: null, status: 'pending', paid: false }
+
+    const config = await this.repository.getCheckoutPaymentMethodConfigByGateway?.('mercado_pago')
+    if (!config?.provider_api_token) throw new Error('Credencial do Mercado Pago não configurada.')
+    const payment = await this.fetchMercadoPagoPayment(config, paymentId)
+    const normalized = this.normalizeWebhookPayload(payment)
+    await this.repository.applyPaymentWebhook({
+      vendaId: normalized.vendaId,
+      externalId: normalized.externalId || paymentId,
+      gateway: 'mercado_pago',
+      status: normalized.status,
+      paid: normalized.paid,
+      payload: payment,
+    })
+    return normalized
   }
 
   private buildMockCharge(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): ChargeResult {
@@ -173,7 +260,7 @@ export class CheckoutPaymentService {
 
   private normalizeWebhookPayload(payload: Record<string, unknown>) {
     const externalId = this.pickString(payload, ['external_id', 'payment_id', 'id', 'transaction_id', 'TransactionId'])
-    const vendaId = this.pickString(payload, ['reference', 'reference_id', 'order_id', 'venda_id'])
+    const vendaId = this.pickString(payload, ['reference', 'external_reference', 'reference_id', 'order_id', 'venda_id'])
       || this.pickString(this.asObject(payload.metadata), ['venda_id', 'sale_id'])
     const status = this.normalizeChargeStatus(payload)
     const paidStatuses = new Set(['paid', 'approved', 'completed', 'success', 'available', 'confirmado', 'compensado'])
