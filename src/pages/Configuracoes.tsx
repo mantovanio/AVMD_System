@@ -4164,6 +4164,11 @@ type PaymentMethodConfig = {
   webhook_url: string
   webhook_secret: string
   observacoes: string
+  enabled_payment_types?: {
+    pix: boolean
+    card: boolean
+    boleto: boolean
+  }
 }
 
 type PaymentRuntimeConfig = {
@@ -4180,7 +4185,7 @@ const DEFAULT_PAYMENT_RUNTIME: PaymentRuntimeConfig = {
 
 const PAYMENT_METHOD_PRESETS: PaymentMethodConfig[] = [
   { id: 'safe2pay',      label: 'Safe2Pay',      categoria: 'gateway', enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
-  { id: 'mercado_pago', label: 'Mercado Pago', categoria: 'gateway', enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
+  { id: 'mercado_pago', label: 'Mercado Pago', categoria: 'gateway', enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '', enabled_payment_types: { pix: true, card: true, boleto: true } },
   { id: 'itau',         label: 'Itaú',         categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
   { id: 'inter',        label: 'Inter',        categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
   { id: 'c6',           label: 'C6 Bank',      categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
@@ -4336,6 +4341,24 @@ function AbaPagamentos() {
     setSuccessMessage(null)
 
     const methodBeingSaved = paymentMethods.find(item => item.id === selectedMethodId) ?? paymentMethods[0]
+    if (methodBeingSaved.id === 'mercado_pago' && methodBeingSaved.enabled) {
+      if (!methodBeingSaved.client_id.trim() || methodBeingSaved.client_id.includes('@')) {
+        setSaving(false)
+        setErro('Public Key inválida. Informe a chave pública fornecida pelo Mercado Pago, não seu e-mail ou usuário.')
+        return
+      }
+      if (!methodBeingSaved.secret_key.trim()) {
+        setSaving(false)
+        setErro('Access Token não informado. Copie o Access Token das credenciais do Mercado Pago.')
+        return
+      }
+      const paymentTypes = methodBeingSaved.enabled_payment_types
+      if (paymentTypes && !paymentTypes.pix && !paymentTypes.card && !paymentTypes.boleto) {
+        setSaving(false)
+        setErro('Ative ao menos uma forma de pagamento do Mercado Pago: Pix, cartão ou boleto.')
+        return
+      }
+    }
 
     const meta = {
       ...(integration?.metadata || {}),
@@ -4418,7 +4441,14 @@ function AbaPagamentos() {
       : methodBeingSaved.is_default
         ? `A integração está ativa em ${environmentLabel} e definida como principal.`
         : `A integração está ativa em ${environmentLabel}, mas ainda não é a principal.`
-    setSuccessMessage(`${methodBeingSaved.label} salvo com sucesso. ${statusDetail}`)
+    const mercadoPagoTypes = methodBeingSaved.id === 'mercado_pago'
+      ? ` Formas habilitadas: ${([
+          ['pix', 'Pix'],
+          ['card', 'cartão'],
+          ['boleto', 'boleto'],
+        ] as const).filter(([type]) => methodBeingSaved.enabled_payment_types?.[type] ?? true).map(([, label]) => label).join(', ')}.`
+      : ''
+    setSuccessMessage(`${methodBeingSaved.label} salvo com sucesso. ${statusDetail}${mercadoPagoTypes}`)
     setPaymentMethods(paymentMethodsToSave)
     void load()
   }
@@ -4617,6 +4647,47 @@ function AbaPagamentos() {
                 </select>
               </label>
             </div>
+
+            {selectedMethod.id === 'mercado_pago' && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-950/20">
+                <div>
+                  <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">Formas aceitas pelo Mercado Pago</p>
+                  <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Somente as opções ligadas abaixo serão apresentadas ao cliente no checkout.</p>
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  {([
+                    ['pix', 'Pix'],
+                    ['card', 'Cartão'],
+                    ['boleto', 'Boleto'],
+                  ] as const).map(([paymentType, label]) => {
+                    const isEnabled = selectedMethod.enabled_payment_types?.[paymentType] ?? true
+                    return (
+                      <div key={paymentType} className="flex items-center justify-between rounded-lg border border-blue-100 bg-white px-3 py-3 dark:border-blue-900/30 dark:bg-gray-900">
+                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{label}</span>
+                        <button
+                          type="button"
+                          disabled={!isAdmin}
+                          aria-label={`${isEnabled ? 'Desativar' : 'Ativar'} ${label}`}
+                          onClick={() => updateMethod(selectedMethod.id, {
+                            enabled_payment_types: {
+                              pix: selectedMethod.enabled_payment_types?.pix ?? true,
+                              card: selectedMethod.enabled_payment_types?.card ?? true,
+                              boleto: selectedMethod.enabled_payment_types?.boleto ?? true,
+                              [paymentType]: !isEnabled,
+                            },
+                          })}
+                          className={cn('relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors disabled:opacity-50',
+                            isEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700')}
+                        >
+                          <span className={cn('pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition',
+                            isEnabled ? 'translate-x-5' : 'translate-x-0')} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-3 md:grid-cols-2">
               <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-950 rounded-xl border border-gray-100 dark:border-gray-800">

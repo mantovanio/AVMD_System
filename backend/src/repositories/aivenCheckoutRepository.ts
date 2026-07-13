@@ -123,8 +123,14 @@ export class AivenCheckoutRepository implements CheckoutRepository {
     const methods = settings.rows[0]?.value?.methods ?? []
     const configuredDefault = String(settings.rows[0]?.value?.default_method_id ?? '')
     const activeGateway = configuredDefault || String(methods.find(item => item.is_default === true)?.id ?? '')
+    const gatewayConfig = methods.find(item => String(item.id ?? '') === activeGateway)
+    const enabledPaymentTypes = gatewayConfig?.enabled_payment_types as Record<string, unknown> | undefined
     const visibleRows = activeGateway
-      ? result.rows.filter(row => String(row.gateway ?? 'manual') === activeGateway)
+      ? result.rows.filter(row => {
+          if (String(row.gateway ?? 'manual') !== activeGateway) return false
+          if (activeGateway !== 'mercado_pago' || !enabledPaymentTypes) return true
+          return enabledPaymentTypes[String(row.codigo ?? row.tipo ?? '')] !== false
+        })
       : result.rows
     return visibleRows.map(row => {
       const configured = methods.find(item => String(item.id ?? '') === String(row.gateway ?? ''))
