@@ -359,7 +359,7 @@ function dedupeConversations(rows: ConversationRow[]) {
   const bestByKey = new Map<string, ConversationRow>()
 
   for (const item of rows) {
-    const phoneKey = normalizeDigits(item.telefone || item.document_key)
+    const phoneKey = normalizePhone(item.telefone || item.document_key)
     const emailKey = (item.email_principal || item.document_key || '').includes('@')
       ? (item.email_principal || item.document_key || '').trim().toLowerCase()
       : ''

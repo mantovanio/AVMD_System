@@ -506,8 +506,12 @@ export async function handleChatRoutes(
        ranked AS (
          SELECT conv.*,
                 EXISTS (SELECT 1 FROM crm_chat_messages WHERE conversation_id = conv.id AND direction = 'outgoing') AS tem_resposta,
-                ROW_NUMBER() OVER (
-                  PARTITION BY CASE WHEN conv.document_key ~ '^[0-9]+$' THEN conv.document_key ELSE conv.id::text END
+                 ROW_NUMBER() OVER (
+                   PARTITION BY CASE WHEN conv.document_key ~ '^[0-9]+$' THEN
+                     CASE WHEN length(conv.document_key) IN (10, 11) AND NOT conv.document_key LIKE '55%' THEN '55' || conv.document_key
+                          WHEN length(conv.document_key) > 11 AND conv.document_key LIKE '55%' THEN conv.document_key
+                          ELSE conv.document_key END
+                   ELSE conv.id::text END
                   ORDER BY conv.ultima_interacao_em DESC NULLS LAST
                 ) AS rn
          FROM crm_chat_admin_view conv
