@@ -4441,6 +4441,7 @@ function AbaPagamentos() {
   }
 
   const selectedMethod = paymentMethods.find(item => item.id === selectedMethodId) ?? paymentMethods[0]
+  const currentGateway = paymentMethods.find(item => item.is_default) ?? null
 
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-gray-400" /></div>
 
@@ -4476,128 +4477,44 @@ function AbaPagamentos() {
 
       {subtab === 'gateway' && (
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Gateway padrão atual — Safe2Pay</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Mantive o gateway atual e abri o chaveamento dos meios paralelos no submenu ao lado.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Token de API (Produção)</label>
-            <div className="flex gap-2">
-              <input
-                type={editingProd ? 'text' : 'password'}
-                value={prodKey}
-                onChange={e => setProdKey(e.target.value)}
-                disabled={!editingProd || !isAdmin}
-                placeholder={editingProd ? 'Insira a chave de API de produção' : 'Chave configurada'}
-                className="flex-1 border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-gray-950 disabled:text-gray-400"
-              />
-              {!editingProd && isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => { setProdKey(''); setEditingProd(true) }}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 text-xs font-medium flex items-center gap-1.5 transition-colors"
-                >
-                  <Pencil size={13} /> Alterar
-                </button>
-              )}
+          <div className={cn(
+            'rounded-xl border p-4',
+            currentGateway?.enabled
+              ? 'border-green-200 bg-green-50/70 dark:border-green-900/40 dark:bg-green-950/20'
+              : 'border-amber-200 bg-amber-50/70 dark:border-amber-900/40 dark:bg-amber-950/20'
+          )}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Gateway selecionado para as vendas</p>
+                <h3 className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {currentGateway?.label ?? 'Nenhum gateway selecionado'}
+                </h3>
+                <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                  {currentGateway?.enabled
+                    ? `${currentGateway.ambiente === 'producao' ? 'Produção' : 'Sandbox / Testes'} · ativo e visível no checkout.`
+                    : currentGateway
+                      ? 'Selecionado como principal, porém está desativado e não aparecerá no checkout.'
+                      : 'Escolha e ative um gateway em Meios de pagamento.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentGateway) setSelectedMethodId(currentGateway.id)
+                  setSubtab('meios')
+                }}
+                className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700"
+              >
+                {currentGateway ? `Configurar ${currentGateway.label}` : 'Escolher gateway'}
+              </button>
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Secret Key (Produção)</label>
-            <div className="flex gap-2">
-              <input
-                type={editingProdSecret ? 'text' : 'password'}
-                value={prodSecret}
-                onChange={e => setProdSecret(e.target.value)}
-                disabled={!editingProdSecret || !isAdmin}
-                placeholder={editingProdSecret ? 'Insira a Secret Key de produção' : 'Secret Key configurada'}
-                className="flex-1 border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-gray-950 disabled:text-gray-400"
-              />
-              {!editingProdSecret && isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => { setProdSecret(''); setEditingProdSecret(true) }}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 text-xs font-medium flex items-center gap-1.5 transition-colors"
-                >
-                  <Pencil size={13} /> Alterar
-                </button>
-              )}
+          {currentGateway?.enabled && paymentRuntime.bloquear_integracoes_reais && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+              O gateway está configurado, mas as chamadas externas estão bloqueadas. Para testar o Sandbox do {currentGateway.label}, desligue “Bloquear integrações reais” e salve.
             </div>
-          </div>
-
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Token de API (Sandbox / Testes)</label>
-            <div className="flex gap-2">
-              <input
-                type={editingSandbox ? 'text' : 'password'}
-                value={sandboxKey}
-                onChange={e => setSandboxKey(e.target.value)}
-                disabled={!editingSandbox || !isAdmin}
-                placeholder={editingSandbox ? 'Insira a chave de API de testes' : 'Chave de testes configurada'}
-                className="flex-1 border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-gray-950 disabled:text-gray-400"
-              />
-              {!editingSandbox && isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => { setSandboxKey(''); setEditingSandbox(true) }}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 text-xs font-medium flex items-center gap-1.5 transition-colors"
-                >
-                  <Pencil size={13} /> Alterar
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Secret Key (Sandbox / Testes)</label>
-            <div className="flex gap-2">
-              <input
-                type={editingSandboxSecret ? 'text' : 'password'}
-                value={sandboxSecret}
-                onChange={e => setSandboxSecret(e.target.value)}
-                disabled={!editingSandboxSecret || !isAdmin}
-                placeholder={editingSandboxSecret ? 'Insira a Secret Key de testes' : 'Secret Key de testes configurada'}
-                className="flex-1 border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-gray-950 disabled:text-gray-400"
-              />
-              {!editingSandboxSecret && isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => { setSandboxSecret(''); setEditingSandboxSecret(true) }}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 text-xs font-medium flex items-center gap-1.5 transition-colors"
-                >
-                  <Pencil size={13} /> Alterar
-                </button>
-              )}
-            </div>
-          </div>
-
-          <ConfigInput
-            label="URL de Callback (Webhook)"
-            value={webhookUrl}
-            onChange={setWebhookUrl}
-            placeholder="https://sua-api.com/functions/v1/payment-webhook"
-          />
-
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-950 rounded-xl border border-gray-100 dark:border-gray-800">
-            <div>
-              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Modo Sandbox (Testes)</p>
-              <p className="text-[10px] text-gray-400">Quando ligado, as cobranças serão enviadas em modo de testes.</p>
-            </div>
-            <button
-              type="button"
-              disabled={!isAdmin}
-              onClick={() => setIsSandbox(!isSandbox)}
-              className={cn('relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 disabled:opacity-50',
-                isSandbox ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700')}
-            >
-              <span className={cn('pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200',
-                isSandbox ? 'translate-x-5' : 'translate-x-0')} />
-            </button>
-          </div>
+          )}
 
           <div className="rounded-xl border border-amber-200 dark:border-amber-900/30 bg-amber-50/70 dark:bg-amber-950/20 p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
