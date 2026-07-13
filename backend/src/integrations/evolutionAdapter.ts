@@ -6,6 +6,14 @@ function cleanBaseUrl(value: string) {
   return value.replace(/\/$/, '')
 }
 
+function normalizePhoneBR(value: string): string {
+  const digits = value.replace(/\D/g, '')
+  if (!digits) return value
+  if (digits.startsWith('55') && digits.length >= 12) return digits
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`
+  return digits
+}
+
 export async function sendEvolutionMessage(
   instance: EvolutionInstanceConfig,
   to: string,
@@ -20,13 +28,14 @@ export async function sendEvolutionMessage(
   }
 
   const url = `${cleanBaseUrl(instance.baseUrl)}/message/sendText/${instance.instanceName}`
+  const normalizedNumber = normalizePhoneBR(to)
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       apikey: instance.apiToken,
     },
-    body: JSON.stringify({ number: to, text: body }),
+    body: JSON.stringify({ number: normalizedNumber, text: body }),
   })
 
   const payload = await response.json().catch(() => ({ status: response.status })) as Record<string, unknown>

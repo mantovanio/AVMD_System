@@ -88,8 +88,8 @@ export class RenewalReminderService {
       }
 
       const hoje = new Date()
-      const vencimento = new Date(row.data_vencimento + 'T00:00:00')
-      const diasRestantes = Math.max(0, Math.ceil((vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24)))
+      const vencimento = new Date(`${String(row.data_vencimento).slice(0, 10)}T12:00:00-03:00`)
+      const diasRestantes = Number.isNaN(vencimento.getTime()) ? 0 : Math.max(0, Math.ceil((vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24)))
 
       const primeiroNome = extrairPrimeiroNome(row.cliente)
       const tplValues: Record<string, string | number> = {
