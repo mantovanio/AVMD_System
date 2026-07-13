@@ -10,6 +10,7 @@ import { createIntegrationRegistry } from './integrations/createRegistry.js'
 import { IntegrationEventProcessor } from './integrations/eventProcessor.js'
 import { CheckoutService } from './services/checkoutService.js'
 import { CheckoutPaymentService } from './services/checkoutPaymentService.js'
+import { RenewalReminderService } from './services/renewalReminderService.js'
 import { handleCheckoutRoutes } from './routes/checkoutRoutes.js'
 import { handleCommercialRoutes } from './routes/commercialRoutes.js'
 import { handleIntegrationRoutes } from './routes/integrationRoutes.js'
@@ -73,6 +74,7 @@ const permissoesRepository = new PermissoesRepository(db)
 const integrationRegistry = createIntegrationRegistry(config)
 const integrationEventProcessor = new IntegrationEventProcessor(integrationEventRepository, integrationRegistry)
 const outboxProcessor = new OutboxProcessor(communicationOutboxRepository, config)
+const renewalReminderService = new RenewalReminderService(db, communicationOutboxRepository)
 const checkoutPaymentService = new CheckoutPaymentService(checkoutRepository)
 const portalRepository = new PortalRepository(db, checkoutRepository, commercialRepository)
 const service = new CheckoutService(checkoutRepository, checkoutPaymentService, profileRepository, config.clerkSecretKey)
@@ -204,6 +206,7 @@ const server = createServer(async (req, res) => {
 })
 
 outboxProcessor.start()
+renewalReminderService.start()
 
 server.listen(config.port, () => {
   process.stdout.write(`Backend Aiven do checkout escutando na porta ${config.port}\n`)

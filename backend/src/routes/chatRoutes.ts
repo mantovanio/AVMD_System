@@ -439,6 +439,7 @@ export async function handleChatRoutes(
       writeJson(res, 200, { ok: true, triggered: 0, message: 'timeout desligado' }, corsOrigin)
       return true
     }
+    const instanceAtend = String(process.env.EVOLUTION_ATENDIMENTO_INSTANCE_NAME ?? 'atendimento').toLowerCase()
     const stale = await db.query<any>(
       `SELECT c.id, c.document_key, c.whatsapp_instance, c.cliente_nome, c.ultima_mensagem, c.ultima_interacao_em, c.fila,
               coalesce(cust.nome, c.cliente_nome) as nome_crm, cust.email as email_principal,
@@ -450,8 +451,9 @@ export async function handleChatRoutes(
        WHERE c.ultima_mensagem_direcao = 'incoming'
          AND c.ultima_interacao_em < NOW() - ($1 || ' minutes')::INTERVAL
          AND c.atendimento_humano = false
+         AND lower(coalesce(c.whatsapp_instance, '')) NOT LIKE '%' || $2 || '%'
        ORDER BY c.ultima_interacao_em ASC`,
-      [String(config.minutes)],
+      [String(config.minutes), instanceAtend],
     )
     const triggered: string[] = []
     for (const conv of stale.rows) {
