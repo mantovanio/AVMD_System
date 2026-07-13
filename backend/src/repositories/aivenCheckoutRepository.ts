@@ -134,9 +134,12 @@ export class AivenCheckoutRepository implements CheckoutRepository {
       : result.rows
     return visibleRows.map(row => {
       const configured = methods.find(item => String(item.id ?? '') === String(row.gateway ?? ''))
+      const environment = String(configured?.ambiente ?? 'producao') === 'sandbox' ? 'sandbox' : 'producao'
+      const credentialsByEnvironment = configured?.credentials_by_environment as Record<string, Record<string, unknown>> | undefined
+      const environmentCredentials = credentialsByEnvironment?.[environment]
       return {
         ...row,
-        public_key: configured ? String(configured.client_id ?? '') || null : null,
+        public_key: configured ? String(environmentCredentials?.public_key ?? configured.client_id ?? '') || null : null,
       }
     })
   }
@@ -180,6 +183,11 @@ export class AivenCheckoutRepository implements CheckoutRepository {
     const catalogGateway = String(catalogMethod.gateway ?? 'safe2pay').trim() || 'safe2pay'
     const appMethod = methods.find(item => String(item.id ?? '') === formaPagamentoId || String(item.id ?? '') === catalogGateway) ?? null
     const gateway = String(appMethod?.gateway ?? catalogGateway).trim() || 'safe2pay'
+    const ambiente = String(appMethod?.ambiente ?? 'producao') === 'sandbox' ? 'sandbox' : 'producao'
+    const credentialsByEnvironment = appMethod?.credentials_by_environment as Record<string, Record<string, unknown>> | undefined
+    const environmentCredentials = credentialsByEnvironment?.[ambiente]
+    const clientId = String(environmentCredentials?.public_key ?? appMethod?.client_id ?? '') || null
+    const secretKey = String(environmentCredentials?.access_token ?? appMethod?.secret_key ?? '') || null
     const integrationResult = await this.db.query<{
       base_url: string | null
       webhook_url: string | null
@@ -201,12 +209,12 @@ export class AivenCheckoutRepository implements CheckoutRepository {
       codigo: catalogMethod.codigo ?? null,
       tipo: catalogMethod.tipo ?? null,
       gateway,
-      ambiente: String(appMethod?.ambiente ?? (integration?.metadata?.is_sandbox === true ? 'sandbox' : 'producao')) === 'sandbox' ? 'sandbox' : 'producao',
-      client_id: appMethod ? String(appMethod.client_id ?? '') || null : null,
-      secret_key: appMethod ? String(appMethod.secret_key ?? '') || null : null,
+      ambiente,
+      client_id: clientId,
+      secret_key: secretKey,
       webhook_url: appMethod ? String(appMethod.webhook_url ?? integration?.webhook_url ?? '') || null : (integration?.webhook_url ?? null),
       provider_base_url: integration?.base_url ?? null,
-      provider_api_token: String(appMethod?.secret_key ?? appMethod?.client_id ?? integration?.api_token ?? '') || null,
+      provider_api_token: String(secretKey ?? clientId ?? integration?.api_token ?? '') || null,
       provider_metadata: integration?.metadata ?? {},
       webhook_secret: appMethod ? String(appMethod.webhook_secret ?? '') || null : null,
       runtime,

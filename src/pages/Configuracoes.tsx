@@ -4169,6 +4169,10 @@ type PaymentMethodConfig = {
     card: boolean
     boleto: boolean
   }
+  credentials_by_environment?: Partial<Record<PaymentMethodEnv, {
+    public_key: string
+    access_token: string
+  }>>
 }
 
 type PaymentRuntimeConfig = {
@@ -4291,6 +4295,20 @@ function AbaPagamentos() {
         const saved = savedPaymentMethods.find((item: PaymentMethodConfig) => item.id === preset.id)
         return saved ? { ...preset, ...saved } : preset
       })
+      for (const method of merged) {
+        if (method.id !== 'mercado_pago') continue
+        const savedCredentials = method.credentials_by_environment ?? {}
+        const currentCredentials = savedCredentials[method.ambiente] ?? {
+          public_key: method.client_id,
+          access_token: method.secret_key,
+        }
+        method.credentials_by_environment = {
+          ...savedCredentials,
+          [method.ambiente]: currentCredentials,
+        }
+        method.client_id = currentCredentials.public_key ?? ''
+        method.secret_key = currentCredentials.access_token ?? ''
+      }
       const safe2payGateway = merged.find(item => item.id === 'safe2pay')
       if (safe2payGateway) {
         safe2payGateway.enabled = !!data
@@ -4458,6 +4476,53 @@ function AbaPagamentos() {
     setPaymentMethods(prev => prev.map(item => {
       if (item.id !== methodId) return item
       return { ...item, ...patch }
+    }))
+  }
+
+  function updateMethodCredential(methodId: PaymentMethodId, field: 'client_id' | 'secret_key', value: string) {
+    setSuccessMessage(null)
+    setPaymentMethods(prev => prev.map(item => {
+      if (item.id !== methodId) return item
+      if (item.id !== 'mercado_pago') return { ...item, [field]: value }
+      const environment = item.ambiente
+      const currentEnvironmentCredentials = item.credentials_by_environment?.[environment] ?? {
+        public_key: item.client_id,
+        access_token: item.secret_key,
+      }
+      return {
+        ...item,
+        [field]: value,
+        credentials_by_environment: {
+          ...item.credentials_by_environment,
+          [environment]: {
+            ...currentEnvironmentCredentials,
+            [field === 'client_id' ? 'public_key' : 'access_token']: value,
+          },
+        },
+      }
+    }))
+  }
+
+  function changeMethodEnvironment(methodId: PaymentMethodId, environment: PaymentMethodEnv) {
+    setSuccessMessage(null)
+    setPaymentMethods(prev => prev.map(item => {
+      if (item.id !== methodId) return item
+      if (item.id !== 'mercado_pago') return { ...item, ambiente: environment }
+      const credentialsByEnvironment = {
+        ...item.credentials_by_environment,
+        [item.ambiente]: {
+          public_key: item.client_id,
+          access_token: item.secret_key,
+        },
+      }
+      const targetCredentials = credentialsByEnvironment[environment] ?? { public_key: '', access_token: '' }
+      return {
+        ...item,
+        ambiente: environment,
+        client_id: targetCredentials.public_key,
+        secret_key: targetCredentials.access_token,
+        credentials_by_environment: credentialsByEnvironment,
+      }
     }))
   }
 
@@ -4631,15 +4696,15 @@ function AbaPagamentos() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <ConfigInput label={selectedMethod.id === 'mercado_pago' ? 'Public Key / Chave pública' : 'Client ID / Chave pública'} value={selectedMethod.client_id} onChange={v => updateMethod(selectedMethod.id, { client_id: v })} placeholder="Ex: APP_USR..." />
-              <ConfigInput type="password" label={selectedMethod.id === 'mercado_pago' ? 'Access Token' : 'Token secreto'} value={selectedMethod.secret_key} onChange={v => updateMethod(selectedMethod.id, { secret_key: v })} placeholder="Ex: APP_USR..." />
+              <ConfigInput label={selectedMethod.id === 'mercado_pago' ? `Public Key — ${selectedMethod.ambiente === 'sandbox' ? 'Testes' : 'Produção'}` : 'Client ID / Chave pública'} value={selectedMethod.client_id} onChange={v => updateMethodCredential(selectedMethod.id, 'client_id', v)} placeholder="Ex: APP_USR..." />
+              <ConfigInput type="password" label={selectedMethod.id === 'mercado_pago' ? `Access Token — ${selectedMethod.ambiente === 'sandbox' ? 'Testes' : 'Produção'}` : 'Token secreto'} value={selectedMethod.secret_key} onChange={v => updateMethodCredential(selectedMethod.id, 'secret_key', v)} placeholder="Ex: APP_USR..." />
               <ConfigInput label="Webhook / retorno" value={selectedMethod.webhook_url} onChange={v => updateMethod(selectedMethod.id, { webhook_url: v })} placeholder="https://..." />
               <ConfigInput type="password" label="Chave secreta do webhook" value={selectedMethod.webhook_secret} onChange={v => updateMethod(selectedMethod.id, { webhook_secret: v })} placeholder="Gerada no painel do Mercado Pago" />
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-gray-500 dark:text-gray-400">Ambiente</span>
                 <select
                   value={selectedMethod.ambiente}
-                  onChange={e => updateMethod(selectedMethod.id, { ambiente: e.target.value as PaymentMethodEnv })}
+                  onChange={e => changeMethodEnvironment(selectedMethod.id, e.target.value as PaymentMethodEnv)}
                   className="border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="sandbox">Sandbox / Testes</option>
