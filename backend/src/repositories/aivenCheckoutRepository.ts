@@ -229,6 +229,34 @@ export class AivenCheckoutRepository implements CheckoutRepository {
     return result.rows[0]?.id ? this.getCheckoutPaymentMethodConfig(result.rows[0].id) : null
   }
 
+  async findCommercialSalePaymentData(vendaId: string, profileId: string) {
+    const result = await this.db.query<{
+      id: string; forma_pagamento_id: string; valor: number; descricao: string; nome: string; email: string
+      telefone: string; documento: string; cep: string; logradouro: string; numero: string; bairro: string; cidade: string; uf: string
+    }>(`
+      select venda.id,
+             venda.forma_pagamento_id,
+             coalesce(venda.valor_venda, 0)::float8 as valor,
+             coalesce(venda.tipo_produto, 'Certificado digital') as descricao,
+             coalesce(venda.nome_faturamento, cliente.nome, 'Cliente') as nome,
+             coalesce(venda.email_faturamento, cliente.email, '') as email,
+             coalesce(venda.telefone_faturamento, cliente.telefone, '') as telefone,
+             coalesce(venda.documento_faturamento, cliente.cpf_cnpj, '') as documento,
+             coalesce(venda.cep, cliente.cep, '') as cep,
+             coalesce(venda.logradouro, cliente.logradouro, '') as logradouro,
+             coalesce(venda.numero, cliente.numero, '') as numero,
+             coalesce(venda.bairro, cliente.bairro, '') as bairro,
+             coalesce(venda.cidade, cliente.cidade, '') as cidade,
+             coalesce(venda.uf, cliente.uf, '') as uf
+      from vendas_certificados venda
+      join profiles solicitante on solicitante.id = $2 and solicitante.status = 'ativo'
+      left join cadastros_base cliente on cliente.id = venda.cadastro_base_id
+      where venda.id = $1 and venda.forma_pagamento_id is not null
+      limit 1
+    `, [vendaId, profileId])
+    return result.rows[0] ?? null
+  }
+
   async getCheckoutScheduleContext(input: CheckoutScheduleContextInput): Promise<{ agentes: AgendaAgent[]; pontos: AgendaPoint[]; slots: AgendaSlot[] }> {
     const vinculados = await this.findActiveTableAgentLinks(input.tabelaPrecoId)
     if (vinculados.length === 0) {

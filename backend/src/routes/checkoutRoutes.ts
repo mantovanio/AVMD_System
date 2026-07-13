@@ -17,6 +17,17 @@ export async function handleCheckoutRoutes(req: IncomingMessage, res: ServerResp
     return
   }
 
+  if (req.method === 'POST' && req.url === '/api/checkout/commercial-charge') {
+    const body = await readJson<{ venda_id?: string; profile_id?: string }>(req)
+    if (!paymentService || !body.venda_id || !body.profile_id) {
+      writeJson(res, 400, { ok: false, error: 'Venda e usuário são obrigatórios.' }, corsOrigin)
+      return
+    }
+    const result = await paymentService.createCommercialPaymentLink({ vendaId: body.venda_id, profileId: body.profile_id })
+    writeJson(res, result.ok ? 200 : 400, result, corsOrigin)
+    return
+  }
+
 
   if (req.method === 'POST' && req.url === '/api/checkout/webhook/safe2pay') {
     const body = await readJson<Record<string, unknown>>(req)

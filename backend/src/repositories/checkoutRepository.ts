@@ -41,6 +41,23 @@ export type CheckoutPaymentMethodConfig = {
   runtime: PaymentRuntimeSetting
 }
 
+export type CommercialSalePaymentData = {
+  id: string
+  forma_pagamento_id: string
+  valor: number
+  descricao: string
+  nome: string
+  email: string
+  telefone: string
+  documento: string
+  cep: string
+  logradouro: string
+  numero: string
+  bairro: string
+  cidade: string
+  uf: string
+}
+
 export type CheckoutScheduleContextInput = {
   tabelaPrecoId: string
   parceiroId?: string | null
@@ -71,6 +88,7 @@ export interface CheckoutRepository {
   getPaymentRuntime(): Promise<PaymentRuntimeSetting>
   getCheckoutPaymentMethodConfig(formaPagamentoId: string): Promise<CheckoutPaymentMethodConfig | null>
   getCheckoutPaymentMethodConfigByGateway?(gateway: string): Promise<CheckoutPaymentMethodConfig | null>
+  findCommercialSalePaymentData?(vendaId: string, profileId: string): Promise<CommercialSalePaymentData | null>
   getCheckoutScheduleContext(input: CheckoutScheduleContextInput): Promise<{ agentes: AgendaAgent[]; pontos: AgendaPoint[]; slots: AgendaSlot[] }>
   findLatestActiveCustomerByDocument(documento: string): Promise<CheckoutExistingCustomerLookup | null>
   upsertCheckoutCustomer(payload: CheckoutSubmitRequest): Promise<{ id: string }>

@@ -294,6 +294,7 @@ const VENDA_WA_BOLETO_TPL = [
   'Forma de pagamento: {{forma_pagamento}}.',
   'Seu pedido está aguardando pagamento.',
   'Vencimento: {{vencimento}}.',
+  '{{payment_action}}',
   '{{ambiente}}',
 ].join('\n')
 
@@ -305,6 +306,7 @@ const VENDA_EMAIL_BOLETO_TPL = [
   'Forma de pagamento: {{forma_pagamento}}.',
   'No momento, o pedido está aguardando pagamento.',
   'Vencimento: {{vencimento}}.',
+  '{{payment_action}}',
   '',
   '{{ambiente}}',
 ].join('\n')
@@ -314,6 +316,7 @@ const VENDA_WA_PAGAMENTO_IMEDIATO_TPL = [
   'Recebemos sua compra do produto {{produto}} no valor de {{valor}}.',
   'Forma de pagamento: {{forma_pagamento}}.',
   'Seu pedido foi registrado e o pagamento está em processamento/confirmação.',
+  '{{payment_action}}',
   '{{ambiente}}',
 ].join('\n')
 
@@ -324,6 +327,7 @@ const VENDA_EMAIL_PAGAMENTO_IMEDIATO_TPL = [
   'Recebemos sua compra do produto {{produto}} no valor de {{valor}}.',
   'Forma de pagamento: {{forma_pagamento}}.',
   'Seu pedido foi registrado e o pagamento está em processamento/confirmação.',
+  '{{payment_action}}',
   '',
   '{{ambiente}}',
 ].join('\n')
@@ -1246,6 +1250,7 @@ export default function Comercial() {
     vencimento: string | null
     telefone: string | null
     email: string | null
+    paymentLink?: string | null
   }) {
     const paymentFlow = classifyPaymentFlow(input.formaPagamento)
     const ambiente = paymentRuntime.modo_teste_geral
@@ -1258,6 +1263,7 @@ export default function Comercial() {
       forma_pagamento: input.formaPagamento || 'Não informada',
       vencimento: input.vencimento ? new Date(`${input.vencimento}T00:00:00`).toLocaleDateString('pt-BR') : 'Não informado',
       ambiente,
+      payment_action: input.paymentLink ? `Pague com segurança pelo link: ${input.paymentLink}` : 'O link de pagamento será enviado pela equipe.',
     }
 
     const isBoleto = paymentFlow === 'boleto'
@@ -1815,6 +1821,22 @@ export default function Comercial() {
       if (!vendaCriada) { showMsg('Erro ao criar venda'); return }
 
       let comunicacaoResumo = 'sem contato do cliente para disparo automático'
+      let paymentLink: string | null = null
+      let paymentLinkError: string | null = null
+      if (profile?.id && pagamentoSelecionado.formaPagamentoId) {
+        try {
+          const chargeResponse = await fetch(getApiUrl('/checkout/commercial-charge'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ venda_id: vendaCriada.id, profile_id: profile.id }),
+          })
+          const charge = await chargeResponse.json() as { ok?: boolean; chargeUrl?: string | null; error?: string }
+          if (!chargeResponse.ok || !charge.ok) throw new Error(charge.error ?? 'Falha ao gerar link de pagamento.')
+          paymentLink = charge.chargeUrl ?? null
+        } catch (error) {
+          paymentLinkError = error instanceof Error ? error.message : 'Falha ao gerar link de pagamento.'
+        }
+      }
       const pontoSelecionado = pontos.find(item => item.id === pontoAtendimentoId) ?? null
       const vendaParaLista: VendaRow = {
         ...(vendaCriada as VendaCertificado),
@@ -1834,6 +1856,7 @@ export default function Comercial() {
           vencimento: formV2.data_vencimento || null,
           telefone: cli?.telefone ?? vendaCriada.telefone_faturamento ?? null,
           email: cli?.email ?? vendaCriada.email_faturamento ?? null,
+          paymentLink,
         })
         comunicacaoResumo = comunicacaoResult.sent > 0
           ? `${comunicacaoResult.sent} comunicação(ões) enfileirada(s)`
@@ -1877,7 +1900,9 @@ export default function Comercial() {
       setFormV2({ ...EMPTY_VENDA_V2 })
       setVendaFilters(EMPTY_VENDA_FILTERS)
       setSelectedIds(new Set())
-      showMsg(`Venda salva com sucesso! ${comunicacaoResumo}.`, 'ok')
+      showMsg(paymentLinkError
+        ? `Venda salva, mas o link de pagamento não foi gerado: ${paymentLinkError}`
+        : `Venda e cobrança criadas com sucesso! ${comunicacaoResumo}.`, paymentLinkError ? 'err' : 'ok')
       void fetchVendasV2()
       void fetchAgenda()
     } catch (error) {
@@ -1898,7 +1923,25 @@ export default function Comercial() {
         forma_pagamento_id: formaPagamentoId,
         admin_profile_id: profile.id,
       })
-      showMsg('Forma de pagamento alterada. O pedido voltou para Em aberto.', 'ok')
+      const chargeResponse = await fetch(getApiUrl('/checkout/commercial-charge'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ venda_id: venda.id, profile_id: profile.id }),
+      })
+      const charge = await chargeResponse.json() as { ok?: boolean; chargeUrl?: string | null; error?: string }
+      if (!chargeResponse.ok || !charge.ok) throw new Error(charge.error ?? 'Forma alterada, mas a nova cobrança não foi gerada.')
+      const paymentName = pagamentosDoGatewayAtual.find(item => item.id === formaPagamentoId)?.nome ?? 'Pagamento'
+      await dispararComunicacaoAutomaticaVenda({
+        vendaId: venda.id,
+        clienteNome: (venda.cadastros_base as { nome?: string } | null)?.nome ?? venda.nome_faturamento ?? null,
+        produtoNome: venda.tipo_produto ?? 'Produto',
+        valorVenda: venda.valor_venda ?? 0,
+        formaPagamento: paymentName,
+        vencimento: venda.data_vencimento ?? null,
+        telefone: venda.telefone_faturamento ?? null,
+        email: venda.email_faturamento ?? null,
+        paymentLink: charge.chargeUrl ?? null,
+      })
+      showMsg('Forma alterada, nova cobrança gerada e link enviado ao cliente.', 'ok')
       await fetchVendasV2()
     } catch (error) {
       showMsg(error instanceof Error ? error.message : 'Erro ao alterar forma de pagamento.')
@@ -4887,6 +4930,12 @@ export default function Comercial() {
                           ) : (
                             (v.metadata as { forma_pagamento?: string })?.forma_pagamento ?? '—'
                           )}
+                          {(() => {
+                            const paymentCharge = (v.metadata as { payment_charge?: { charge_url?: string | null } } | null)?.payment_charge
+                            return paymentCharge?.charge_url ? (
+                              <a href={paymentCharge.charge_url} target="_blank" rel="noreferrer" className="ml-2 text-xs font-medium text-blue-600 underline">Abrir</a>
+                            ) : null
+                          })()}
                         </td>
                         <td className="px-3 py-2 text-right font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">
                           {formatCurrency(v.valor_venda ?? 0)}
