@@ -636,10 +636,13 @@ export default function ChatInboxCRM() {
     [conversations, selectedId],
   )
 
-  const humanModeActive = useMemo(
-    () => Boolean(selectedConversation && (selectedConversation.atendimento_humano || humanOverrideIds.includes(selectedConversation.id))),
-      [humanOverrideIds, selectedConversation],
-    )
+  const humanModeActive = useMemo(() => {
+    if (!selectedConversation) return false
+    if (selectedConversation.atendimento_humano || humanOverrideIds.includes(selectedConversation.id)) return true
+    const inst = String(selectedConversation.whatsapp_instance ?? '').trim().toLowerCase()
+    if (inst && !inst.includes('renov') && !inst.includes('certiid')) return true
+    return false
+  }, [humanOverrideIds, selectedConversation])
 
   const currentHumanAgentName = selectedConversation?.agente_atual
     || selectedConversation?.agente_nome
