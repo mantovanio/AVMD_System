@@ -275,6 +275,11 @@ type PaymentMethodConfig = {
   label: string
   enabled: boolean
   is_default: boolean
+  enabled_payment_types?: {
+    pix: boolean
+    card: boolean
+    boleto: boolean
+  }
 }
 
 type PaymentRuntimeConfig = {
@@ -743,17 +748,22 @@ export default function Comercial() {
   // ── derived ──────────────────────────────────────────────────
   const certificadosAtivos = useMemo(() => certificados.filter(c => c.ativo), [certificados])
   const pagamentosAtivos   = useMemo(() => pagamentos.filter(p => p.ativo), [pagamentos])
-  const gatewayPrincipalId = paymentMethods.find(method => method.is_default)?.id ?? null
+  const gatewayPrincipal = paymentMethods.find(method => method.is_default) ?? null
+  const gatewayPrincipalId = gatewayPrincipal?.id ?? null
   const pagamentosDoGatewayAtual = useMemo(
-    () => pagamentosAtivos.filter(item => !gatewayPrincipalId || item.gateway === gatewayPrincipalId),
-    [gatewayPrincipalId, pagamentosAtivos],
+    () => pagamentosAtivos.filter(item => {
+      if (gatewayPrincipalId && item.gateway !== gatewayPrincipalId) return false
+      if (gatewayPrincipalId !== 'mercado_pago') return true
+      const paymentType = String(item.codigo ?? item.tipo ?? '') as 'pix' | 'card' | 'boleto'
+      return gatewayPrincipal?.enabled_payment_types?.[paymentType] ?? true
+    }),
+    [gatewayPrincipal, gatewayPrincipalId, pagamentosAtivos],
   )
   const formasPagamento    = useMemo(() => {
-    const catalogo = pagamentosAtivos.map(p => p.nome)
-    const meiosHabilitados = paymentMethods.filter(p => p.enabled).map(p => p.label)
+    const catalogo = pagamentosDoGatewayAtual.map(p => p.nome)
     const fallback = ['PIX', 'Cartão de Crédito', 'Dinheiro', 'Boleto']
-    return Array.from(new Set((catalogo.length || meiosHabilitados.length) ? [...catalogo, ...meiosHabilitados] : fallback))
-  }, [pagamentosAtivos, paymentMethods])
+    return Array.from(new Set(catalogo.length ? catalogo : (gatewayPrincipalId ? [] : fallback)))
+  }, [gatewayPrincipalId, pagamentosDoGatewayAtual])
   const certificadoById    = useMemo(() => new Map(certificados.map(c => [c.id, c])), [certificados])
   const tabelasAtivas      = useMemo(() => tabelasPreco.filter(t => t.ativo), [tabelasPreco])
 
@@ -1205,8 +1215,8 @@ export default function Comercial() {
       }
     }
 
-    const formaCatalogo = pagamentosAtivos.find(item => item.nome.trim().toLowerCase() === nomeNormalizado) ?? null
-    const paymentMethod = paymentMethods.find(item => item.label.trim().toLowerCase() === nomeNormalizado) ?? null
+    const formaCatalogo = pagamentosDoGatewayAtual.find(item => item.nome.trim().toLowerCase() === nomeNormalizado) ?? null
+    const paymentMethod = paymentMethods.find(item => item.id === formaCatalogo?.gateway) ?? null
 
     return {
       formaPagamentoId: formaCatalogo?.id ?? null,
