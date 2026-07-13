@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 export type EvolutionInstanceConfig = {
   baseUrl: string
   apiToken: string
@@ -19,7 +22,12 @@ export type BackendConfig = {
 }
 
 try {
-  process.loadEnvFile?.('backend/.env.local')
+  const envFileCandidates = [
+    resolve('backend/.env.local'),
+    resolve('../.env.local'),
+  ]
+  const envFile = envFileCandidates.find(f => existsSync(f))
+  if (envFile) process.loadEnvFile?.(envFile)
 } catch {
   // Arquivo local opcional para segredos de desenvolvimento.
 }
