@@ -1,3 +1,4 @@
+import type { AivenSqlClient } from '../db/aivenClient.js'
 import type { BackendConfig } from '../config/env.js'
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
 import { sendEvolutionMessage } from '../integrations/evolutionAdapter.js'
@@ -15,6 +16,14 @@ function pickInstance(config: BackendConfig, payload: Record<string, unknown>) {
     : config.evolutionAtendimento
 }
 
+function normalizePhoneBR(value: string): string {
+  const digits = value.replace(/\D/g, '')
+  if (!digits) return value
+  if (digits.startsWith('55') && digits.length >= 12) return digits
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`
+  return digits
+}
+
 const MAX_FOLLOWUP_ROUNDS = 3
 
 export class OutboxProcessor {
@@ -23,6 +32,7 @@ export class OutboxProcessor {
   constructor(
     private readonly outboxRepo: CommunicationOutboxRepository,
     private readonly config: BackendConfig,
+    private readonly db?: AivenSqlClient,
   ) {}
 
   start(intervalMs = 5_000) {
@@ -100,7 +110,49 @@ export class OutboxProcessor {
     })
 
     if (result.ok) {
+      await this.logOutgoingMessage(item, result.external_id ?? null)
       await this.scheduleNextFollowUpIfNeeded(item)
+    }
+  }
+
+  private async logOutgoingMessage(item: { to_address: string; body: string; payload: Record<string, unknown> }, externalId: string | null) {
+    if (!this.db) return
+    try {
+      const phoneDigits = normalizePhoneBR(item.to_address)
+      const canal = String(item.payload.canal ?? 'atendimento').trim()
+      const tipo = String(item.payload.tipo ?? '').trim()
+      const senderName = tipo.includes('renovacao') ? 'Clara (IA)' : 'Sistema'
+
+      const convResult = await this.db.query<{ id: string }>(
+        `SELECT id FROM crm_chat_conversations WHERE document_key = $1 LIMIT 1`,
+        [phoneDigits],
+      )
+      let convId = convResult.rows[0]?.id ?? null
+
+      if (!convId) {
+        const insertConv = await this.db.query<{ id: string }>(
+          `INSERT INTO crm_chat_conversations (document_key, telefone, whatsapp_instance, fila, ultima_mensagem, ultima_mensagem_direcao, ultima_interacao_em, kanban_status)
+           VALUES ($1, $1, $2, $3, $4, 'outgoing', NOW(), 'conversando')
+           RETURNING id`,
+          [phoneDigits, canal === 'renovacao' ? 'CertiID' : 'atendimento', canal, item.body],
+        )
+        convId = insertConv.rows[0]?.id ?? null
+      }
+
+      if (!convId) return
+
+      await this.db.query(
+        `INSERT INTO crm_chat_messages (conversation_id, document_key, external_message_id, direction, sender_type, sender_name, mensagem)
+         VALUES ($1, $2, $3, 'outgoing', 'automation', $4, $5)`,
+        [convId, phoneDigits, externalId, senderName, item.body],
+      )
+
+      await this.db.query(
+        `UPDATE crm_chat_conversations SET ultima_mensagem = $1, ultima_mensagem_direcao = 'outgoing', ultima_interacao_em = NOW() WHERE id = $2`,
+        [item.body, convId],
+      )
+    } catch (err) {
+      console.error('[OutboxProcessor] Erro ao registrar mensagem no CRM chat:', err)
     }
   }
 
