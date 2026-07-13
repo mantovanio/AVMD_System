@@ -4377,11 +4377,15 @@ function AbaPagamentos() {
       }
     })
 
+    const shouldSaveSafe2PayIntegration = selectedMethodId === 'safe2pay'
+
     const [safe2payRes, methodsSaveRes, runtimeSaveRes] = await Promise.all([
-      supabase
-        .from('external_integrations')
-        .update(payload)
-        .eq('provider', 'safe2pay'),
+      shouldSaveSafe2PayIntegration
+        ? supabase
+            .from('external_integrations')
+            .update(payload)
+            .eq('provider', 'safe2pay')
+        : Promise.resolve({ error: null }),
       fetch(getApiUrl('/app-settings'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
           key: 'payment_methods',
@@ -4671,8 +4675,8 @@ function AbaPagamentos() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <ConfigInput label="Client ID / Chave pública" value={selectedMethod.client_id} onChange={v => updateMethod(selectedMethod.id, { client_id: v })} placeholder="Ex: APP_USR..." />
-              <ConfigInput type="password" label="Token secreto" value={selectedMethod.secret_key} onChange={v => updateMethod(selectedMethod.id, { secret_key: v })} placeholder="Ex: APP_USR..." />
+              <ConfigInput label={selectedMethod.id === 'mercado_pago' ? 'Public Key / Chave pública' : 'Client ID / Chave pública'} value={selectedMethod.client_id} onChange={v => updateMethod(selectedMethod.id, { client_id: v })} placeholder="Ex: APP_USR..." />
+              <ConfigInput type="password" label={selectedMethod.id === 'mercado_pago' ? 'Access Token' : 'Token secreto'} value={selectedMethod.secret_key} onChange={v => updateMethod(selectedMethod.id, { secret_key: v })} placeholder="Ex: APP_USR..." />
               <ConfigInput label="Webhook / retorno" value={selectedMethod.webhook_url} onChange={v => updateMethod(selectedMethod.id, { webhook_url: v })} placeholder="https://..." />
               <ConfigInput type="password" label="Chave secreta do webhook" value={selectedMethod.webhook_secret} onChange={v => updateMethod(selectedMethod.id, { webhook_secret: v })} placeholder="Gerada no painel do Mercado Pago" />
               <label className="flex flex-col gap-1">
