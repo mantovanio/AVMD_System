@@ -52,7 +52,7 @@ import {
 } from '@/lib/nfse'
 import { getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { getApiUrl } from '@/lib/api'
-import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenTitularByCpf, updateAivenCommercialSaleStatus, updateAivenCommercialSalePaymentStatus, updateVenda, type CancelamentoVendaInput, type UpdateVendaInput } from '@/lib/commercialAiven'
+import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenTitularByCpf, updateAivenCommercialSaleStatus, updateAivenCommercialSalePaymentStatus, updateVenda, updateVendaPaymentMethod, type CancelamentoVendaInput, type UpdateVendaInput } from '@/lib/commercialAiven'
 import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
 import { useAuth } from '@/contexts/AuthContext'
 import { hasPerfil, isAdminProfile } from '@/lib/security'
@@ -630,6 +630,7 @@ export default function Comercial() {
   const [editandoVenda, setEditandoVenda] = useState<VendaRow | null>(null)
   const [editForm, setEditForm] = useState<UpdateVendaInput & { tipo_produto_label?: string }>({ id: '' })
   const [editSaving, setEditSaving] = useState(false)
+  const [updatingPaymentVendaId, setUpdatingPaymentVendaId] = useState<string | null>(null)
 
   // ── agenda state ─────────────────────────────────────────────
   const [agenda, setAgenda]             = useState<AgendaItem[]>([])
@@ -742,6 +743,11 @@ export default function Comercial() {
   // ── derived ──────────────────────────────────────────────────
   const certificadosAtivos = useMemo(() => certificados.filter(c => c.ativo), [certificados])
   const pagamentosAtivos   = useMemo(() => pagamentos.filter(p => p.ativo), [pagamentos])
+  const gatewayPrincipalId = paymentMethods.find(method => method.is_default)?.id ?? null
+  const pagamentosDoGatewayAtual = useMemo(
+    () => pagamentosAtivos.filter(item => !gatewayPrincipalId || item.gateway === gatewayPrincipalId),
+    [gatewayPrincipalId, pagamentosAtivos],
+  )
   const formasPagamento    = useMemo(() => {
     const catalogo = pagamentosAtivos.map(p => p.nome)
     const meiosHabilitados = paymentMethods.filter(p => p.enabled).map(p => p.label)
@@ -1870,6 +1876,24 @@ export default function Comercial() {
       showMsg(`Erro ao salvar venda: ${message}`, 'err')
     } finally {
       setSalvandoV(false)
+    }
+  }
+
+  async function alterarFormaPagamentoVenda(venda: VendaRow, formaPagamentoId: string) {
+    if (!isAdmin || !profile?.id || !formaPagamentoId || formaPagamentoId === venda.forma_pagamento_id) return
+    setUpdatingPaymentVendaId(venda.id)
+    try {
+      await updateVendaPaymentMethod({
+        id: venda.id,
+        forma_pagamento_id: formaPagamentoId,
+        admin_profile_id: profile.id,
+      })
+      showMsg('Forma de pagamento alterada. O pedido voltou para Em aberto.', 'ok')
+      await fetchVendasV2()
+    } catch (error) {
+      showMsg(error instanceof Error ? error.message : 'Erro ao alterar forma de pagamento.')
+    } finally {
+      setUpdatingPaymentVendaId(null)
     }
   }
 
@@ -4839,7 +4863,20 @@ export default function Comercial() {
                           {new Date(v.updated_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}
                         </td>
                         <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
-                          {(v.metadata as { forma_pagamento?: string })?.forma_pagamento ?? '—'}
+                          {isAdmin ? (
+                            <select
+                              title="Alterar forma de pagamento (somente administrador)"
+                              value={v.forma_pagamento_id ?? ''}
+                              disabled={updatingPaymentVendaId === v.id}
+                              onChange={e => void alterarFormaPagamentoVenda(v, e.target.value)}
+                              className="max-w-[190px] rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
+                            >
+                              <option value="">Selecione</option>
+                              {pagamentosDoGatewayAtual.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                            </select>
+                          ) : (
+                            (v.metadata as { forma_pagamento?: string })?.forma_pagamento ?? '—'
+                          )}
                         </td>
                         <td className="px-3 py-2 text-right font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">
                           {formatCurrency(v.valor_venda ?? 0)}

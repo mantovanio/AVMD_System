@@ -21,6 +21,12 @@ export type UpdateCommercialSalePaymentStatusInput = {
   status: 'em_aberto' | 'pago' | 'recusado'
 }
 
+export type UpdateCommercialSalePaymentMethodInput = {
+  id: string
+  forma_pagamento_id: string
+  admin_profile_id: string
+}
+
 export type UpdateVendaInput = {
   id: string
   tipo_produto?: string
@@ -121,6 +127,61 @@ export class CommercialRepository {
         entityType: 'vendas_certificados',
         entityId: venda.id,
         payload: { status_pagamento: venda.status_pagamento },
+      })
+    }
+    return venda
+  }
+
+  async updateSalePaymentMethod(input: UpdateCommercialSalePaymentMethodInput) {
+    const admin = await this.db.query<{ id: string }>(`
+      select id from profiles
+      where id = $1 and perfil = 'admin' and status = 'ativo'
+      limit 1
+    `, [input.admin_profile_id])
+    if (!admin.rows[0]) throw new Error('Apenas administradores podem alterar a forma de pagamento.')
+
+    const settings = await this.db.query<{ gateway: string | null }>(`
+      select coalesce(value->>'default_method_id', method->>'id') as gateway
+      from app_settings
+      left join lateral jsonb_array_elements(coalesce(value->'methods', '[]'::jsonb)) method
+        on method->>'is_default' = 'true'
+      where key = 'payment_methods'
+      limit 1
+    `)
+    const gateway = settings.rows[0]?.gateway ?? null
+
+    const result = await this.db.query<Record<string, unknown>>(`
+      update vendas_certificados venda
+      set forma_pagamento_id = forma.id,
+          status_pagamento = 'em_aberto',
+          pago = false,
+          data_pagamento = null,
+          metadata = coalesce(venda.metadata, '{}'::jsonb) || jsonb_build_object(
+            'forma_pagamento', forma.nome,
+            'payment_method_id', forma.gateway,
+            'payment_method_label', forma.nome,
+            'forma_pagamento_alterada_por', $3,
+            'forma_pagamento_alterada_em', now()
+          ),
+          updated_at = now()
+      from formas_pagamento_v2 forma
+      where venda.id = $1
+        and forma.id = $2
+        and forma.ativo = true
+        and ($4::text is null or forma.gateway = $4)
+      returning venda.*
+    `, [input.id, input.forma_pagamento_id, input.admin_profile_id, gateway])
+    const venda = result.rows[0] ?? null
+    if (venda) {
+      await this.recordIntegrationEvent({
+        eventType: 'commercial.sale.payment_method.updated',
+        entityType: 'vendas_certificados',
+        entityId: String(venda.id),
+        payload: {
+          forma_pagamento_id: input.forma_pagamento_id,
+          admin_profile_id: input.admin_profile_id,
+          status_pagamento: 'em_aberto',
+        },
       })
     }
     return venda

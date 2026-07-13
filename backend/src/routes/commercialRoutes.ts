@@ -5,6 +5,7 @@ import { CommercialRepository } from '../repositories/commercialRepository.js'
 type SalesRequest = { limit?: number }
 type SaleStatusRequest = { id: string; status: string }
 type SalePaymentStatusRequest = { id: string; status: string }
+type SalePaymentMethodRequest = { id: string; forma_pagamento_id: string; admin_profile_id: string }
 type ScheduleRequest = { dataBase?: string | null; status?: string | null; agenteId?: string | null }
 type UpdateVendaRequest = {
   id: string
@@ -131,6 +132,23 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
     const body = await readJson<SalePaymentStatusRequest>(req)
     const venda = await repository.updateSalePaymentStatus(body as { id: string; status: 'em_aberto' | 'pago' | 'recusado' })
     writeJson(res, 200, { ok: true, venda }, corsOrigin)
+    return true
+  }
+
+  if (req.method === 'POST' && req.url === '/api/comercial/vendas/forma-pagamento') {
+    const body = await readJson<SalePaymentMethodRequest>(req)
+    try {
+      const venda = await repository.updateSalePaymentMethod(body)
+      if (!venda) {
+        writeJson(res, 404, { ok: false, error: 'Venda ou forma de pagamento não encontrada.' }, corsOrigin)
+        return true
+      }
+      writeJson(res, 200, { ok: true, venda }, corsOrigin)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não foi possível alterar a forma de pagamento.'
+      const status = message.includes('administradores') ? 403 : 400
+      writeJson(res, status, { ok: false, error: message }, corsOrigin)
+    }
     return true
   }
 

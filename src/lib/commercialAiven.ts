@@ -166,6 +166,21 @@ export type UpdateVendaInput = {
   contador_id?: string | null
 }
 
+export async function updateVendaPaymentMethod(input: {
+  id: string
+  forma_pagamento_id: string
+  admin_profile_id: string
+}) {
+  const response = await fetch(getApiUrl('/comercial/vendas/forma-pagamento'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  const data = await response.json() as ApiResponse<'venda', Record<string, unknown>> & { error?: string }
+  if (!response.ok || !data.ok) throw new Error(data.error ?? 'Não foi possível alterar a forma de pagamento.')
+  return data.venda ?? null
+}
+
 export async function updateVenda(input: UpdateVendaInput) {
   const response = await fetch(getApiUrl(`/comercial/vendas/${input.id}`), {
     method: 'PATCH',
