@@ -4186,7 +4186,7 @@ const PAYMENT_METHOD_PRESETS: PaymentMethodConfig[] = [
   { id: 'c6',           label: 'C6 Bank',      categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
 ]
 
-// ── Aba Pagamentos (Safe2Pay) ─────────────────────────────────
+// ── Aba Pagamentos ─────────────────────────────────────────────
 function AbaPagamentos() {
   const { profile } = useAuth()
   const isAdmin = isAdminProfile(profile)
@@ -4194,7 +4194,7 @@ function AbaPagamentos() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
-  const [ok, setOk] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const [integration, setIntegration] = useState<any>(null)
   const [prodKey, setProdKey] = useState('')
@@ -4333,7 +4333,9 @@ function AbaPagamentos() {
     if (!isAdmin) return
     setSaving(true)
     setErro(null)
-    setOk(false)
+    setSuccessMessage(null)
+
+    const methodBeingSaved = paymentMethods.find(item => item.id === selectedMethodId) ?? paymentMethods[0]
 
     const meta = {
       ...(integration?.metadata || {}),
@@ -4405,17 +4407,24 @@ function AbaPagamentos() {
 
     setSaving(false)
     if (safe2payRes.error || methodsSaveRes.error || runtimeSaveRes.error) {
-      setErro(safe2payRes.error?.message ?? methodsSaveRes.error?.message ?? runtimeSaveRes.error?.message ?? 'Erro ao salvar pagamentos.')
+      const detail = safe2payRes.error?.message ?? methodsSaveRes.error?.message ?? runtimeSaveRes.error?.message ?? 'Erro desconhecido.'
+      setErro(`Não foi possível salvar ${methodBeingSaved.label}: ${detail}`)
       return
     }
 
-    setOk(true)
+    const environmentLabel = methodBeingSaved.ambiente === 'producao' ? 'Produção' : 'Sandbox / Testes'
+    const statusDetail = !methodBeingSaved.enabled
+      ? 'As credenciais foram salvas, mas a integração permanece desativada.'
+      : methodBeingSaved.is_default
+        ? `A integração está ativa em ${environmentLabel} e definida como principal.`
+        : `A integração está ativa em ${environmentLabel}, mas ainda não é a principal.`
+    setSuccessMessage(`${methodBeingSaved.label} salvo com sucesso. ${statusDetail}`)
     setPaymentMethods(paymentMethodsToSave)
     void load()
   }
 
   function updateMethod(methodId: PaymentMethodId, patch: Partial<PaymentMethodConfig>) {
-    setOk(false)
+    setSuccessMessage(null)
     setPaymentMethods(prev => prev.map(item => {
       if (item.id !== methodId) return item
       return { ...item, ...patch }
@@ -4423,7 +4432,7 @@ function AbaPagamentos() {
   }
 
   function setMethodAsDefault(methodId: PaymentMethodId) {
-    setOk(false)
+    setSuccessMessage(null)
     setPaymentMethods(prev => prev.map(item => ({
       ...item,
       enabled: item.id === methodId ? true : item.enabled,
@@ -4745,9 +4754,9 @@ function AbaPagamentos() {
           {erro}
         </p>
       )}
-      {ok && (
+      {successMessage && (
         <p className="text-xs text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
-          Configurações de pagamento atualizadas.
+          {successMessage}
         </p>
       )}
 
