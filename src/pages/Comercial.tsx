@@ -2489,14 +2489,15 @@ export default function Comercial() {
       }
       const records = rows.filter(r => Object.values(r).some(v => v)).map(row => ({
         codigo:               row['codigo'] ? parseInt(row['codigo']) : null,
-        status_produto:       normalizeStatusProduto(row['status_do_produto'] ?? row['status'] ?? null, true),
+        status_produto:       normalizeStatusProduto(row['cadastrado'] ?? row['status_do_produto'] ?? row['status'] ?? null, true),
         tipo:                 row['nome'] || '',
         descricao:            row['descricao'] || null,
-        validade:             normalizeValidadeImport(row['validade_meses'] ?? row['validade_em_meses'] ?? row['validade'] ?? ''),
-        validade_meses:       validadeEmMeses(String(row['validade_meses'] ?? row['validade_em_meses'] ?? row['validade'] ?? '')),
+        validade:             normalizeValidadeImport(row['validade'] ?? ''),
+        validade_meses:       validadeEmMeses(String(row['validade'] ?? '')),
+        periodo_uso:          row['periodo_de_uso'] || row['periodo_uso'] || null,
         modelo:               row['modelo'] || null,
         categoria:            row['tipo'] || null,
-        tipo_emissao_padrao:  row['tipo_emissao'] || row['tipo_de_emissao'] || row['semissao'] || null,
+        tipo_emissao_padrao:  row['tipo_emissao'] || row['tipo_de_emissao'] || null,
         descricao_produto:    row['descricao_do_produto'] || row['descricao_produto'] || null,
         produto_vinculado_ac: row['produto_vinculado_na_ac'] || row['produto_vinculado_ac'] || row['produto_ac'] || null,
         preco_venda:          parseNum(row['preco_de_venda'] ?? row['preco_venda'] ?? row['preco'] ?? '0'),
@@ -2505,7 +2506,7 @@ export default function Comercial() {
         agrupador:            row['agrupador'] || row['agrupador_utilizado_no_e_commerce'] || null,
         hash:                 row['hash_produto'] || row['hash'] || null,
         estoque:              0,
-        ativo:                /^ativo$/i.test(normalizeStatusProduto(row['status_do_produto'] ?? row['status'] ?? null, true)),
+        ativo:                /^ativo$/i.test(normalizeStatusProduto(row['cadastrado'] ?? row['status_do_produto'] ?? row['status'] ?? null, true)),
       }))
       const existResp = await fetch(getApiUrl('/catalog/certificados'))
       const existData = await existResp.json()
