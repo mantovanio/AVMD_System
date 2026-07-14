@@ -501,6 +501,19 @@ const EMPTY_ITEM: NovaTabelaPrecoItem = {
   tabela_preco_id: '', certificado_id: '', valor: 0, valor_custo: 0, valor_repasse: 0, link_safeweb: null, ativo: true,
 }
 
+type ItemProductDraft = {
+  tipo: string
+  descricao_produto: string
+  validade: string
+  validade_meses: number
+  tipo_emissao_padrao: string
+  periodo_uso: string
+}
+
+const EMPTY_ITEM_PRODUCT: ItemProductDraft = {
+  tipo: '', descricao_produto: '', validade: '', validade_meses: 0, tipo_emissao_padrao: '', periodo_uso: '',
+}
+
 const EMPTY_PARTICIPANTE: NovaTabelaPrecoParticipante = {
   tabela_preco_id: '', tipo_participante: 'tipo_parceiro',
   parceiro_id: null, tipo_parceiro: null, perfil: null,
@@ -712,6 +725,7 @@ export default function Comercial() {
   const [showFormItem, setShowFormItem]             = useState(false)
   const [editingItemId, setEditingItemId]           = useState<string | null>(null)
   const [formItem, setFormItem]                     = useState<NovaTabelaPrecoItem>(EMPTY_ITEM)
+  const [formItemProduct, setFormItemProduct]       = useState<ItemProductDraft>(EMPTY_ITEM_PRODUCT)
   const [showFormParticipante, setShowFormParticipante] = useState(false)
   const [formParticipante, setFormParticipante]         = useState<NovaTabelaPrecoParticipante>(EMPTY_PARTICIPANTE)
   const [showFormAgenteTabela, setShowFormAgenteTabela] = useState(false)
@@ -2812,6 +2826,14 @@ export default function Comercial() {
       certificado_id: certificadoId,
       valor: certificado?.preco_venda ?? 0,
     })
+    setFormItemProduct(certificado ? {
+      tipo: certificado.tipo,
+      descricao_produto: certificado.descricao_produto ?? certificado.descricao ?? '',
+      validade: certificado.validade,
+      validade_meses: certificado.validade_meses ?? validadeEmMeses(certificado.validade) ?? 0,
+      tipo_emissao_padrao: certificado.tipo_emissao_padrao ?? '',
+      periodo_uso: certificado.periodo_uso ?? '',
+    } : EMPTY_ITEM_PRODUCT)
     setShowFormItem(true)
   }
   function editarItem(item: TabelaPrecoItem) {
@@ -2822,17 +2844,38 @@ export default function Comercial() {
       valor: certificado?.preco_venda ?? item.valor, valor_custo: item.valor_custo, valor_repasse: item.valor_repasse,
       link_safeweb: item.link_safeweb, ativo: item.ativo,
     })
+    setFormItemProduct(certificado ? {
+      tipo: certificado.tipo,
+      descricao_produto: certificado.descricao_produto ?? certificado.descricao ?? '',
+      validade: certificado.validade,
+      validade_meses: certificado.validade_meses ?? validadeEmMeses(certificado.validade) ?? 0,
+      tipo_emissao_padrao: certificado.tipo_emissao_padrao ?? '',
+      periodo_uso: certificado.periodo_uso ?? '',
+    } : EMPTY_ITEM_PRODUCT)
     setShowFormItem(true)
   }
   async function salvarItem() {
     if (!formItem.certificado_id) return
     setSalvandoCatalogo(true)
-    const rI = await fetch(getApiUrl('/catalog/itens'), {
+    const certificadoAtual = certificadoById.get(formItem.certificado_id)
+    const rC = certificadoAtual ? await fetch(getApiUrl('/catalog/certificados'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...certificadoAtual,
+          tipo: formItemProduct.tipo.trim() || certificadoAtual.tipo,
+          descricao_produto: formItemProduct.descricao_produto.trim() || null,
+          validade: formItemProduct.validade.trim() || certificadoAtual.validade,
+          validade_meses: formItemProduct.validade_meses || validadeEmMeses(formItemProduct.validade) || null,
+          tipo_emissao_padrao: formItemProduct.tipo_emissao_padrao.trim() || null,
+          periodo_uso: formItemProduct.periodo_uso.trim() || null,
+        }),
+      }) : new Response(null, { status: 200 })
+    const rI = rC.ok ? await fetch(getApiUrl('/catalog/itens'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(editingItemId ? { ...formItem, id: editingItemId } : formItem),
-    })
+    }) : new Response(null, { status: 500 })
     setSalvandoCatalogo(false)
-    if (!rI.ok) { showMsg('Erro ao salvar item'); return }
+    if (!rI.ok || !rC.ok) { showMsg('Erro ao salvar produto e preço'); return }
     setShowFormItem(false); setEditingItemId(null); void fetchCatalogo()
   }
   async function excluirItem(id: string) {
@@ -6008,26 +6051,45 @@ export default function Comercial() {
                     </div>
 
                     {showFormItem && (
-                      <Panel title={editingItemId ? 'Editar Item' : 'Novo Item'} onClose={() => setShowFormItem(false)}>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div className="md:col-span-4">
+                      <FloatingPanel title={editingItemId ? 'Editar produto da tabela' : 'Adicionar produto à tabela'} onClose={() => setShowFormItem(false)}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="md:col-span-2">
                             <SelectInput label="Certificado *" value={formItem.certificado_id}
-                              onChange={v => setFormItem(p => ({ ...p, certificado_id: v, valor: certificadoById.get(v)?.preco_venda ?? 0 }))}
+                              onChange={v => {
+                                const cert = certificadoById.get(v)
+                                setFormItem(p => ({ ...p, certificado_id: v, valor: cert?.preco_venda ?? 0 }))
+                                setFormItemProduct(cert ? {
+                                  tipo: cert.tipo,
+                                  descricao_produto: cert.descricao_produto ?? cert.descricao ?? '',
+                                  validade: cert.validade,
+                                  validade_meses: cert.validade_meses ?? validadeEmMeses(cert.validade) ?? 0,
+                                  tipo_emissao_padrao: cert.tipo_emissao_padrao ?? '',
+                                  periodo_uso: cert.periodo_uso ?? '',
+                                } : EMPTY_ITEM_PRODUCT)
+                              }}
                               options={certificadosAtivos.map(c => ({ value: c.id, label: `${c.codigo ? c.codigo + ' · ' : ''}${c.tipo}${c.validade ? ' · ' + c.validade : ''}` }))} />
                           </div>
-                          <div className="space-y-1">
-                            <span className="text-xs text-gray-500">Preço de Venda Herdado</span>
-                            <div className="h-11 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 flex items-center text-sm font-semibold text-green-600 dark:text-green-400">
-                              {formatCurrency(certificadoById.get(formItem.certificado_id)?.preco_venda ?? 0)}
-                            </div>
+                          <TextInput label="Nome do produto *" value={formItemProduct.tipo} onChange={v => setFormItemProduct(p => ({ ...p, tipo: v }))} className="md:col-span-2" />
+                          <label className="flex flex-col gap-1 md:col-span-2">
+                            <span className="text-xs text-gray-500">Descrição exibida na loja</span>
+                            <textarea value={formItemProduct.descricao_produto} onChange={e => setFormItemProduct(p => ({ ...p, descricao_produto: e.target.value }))} rows={3}
+                              className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                          </label>
+                          <TextInput label="Validade *" value={formItemProduct.validade} onChange={v => setFormItemProduct(p => ({ ...p, validade: v }))} placeholder="Ex.: 1 ano, 2 anos, 4 meses" />
+                          <NumberInput label="Validade em meses" value={formItemProduct.validade_meses} onChange={v => setFormItemProduct(p => ({ ...p, validade_meses: v }))} step={1} />
+                          <TextInput label="Tipo de emissão" value={formItemProduct.tipo_emissao_padrao} onChange={v => setFormItemProduct(p => ({ ...p, tipo_emissao_padrao: v }))} placeholder="Videoconferência, Presencial, Fast..." />
+                          <TextInput label="Período de uso" value={formItemProduct.periodo_uso} onChange={v => setFormItemProduct(p => ({ ...p, periodo_uso: v }))} placeholder="Ex.: 12 meses" />
+                          <div className="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            Nome, descrição, validade e emissão pertencem ao produto-base e serão atualizados em todas as tabelas. Os valores abaixo são exclusivos desta tabela.
                           </div>
+                          <NumberInput label="Preço de venda nesta tabela (R$)" value={formItem.valor} onChange={v => setFormItem(p => ({ ...p, valor: v }))} />
                           <NumberInput label="Valor Custo (R$)" value={formItem.valor_custo} onChange={v => setFormItem(p => ({ ...p, valor_custo: v }))} />
                           <NumberInput label="Valor Repasse (R$)" value={formItem.valor_repasse} onChange={v => setFormItem(p => ({ ...p, valor_repasse: v }))} />
                           <ActiveSelect value={formItem.ativo} onChange={v => setFormItem(p => ({ ...p, ativo: v }))} />
-                          <TextInput label="Link Safeweb" value={formItem.link_safeweb ?? ''} onChange={v => setFormItem(p => ({ ...p, link_safeweb: v || null }))} className="md:col-span-4" />
+                          <TextInput label="Link Safeweb" value={formItem.link_safeweb ?? ''} onChange={v => setFormItem(p => ({ ...p, link_safeweb: v || null }))} className="md:col-span-2" />
                         </div>
                         <FormActions onSave={salvarItem} onCancel={() => setShowFormItem(false)} saving={salvandoCatalogo} />
-                      </Panel>
+                      </FloatingPanel>
                     )}
 
                     {(() => {
@@ -6061,9 +6123,9 @@ export default function Comercial() {
                                           className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer" />
                                       </td>
                                       <td className="px-4 py-3 text-xs text-gray-400">{cert?.codigo ?? '—'}</td>
-                                      <td className="px-4 py-3 font-medium text-sm">{cert?.tipo ?? 'Cert. removido'}</td>
+                                      <td className="px-4 py-3 font-medium text-sm"><button type="button" onClick={() => editarItem(item)} className="text-left hover:text-blue-600 hover:underline">{cert?.tipo ?? 'Cert. removido'}</button></td>
                                       <td className="px-4 py-3 text-sm text-gray-500">{cert?.validade ?? '—'}</td>
-                                      <td className="px-4 py-3 text-green-600 dark:text-green-400 font-semibold">{formatCurrency(cert?.preco_venda ?? item.valor)}</td>
+                                      <td className="px-4 py-3 text-green-600 dark:text-green-400 font-semibold">{formatCurrency(item.valor)}</td>
                                       <td className="px-4 py-3 text-sm text-gray-500">{formatCurrency(item.valor_custo)}</td>
                                       <td className="px-4 py-3 text-sm text-gray-500">{formatCurrency(item.valor_repasse)}</td>
                                       <td className="px-4 py-3">
@@ -7398,6 +7460,20 @@ function Panel({ title, onClose, children }: { title: string; onClose: () => voi
         <button type="button" title="Fechar" onClick={onClose}><X size={16} className="text-gray-400" /></button>
       </div>
       {children}
+    </div>
+  )
+}
+
+function FloatingPanel({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
+      <div role="dialog" aria-modal="true" aria-label={title} className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700 dark:bg-gray-900">
+        <div className="sticky top-0 z-10 -mx-1 mb-4 flex items-center justify-between border-b border-gray-100 bg-white px-1 pb-3 dark:border-gray-800 dark:bg-gray-900">
+          <div><h3 className="text-base font-semibold text-gray-800 dark:text-gray-100">{title}</h3><p className="mt-0.5 text-xs text-gray-400">Edite sem sair da tabela selecionada</p></div>
+          <button type="button" title="Fechar" onClick={onClose} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800"><X size={18} /></button>
+        </div>
+        {children}
+      </div>
     </div>
   )
 }

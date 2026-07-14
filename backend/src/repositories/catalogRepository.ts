@@ -24,7 +24,6 @@ export class CatalogRepository {
        on conflict (id) do update set ${ups}, updated_at = now() returning id`,
       [id, ...vals]
     )
-    await this.syncTabelaItensFromCertificado(id)
     return r.rows[0] ?? { id }
   }
 
@@ -66,7 +65,6 @@ export class CatalogRepository {
          on conflict (id) do update set ${ups}, updated_at = now()`,
         [id, ...vals]
       )
-      await this.syncTabelaItensFromCertificado(id)
     }
   }
 
@@ -108,13 +106,8 @@ export class CatalogRepository {
 
   async saveTabelaItem(input: Record<string, unknown>) {
     const id = (input.id as string | null)?.trim() || randomUUID()
-    const certificadoId = String(input.certificado_id ?? '').trim()
-    const valorHeradado = certificadoId ? await this.getCertificadoPrecoVenda(certificadoId) : null
     const fields = ['tabela_preco_id','certificado_id','valor','valor_custo','valor_repasse','link_safeweb','ativo']
-    const vals = fields.map(f => {
-      if (f === 'valor') return valorHeradado ?? input[f] ?? null
-      return input[f] ?? null
-    })
+    const vals = fields.map(f => input[f] ?? null)
     const cols = fields.join(', ')
     const phs = fields.map((_, i) => `$${i + 2}`).join(', ')
     const ups = fields.map(f => `${f} = excluded.${f}`).join(', ')
@@ -131,12 +124,7 @@ export class CatalogRepository {
     const fields = ['tabela_preco_id','certificado_id','valor','valor_custo','valor_repasse','link_safeweb','ativo']
     for (const item of items) {
       const id = (item.id as string | null)?.trim() || randomUUID()
-      const certificadoId = String(item.certificado_id ?? '').trim()
-      const valorHeradado = certificadoId ? await this.getCertificadoPrecoVenda(certificadoId) : null
-      const vals = fields.map(f => {
-        if (f === 'valor') return valorHeradado ?? item[f] ?? null
-        return item[f] ?? null
-      })
+      const vals = fields.map(f => item[f] ?? null)
       const cols = fields.join(', ')
       const phs = fields.map((_, i) => `$${i + 2}`).join(', ')
       const ups = fields.map(f => `${f} = excluded.${f}`).join(', ')
@@ -178,29 +166,6 @@ export class CatalogRepository {
   async getAllCertificadosCodigoId() {
     const r = await this.db.query(`select id, codigo from certificados`)
     return r.rows as { id: string; codigo: number | null }[]
-  }
-
-  private async getCertificadoPrecoVenda(certificadoId: string): Promise<number | null> {
-    const r = await this.db.query<{ preco_venda: number | null }>(
-      `select preco_venda
-       from certificados
-       where id = $1::uuid
-       limit 1`,
-      [certificadoId],
-    )
-    return r.rows[0]?.preco_venda ?? null
-  }
-
-  private async syncTabelaItensFromCertificado(certificadoId: string): Promise<void> {
-    await this.db.query(
-      `update tabelas_preco_itens i
-       set valor = coalesce(c.preco_venda, 0),
-           updated_at = now()
-       from certificados c
-       where c.id = $1::uuid
-         and i.certificado_id = c.id`,
-      [certificadoId],
-    )
   }
 
   // ── Tabela participantes ──────────────────────────────────────────────
