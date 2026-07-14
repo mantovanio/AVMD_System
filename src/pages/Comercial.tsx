@@ -684,6 +684,7 @@ export default function Comercial() {
   const [salvandoCatalogo, setSalvandoCatalogo] = useState(false)
   // certificados form
   const [showFormCert, setShowFormCert]         = useState(false)
+  const [showComboSection, setShowComboSection] = useState(false)
   const [editingCertId, setEditingCertId]       = useState<string | null>(null)
   const [formCert, setFormCert]                 = useState<NovoCertificado>(EMPTY_CERTIFICADO)
   const [importando, setImportando]             = useState(false)
@@ -2379,7 +2380,7 @@ export default function Comercial() {
   }
 
   // ── catalog mutations ────────────────────────────────────────
-  function abrirNovoCertificado() { setEditingCertId(null); setFormCert({ ...EMPTY_CERTIFICADO }); setShowFormCert(true) }
+  function abrirNovoCertificado() { setEditingCertId(null); setFormCert({ ...EMPTY_CERTIFICADO }); setShowComboSection(false); setShowFormCert(true) }
 
   function editarCertificado(c: Certificado) {
     setEditingCertId(c.id)
@@ -2391,9 +2392,9 @@ export default function Comercial() {
       agrupador: c.agrupador, hash: c.hash, codigo_alternativo: c.codigo_alternativo ?? null, combo_produtos: c.combo_produtos ?? null,
       estoque: c.estoque, ativo: c.ativo,
     })
+    setShowComboSection(false)
     setShowFormCert(true)
   }
-
   async function salvarCertificado() {
     if (!formCert.tipo.trim() || !formCert.validade.trim()) return
     setSalvandoCatalogo(true)
@@ -7227,33 +7228,41 @@ export default function Comercial() {
                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </label>
               <div className="mt-4 border-t border-gray-100 dark:border-gray-800 pt-4">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Combo de Produto</span>
-                <p className="text-xs text-gray-400 mt-1">Associe outros certificados para gerar uma venda combo.</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {certificados.filter(c => c.id !== editingCertId).map(c => {
-                    const isSelected = (formCert.combo_produtos ?? []).includes(c.id)
-                    return (
-                      <button key={c.id} type="button"
-                        onClick={() => {
-                          const current = formCert.combo_produtos ?? []
-                          setFormCert(p => ({
-                            ...p,
-                            combo_produtos: isSelected
-                              ? current.filter(id => id !== c.id)
-                              : [...current, c.id],
-                          }))
-                        }}
-                        className={cn(
-                          'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
-                          isSelected
-                            ? 'bg-blue-100 border-blue-400 text-blue-700 dark:bg-blue-900/30 dark:border-blue-500 dark:text-blue-300'
-                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400'
-                        )}>
-                        {c.tipo || `#${c.codigo}`}
-                      </button>
-                    )
-                  })}
-                </div>
+                <button type="button" onClick={() => setShowComboSection(v => !v)}
+                  className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                  <ChevronRight size={14} className={cn('transition-transform', showComboSection && 'rotate-90')} />
+                  Combo de Produto
+                </button>
+                {showComboSection && (
+                  <>
+                    <p className="text-xs text-gray-400 mt-2 ml-5">Associe outros certificados para gerar uma venda combo.</p>
+                    <div className="mt-2 flex flex-wrap gap-2 ml-5">
+                      {certificados.filter(c => c.id !== editingCertId).map(c => {
+                        const isSelected = (formCert.combo_produtos ?? []).includes(c.id)
+                        return (
+                          <button key={c.id} type="button"
+                            onClick={() => {
+                              const current = formCert.combo_produtos ?? []
+                              setFormCert(p => ({
+                                ...p,
+                                combo_produtos: isSelected
+                                  ? current.filter(id => id !== c.id)
+                                  : [...current, c.id],
+                              }))
+                            }}
+                            className={cn(
+                              'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                              isSelected
+                                ? 'bg-blue-100 border-blue-400 text-blue-700 dark:bg-blue-900/30 dark:border-blue-500 dark:text-blue-300'
+                                : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400'
+                            )}>
+                            {c.tipo || `#${c.codigo}`}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
               <FormActions onSave={salvarCertificado} onCancel={() => setShowFormCert(false)} saving={salvandoCatalogo} />
             </div>
