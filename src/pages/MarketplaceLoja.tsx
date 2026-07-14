@@ -11,7 +11,6 @@ import {
   Mail,
   MapPin,
   Phone,
-  Search,
   Store,
   UserRound,
   Wallet,
@@ -27,7 +26,6 @@ import {
   formatDateTime,
   InfoLine,
   InfoMini,
-  ProductCard,
   ProductHero,
   ProductTags,
   SectionCard,
@@ -47,7 +45,6 @@ type LojaMarketplaceConfig = {
 }
 
 type CheckoutBuyerType = 'pessoa_fisica' | 'pessoa_juridica'
-type ProductAudience = 'todos' | 'pessoa_fisica' | 'pessoa_juridica' | 'acessorios'
 
 type FormState = {
   comprador: {
@@ -80,6 +77,9 @@ type FormState = {
   }
   forma_pagamento_id: string
   observacoes: string
+  conectividade_social: string
+  documento_identidade: string
+  titulo_eleitor_uf: string
 }
 
 type SectionStatus = {
@@ -119,6 +119,19 @@ const INITIAL_FORM: FormState = {
   },
   forma_pagamento_id: '',
   observacoes: '',
+  conectividade_social: '',
+  documento_identidade: '',
+  titulo_eleitor_uf: '',
+}
+
+const BRAZIL_STATES = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
+
+function checkoutNotes(form: FormState) {
+  const notes = [form.observacoes.trim()]
+  if (form.conectividade_social) notes.push(`Conectividade Social: ${form.conectividade_social}`)
+  if (form.documento_identidade) notes.push(`Documento de identidade: ${form.documento_identidade}`)
+  if (form.titulo_eleitor_uf) notes.push(`UF do título de eleitor: ${form.titulo_eleitor_uf}`)
+  return notes.filter(Boolean).join('\n') || null
 }
 
 function normalizeLojaConfig(configuracoes: Record<string, unknown> | null | undefined): Required<LojaMarketplaceConfig> {
@@ -260,15 +273,33 @@ function statusPagamentoLabel(option: PaymentOption) {
   return 'A validação só é liberada após a confirmação'
 }
 
-function productAudience(item: LojaItemRow): Exclude<ProductAudience, 'todos'> {
-  const text = `${item.certificados?.tipo ?? ''} ${item.certificados?.descricao_produto ?? ''}`.toLowerCase()
-  if (/token|cart[aã]o|leitora|valida[cç][aã]o domiciliar/.test(text) && !/e-cpf|e-pf|e-cnpj|e-pj|safeid/.test(text)) return 'acessorios'
-  if (/e-cnpj|e-pj|cnpj/.test(text)) return 'pessoa_juridica'
-  return 'pessoa_fisica'
-}
-
 function normalizedSearch(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+
+function productKind(item: LojaItemRow) {
+  const name = normalizedSearch(item.certificados?.tipo ?? '')
+  if (name.includes('combo')) return 'Combo'
+  if (/token|cartao|leitora|validacao domiciliar/.test(name) && !/e-cpf|e-pf|e-cnpj|e-pj|safeid/.test(name)) return 'Mídias e serviços'
+  if (/e-cnpj|e-pj/.test(name)) return 'e-CNPJ'
+  if (/e-cpf|e-pf/.test(name)) return 'e-CPF'
+  return 'Outros'
+}
+
+function productEmission(item: LojaItemRow) {
+  return labelEmissao(item.certificados?.tipo_emissao_padrao) ?? 'Não informado'
+}
+
+function productValidity(item: LojaItemRow) {
+  const explicit = item.certificados?.validade?.trim()
+  if (explicit) return explicit
+  const name = normalizedSearch(item.certificados?.tipo ?? '')
+  const totalMonths = name.match(/validade(?: total)?(?: de)? (\d+) meses?/)?.[1]
+  if (totalMonths) return Number(totalMonths) === 24 ? '2 anos' : `${totalMonths} meses`
+  if (/validade (?:de )?2 anos|validade 2 anos/.test(name)) return '2 anos'
+  if (/4 meses|degustacao/.test(name)) return '4 meses'
+  if (/12 meses|1 ano/.test(name)) return '1 ano'
+  return 'Não informada'
 }
 
 export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
@@ -278,9 +309,10 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [tabela, setTabela] = useState<TabelaPreco | null>(null)
   const [itens, setItens] = useState<LojaItemRow[]>([])
   const [selectedItemId, setSelectedItemId] = useState('')
-  const [productSearch, setProductSearch] = useState('')
-  const [productAudienceFilter, setProductAudienceFilter] = useState<ProductAudience>('todos')
-  const [productEmissionFilter, setProductEmissionFilter] = useState('todos')
+  const [productKindFilter, setProductKindFilter] = useState('')
+  const [productEmissionFilter, setProductEmissionFilter] = useState('')
+  const [productValidityFilter, setProductValidityFilter] = useState('')
+  const [productConfirmed, setProductConfirmed] = useState(false)
   const [pagamentos, setPagamentos] = useState<PaymentOption[]>([])
   const [agendaAgents, setAgendaAgents] = useState<AgendaAgent[]>([])
   const [agendaPoints, setAgendaPoints] = useState<AgendaPoint[]>([])
@@ -327,6 +359,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
         setTabela(context.tabela)
         setItens(context.produtos)
         setSelectedItemId(initialItemId)
+        setProductConfirmed(Boolean(initialItemId && normalizeLojaConfig(context.loja.configuracoes).modo_exibicao === 'link_direto'))
         setPagamentos(context.pagamentos)
         setAgendaAgents(context.agentes)
         setAgendaPoints(context.pontos)
@@ -360,21 +393,12 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     [itens]
   )
 
-  const productEmissionOptions = useMemo(() => {
-    const labels = produtosAtivos.map(item => labelEmissao(item.certificados?.tipo_emissao_padrao)).filter((value): value is string => Boolean(value))
-    return Array.from(new Set(labels)).sort((a, b) => a.localeCompare(b, 'pt-BR'))
-  }, [produtosAtivos])
-
-  const filteredProducts = useMemo(() => {
-    const query = normalizedSearch(productSearch)
-    return produtosAtivos.filter(item => {
-      if (productAudienceFilter !== 'todos' && productAudience(item) !== productAudienceFilter) return false
-      const emission = labelEmissao(item.certificados?.tipo_emissao_padrao) ?? ''
-      if (productEmissionFilter !== 'todos' && emission !== productEmissionFilter) return false
-      if (!query) return true
-      return normalizedSearch([item.certificados?.tipo, item.certificados?.descricao_produto, item.certificados?.modelo, item.certificados?.validade, item.certificados?.periodo_uso].filter(Boolean).join(' ')).includes(query)
-    })
-  }, [productAudienceFilter, productEmissionFilter, productSearch, produtosAtivos])
+  const productKindOptions = useMemo(() => Array.from(new Set(produtosAtivos.map(productKind))).sort(), [produtosAtivos])
+  const productsByKind = useMemo(() => produtosAtivos.filter(item => !productKindFilter || productKind(item) === productKindFilter), [productKindFilter, produtosAtivos])
+  const productEmissionOptions = useMemo(() => Array.from(new Set(productsByKind.map(productEmission))).sort(), [productsByKind])
+  const productsByEmission = useMemo(() => productsByKind.filter(item => !productEmissionFilter || productEmission(item) === productEmissionFilter), [productEmissionFilter, productsByKind])
+  const productValidityOptions = useMemo(() => Array.from(new Set(productsByEmission.map(productValidity))).sort(), [productsByEmission])
+  const filteredProducts = useMemo(() => productsByEmission.filter(item => !productValidityFilter || productValidity(item) === productValidityFilter), [productValidityFilter, productsByEmission])
 
   const lojaConfig = useMemo(
     () => normalizeLojaConfig(loja?.configuracoes),
@@ -565,7 +589,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     { label: 'Agendamento', done: agendamentoDone, icon: CalendarDays },
   ]
 
-  const canShowFaturamento = !!itemSelecionado
+  const canShowFaturamento = !!itemSelecionado && productConfirmed
   const canShowTitular = canShowFaturamento && faturamentoDone
   const canShowPagamento = canShowTitular && titularDone
   const canShowAgendamento = canShowPagamento && pagamentoDone
@@ -729,6 +753,12 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
 
   function handleSelectProduct(itemId: string) {
     setSelectedItemId(itemId)
+    setProductConfirmed(false)
+  }
+
+  function confirmProductSelection() {
+    if (!itemSelecionado) return
+    setProductConfirmed(true)
     requestAnimationFrame(() => {
       formStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
@@ -828,7 +858,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
           ponto_atendimento_id: selectedSlot.ponto_atendimento_id,
           data_agendada: selectedSlot.inicio,
         } : null,
-        observacoes: form.observacoes.trim() || null,
+        observacoes: checkoutNotes(form),
       })
 
       const mensagens = [result.message, result.access_message].filter(Boolean)
@@ -940,39 +970,67 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
               ) : modoLinkDireto && itemSelecionado ? (
                 <ProductHero item={itemSelecionado} />
               ) : (
-                <div className="space-y-5">
-                  <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
-                    <p className="text-sm font-semibold text-slate-800">Qual certificado você precisa?</p>
-                    <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Filtrar produtos por perfil">
-                      {([['todos', 'Todos'], ['pessoa_fisica', 'Pessoa Física'], ['pessoa_juridica', 'Pessoa Jurídica'], ['acessorios', 'Mídias e serviços']] as const).map(([value, label]) => (
-                        <button key={value} type="button" onClick={() => setProductAudienceFilter(value)} className={cn('rounded-full border px-4 py-2 text-sm font-semibold transition-colors', productAudienceFilter === value ? 'border-[#17346b] bg-[#17346b] text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300')}>{label}</button>
-                      ))}
-                    </div>
-                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-                      <label className="relative block">
-                        <span className="sr-only">Buscar produto</span>
-                        <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input value={productSearch} onChange={event => setProductSearch(event.target.value)} placeholder="Buscar e-CPF, e-CNPJ, SafeID..." className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none transition focus:border-[#17346b] focus:ring-2 focus:ring-sky-100" />
-                      </label>
-                      <label>
-                        <span className="sr-only">Tipo de atendimento</span>
-                        <select value={productEmissionFilter} onChange={event => setProductEmissionFilter(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-[#17346b] focus:ring-2 focus:ring-sky-100">
-                          <option value="todos">Todos os atendimentos</option>
-                          {productEmissionOptions.map(option => <option key={option} value={option}>{option}</option>)}
-                        </select>
-                      </label>
-                    </div>
+                <div className="space-y-6">
+                  <p className="text-base font-semibold text-[#17346b]">Selecione as opções abaixo para encontrar seu Certificado Digital.</p>
+                  <div className="grid overflow-hidden rounded-2xl border border-slate-300 sm:grid-cols-3">
+                    <label className="border-b border-slate-300 p-4 sm:border-b-0 sm:border-r">
+                      <span className="block text-sm font-bold text-[#17346b]">Produto</span>
+                      <select value={productKindFilter} onChange={event => { setProductKindFilter(event.target.value); setProductEmissionFilter(''); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none">
+                        <option value="">Selecione</option>
+                        {productKindOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </label>
+                    <label className="border-b border-slate-300 p-4 sm:border-b-0 sm:border-r">
+                      <span className="block text-sm font-bold text-[#17346b]">Emissão</span>
+                      <select disabled={!productKindFilter} value={productEmissionFilter} onChange={event => { setProductEmissionFilter(event.target.value); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
+                        <option value="">Selecione</option>
+                        {productEmissionOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </label>
+                    <label className="p-4">
+                      <span className="block text-sm font-bold text-[#17346b]">Validade</span>
+                      <select disabled={!productEmissionFilter} value={productValidityFilter} onChange={event => { setProductValidityFilter(event.target.value); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
+                        <option value="">Selecione</option>
+                        {productValidityOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </label>
                   </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm text-slate-500"><strong className="text-slate-800">{filteredProducts.length}</strong> {filteredProducts.length === 1 ? 'opção encontrada' : 'opções encontradas'}</p>
-                    {(productSearch || productAudienceFilter !== 'todos' || productEmissionFilter !== 'todos') && <button type="button" onClick={() => { setProductSearch(''); setProductAudienceFilter('todos'); setProductEmissionFilter('todos') }} className="text-sm font-semibold text-[#17346b] hover:underline">Limpar filtros</button>}
-                  </div>
-                  {filteredProducts.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {filteredProducts.map(item => <ProductCard key={item.id} item={item} selected={selectedItemId === item.id} onSelect={handleSelectProduct} />)}
+
+                  {!productKindFilter || !productEmissionFilter || !productValidityFilter ? (
+                    <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-slate-300 bg-slate-50/40 px-6 text-center">
+                      <Store size={54} strokeWidth={1.25} className="text-slate-300" />
+                      <p className="mt-5 text-lg font-semibold text-slate-600">Preencha os filtros acima para visualizar os produtos</p>
                     </div>
+                  ) : filteredProducts.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-slate-500">Nenhum produto disponível para esta combinação.</div>
                   ) : (
-                    <div className="rounded-[24px] border border-dashed border-slate-300 bg-white px-5 py-10 text-center"><p className="font-semibold text-slate-800">Nenhum produto encontrado</p><p className="mt-1 text-sm text-slate-500">Altere os filtros ou faça uma nova busca.</p></div>
+                    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,.85fr)]">
+                      <div className="overflow-hidden rounded-2xl border border-slate-300">
+                        <div className="grid grid-cols-[1fr_auto] bg-slate-50 px-5 py-3 text-sm font-bold text-[#17346b]"><span>Produtos</span><span>Valores</span></div>
+                        {filteredProducts.map(item => {
+                          const selected = selectedItemId === item.id
+                          return (
+                            <button key={item.id} type="button" onClick={() => handleSelectProduct(item.id)} className={cn('grid w-full grid-cols-[1fr_auto] items-center gap-4 border-t border-slate-200 px-5 py-3 text-left transition', selected ? 'bg-[#0b8fc1] text-white' : 'bg-white hover:bg-sky-50')}>
+                              <span className="text-sm font-semibold">{item.certificados?.tipo ?? 'Produto'}</span>
+                              <span className="flex items-center gap-3 whitespace-nowrap text-sm font-semibold">{formatCurrency(item.valor)}<span className={cn('h-5 w-5 rounded-full border-2 p-1', selected ? 'border-white' : 'border-slate-300')}><span className={cn('block h-full w-full rounded-full', selected && 'bg-white')} /></span></span>
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      <aside>
+                        <p className="mb-3 text-base font-bold text-[#17346b]">Resumo da compra</p>
+                        <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white">
+                          {itemSelecionado ? (
+                            <>
+                              <div className="p-5"><p className="font-bold text-slate-900">{itemSelecionado.certificados?.tipo}</p><p className="mt-2 text-sm text-slate-600">Emissão: {productEmission(itemSelecionado)}</p><p className="text-sm text-slate-600">Validade: {productValidity(itemSelecionado)}</p><ProductTags item={itemSelecionado} compact /></div>
+                              <div className="border-t border-slate-200 px-5 py-6 text-center text-3xl font-bold text-emerald-600">{formatCurrency(itemSelecionado.valor)}</div>
+                            </>
+                          ) : <div className="p-8 text-center text-sm text-slate-500">Escolha um produto para continuar.</div>}
+                        </div>
+                        <button type="button" disabled={!itemSelecionado} onClick={confirmProductSelection} className="mt-4 w-full rounded-xl bg-[#0b8fc1] px-5 py-4 text-sm font-bold text-white transition hover:bg-[#087ca8] disabled:cursor-not-allowed disabled:bg-slate-300">Avançar</button>
+                      </aside>
+                    </div>
                   )}
                 </div>
               )}
@@ -1595,6 +1653,38 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                 <WarningCard text="Se você não agendar agora, será necessário voltar depois ao portal do cliente para escolher um horário antes do atendimento." />
                 <WarningCard text="Informe e-mail e telefone com WhatsApp válidos para a equipe entrar em contato no momento da validação." />
               </div>
+
+              <details className="mt-5 overflow-hidden rounded-[22px] border border-slate-200 bg-white">
+                <summary className="cursor-pointer bg-slate-50 px-5 py-4 text-sm font-semibold text-slate-800">Dados opcionais</summary>
+                <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-3">
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Conectividade Social</span>
+                    <select value={form.conectividade_social} onChange={event => setForm(prev => ({ ...prev, conectividade_social: event.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#17346b] focus:ring-2 focus:ring-sky-100">
+                      <option value="">Selecione uma opção</option>
+                      <option value="Não utilizarei">Não utilizarei</option>
+                      <option value="Pessoa física / CAEPF">Pessoa física / CAEPF</option>
+                      <option value="Pessoa jurídica / CNPJ">Pessoa jurídica / CNPJ</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Documento de identidade</span>
+                    <select value={form.documento_identidade} onChange={event => setForm(prev => ({ ...prev, documento_identidade: event.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#17346b] focus:ring-2 focus:ring-sky-100">
+                      <option value="">Selecione uma opção</option>
+                      <option value="RG">RG</option>
+                      <option value="CNH">CNH</option>
+                      <option value="Passaporte">Passaporte</option>
+                      <option value="Documento profissional">Documento profissional</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">UF do título de eleitor</span>
+                    <select value={form.titulo_eleitor_uf} onChange={event => setForm(prev => ({ ...prev, titulo_eleitor_uf: event.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#17346b] focus:ring-2 focus:ring-sky-100">
+                      <option value="">Selecione uma opção</option>
+                      {BRAZIL_STATES.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </details>
 
               <div className="mt-4">
                 <GuidedField
