@@ -158,7 +158,8 @@ function buildSlotKey(slot: AgendaSlot | null | undefined) {
 
 function labelEmissao(tipo: string | null | undefined): string | null {
   if (!tipo) return null
-  if (/online|video|vídeo|fast|remot/i.test(tipo)) return 'Fast'
+  if (/fast/i.test(tipo)) return 'Fast'
+  if (/online|video|vídeo|remot/i.test(tipo)) return 'Videoconferência'
   return tipo
 }
 
