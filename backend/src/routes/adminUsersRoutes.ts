@@ -96,7 +96,11 @@ export async function handleAdminUsersRoutes(
   if (body.action === 'update_password') {
     const { userId, password } = body.payload
     try {
-      await clerkClient.users.updateUser(userId, { password })
+      await clerkClient.users.updateUser(userId, {
+        password,
+        skipPasswordChecks: true,
+        signOutOfOtherSessions: true,
+      })
       writeJson(res, 200, { ok: true }, corsOrigin)
     } catch (error) {
       writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
