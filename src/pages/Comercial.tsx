@@ -2754,7 +2754,7 @@ export default function Comercial() {
     showMsg('Regra de preço em relação à matriz salva com sucesso.', 'ok')
   }
 
-  async function aplicarPricingMatrixRule(tabelaId: string) {
+  async function aplicarPricingMatrixRule(tabelaId: string, apenasSelecionados?: Set<string>) {
     if (!pricingMatrixForm.tabela_base_id) {
       showMsg('Selecione a tabela matriz antes de aplicar a regra.')
       return
@@ -2764,25 +2764,33 @@ export default function Comercial() {
       return
     }
 
-    const itensBase = tabelaItens.filter(item => item.tabela_preco_id === pricingMatrixForm.tabela_base_id)
-    const itensDestino = tabelaItens.filter(item => item.tabela_preco_id === tabelaId)
-    if (!itensBase.length) {
+    const useCatalogo = pricingMatrixForm.tabela_base_id === '__catalogo__'
+    const itensBase = useCatalogo
+      ? []
+      : tabelaItens.filter(item => item.tabela_preco_id === pricingMatrixForm.tabela_base_id)
+    let itensDestino = tabelaItens.filter(item => item.tabela_preco_id === tabelaId)
+    if (apenasSelecionados && apenasSelecionados.size > 0) {
+      itensDestino = itensDestino.filter(item => apenasSelecionados.has(item.id))
+    }
+    if (!useCatalogo && !itensBase.length) {
       showMsg('A tabela matriz escolhida não possui produtos para servir de base.')
       return
     }
     if (!itensDestino.length) {
-      showMsg('A tabela atual ainda não possui produtos vinculados para receber o reajuste.')
+      showMsg(apenasSelecionados?.size ? 'Nenhum dos itens selecionados foi encontrado na tabela.' : 'A tabela atual ainda não possui produtos vinculados para receber o reajuste.')
       return
     }
 
-    const baseByCertificado = new Map(itensBase.map(item => [item.certificado_id, item]))
+    const baseByCertificado = useCatalogo
+      ? new Map(certificados.map(c => [c.id, { valor: Number(c.preco_venda) || 0 }]))
+      : new Map(itensBase.map(item => [item.certificado_id, { valor: Number(item.valor) }]))
     const percentual = Number(pricingMatrixForm.ajuste_percentual) || 0
     const fator = 1 + percentual / 100
     const updates = itensDestino
       .map(item => {
         const itemBase = baseByCertificado.get(item.certificado_id)
-        if (!itemBase) return null
-        const novoValor = Math.round((Number(itemBase.valor) * fator + Number.EPSILON) * 100) / 100
+        if (!itemBase || !itemBase.valor) return null
+        const novoValor = Math.round((itemBase.valor * fator + Number.EPSILON) * 100) / 100
         return {
           id: item.id,
           valor: novoValor,
@@ -2825,7 +2833,9 @@ export default function Comercial() {
         ajuste_percentual: percentual,
       },
     ])
-    showMsg(`${updates.length} produto(s) atualizados com base na tabela matriz.`, 'ok')
+    const label = apenasSelecionados?.size ? `${updates.length} produto(s) selecionado(s)` : `${updates.length} produto(s)`
+    const baseLabel = useCatalogo ? 'Tabela de Certificados' : 'tabela matriz'
+    showMsg(`${label} atualizados com base na ${baseLabel}.`, 'ok')
     void fetchCatalogo()
   }
 
@@ -5839,6 +5849,7 @@ export default function Comercial() {
                         onChange={v => setPricingMatrixForm(prev => ({ ...prev, tabela_base_id: v }))}
                         options={[
                           { value: '', label: 'Selecione a tabela base' },
+                          { value: '__catalogo__', label: 'Tabela de Certificados (preço referência)' },
                           ...tabelasPreco
                             .filter(item => item.id !== selectedTabelaId && item.ativo)
                             .map(item => ({ value: item.id, label: item.nome })),
@@ -5866,10 +5877,20 @@ export default function Comercial() {
                         >
                           Aplicar na tabela
                         </button>
+                        {selectedItemIds.size > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => void aplicarPricingMatrixRule(selectedTabelaId, selectedItemIds)}
+                            disabled={salvandoCatalogo}
+                            className="px-3 py-2 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-700 disabled:opacity-60"
+                          >
+                            Aplicar nos selecionados ({selectedItemIds.size})
+                          </button>
+                        )}
                       </div>
                     </div>
                     <p className="text-[11px] text-gray-400">
-                      Exemplo: `-15` deixa esta tabela 15% abaixo da matriz. `10` aplica 10% acima. A regra atua nos produtos já vinculados a esta tabela.
+                      Exemplo: `-10` deixa esta tabela 10% abaixo da matriz. `10` aplica 10% acima. Selecione itens na grade abaixo e use "Aplicar nos selecionados" para reajustar apenas esses. A regra atua no preço de venda, sem alterar custos.
                     </p>
                   </div>
 
