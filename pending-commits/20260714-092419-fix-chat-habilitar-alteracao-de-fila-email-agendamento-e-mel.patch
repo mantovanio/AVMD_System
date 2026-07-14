@@ -1,0 +1,52 @@
+From: pending-queue <queue@avmd.local>
+Date: Tue, 14 Jul 2026 09:24:19 -0300
+Subject: fix(chat): habilitar alteracao de fila (email/agendamento) e melhorar resumo
+Patch-Hash: sha256:644250faf1c431fc576fb1a86cc21c15e0173fc07fb73dd816af193e7f534cab
+---
+diff --git a/src/pages/ChatInboxCRM.tsx b/src/pages/ChatInboxCRM.tsx
+index 22210b7..8ea766c 100644
+--- a/src/pages/ChatInboxCRM.tsx
++++ b/src/pages/ChatInboxCRM.tsx
+@@ -1244,6 +1244,25 @@ export default function ChatInboxCRM() {
+     setActionLoading(false)
+   }
+ 
++  async function changeConversationQueue(newFila: QueueType) {
++    if (!selectedConversation) return
++    setActionLoading(true)
++    setActionError(null)
++    try {
++      const response = await fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}`), {
++        method: 'PATCH',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ fila: newFila }),
++      })
++      const data = await response.json()
++      if (!data.ok) throw new Error(data.error || 'Falha ao alterar fila')
++      await loadConversations(false)
++    } catch (err) {
++      setActionError(err instanceof Error ? err.message : String(err))
++    }
++    setActionLoading(false)
++  }
++
+   async function updateConversationStatusById(conversationId: string, status: string) {
+     const shouldExitView = isClosedConversationStatus(status) && conversationId === selectedId
+     const response = await fetch(getApiUrl(`/chat/crm/conversations/${conversationId}`), {
+@@ -2785,7 +2804,15 @@ export default function ChatInboxCRM() {
+                     )}
+ 
+                     <PanelBlock title="Controles do atendimento">
+-                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Etapa do Kanban</label>
++                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Fila</label>
++                      <select value={selectedConversation.fila} onChange={event => void changeConversationQueue(event.target.value as QueueType)} disabled={actionLoading} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none">
++                        <option value="atendimento">Atendimento</option>
++                        <option value="renovacao">Renovacao</option>
++                        <option value="email">Email</option>
++                        <option value="agendamento">Agendamento</option>
++                      </select>
++
++                      <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-slate-500">Etapa do Kanban</label>
+                       <select value={normalizeKanbanStatus(selectedConversation.kanban_status)} onChange={event => void updateConversationStatus(event.target.value)} disabled={actionLoading} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none">
+                         {STATUS_OPTIONS.map(column => (
+                           <option key={column.key} value={column.key}>{column.label}</option>
