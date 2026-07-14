@@ -6115,13 +6115,14 @@ export default function Comercial() {
                         const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s
                       })
                       return (
-                        <DataTable headers={['', 'Cód', 'Certificado', 'Validade', 'Preço Venda', 'Custo', 'Repasse', 'Marketplace', 'Status', 'Ações']}>
+                        <div className="overflow-x-auto">
+                        <DataTable headers={['', 'Cód', 'Nome', 'Descrição', 'Validade', 'Uso', 'Emissão', 'Preço', 'Custo', 'Repasse', 'Link', 'St', '']}>
                           {itens.length === 0
-                            ? <EmptyRow colSpan={10} label="Nenhum produto nesta tabela." />
+                            ? <EmptyRow colSpan={13} label="Nenhum produto nesta tabela." />
                             : (
                               <>
                                 <tr className="bg-gray-50 dark:bg-gray-800/50">
-                                  <td className="px-4 py-2" colSpan={10}>
+                                  <td className="px-3 py-2" colSpan={13}>
                                     <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-500 select-none">
                                       <input type="checkbox" checked={allItemsSel} onChange={toggleAllItems}
                                         className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer" />
@@ -6133,38 +6134,31 @@ export default function Comercial() {
                                   const cert = certificadoById.get(item.certificado_id)
                                   return (
                                     <tr key={item.id} className={cn('hover:bg-gray-50 dark:hover:bg-gray-800/50', !item.ativo && 'opacity-50', selectedItemIds.has(item.id) && 'bg-blue-50 dark:bg-blue-900/10')}>
-                                      <td className="px-4 py-3">
+                                      <td className="px-3 py-2">
                                         <input type="checkbox" checked={selectedItemIds.has(item.id)} onChange={() => toggleOneItem(item.id)}
                                           className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer" />
                                       </td>
-                                      <td className="px-4 py-3 text-xs text-gray-400">{cert?.codigo ?? '—'}</td>
-                                      <td className="px-4 py-3 font-medium text-sm"><button type="button" onClick={() => editarItem(item)} className="text-left hover:text-blue-600 hover:underline">{cert?.tipo ?? 'Cert. removido'}</button></td>
-                                      <td className="px-4 py-3 text-sm text-gray-500">{cert?.validade ?? '—'}</td>
-                                      <td className="px-4 py-3 text-green-600 dark:text-green-400 font-semibold">{formatCurrency(item.valor)}</td>
-                                      <td className="px-4 py-3 text-sm text-gray-500">{formatCurrency(item.valor_custo)}</td>
-                                      <td className="px-4 py-3 text-sm text-gray-500">{formatCurrency(item.valor_repasse)}</td>
-                                      <td className="px-4 py-3">
+                                      <td className="px-3 py-2 text-xs text-gray-400">{cert?.codigo ?? '—'}</td>
+                                      <td className="px-3 py-2 font-medium text-sm"><button type="button" onClick={() => editarItem(item)} className="text-left hover:text-blue-600 hover:underline max-w-[150px] truncate block" title={cert?.tipo ?? ''}>{cert?.tipo ?? 'Cert. removido'}</button></td>
+                                      <td className="px-3 py-2 text-xs text-gray-500 max-w-[120px] truncate" title={cert?.descricao_produto ?? cert?.descricao ?? ''}>{cert?.descricao_produto ?? cert?.descricao ?? '—'}</td>
+                                      <td className="px-3 py-2 text-xs text-gray-500">{cert?.validade ?? '—'}</td>
+                                      <td className="px-3 py-2 text-xs text-gray-500">{cert?.periodo_uso ?? '—'}</td>
+                                      <td className="px-3 py-2 text-xs text-gray-500">{cert?.tipo_emissao_padrao ?? '—'}</td>
+                                      <td className="px-3 py-2 text-green-600 dark:text-green-400 font-semibold text-sm">{formatCurrency(item.valor)}</td>
+                                      <td className="px-3 py-2 text-xs text-gray-500">{formatCurrency(item.valor_custo)}</td>
+                                      <td className="px-3 py-2 text-xs text-gray-500">{formatCurrency(item.valor_repasse)}</td>
+                                      <td className="px-3 py-2">
                                         <div className="flex items-center gap-1">
-                                          <button
-                                            type="button"
-                                            onClick={() => abrirMarketplaceLink(item.link_safeweb)}
-                                            title="Abrir marketplace"
-                                            className="p-1 text-emerald-500 hover:text-emerald-700"
-                                          >
-                                            <ExternalLink size={13} />
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => { void copiarMarketplaceLink(item.link_safeweb, 'Link do produto') }}
-                                            title="Copiar link"
-                                            className="p-1 text-emerald-500 hover:text-emerald-700"
-                                          >
-                                            <Copy size={13} />
-                                          </button>
+                                          {item.link_safeweb ? (
+                                            <>
+                                              <button type="button" onClick={() => abrirMarketplaceLink(item.link_safeweb)} title="Abrir link" className="p-1 text-emerald-500 hover:text-emerald-700"><ExternalLink size={12} /></button>
+                                              <button type="button" onClick={() => { void copiarMarketplaceLink(item.link_safeweb, 'Link do produto') }} title="Copiar link" className="p-1 text-emerald-500 hover:text-emerald-700"><Copy size={12} /></button>
+                                            </>
+                                          ) : <span className="text-xs text-gray-300">—</span>}
                                         </div>
                                       </td>
-                                      <td className="px-4 py-3"><StatusPill active={item.ativo} /></td>
-                                      <td className="px-4 py-3">
+                                      <td className="px-3 py-2"><StatusPill active={item.ativo} /></td>
+                                      <td className="px-3 py-2">
                                         <div className="flex items-center gap-1">
                                           <button type="button" onClick={() => editarItem(item)} title="Editar" className="p-1 text-gray-400 hover:text-blue-600"><Edit3 size={13} /></button>
                                           <button type="button" onClick={() => toggleItem(item)} title={item.ativo ? 'Inativar' : 'Ativar'} className="p-1 text-gray-400 hover:text-amber-600">
@@ -6180,6 +6174,7 @@ export default function Comercial() {
                             )
                           }
                         </DataTable>
+                        </div>
                       )
                     })()}
                   </div>
