@@ -2519,7 +2519,7 @@ export default function Comercial() {
       const rBI = await fetch(getApiUrl('/catalog/certificados/bulk'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: allItems }),
       })
-      if (!rBI.ok) { showMsg('Erro ao importar certificados'); return }
+      if (!rBI.ok) { const errBody = await rBI.json().catch(() => null); showMsg(errBody?.error ?? 'Erro ao importar certificados'); return }
       showMsg(`${records.length} certificado(s) importado(s)/atualizado(s).`, 'ok')
       void fetchCatalogo()
     } finally {

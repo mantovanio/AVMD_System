@@ -58,9 +58,15 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   }
 
   if (method === 'POST' && url === '/api/catalog/certificados/bulk') {
-    const body = await readJson<{ items: Record<string, unknown>[] }>(req)
-    await repo.bulkUpsertCertificados(body.items ?? [])
-    writeJson(res, 200, { ok: true }, corsOrigin)
+    try {
+      const body = await readJson<{ items: Record<string, unknown>[] }>(req)
+      await repo.bulkUpsertCertificados(body.items ?? [])
+      writeJson(res, 200, { ok: true }, corsOrigin)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[catalog] bulkUpsertCertificados error:', msg)
+      writeJson(res, 500, { ok: false, error: 'Erro ao importar certificados: ' + msg }, corsOrigin)
+    }
     return true
   }
 
