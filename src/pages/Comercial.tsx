@@ -5587,7 +5587,7 @@ export default function Comercial() {
                 const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s
               })
               return (
-                <DataTable headers={['', 'Status', 'Tipo emissão', 'Código', 'Nome', 'Validade (meses)', 'Tipo', 'Produto vinculado na AC', 'Preço de venda', 'Valor Custo AC', 'Valor Custo AR', 'Agrupador', 'Hash', 'Ações']}>
+                <DataTable headers={['', 'Status', 'Tipo emissão', 'Código', 'Nome', 'Validade total', 'Tipo', 'Produto vinculado na AC', 'Preço de venda', 'Valor Custo AC', 'Valor Custo AR', 'Agrupador', 'Hash', 'Ações']}>
                   {certificados.length === 0 ? (
                     <EmptyRow colSpan={14} label="Nenhum certificado cadastrado. Use 'Importar Planilha' ou 'Novo Certificado'." />
                   ) : certificadosFiltrados.length === 0 ? (
@@ -6076,8 +6076,7 @@ export default function Comercial() {
                             <textarea value={formItemProduct.descricao_produto} onChange={e => setFormItemProduct(p => ({ ...p, descricao_produto: e.target.value }))} rows={3}
                               className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                           </label>
-                          <TextInput label="Validade *" value={formItemProduct.validade} onChange={v => setFormItemProduct(p => ({ ...p, validade: v }))} placeholder="Ex.: 1 ano, 2 anos, 4 meses" />
-                          <NumberInput label="Validade em meses" value={formItemProduct.validade_meses} onChange={v => setFormItemProduct(p => ({ ...p, validade_meses: v }))} step={1} />
+                          <NumberInput label="Validade total (meses) *" value={formItemProduct.validade_meses} onChange={v => setFormItemProduct(p => ({ ...p, validade_meses: v, validade: v ? `${v} meses` : '' }))} step={1} min={0} />
                           <TextInput label="Tipo de emissão" value={formItemProduct.tipo_emissao_padrao} onChange={v => setFormItemProduct(p => ({ ...p, tipo_emissao_padrao: v }))} placeholder="Videoconferência, Presencial, Fast..." />
                           <TextInput label="Período de uso" value={formItemProduct.periodo_uso} onChange={v => setFormItemProduct(p => ({ ...p, periodo_uso: v }))} placeholder="Ex.: 12 meses" />
                           <div className="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -7182,8 +7181,8 @@ export default function Comercial() {
                     { value: 'Videoconferência', label: 'Videoconferência' },
                   ]}
                 />
-                <NumberInput label="Validade (meses) *" value={formCert.validade_meses ?? 0} onChange={v => setFormCert(p => ({ ...p, validade_meses: v || null, validade: v ? `${v} meses` : '' }))} step={1} min={0} />
-                <TextInput label="Período de Uso (Fast)" value={formCert.periodo_uso ?? ''} onChange={v => setFormCert(p => ({ ...p, periodo_uso: v || null }))} />
+                <NumberInput label="Validade total (meses) *" value={formCert.validade_meses ?? 0} onChange={v => setFormCert(p => ({ ...p, validade_meses: v || null, validade: v ? `${v} meses` : '' }))} step={1} min={0} />
+                <TextInput label="Período de uso" value={formCert.periodo_uso ?? ''} onChange={v => setFormCert(p => ({ ...p, periodo_uso: v || null }))} placeholder="Ex.: 12 meses, 1 ano" />
                 <SelectInput
                   label="Tipo Produto"
                   value={formCert.categoria ?? ''}
