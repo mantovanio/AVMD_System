@@ -11,6 +11,7 @@ import {
   Mail,
   MapPin,
   Phone,
+  Search,
   Store,
   UserRound,
   Wallet,
@@ -46,6 +47,7 @@ type LojaMarketplaceConfig = {
 }
 
 type CheckoutBuyerType = 'pessoa_fisica' | 'pessoa_juridica'
+type ProductAudience = 'todos' | 'pessoa_fisica' | 'pessoa_juridica' | 'acessorios'
 
 type FormState = {
   comprador: {
@@ -258,6 +260,17 @@ function statusPagamentoLabel(option: PaymentOption) {
   return 'A validação só é liberada após a confirmação'
 }
 
+function productAudience(item: LojaItemRow): Exclude<ProductAudience, 'todos'> {
+  const text = `${item.certificados?.tipo ?? ''} ${item.certificados?.descricao_produto ?? ''}`.toLowerCase()
+  if (/token|cart[aã]o|leitora|valida[cç][aã]o domiciliar/.test(text) && !/e-cpf|e-pf|e-cnpj|e-pj|safeid/.test(text)) return 'acessorios'
+  if (/e-cnpj|e-pj|cnpj/.test(text)) return 'pessoa_juridica'
+  return 'pessoa_fisica'
+}
+
+function normalizedSearch(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+
 export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -265,6 +278,9 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [tabela, setTabela] = useState<TabelaPreco | null>(null)
   const [itens, setItens] = useState<LojaItemRow[]>([])
   const [selectedItemId, setSelectedItemId] = useState('')
+  const [productSearch, setProductSearch] = useState('')
+  const [productAudienceFilter, setProductAudienceFilter] = useState<ProductAudience>('todos')
+  const [productEmissionFilter, setProductEmissionFilter] = useState('todos')
   const [pagamentos, setPagamentos] = useState<PaymentOption[]>([])
   const [agendaAgents, setAgendaAgents] = useState<AgendaAgent[]>([])
   const [agendaPoints, setAgendaPoints] = useState<AgendaPoint[]>([])
@@ -343,6 +359,22 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     () => itens.filter(item => item.certificados ? item.certificados.ativo : true),
     [itens]
   )
+
+  const productEmissionOptions = useMemo(() => {
+    const labels = produtosAtivos.map(item => labelEmissao(item.certificados?.tipo_emissao_padrao)).filter((value): value is string => Boolean(value))
+    return Array.from(new Set(labels)).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }, [produtosAtivos])
+
+  const filteredProducts = useMemo(() => {
+    const query = normalizedSearch(productSearch)
+    return produtosAtivos.filter(item => {
+      if (productAudienceFilter !== 'todos' && productAudience(item) !== productAudienceFilter) return false
+      const emission = labelEmissao(item.certificados?.tipo_emissao_padrao) ?? ''
+      if (productEmissionFilter !== 'todos' && emission !== productEmissionFilter) return false
+      if (!query) return true
+      return normalizedSearch([item.certificados?.tipo, item.certificados?.descricao_produto, item.certificados?.modelo, item.certificados?.validade, item.certificados?.periodo_uso].filter(Boolean).join(' ')).includes(query)
+    })
+  }, [productAudienceFilter, productEmissionFilter, productSearch, produtosAtivos])
 
   const lojaConfig = useMemo(
     () => normalizeLojaConfig(loja?.configuracoes),
@@ -908,15 +940,40 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
               ) : modoLinkDireto && itemSelecionado ? (
                 <ProductHero item={itemSelecionado} />
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {produtosAtivos.map(item => (
-                    <ProductCard
-                      key={item.id}
-                      item={item}
-                      selected={selectedItemId === item.id}
-                      onSelect={handleSelectProduct}
-                    />
-                  ))}
+                <div className="space-y-5">
+                  <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
+                    <p className="text-sm font-semibold text-slate-800">Qual certificado você precisa?</p>
+                    <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Filtrar produtos por perfil">
+                      {([['todos', 'Todos'], ['pessoa_fisica', 'Pessoa Física'], ['pessoa_juridica', 'Pessoa Jurídica'], ['acessorios', 'Mídias e serviços']] as const).map(([value, label]) => (
+                        <button key={value} type="button" onClick={() => setProductAudienceFilter(value)} className={cn('rounded-full border px-4 py-2 text-sm font-semibold transition-colors', productAudienceFilter === value ? 'border-[#17346b] bg-[#17346b] text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300')}>{label}</button>
+                      ))}
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+                      <label className="relative block">
+                        <span className="sr-only">Buscar produto</span>
+                        <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input value={productSearch} onChange={event => setProductSearch(event.target.value)} placeholder="Buscar e-CPF, e-CNPJ, SafeID..." className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none transition focus:border-[#17346b] focus:ring-2 focus:ring-sky-100" />
+                      </label>
+                      <label>
+                        <span className="sr-only">Tipo de atendimento</span>
+                        <select value={productEmissionFilter} onChange={event => setProductEmissionFilter(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-[#17346b] focus:ring-2 focus:ring-sky-100">
+                          <option value="todos">Todos os atendimentos</option>
+                          {productEmissionOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm text-slate-500"><strong className="text-slate-800">{filteredProducts.length}</strong> {filteredProducts.length === 1 ? 'opção encontrada' : 'opções encontradas'}</p>
+                    {(productSearch || productAudienceFilter !== 'todos' || productEmissionFilter !== 'todos') && <button type="button" onClick={() => { setProductSearch(''); setProductAudienceFilter('todos'); setProductEmissionFilter('todos') }} className="text-sm font-semibold text-[#17346b] hover:underline">Limpar filtros</button>}
+                  </div>
+                  {filteredProducts.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredProducts.map(item => <ProductCard key={item.id} item={item} selected={selectedItemId === item.id} onSelect={handleSelectProduct} />)}
+                    </div>
+                  ) : (
+                    <div className="rounded-[24px] border border-dashed border-slate-300 bg-white px-5 py-10 text-center"><p className="font-semibold text-slate-800">Nenhum produto encontrado</p><p className="mt-1 text-sm text-slate-500">Altere os filtros ou faça uma nova busca.</p></div>
+                  )}
                 </div>
               )}
             </SectionCard>
