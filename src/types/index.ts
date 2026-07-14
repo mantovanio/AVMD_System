@@ -195,6 +195,8 @@ export interface Certificado {
   valor_custo: number
   agrupador: string | null
   hash: string | null
+  codigo_alternativo: string | null  // código secundário (ex: código Safeweb)
+  combo_produtos: string[] | null    // IDs de certificados associados para venda combo
   estoque: number
   ativo: boolean
   created_at: string

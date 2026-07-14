@@ -487,7 +487,7 @@ const EMPTY_CERTIFICADO: NovoCertificado = {
   codigo: null, status_produto: 'Ativo', tipo: '', descricao: null, validade: '12 meses', validade_meses: 12,
   modelo: null, categoria: null, tipo_emissao_padrao: null, periodo_uso: null, descricao_produto: null,
   produto_vinculado_ac: null, preco_venda: 0, valor_custo_ac: 0, valor_custo: 0,
-  agrupador: null, hash: null, estoque: 0, ativo: true,
+  agrupador: null, hash: null, codigo_alternativo: null, combo_produtos: null, estoque: 0, ativo: true,
 }
 
 const EMPTY_TABELA: NovaTabelaPreco = {
@@ -2401,7 +2401,8 @@ export default function Comercial() {
       modelo: c.modelo, categoria: c.categoria, tipo_emissao_padrao: c.tipo_emissao_padrao, periodo_uso: c.periodo_uso ?? null,
       descricao_produto: c.descricao_produto, produto_vinculado_ac: c.produto_vinculado_ac,
       preco_venda: c.preco_venda, valor_custo_ac: c.valor_custo_ac, valor_custo: c.valor_custo,
-      agrupador: c.agrupador, hash: c.hash, estoque: c.estoque, ativo: c.ativo,
+      agrupador: c.agrupador, hash: c.hash, codigo_alternativo: c.codigo_alternativo ?? null, combo_produtos: c.combo_produtos ?? null,
+      estoque: c.estoque, ativo: c.ativo,
     })
     setShowFormCert(true)
   }
@@ -7166,14 +7167,40 @@ export default function Comercial() {
                   ]}
                 />
                 <TextInput label="Nome *" value={formCert.tipo} onChange={v => setFormCert(p => ({ ...p, tipo: v }))} className="md:col-span-3" />
-                <TextInput label="Tipo Emissão" value={formCert.tipo_emissao_padrao ?? ''} onChange={v => setFormCert(p => ({ ...p, tipo_emissao_padrao: v || null }))} />
+                <SelectInput
+                  label="Tipo Emissão"
+                  value={formCert.tipo_emissao_padrao ?? ''}
+                  onChange={v => setFormCert(p => ({ ...p, tipo_emissao_padrao: v || null }))}
+                  options={[
+                    { value: '', label: 'Selecione...' },
+                    { value: 'Emissão presencial', label: 'Emissão presencial' },
+                    { value: 'Emissão online', label: 'Emissão online' },
+                    { value: 'Emissão videoconferência', label: 'Emissão videoconferência' },
+                    { value: 'Fast', label: 'Fast' },
+                    { value: 'Presencial', label: 'Presencial' },
+                    { value: 'Renovação online', label: 'Renovação online' },
+                    { value: 'Videoconferência', label: 'Videoconferência' },
+                  ]}
+                />
                 <NumberInput label="Validade (meses) *" value={formCert.validade_meses ?? 0} onChange={v => setFormCert(p => ({ ...p, validade_meses: v || null, validade: v ? `${v} meses` : '' }))} step={1} min={0} />
                 <TextInput label="Período de Uso (Fast)" value={formCert.periodo_uso ?? ''} onChange={v => setFormCert(p => ({ ...p, periodo_uso: v || null }))} />
-                <TextInput label="Tipo" value={formCert.categoria ?? ''} onChange={v => setFormCert(p => ({ ...p, categoria: v || null }))} />
+                <SelectInput
+                  label="Tipo Produto"
+                  value={formCert.categoria ?? ''}
+                  onChange={v => setFormCert(p => ({ ...p, categoria: v || null }))}
+                  options={[
+                    { value: '', label: 'Selecione...' },
+                    { value: 'e-CPF', label: 'e-CPF' },
+                    { value: 'e-CNPJ', label: 'e-CNPJ' },
+                    { value: 'e-PF', label: 'e-PF' },
+                    { value: 'e-PJ', label: 'e-PJ' },
+                  ]}
+                />
                 <TextInput label="Modelo" value={formCert.modelo ?? ''} onChange={v => setFormCert(p => ({ ...p, modelo: v || null }))} />
                 <TextInput label="Agrupador (e-commerce)" value={formCert.agrupador ?? ''} onChange={v => setFormCert(p => ({ ...p, agrupador: v || null }))} className="md:col-span-2" />
                 <TextInput label="Produto Vinculado na AC" value={formCert.produto_vinculado_ac ?? ''} onChange={v => setFormCert(p => ({ ...p, produto_vinculado_ac: v || null }))} className="md:col-span-3" />
                 <TextInput label="Hash" value={formCert.hash ?? ''} onChange={v => setFormCert(p => ({ ...p, hash: v || null }))} className="md:col-span-2" />
+                <TextInput label="Código Alternativo" value={formCert.codigo_alternativo ?? ''} onChange={v => setFormCert(p => ({ ...p, codigo_alternativo: v || null }))} className="md:col-span-2" />
                 <NumberInput label="Preço de Venda (R$)" value={formCert.preco_venda} onChange={v => setFormCert(p => ({ ...p, preco_venda: v }))} />
                 <NumberInput label="Valor Custo AC (R$)" value={formCert.valor_custo_ac} onChange={v => setFormCert(p => ({ ...p, valor_custo_ac: v }))} />
                 <NumberInput label="Valor Custo AR (R$)" value={formCert.valor_custo} onChange={v => setFormCert(p => ({ ...p, valor_custo: v }))} />
@@ -7184,6 +7211,35 @@ export default function Comercial() {
                 <textarea rows={2} value={formCert.descricao_produto ?? ''} onChange={e => setFormCert(p => ({ ...p, descricao_produto: e.target.value || null }))}
                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </label>
+              <div className="mt-4 border-t border-gray-100 dark:border-gray-800 pt-4">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Combo de Produto</span>
+                <p className="text-xs text-gray-400 mt-1">Associe outros certificados para gerar uma venda combo.</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {certificados.filter(c => c.id !== editingCertId).map(c => {
+                    const isSelected = (formCert.combo_produtos ?? []).includes(c.id)
+                    return (
+                      <button key={c.id} type="button"
+                        onClick={() => {
+                          const current = formCert.combo_produtos ?? []
+                          setFormCert(p => ({
+                            ...p,
+                            combo_produtos: isSelected
+                              ? current.filter(id => id !== c.id)
+                              : [...current, c.id],
+                          }))
+                        }}
+                        className={cn(
+                          'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                          isSelected
+                            ? 'bg-blue-100 border-blue-400 text-blue-700 dark:bg-blue-900/30 dark:border-blue-500 dark:text-blue-300'
+                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400'
+                        )}>
+                        {c.tipo || `#${c.codigo}`}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
               <FormActions onSave={salvarCertificado} onCancel={() => setShowFormCert(false)} saving={salvandoCatalogo} />
             </div>
           </div>

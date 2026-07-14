@@ -14,7 +14,7 @@ export class CatalogRepository {
     const id = (input.id as string | null)?.trim() || randomUUID()
     const fields = ['codigo','status_produto','tipo','estoque','validade','validade_meses','descricao','modelo','categoria',
       'tipo_emissao_padrao','periodo_uso','descricao_produto','produto_vinculado_ac',
-      'preco_venda','valor_custo_ac','valor_custo','agrupador','hash','ativo']
+      'preco_venda','valor_custo_ac','valor_custo','agrupador','hash','codigo_alternativo','combo_produtos','ativo']
     const vals = fields.map(f => input[f] ?? null)
     const cols = fields.join(', ')
     const phs = fields.map((_, i) => `$${i + 2}`).join(', ')
@@ -53,7 +53,7 @@ export class CatalogRepository {
   async bulkUpsertCertificados(items: Record<string, unknown>[]) {
     const fields = ['codigo','status_produto','tipo','estoque','validade','validade_meses','descricao','modelo','categoria',
       'tipo_emissao_padrao','periodo_uso','descricao_produto','produto_vinculado_ac',
-      'preco_venda','valor_custo_ac','valor_custo','agrupador','hash','ativo']
+      'preco_venda','valor_custo_ac','valor_custo','agrupador','hash','codigo_alternativo','combo_produtos','ativo']
     for (const item of items) {
       const id = (item.id as string | null)?.trim() || randomUUID()
       const vals = fields.map(f => item[f] ?? null)
