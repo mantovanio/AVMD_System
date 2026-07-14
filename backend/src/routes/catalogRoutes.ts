@@ -45,9 +45,15 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   }
 
   if (method === 'POST' && url === '/api/catalog/certificados') {
-    const body = await readJson<Record<string, unknown>>(req)
-    const certificado = await repo.saveCertificado(body)
-    writeJson(res, 200, { ok: true, certificado }, corsOrigin)
+    try {
+      const body = await readJson<Record<string, unknown>>(req)
+      const certificado = await repo.saveCertificado(body)
+      writeJson(res, 200, { ok: true, certificado }, corsOrigin)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[catalog] saveCertificado error:', msg)
+      writeJson(res, 500, { ok: false, error: 'Erro ao salvar certificado: ' + msg }, corsOrigin)
+    }
     return true
   }
 

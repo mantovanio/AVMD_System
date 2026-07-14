@@ -15,7 +15,13 @@ export class CatalogRepository {
     const fields = ['codigo','status_produto','tipo','estoque','validade','validade_meses','descricao','modelo','categoria',
       'tipo_emissao_padrao','periodo_uso','descricao_produto','produto_vinculado_ac',
       'preco_venda','valor_custo_ac','valor_custo','agrupador','hash','codigo_alternativo','combo_produtos','ativo']
-    const vals = fields.map(f => input[f] ?? null)
+    const vals = fields.map(f => {
+      const v = input[f] ?? null
+      if (f === 'combo_produtos' && v !== null && typeof v === 'object') return JSON.stringify(v)
+      if (f === 'ativo' && typeof v === 'boolean') return v
+      if (f === 'estoque' && typeof v === 'number') return v
+      return v
+    })
     const cols = fields.join(', ')
     const phs = fields.map((_, i) => `$${i + 2}`).join(', ')
     const ups = fields.map(f => `${f} = excluded.${f}`).join(', ')
@@ -56,7 +62,13 @@ export class CatalogRepository {
       'preco_venda','valor_custo_ac','valor_custo','agrupador','hash','codigo_alternativo','combo_produtos','ativo']
     for (const item of items) {
       const id = (item.id as string | null)?.trim() || randomUUID()
-      const vals = fields.map(f => item[f] ?? null)
+      const vals = fields.map(f => {
+        const v = item[f] ?? null
+        if (f === 'combo_produtos' && v !== null && typeof v === 'object') return JSON.stringify(v)
+        if (f === 'ativo' && typeof v === 'boolean') return v
+        if (f === 'estoque' && typeof v === 'number') return v
+        return v
+      })
       const cols = fields.join(', ')
       const phs = fields.map((_, i) => `$${i + 2}`).join(', ')
       const ups = fields.map(f => `${f} = excluded.${f}`).join(', ')

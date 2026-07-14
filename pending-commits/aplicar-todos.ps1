@@ -42,7 +42,7 @@ foreach ($Patch in $Patches) {
 
   if ($DryRun) {
     & git apply --stat $Patch.FullName
-    Write-Host "  (dry-run — nao aplicado)"
+    Write-Host "  (dry-run - nao aplicado)"
   } else {
     & git apply $Patch.FullName
     & git add -A

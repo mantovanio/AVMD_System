@@ -501,19 +501,6 @@ const EMPTY_ITEM: NovaTabelaPrecoItem = {
   tabela_preco_id: '', certificado_id: '', valor: 0, valor_custo: 0, valor_repasse: 0, link_safeweb: null, ativo: true,
 }
 
-type ItemProductDraft = {
-  tipo: string
-  descricao_produto: string
-  validade: string
-  validade_meses: number
-  tipo_emissao_padrao: string
-  periodo_uso: string
-}
-
-const EMPTY_ITEM_PRODUCT: ItemProductDraft = {
-  tipo: '', descricao_produto: '', validade: '', validade_meses: 0, tipo_emissao_padrao: '', periodo_uso: '',
-}
-
 const EMPTY_PARTICIPANTE: NovaTabelaPrecoParticipante = {
   tabela_preco_id: '', tipo_participante: 'tipo_parceiro',
   parceiro_id: null, tipo_parceiro: null, perfil: null,
@@ -703,6 +690,7 @@ export default function Comercial() {
   const [certFilters, setCertFilters]           = useState<CertFilters>(EMPTY_CERT_FILTERS)
   const [selectedCertIds, setSelectedCertIds]   = useState<Set<string>>(new Set())
   const [selectedItemIds, setSelectedItemIds]   = useState<Set<string>>(new Set())
+  const [itemFiltro, setItemFiltro]             = useState({ busca: '', emissao: '', uso: '' })
   const clienteSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const importInputRef                          = useRef<HTMLInputElement>(null)
   const importItensRef                          = useRef<HTMLInputElement>(null)
@@ -725,7 +713,6 @@ export default function Comercial() {
   const [showFormItem, setShowFormItem]             = useState(false)
   const [editingItemId, setEditingItemId]           = useState<string | null>(null)
   const [formItem, setFormItem]                     = useState<NovaTabelaPrecoItem>(EMPTY_ITEM)
-  const [formItemProduct, setFormItemProduct]       = useState<ItemProductDraft>(EMPTY_ITEM_PRODUCT)
   const [showFormParticipante, setShowFormParticipante] = useState(false)
   const [formParticipante, setFormParticipante]         = useState<NovaTabelaPrecoParticipante>(EMPTY_PARTICIPANTE)
   const [showFormAgenteTabela, setShowFormAgenteTabela] = useState(false)
@@ -2428,7 +2415,7 @@ export default function Comercial() {
       body: JSON.stringify(editingCertId ? { ...payload, id: editingCertId } : payload),
     })
     setSalvandoCatalogo(false)
-    if (!rC.ok) { showMsg('Erro ao salvar certificado'); return }
+    if (!rC.ok) { const errBody = await rC.json().catch(() => null); showMsg(errBody?.error ?? 'Erro ao salvar certificado'); return }
     setShowFormCert(false); setEditingCertId(null); setFormCert({ ...EMPTY_CERTIFICADO }); void fetchCatalogo()
   }
 
@@ -2557,14 +2544,29 @@ export default function Comercial() {
     const certificadosSelecionados = (certificadosFonte ?? certificados).filter(cert => cert.ativo)
     if (!certificadosSelecionados.length) return { inserted: 0, error: null as string | null }
 
-    const certificadosJaVinculados = new Set(
-      tabelaItens
-        .filter(item => item.tabela_preco_id === tabelaId)
-        .map(item => item.certificado_id)
+    const itensDaTabela = tabelaItens.filter(item => item.tabela_preco_id === tabelaId)
+
+    const certificadosJaVinculadosAtivos = new Set(
+      itensDaTabela.filter(item => item.ativo).map(item => item.certificado_id)
     )
 
+    const itensInativosParaReativar = itensDaTabela.filter(item =>
+      !item.ativo && certificadosSelecionados.some(c => c.id === item.certificado_id)
+    )
+
+    for (const item of itensInativosParaReativar) {
+      await fetch(getApiUrl(`/catalog/itens/${item.id}`), {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: true }),
+      })
+    }
+    if (itensInativosParaReativar.length) {
+      setTabelaItens(prev => prev.map(x =>
+        itensInativosParaReativar.some(r => r.id === x.id) ? { ...x, ativo: true } : x
+      ))
+    }
+
     const records: NovaTabelaPrecoItem[] = certificadosSelecionados
-      .filter(cert => !certificadosJaVinculados.has(cert.id))
+      .filter(cert => !certificadosJaVinculadosAtivos.has(cert.id))
       .map(cert => ({
         tabela_preco_id: tabelaId,
         certificado_id: cert.id,
@@ -2575,14 +2577,15 @@ export default function Comercial() {
         ativo: true,
       }))
 
-    if (!records.length) return { inserted: 0, error: null as string | null }
+    const totalReativados = itensInativosParaReativar.length
+    if (!records.length) return { inserted: totalReativados, error: null as string | null }
 
     const rBI2 = await fetch(getApiUrl('/catalog/itens/bulk'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: records }),
     })
     const biData = await rBI2.json().catch(() => null)
     return {
-      inserted: records.length,
+      inserted: records.length + totalReativados,
       error: rBI2.ok ? null : (biData?.error ?? 'Erro ao inserir itens'),
     }
   }
@@ -2827,14 +2830,6 @@ export default function Comercial() {
       certificado_id: certificadoId,
       valor: certificado?.preco_venda ?? 0,
     })
-    setFormItemProduct(certificado ? {
-      tipo: certificado.tipo,
-      descricao_produto: certificado.descricao_produto ?? certificado.descricao ?? '',
-      validade: certificado.validade,
-      validade_meses: certificado.validade_meses ?? validadeEmMeses(certificado.validade) ?? 0,
-      tipo_emissao_padrao: certificado.tipo_emissao_padrao ?? '',
-      periodo_uso: certificado.periodo_uso ?? '',
-    } : EMPTY_ITEM_PRODUCT)
     setShowFormItem(true)
   }
   function editarItem(item: TabelaPrecoItem) {
@@ -2845,43 +2840,11 @@ export default function Comercial() {
       valor: certificado?.preco_venda ?? item.valor, valor_custo: item.valor_custo, valor_repasse: item.valor_repasse,
       link_safeweb: item.link_safeweb, ativo: item.ativo,
     })
-    setFormItemProduct(certificado ? {
-      tipo: certificado.tipo,
-      descricao_produto: certificado.descricao_produto ?? certificado.descricao ?? '',
-      validade: certificado.validade,
-      validade_meses: certificado.validade_meses ?? validadeEmMeses(certificado.validade) ?? 0,
-      tipo_emissao_padrao: certificado.tipo_emissao_padrao ?? '',
-      periodo_uso: certificado.periodo_uso ?? '',
-    } : EMPTY_ITEM_PRODUCT)
     setShowFormItem(true)
   }
   async function salvarItem() {
-    if (!formItemProduct.tipo.trim()) return
+    if (!formItem.certificado_id) { showMsg('Selecione um certificado do catálogo.'); return }
     setSalvandoCatalogo(true)
-    const certificadoAtual = formItem.certificado_id ? certificadoById.get(formItem.certificado_id) : null
-    let rC: Response
-    if (certificadoAtual) {
-      rC = await fetch(getApiUrl('/catalog/certificados'), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...certificadoAtual,
-          tipo: formItemProduct.tipo.trim(),
-          descricao_produto: formItemProduct.descricao_produto.trim() || null,
-          validade: formItemProduct.validade.trim() || certificadoAtual.validade,
-          validade_meses: formItemProduct.validade_meses || validadeEmMeses(formItemProduct.validade) || null,
-          tipo_emissao_padrao: formItemProduct.tipo_emissao_padrao.trim() || null,
-          periodo_uso: formItemProduct.periodo_uso.trim() || null,
-        }),
-      })
-    } else {
-      rC = new Response(null, { status: 200 })
-    }
-    if (!rC.ok) {
-      const errBody = await rC.json().catch(() => null)
-      showMsg(errBody?.error ?? 'Erro ao salvar certificado')
-      setSalvandoCatalogo(false)
-      return
-    }
     const rI = await fetch(getApiUrl('/catalog/itens'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(editingItemId ? { ...formItem, id: editingItemId } : formItem),
@@ -2889,7 +2852,7 @@ export default function Comercial() {
     setSalvandoCatalogo(false)
     if (!rI.ok) {
       const errBody = await rI.json().catch(() => null)
-      showMsg(errBody?.error ?? 'Erro ao salvar produto e preço')
+      showMsg(errBody?.error ?? 'Erro ao salvar preço do produto')
       return
     }
     setShowFormItem(false); setEditingItemId(null); void fetchCatalogo()
@@ -5602,7 +5565,8 @@ export default function Comercial() {
                 const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s
               })
               return (
-                <DataTable headers={['', 'Status', 'Tipo emissão', 'Código', 'Nome', 'Validade total', 'Tipo', 'Produto vinculado na AC', 'Preço de venda', 'Valor Custo AC', 'Valor Custo AR', 'Agrupador', 'Hash', 'Ações']}>
+                <DataTable headers={['', 'Status', 'Tipo emissão', 'Código', 'Nome', 'Validade total', 'Tipo', 'Produto vinculado na AC', 'Preço de venda', 'Valor Custo AC', 'Valor Custo AR', 'Agrupador', 'Hash', 'Ações']}
+                  initialWidths={[40, 60, 120, 70, 180, 80, 100, 160, 100, 100, 100, 100, 100, 80]}>
                   {certificados.length === 0 ? (
                     <EmptyRow colSpan={14} label="Nenhum certificado cadastrado. Use 'Importar Planilha' ou 'Novo Certificado'." />
                   ) : certificadosFiltrados.length === 0 ? (
@@ -5694,7 +5658,8 @@ export default function Comercial() {
                 </Panel>
               )}
 
-              <DataTable headers={['Sel.', 'Tabela', 'Voucher', 'Produtos', 'Participantes', 'Desconto R$', 'Desconto %', '% Comissão', 'Status', 'Ações']}>
+              <DataTable headers={['Sel.', 'Tabela', 'Voucher', 'Produtos', 'Participantes', 'Desconto R$', 'Desconto %', '% Comissão', 'Status', 'Ações']}
+                initialWidths={[40, 180, 80, 70, 90, 90, 80, 80, 60, 80]}>
                 {tabelasPreco.length === 0 ? (
                   <EmptyRow colSpan={10} label="Nenhuma tabela cadastrada." />
                 ) : (
@@ -5784,7 +5749,7 @@ export default function Comercial() {
               const parts = tabelaParticipantes.filter(p => p.tabela_preco_id === selectedTabelaId)
               const agentesPermitidos = agentesTabelaPreco.filter(a => a.tabela_preco_id === selectedTabelaId)
               const pricingRule = pricingRuleByTabelaId.get(selectedTabelaId) ?? null
-              const certificadosDisponiveisBase = certificadosFiltrados.filter(cert => !itens.some(item => item.certificado_id === cert.id))
+              const certificadosDisponiveisBase = certificadosFiltrados.filter(cert => !itens.some(item => item.certificado_id === cert.id && item.ativo))
               const certificadosDisponiveisBaseFiltrados = certificadosDisponiveisBase.filter(cert => {
                 const termo = tabelaCertBusca.trim().toLowerCase()
                 if (termo) {
@@ -6067,35 +6032,15 @@ export default function Comercial() {
                     </div>
 
                     {showFormItem && (
-                      <FloatingPanel title={editingItemId ? 'Editar produto da tabela' : 'Adicionar produto à tabela'} onClose={() => setShowFormItem(false)}>
+                      <FloatingPanel title={editingItemId ? 'Editar preço do produto' : 'Adicionar certificado à tabela'} onClose={() => setShowFormItem(false)}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <TextInput label="Nome do produto *" value={formItemProduct.tipo} onChange={v => setFormItemProduct(p => ({ ...p, tipo: v }))} className="md:col-span-2" />
                           <div className="md:col-span-2">
-                            <SelectInput label="Preencher dados de um certificado existente" value={formItem.certificado_id}
+                            <SelectInput label="Certificado do catálogo *" value={formItem.certificado_id}
                               onChange={v => {
                                 const cert = certificadoById.get(v)
                                 setFormItem(p => ({ ...p, certificado_id: v, valor: cert?.preco_venda ?? 0 }))
-                                setFormItemProduct(cert ? {
-                                  tipo: cert.tipo,
-                                  descricao_produto: cert.descricao_produto ?? cert.descricao ?? '',
-                                  validade: cert.validade,
-                                  validade_meses: cert.validade_meses ?? validadeEmMeses(cert.validade) ?? 0,
-                                  tipo_emissao_padrao: cert.tipo_emissao_padrao ?? '',
-                                  periodo_uso: cert.periodo_uso ?? '',
-                                } : EMPTY_ITEM_PRODUCT)
                               }}
-                              options={[{ value: '', label: 'Selecione para auto-preencher...' }, ...certificadosAtivos.map(c => ({ value: c.id, label: `${c.codigo ? c.codigo + ' · ' : ''}${c.tipo}${c.validade ? ' · ' + c.validade : ''}` }))]} />
-                          </div>
-                          <label className="flex flex-col gap-1 md:col-span-2">
-                            <span className="text-xs text-gray-500">Descrição exibida na loja</span>
-                            <textarea value={formItemProduct.descricao_produto} onChange={e => setFormItemProduct(p => ({ ...p, descricao_produto: e.target.value }))} rows={3}
-                              className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                          </label>
-                          <NumberInput label="Validade total (meses) *" value={formItemProduct.validade_meses} onChange={v => setFormItemProduct(p => ({ ...p, validade_meses: v, validade: v ? `${v} meses` : '' }))} step={1} min={0} />
-                          <TextInput label="Tipo de emissão" value={formItemProduct.tipo_emissao_padrao} onChange={v => setFormItemProduct(p => ({ ...p, tipo_emissao_padrao: v }))} placeholder="Videoconferência, Presencial, Fast..." />
-                          <TextInput label="Período de uso" value={formItemProduct.periodo_uso} onChange={v => setFormItemProduct(p => ({ ...p, periodo_uso: v }))} placeholder="Ex.: 12 meses" />
-                          <div className="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                            O nome acima é o que aparece no catálogo e na loja. Se preencheu de um certificado existente, as alterações no nome afetam todas as tabelas.
+                              options={[{ value: '', label: 'Selecione um certificado...' }, ...certificadosAtivos.map(c => ({ value: c.id, label: `${c.codigo ? c.codigo + ' · ' : ''}${c.tipo}${c.validade ? ' · ' + c.validade : ''}` }))]} />
                           </div>
                           <NumberInput label="Preço de venda nesta tabela (R$)" value={formItem.valor} onChange={v => setFormItem(p => ({ ...p, valor: v }))} />
                           <NumberInput label="Valor Custo (R$)" value={formItem.valor_custo} onChange={v => setFormItem(p => ({ ...p, valor_custo: v }))} />
@@ -6108,17 +6053,64 @@ export default function Comercial() {
                     )}
 
                     {(() => {
-                      const allItemIds = itens.map(i => i.id)
+                      const itensFiltrados = itens.filter(item => {
+                        const cert = certificadoById.get(item.certificado_id)
+                        if (itemFiltro.busca) {
+                          const termo = itemFiltro.busca.toLowerCase()
+                          const matchNome = (cert?.tipo ?? '').toLowerCase().includes(termo)
+                          const matchCodigo = (cert?.codigo?.toString() ?? '').includes(termo)
+                          if (!matchNome && !matchCodigo) return false
+                        }
+                        if (itemFiltro.emissao && cert?.tipo_emissao_padrao !== itemFiltro.emissao) return false
+                        if (itemFiltro.uso && cert?.periodo_uso !== itemFiltro.uso) return false
+                        return true
+                      })
+                      const opcoesEmissao = [...new Set(itens.map(i => certificadoById.get(i.certificado_id)?.tipo_emissao_padrao).filter(Boolean))] as string[]
+                      const opcoesUso = [...new Set(itens.map(i => certificadoById.get(i.certificado_id)?.periodo_uso).filter(Boolean))] as string[]
+                      const allItemIds = itensFiltrados.map(i => i.id)
                       const allItemsSel = allItemIds.length > 0 && allItemIds.every(id => selectedItemIds.has(id))
                       const toggleAllItems = () => setSelectedItemIds(allItemsSel ? new Set() : new Set(allItemIds))
                       const toggleOneItem = (id: string) => setSelectedItemIds(prev => {
                         const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s
                       })
                       return (
+                        <div className="space-y-2">
+                        <div className="flex flex-wrap items-end gap-2">
+                          <label className="flex flex-col gap-1">
+                            <span className="text-xs text-gray-500">Buscar</span>
+                            <input type="text" value={itemFiltro.busca} onChange={e => setItemFiltro(p => ({ ...p, busca: e.target.value }))}
+                              placeholder="Nome ou código..."
+                              className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 w-48" />
+                          </label>
+                          <label className="flex flex-col gap-1">
+                            <span className="text-xs text-gray-500">Emissão</span>
+                            <select value={itemFiltro.emissao} onChange={e => setItemFiltro(p => ({ ...p, emissao: e.target.value }))}
+                              className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                              <option value="">Todas</option>
+                              {opcoesEmissao.map(e => <option key={e} value={e}>{e}</option>)}
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1">
+                            <span className="text-xs text-gray-500">Período de uso</span>
+                            <select value={itemFiltro.uso} onChange={e => setItemFiltro(p => ({ ...p, uso: e.target.value }))}
+                              className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                              <option value="">Todos</option>
+                              {opcoesUso.map(u => <option key={u} value={u}>{u}</option>)}
+                            </select>
+                          </label>
+                          {(itemFiltro.busca || itemFiltro.emissao || itemFiltro.uso) && (
+                            <button type="button" onClick={() => setItemFiltro({ busca: '', emissao: '', uso: '' })}
+                              className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+                              Limpar filtros
+                            </button>
+                          )}
+                          <span className="text-xs text-gray-400 py-2">{itensFiltrados.length} de {itens.length} produto(s)</span>
+                        </div>
                         <div className="overflow-x-auto">
-                        <DataTable headers={['', 'Cód', 'Nome', 'Descrição', 'Validade', 'Uso', 'Emissão', 'Preço', 'Custo', 'Repasse', 'Link', 'St', '']}>
-                          {itens.length === 0
-                            ? <EmptyRow colSpan={13} label="Nenhum produto nesta tabela." />
+                        <DataTable headers={['', 'Cód', 'Nome', 'Descrição', 'Validade', 'Uso', 'Emissão', 'Preço', 'Custo', 'Repasse', 'Link', 'St', '']}
+                          initialWidths={[40, 60, 180, 150, 80, 80, 120, 90, 90, 90, 80, 60, 80]}>
+                          {itensFiltrados.length === 0
+                            ? <EmptyRow colSpan={13} label={itens.length === 0 ? 'Nenhum produto nesta tabela.' : 'Nenhum produto com os filtros atuais.'} />
                             : (
                               <>
                                 <tr className="bg-gray-50 dark:bg-gray-800/50">
@@ -6130,7 +6122,7 @@ export default function Comercial() {
                                     </label>
                                   </td>
                                 </tr>
-                                {itens.map(item => {
+                                {itensFiltrados.map(item => {
                                   const cert = certificadoById.get(item.certificado_id)
                                   return (
                                     <tr key={item.id} className={cn('hover:bg-gray-50 dark:hover:bg-gray-800/50', !item.ativo && 'opacity-50', selectedItemIds.has(item.id) && 'bg-blue-50 dark:bg-blue-900/10')}>
@@ -6174,6 +6166,7 @@ export default function Comercial() {
                             )
                           }
                         </DataTable>
+                        </div>
                         </div>
                       )
                     })()}
@@ -7166,6 +7159,7 @@ export default function Comercial() {
             <div className="p-5">
               <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                 <NumberInput label="Código" value={formCert.codigo ?? 0} onChange={v => setFormCert(p => ({ ...p, codigo: v || null }))} step={1} />
+                <NumberInput label="Estoque" value={formCert.estoque} onChange={v => setFormCert(p => ({ ...p, estoque: v }))} step={1} min={0} />
                 <SelectInput
                   label="Status"
                   value={normalizeStatusProduto(formCert.status_produto, formCert.ativo)}
@@ -7670,13 +7664,56 @@ function ActiveSelect({ value, onChange }: { value: boolean; onChange: (value: b
   )
 }
 
-function DataTable({ headers, children }: { headers: string[]; children: React.ReactNode }) {
+function DataTable({ headers, children, initialWidths }: { headers: string[]; children: React.ReactNode; initialWidths?: (number | string)[] }) {
+  const [widths, setWidths] = useState<(number | string)[]>(
+    initialWidths ?? headers.map(() => 'auto')
+  )
+  const draggingRef = useRef<{ colIndex: number; startX: number; startWidth: number } | null>(null)
+
+  const handleMouseDown = useCallback((colIndex: number, e: React.MouseEvent) => {
+    e.preventDefault()
+    const th = (e.currentTarget.parentElement as HTMLElement)
+    const startWidth = th.getBoundingClientRect().width
+    draggingRef.current = { colIndex, startX: e.clientX, startWidth }
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!draggingRef.current) return
+      const diff = ev.clientX - draggingRef.current.startX
+      const newWidth = Math.max(50, draggingRef.current.startWidth + diff)
+      setWidths(prev => {
+        const next = [...prev]
+        next[draggingRef.current!.colIndex] = newWidth
+        return next
+      })
+    }
+    const handleMouseUp = () => {
+      draggingRef.current = null
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }, [])
+
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-      <table className="w-full text-sm">
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-x-auto">
+      <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
+        <colgroup>
+          {headers.map((_, i) => <col key={i} style={{ width: widths[i] }} />)}
+        </colgroup>
         <thead>
           <tr className="bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left">
-            {headers.map(h => <th key={h} className="px-5 py-3">{h}</th>)}
+            {headers.map((h, i) => (
+              <th key={h} className="px-5 py-3 relative select-none group" style={{ width: widths[i] }}>
+                {h}
+                {i < headers.length - 1 && (
+                  <div
+                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400/40 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onMouseDown={e => handleMouseDown(i, e)}
+                  />
+                )}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">{children}</tbody>
