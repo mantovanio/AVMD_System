@@ -2487,27 +2487,35 @@ export default function Comercial() {
         if (/^\d+$/.test(raw)) return `${raw} meses`
         return raw
       }
-      const records = rows.filter(r => Object.values(r).some(v => v)).map(row => ({
-        codigo:               row['codigo'] ? parseInt(row['codigo']) : null,
-        status_produto:       normalizeStatusProduto(row['cadastrado'] ?? row['status_do_produto'] ?? row['status'] ?? null, true),
-        tipo:                 row['nome'] || '',
-        descricao:            row['descricao'] || null,
-        validade:             normalizeValidadeImport(row['validade'] ?? ''),
-        validade_meses:       validadeEmMeses(String(row['validade'] ?? '')),
-        periodo_uso:          row['periodo_de_uso'] || row['periodo_uso'] || null,
-        modelo:               row['modelo'] || null,
-        categoria:            row['tipo'] || null,
-        tipo_emissao_padrao:  row['tipo_emissao'] || row['tipo_de_emissao'] || null,
-        descricao_produto:    row['descricao_do_produto'] || row['descricao_produto'] || null,
-        produto_vinculado_ac: row['produto_vinculado_na_ac'] || row['produto_vinculado_ac'] || row['produto_ac'] || null,
-        preco_venda:          parseNum(row['preco_de_venda'] ?? row['preco_venda'] ?? row['preco'] ?? '0'),
-        valor_custo_ac:       parseNum(row['valor_custo_ac'] ?? row['custo_ac'] ?? '0'),
-        valor_custo:          parseNum(row['valor_custo_ar'] ?? row['valor_custo'] ?? row['custo'] ?? '0'),
-        agrupador:            row['agrupador'] || row['agrupador_utilizado_no_e_commerce'] || null,
-        hash:                 row['hash_produto'] || row['hash'] || null,
-        estoque:              0,
-        ativo:                /^ativo$/i.test(normalizeStatusProduto(row['cadastrado'] ?? row['status_do_produto'] ?? row['status'] ?? null, true)),
-      }))
+      // Mapa flexível: cada campo do DB aceita múltiplos nomes de coluna (normalizados)
+      const pick = (row: Record<string, string>, ...aliases: string[]): string => {
+        for (const a of aliases) { if (row[a]) return row[a] }
+        return ''
+      }
+      const records = rows.filter(r => Object.values(r).some(v => v)).map(row => {
+        const statusRaw = pick(row, 'cadastrado', 'status_do_produto', 'status', 'situacao')
+        return {
+          codigo:               pick(row, 'codigo', 'cod', 'code', 'cod_produto') ? parseInt(pick(row, 'codigo', 'cod', 'code', 'cod_produto')) : null,
+          status_produto:       normalizeStatusProduto(statusRaw || null, true),
+          tipo:                 pick(row, 'nome', 'tipo_produto', 'produto', 'certificado', 'name') || '',
+          descricao:            pick(row, 'descricao', 'desc', 'description') || null,
+          validade:             normalizeValidadeImport(pick(row, 'validade', 'validade_total', 'validade_em_meses', 'validade_meses', 'valid')),
+          validade_meses:       validadeEmMeses(pick(row, 'validade', 'validade_total', 'validade_em_meses', 'validade_meses', 'valid')),
+          periodo_uso:          pick(row, 'periodo_de_uso', 'periodo_uso', 'periodo', 'uso', 'prazo_uso') || null,
+          modelo:               pick(row, 'modelo', 'model', 'versao') || null,
+          categoria:            pick(row, 'tipo', 'categoria', 'category', 'tipo_certificado') || null,
+          tipo_emissao_padrao:  pick(row, 'tipo_emissao', 'tipo_de_emissao', 'emissao', 'tipo_emissao_padrao', 'semissao') || null,
+          descricao_produto:    pick(row, 'descricao_do_produto', 'descricao_produto', 'desc_produto', 'descrição do produto') || null,
+          produto_vinculado_ac: pick(row, 'produto_vinculado_na_ac', 'produto_vinculado_ac', 'produto_ac', 'produto_vinculado') || null,
+          preco_venda:          parseNum(pick(row, 'preco_de_venda', 'preco_venda', 'preco', 'price', 'valor_venda', 'valor_de_venda')),
+          valor_custo_ac:       parseNum(pick(row, 'valor_custo_ac', 'custo_ac', 'custo_acr', 'cost_ac')),
+          valor_custo:          parseNum(pick(row, 'valor_custo_ar', 'valor_custo', 'custo', 'custo_ar', 'cost')),
+          agrupador:            pick(row, 'agrupador', 'agrupador_utilizado_no_e_commerce', 'group', 'agrupador_ecommerce') || null,
+          hash:                 pick(row, 'hash_produto', 'hash', 'sku', 'codigo_hash') || null,
+          estoque:              parseNum(pick(row, 'estoque', 'stock', 'quantidade')) || 0,
+          ativo:                /^ativo$/i.test(statusRaw) || (!statusRaw && true),
+        }
+      })
       const existResp = await fetch(getApiUrl('/catalog/certificados'))
       const existData = await existResp.json()
       const existMap = new Map(
