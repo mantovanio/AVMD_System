@@ -2856,27 +2856,42 @@ export default function Comercial() {
     setShowFormItem(true)
   }
   async function salvarItem() {
-    if (!formItem.certificado_id) return
+    if (!formItemProduct.tipo.trim()) return
     setSalvandoCatalogo(true)
-    const certificadoAtual = certificadoById.get(formItem.certificado_id)
-    const rC = certificadoAtual ? await fetch(getApiUrl('/catalog/certificados'), {
+    const certificadoAtual = formItem.certificado_id ? certificadoById.get(formItem.certificado_id) : null
+    let rC: Response
+    if (certificadoAtual) {
+      rC = await fetch(getApiUrl('/catalog/certificados'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...certificadoAtual,
-          tipo: formItemProduct.tipo.trim() || certificadoAtual.tipo,
+          tipo: formItemProduct.tipo.trim(),
           descricao_produto: formItemProduct.descricao_produto.trim() || null,
           validade: formItemProduct.validade.trim() || certificadoAtual.validade,
           validade_meses: formItemProduct.validade_meses || validadeEmMeses(formItemProduct.validade) || null,
           tipo_emissao_padrao: formItemProduct.tipo_emissao_padrao.trim() || null,
           periodo_uso: formItemProduct.periodo_uso.trim() || null,
         }),
-      }) : new Response(null, { status: 200 })
-    const rI = rC.ok ? await fetch(getApiUrl('/catalog/itens'), {
+      })
+    } else {
+      rC = new Response(null, { status: 200 })
+    }
+    if (!rC.ok) {
+      const errBody = await rC.json().catch(() => null)
+      showMsg(errBody?.error ?? 'Erro ao salvar certificado')
+      setSalvandoCatalogo(false)
+      return
+    }
+    const rI = await fetch(getApiUrl('/catalog/itens'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(editingItemId ? { ...formItem, id: editingItemId } : formItem),
-    }) : new Response(null, { status: 500 })
+    })
     setSalvandoCatalogo(false)
-    if (!rI.ok || !rC.ok) { showMsg('Erro ao salvar produto e preço'); return }
+    if (!rI.ok) {
+      const errBody = await rI.json().catch(() => null)
+      showMsg(errBody?.error ?? 'Erro ao salvar produto e preço')
+      return
+    }
     setShowFormItem(false); setEditingItemId(null); void fetchCatalogo()
   }
   async function excluirItem(id: string) {
@@ -6054,8 +6069,9 @@ export default function Comercial() {
                     {showFormItem && (
                       <FloatingPanel title={editingItemId ? 'Editar produto da tabela' : 'Adicionar produto à tabela'} onClose={() => setShowFormItem(false)}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <TextInput label="Nome do produto *" value={formItemProduct.tipo} onChange={v => setFormItemProduct(p => ({ ...p, tipo: v }))} className="md:col-span-2" />
                           <div className="md:col-span-2">
-                            <SelectInput label="Certificado *" value={formItem.certificado_id}
+                            <SelectInput label="Preencher dados de um certificado existente" value={formItem.certificado_id}
                               onChange={v => {
                                 const cert = certificadoById.get(v)
                                 setFormItem(p => ({ ...p, certificado_id: v, valor: cert?.preco_venda ?? 0 }))
@@ -6068,9 +6084,8 @@ export default function Comercial() {
                                   periodo_uso: cert.periodo_uso ?? '',
                                 } : EMPTY_ITEM_PRODUCT)
                               }}
-                              options={certificadosAtivos.map(c => ({ value: c.id, label: `${c.codigo ? c.codigo + ' · ' : ''}${c.tipo}${c.validade ? ' · ' + c.validade : ''}` }))} />
+                              options={[{ value: '', label: 'Selecione para auto-preencher...' }, ...certificadosAtivos.map(c => ({ value: c.id, label: `${c.codigo ? c.codigo + ' · ' : ''}${c.tipo}${c.validade ? ' · ' + c.validade : ''}` }))]} />
                           </div>
-                          <TextInput label="Nome do produto *" value={formItemProduct.tipo} onChange={v => setFormItemProduct(p => ({ ...p, tipo: v }))} className="md:col-span-2" />
                           <label className="flex flex-col gap-1 md:col-span-2">
                             <span className="text-xs text-gray-500">Descrição exibida na loja</span>
                             <textarea value={formItemProduct.descricao_produto} onChange={e => setFormItemProduct(p => ({ ...p, descricao_produto: e.target.value }))} rows={3}
@@ -6080,7 +6095,7 @@ export default function Comercial() {
                           <TextInput label="Tipo de emissão" value={formItemProduct.tipo_emissao_padrao} onChange={v => setFormItemProduct(p => ({ ...p, tipo_emissao_padrao: v }))} placeholder="Videoconferência, Presencial, Fast..." />
                           <TextInput label="Período de uso" value={formItemProduct.periodo_uso} onChange={v => setFormItemProduct(p => ({ ...p, periodo_uso: v }))} placeholder="Ex.: 12 meses" />
                           <div className="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                            Nome, descrição, validade e emissão pertencem ao produto-base e serão atualizados em todas as tabelas. Os valores abaixo são exclusivos desta tabela.
+                            O nome acima é o que aparece no catálogo e na loja. Se preencheu de um certificado existente, as alterações no nome afetam todas as tabelas.
                           </div>
                           <NumberInput label="Preço de venda nesta tabela (R$)" value={formItem.valor} onChange={v => setFormItem(p => ({ ...p, valor: v }))} />
                           <NumberInput label="Valor Custo (R$)" value={formItem.valor_custo} onChange={v => setFormItem(p => ({ ...p, valor_custo: v }))} />
