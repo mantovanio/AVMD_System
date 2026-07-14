@@ -428,13 +428,11 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
 
   useEffect(() => {
     if (!loja) return
-    const proximoId = resolveInitialItemId(produtosAtivos, loja)
-    if (proximoId && proximoId !== selectedItemId) {
-      setSelectedItemId(proximoId)
-      return
-    }
-    if (!proximoId && selectedItemId) setSelectedItemId('')
-  }, [loja, produtosAtivos, selectedItemId])
+    setSelectedItemId(currentId => {
+      if (currentId && produtosAtivos.some(item => item.id === currentId)) return currentId
+      return resolveInitialItemId(produtosAtivos, loja)
+    })
+  }, [loja, produtosAtivos])
 
   const titularEfetivo = useMemo(
     () => resolveTitularEfetivo(form),
