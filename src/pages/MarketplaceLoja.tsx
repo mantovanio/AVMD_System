@@ -5,6 +5,7 @@ import {
   Building2,
   CalendarDays,
   CheckCircle2,
+  CircleHelp,
   CreditCard,
   Loader2,
   Lock,
@@ -583,7 +584,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const agendamentoDone = !!selectedSlot
 
   const sectionStatuses: SectionStatus[] = [
-    { label: '1. Produto', done: !!itemSelecionado, icon: Store },
+    { label: 'Produto', done: !!itemSelecionado && productConfirmed, icon: Store },
     { label: 'Faturamento', done: faturamentoDone, icon: Building2 },
     { label: 'Titular', done: titularDone, icon: UserRound },
     { label: 'Pagamento', done: pagamentoDone, icon: CreditCard },
@@ -929,32 +930,36 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     Solicitação de certificado digital
                   </h2>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {sectionStatuses.map(section => (
-                    <div key={section.label}
-                      className={cn(
-                        'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border',
-                        section.done
-                          ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                          : 'bg-slate-50 border-slate-200 text-slate-500'
-                      )}>
-                      {section.done
-                        ? <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
-                        : <section.icon size={12} className="text-[#17346b] shrink-0" />}
-                      {section.label}
+              </div>
+              <div className="mt-5 grid grid-cols-5">
+                {sectionStatuses.map((section, index) => {
+                  const completedCount = sectionStatuses.filter(item => item.done).length
+                  const active = index === Math.min(completedCount, sectionStatuses.length - 1)
+                  return (
+                    <div key={section.label} className="relative flex flex-col items-center text-center">
+                      {index > 0 && <span className={cn('absolute right-1/2 top-3 h-0.5 w-full', index <= completedCount ? 'bg-emerald-500' : 'bg-slate-200')} />}
+                      <span className={cn('relative z-10 flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white', section.done ? 'bg-emerald-600' : active ? 'bg-[#17346b]' : 'bg-slate-300')}>
+                        {section.done ? <CheckCircle2 size={15} /> : index + 1}
+                      </span>
+                      <span className={cn('relative z-10 mt-2 text-[10px] font-semibold sm:text-xs', section.done || active ? 'text-slate-800' : 'text-slate-400')}>{section.label}</span>
                     </div>
-                  ))}
+                  )
+                })}
+              </div>
+              <details className="mt-5 rounded-2xl border border-sky-200 bg-sky-50/70 px-4 py-3">
+                <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-[#17346b]">
+                  <CircleHelp size={17} /> Como funciona e como acompanhar depois
+                </summary>
+                <div className="mt-3 space-y-2 pl-6 text-sm leading-relaxed text-slate-700">
+                  <p>Escolha o produto, preencha sua identificação, faça o pagamento e selecione o agendamento. Ao concluir, o pedido ficará disponível no Portal do Cliente.</p>
+                  <p>Você poderá entrar novamente com o e-mail e a senha criados nesta compra para consultar o produto, acompanhar a situação do pagamento e reagendar o atendimento.</p>
+                  <p>Nas compras realizadas pela internet, o direito de arrependimento pode ser solicitado em até 7 dias, contados da assinatura ou do recebimento do produto ou serviço, conforme o artigo 49 do Código de Defesa do Consumidor. A solicitação será registrada e analisada conforme a situação do pedido.</p>
+                  <div className="flex flex-wrap gap-3 pt-1">
+                    <a href="/" className="font-semibold text-[#0b8fc1] underline underline-offset-2">Acessar o Portal do Cliente</a>
+                    <a href="https://www.planalto.gov.br/ccivil_03/leis/l8078compilado.htm" target="_blank" rel="noreferrer" className="font-semibold text-[#0b8fc1] underline underline-offset-2">Consultar o Código de Defesa do Consumidor</a>
+                  </div>
                 </div>
-              </div>
-              <div className="mt-4 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-emerald-500 transition-all duration-500 ease-out"
-                  style={{ width: `${(sectionStatuses.filter(s => s.done).length / sectionStatuses.length) * 100}%` }}
-                />
-              </div>
-              <p className="mt-1.5 text-[11px] text-slate-400 font-medium">
-                {sectionStatuses.filter(s => s.done).length} de {sectionStatuses.length} etapas concluídas
-              </p>
+              </details>
             </div>
 
             <SectionCard
