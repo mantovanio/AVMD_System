@@ -4350,11 +4350,11 @@ const DEFAULT_PAYMENT_RUNTIME: PaymentRuntimeConfig = {
 }
 
 const PAYMENT_METHOD_PRESETS: PaymentMethodConfig[] = [
-  { id: 'safe2pay',      label: 'Safe2Pay',      categoria: 'gateway', enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
+  { id: 'safe2pay',      label: 'Safe2Pay',      categoria: 'gateway', enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '', enabled_payment_types: { pix: true, card: true, boleto: true } },
   { id: 'mercado_pago', label: 'Mercado Pago', categoria: 'gateway', enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '', enabled_payment_types: { pix: true, card: true, boleto: true } },
-  { id: 'itau',         label: 'Itaú',         categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
-  { id: 'inter',        label: 'Inter',        categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
-  { id: 'c6',           label: 'C6 Bank',      categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '' },
+  { id: 'itau',         label: 'Itaú',         categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '', enabled_payment_types: { pix: true, card: false, boleto: true } },
+  { id: 'inter',        label: 'Inter',        categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '', enabled_payment_types: { pix: true, card: false, boleto: true } },
+  { id: 'c6',           label: 'C6 Bank',      categoria: 'banco',   enabled: false, is_default: false, ambiente: 'sandbox', client_id: '', secret_key: '', webhook_url: '', webhook_secret: '', observacoes: '', enabled_payment_types: { pix: true, card: false, boleto: true } },
 ]
 
 // ── Aba Pagamentos ─────────────────────────────────────────────
@@ -4386,34 +4386,37 @@ function AbaPagamentos() {
   const load = useCallback(async () => {
     setLoading(true)
     setErro(null)
-    const [integrationRes, methodsRes, runtimeRes] = await Promise.all([
-      supabase.from('external_integrations').select('*').eq('provider', 'safe2pay').maybeSingle(),
+    const [integrationsRes, methodsRes, runtimeRes] = await Promise.all([
+      fetch(getApiUrl('/integrations')).then(r => r.json() as Promise<{ ok: boolean; integrations: any[]; error?: string }>),
       fetch(getApiUrl('/app-settings?keys=payment_methods')).then(response => response.json()),
       fetch(getApiUrl('/app-settings?keys=payment_runtime')).then(response => response.json()),
     ])
 
-    if (integrationRes.error || !methodsRes.ok || !runtimeRes.ok) {
-      setErro(integrationRes.error?.message ?? methodsRes.error ?? runtimeRes.error ?? 'Erro ao carregar gateways.')
+    if (!integrationsRes.ok || !methodsRes.ok || !runtimeRes.ok) {
+      setErro(integrationsRes.error ?? methodsRes.error ?? runtimeRes.error ?? 'Erro ao carregar gateways.')
       setLoading(false)
       return
     }
 
-    const data = integrationRes.data
-    const metadata = ((data?.metadata ?? {}) as Record<string, unknown>)
-    if (data) {
-      setIntegration(data)
-      setWebhookUrl(data.webhook_url || '')
-      setIsSandbox(data.metadata?.is_sandbox === true)
+    const allIntegrations = integrationsRes.integrations ?? []
+    const safe2payData = allIntegrations.find((i: any) => i.provider === 'safe2pay') ?? null
+    const mercadoPagoData = allIntegrations.find((i: any) => i.provider === 'mercado_pago') ?? null
+
+    if (safe2payData) {
+      setIntegration(safe2payData)
+      setWebhookUrl(safe2payData.webhook_url || '')
+      setIsSandbox(safe2payData.metadata?.is_sandbox === true)
       
-      if (data.api_token) {
-        setProdKey(`••••••••••••••••${data.api_token.slice(-4)}`)
+      if (safe2payData.api_token) {
+        setProdKey(`••••••••••••••••${safe2payData.api_token.slice(-4)}`)
         setEditingProd(false)
       } else {
         setProdKey('')
         setEditingProd(true)
       }
-      if (metadata.secret_key_producao) {
-        const secret = String(metadata.secret_key_producao)
+      const meta = (safe2payData.metadata ?? {}) as Record<string, unknown>
+      if (meta.secret_key_producao) {
+        const secret = String(meta.secret_key_producao)
         setProdSecret(`••••••••••••••••${secret.slice(-4)}`)
         setEditingProdSecret(false)
       } else {
@@ -4421,16 +4424,16 @@ function AbaPagamentos() {
         setEditingProdSecret(true)
       }
 
-      if (metadata.api_key_sandbox) {
-        const sandboxToken = String(metadata.api_key_sandbox)
+      if (meta.api_key_sandbox) {
+        const sandboxToken = String(meta.api_key_sandbox)
         setSandboxKey(`••••••••••••••••${sandboxToken.slice(-4)}`)
         setEditingSandbox(false)
       } else {
         setSandboxKey('')
         setEditingSandbox(true)
       }
-      if (metadata.secret_key_sandbox) {
-        const sandboxSecretValue = String(metadata.secret_key_sandbox)
+      if (meta.secret_key_sandbox) {
+        const sandboxSecretValue = String(meta.secret_key_sandbox)
         setSandboxSecret(`••••••••••••••••${sandboxSecretValue.slice(-4)}`)
         setEditingSandboxSecret(false)
       } else {
@@ -4457,47 +4460,60 @@ function AbaPagamentos() {
         const saved = savedPaymentMethods.find((item: PaymentMethodConfig) => item.id === preset.id)
         return saved ? { ...preset, ...saved } : preset
       })
+
       for (const method of merged) {
-        if (method.id !== 'mercado_pago') continue
-        const savedCredentials = method.credentials_by_environment ?? {}
-        const currentCredentials = savedCredentials[method.ambiente] ?? {
-          public_key: method.client_id,
-          access_token: method.secret_key,
+        if (method.id === 'mercado_pago') {
+          const savedCredentials = method.credentials_by_environment ?? {}
+          const currentCredentials = savedCredentials[method.ambiente] ?? {
+            public_key: method.client_id,
+            access_token: method.secret_key,
+          }
+          method.credentials_by_environment = {
+            ...savedCredentials,
+            [method.ambiente]: currentCredentials,
+          }
+          method.client_id = currentCredentials.public_key ?? ''
+          method.secret_key = currentCredentials.access_token ?? ''
+
+          if (mercadoPagoData) {
+            method.enabled = mercadoPagoData.status === 'ativo' || method.enabled
+            method.webhook_url = mercadoPagoData.webhook_url ?? method.webhook_url
+          }
         }
-        method.credentials_by_environment = {
-          ...savedCredentials,
-          [method.ambiente]: currentCredentials,
+
+        if (method.id === 'safe2pay' && safe2payData) {
+          method.enabled = !!safe2payData
+          method.ambiente = (safe2payData.metadata?.is_sandbox === true ? 'sandbox' : 'producao') as PaymentMethodEnv
+          const meta = (safe2payData.metadata ?? {}) as Record<string, unknown>
+          method.client_id = safe2payData.metadata?.is_sandbox === true
+            ? String(meta.api_key_sandbox ?? method.client_id ?? '')
+            : String(safe2payData.api_token ?? method.client_id ?? '')
+          method.secret_key = safe2payData.metadata?.is_sandbox === true
+            ? String(meta.secret_key_sandbox ?? method.secret_key ?? '')
+            : String(meta.secret_key_producao ?? method.secret_key ?? '')
+          method.webhook_url = safe2payData.webhook_url ?? method.webhook_url ?? ''
         }
-        method.client_id = currentCredentials.public_key ?? ''
-        method.secret_key = currentCredentials.access_token ?? ''
       }
-      const safe2payGateway = merged.find(item => item.id === 'safe2pay')
-      if (safe2payGateway) {
-        safe2payGateway.enabled = !!data
-        safe2payGateway.ambiente = (data?.metadata?.is_sandbox === true ? 'sandbox' : 'producao') as PaymentMethodEnv
-        safe2payGateway.client_id = data?.metadata?.is_sandbox === true
-          ? String(metadata.api_key_sandbox ?? safe2payGateway.client_id ?? '')
-          : String(data?.api_token ?? safe2payGateway.client_id ?? '')
-        safe2payGateway.secret_key = data?.metadata?.is_sandbox === true
-          ? String(metadata.secret_key_sandbox ?? safe2payGateway.secret_key ?? '')
-          : String(metadata.secret_key_producao ?? safe2payGateway.secret_key ?? '')
-        safe2payGateway.webhook_url = data?.webhook_url ?? safe2payGateway.webhook_url ?? ''
-      }
+
       setPaymentMethods(merged)
-      const active = merged.find(item => item.is_default) ?? merged[0]
+      const active = merged.find(item => item.is_default) ?? merged.find(item => item.id === 'mercado_pago') ?? merged[0]
       setSelectedMethodId(active.id)
     } else {
       const defaults = PAYMENT_METHOD_PRESETS.map(item => {
-        if (item.id !== 'safe2pay') return item
-        return {
-          ...item,
-          enabled: !!data,
-          is_default: item.is_default,
-          ambiente: (data?.metadata?.is_sandbox === true ? 'sandbox' : 'producao') as PaymentMethodEnv,
+        if (item.id === 'mercado_pago' && mercadoPagoData) {
+          return { ...item, enabled: mercadoPagoData.status === 'ativo' }
         }
+        if (item.id === 'safe2pay' && safe2payData) {
+          return {
+            ...item,
+            enabled: true,
+            ambiente: (safe2payData.metadata?.is_sandbox === true ? 'sandbox' : 'producao') as PaymentMethodEnv,
+          }
+        }
+        return item
       })
       setPaymentMethods(defaults)
-      setSelectedMethodId(PAYMENT_METHOD_PRESETS[0].id)
+      setSelectedMethodId('mercado_pago')
     }
 
     const runtimeValue = runtimeRes.settings?.payment_runtime
@@ -4843,7 +4859,13 @@ function AbaPagamentos() {
                   {method.is_default && <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Principal</span>}
                 </div>
                 <p className="text-[11px] text-gray-400 mt-1">
-                  {method.enabled ? 'Ativo para uso' : 'Desligado'} • {method.ambiente === 'producao' ? 'Produção' : 'Sandbox'}
+                  {method.enabled ? 'Ativo' : 'Desligado'} • {method.ambiente === 'producao' ? 'Produção' : 'Sandbox'}
+                  {method.enabled && method.enabled_payment_types ? (() => {
+                    const types = Object.entries(method.enabled_payment_types)
+                      .filter(([, v]) => v)
+                      .map(([k]) => k === 'pix' ? 'Pix' : k === 'card' ? 'Cartão' : 'Boleto')
+                    return types.length > 0 ? ` · ${types.join(', ')}` : ''
+                  })() : ''}
                 </p>
               </button>
             ))}
@@ -4875,46 +4897,44 @@ function AbaPagamentos() {
               </label>
             </div>
 
-            {selectedMethod.id === 'mercado_pago' && (
-              <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-950/20">
-                <div>
-                  <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">Formas aceitas pelo Mercado Pago</p>
-                  <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Somente as opções ligadas abaixo serão apresentadas ao cliente no checkout.</p>
-                </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                  {([
-                    ['pix', 'Pix'],
-                    ['card', 'Cartão'],
-                    ['boleto', 'Boleto'],
-                  ] as const).map(([paymentType, label]) => {
-                    const isEnabled = selectedMethod.enabled_payment_types?.[paymentType] ?? true
-                    return (
-                      <div key={paymentType} className="flex items-center justify-between rounded-lg border border-blue-100 bg-white px-3 py-3 dark:border-blue-900/30 dark:bg-gray-900">
-                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{label}</span>
-                        <button
-                          type="button"
-                          disabled={!isAdmin}
-                          aria-label={`${isEnabled ? 'Desativar' : 'Ativar'} ${label}`}
-                          onClick={() => updateMethod(selectedMethod.id, {
-                            enabled_payment_types: {
-                              pix: selectedMethod.enabled_payment_types?.pix ?? true,
-                              card: selectedMethod.enabled_payment_types?.card ?? true,
-                              boleto: selectedMethod.enabled_payment_types?.boleto ?? true,
-                              [paymentType]: !isEnabled,
-                            },
-                          })}
-                          className={cn('relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors disabled:opacity-50',
-                            isEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700')}
-                        >
-                          <span className={cn('pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition',
-                            isEnabled ? 'translate-x-5' : 'translate-x-0')} />
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
+            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-950/20">
+              <div>
+                <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">Formas de pagamento habilitadas para {selectedMethod.label}</p>
+                <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Selecione quais formas este gateway irá processar no checkout. Cada gateway pode ter suas próprias formas habilitadas.</p>
               </div>
-            )}
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                {([
+                  ['pix', 'Pix'],
+                  ['card', 'Cartão'],
+                  ['boleto', 'Boleto'],
+                ] as const).map(([paymentType, label]) => {
+                  const isEnabled = selectedMethod.enabled_payment_types?.[paymentType] ?? true
+                  return (
+                    <div key={paymentType} className="flex items-center justify-between rounded-lg border border-blue-100 bg-white px-3 py-3 dark:border-blue-900/30 dark:bg-gray-900">
+                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{label}</span>
+                      <button
+                        type="button"
+                        disabled={!isAdmin}
+                        aria-label={`${isEnabled ? 'Desativar' : 'Ativar'} ${label}`}
+                        onClick={() => updateMethod(selectedMethod.id, {
+                          enabled_payment_types: {
+                            pix: selectedMethod.enabled_payment_types?.pix ?? true,
+                            card: selectedMethod.enabled_payment_types?.card ?? true,
+                            boleto: selectedMethod.enabled_payment_types?.boleto ?? true,
+                            [paymentType]: !isEnabled,
+                          },
+                        })}
+                        className={cn('relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors disabled:opacity-50',
+                          isEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700')}
+                      >
+                        <span className={cn('pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition',
+                          isEnabled ? 'translate-x-5' : 'translate-x-0')} />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
 
             <div className="grid gap-3 md:grid-cols-2">
               <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-950 rounded-xl border border-gray-100 dark:border-gray-800">
