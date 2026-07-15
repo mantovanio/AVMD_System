@@ -83,6 +83,37 @@ export class CheckoutService {
     }
 
     const tabela = await this.repository.findPriceTable(loja.tabela_preco_id)
+
+    let descontoAplicado = 0
+    let voucherCodigo = null
+    let voucherPercentual = null
+    let voucherValor = null
+
+    if (body.voucher?.codigo && body.voucher.desconto > 0) {
+      if (!tabela) {
+        return { ok: false, error: 'Tabela de preco nao encontrada.' }
+      }
+      if (!tabela.codigo_voucher || tabela.codigo_voucher.toLowerCase() !== body.voucher.codigo.toLowerCase()) {
+        return { ok: false, error: 'Cupom de desconto invalido.' }
+      }
+      const valorBase = Number(item.valor ?? 0)
+      if (Number(tabela.max_desconto_percentual) > 0) {
+        const descontoPct = valorBase * Number(tabela.max_desconto_percentual) / 100
+        if (body.voucher.desconto > descontoPct) {
+          return { ok: false, error: `Desconto maximo permitido: ${Number(tabela.max_desconto_percentual)}% (${descontoPct.toFixed(2)}).` }
+        }
+      }
+      if (Number(tabela.max_desconto_valor) > 0 && body.voucher.desconto > Number(tabela.max_desconto_valor)) {
+        return { ok: false, error: `Desconto maximo permitido: R$ ${Number(tabela.max_desconto_valor).toFixed(2)}.` }
+      }
+      descontoAplicado = body.voucher.desconto
+      voucherCodigo = body.voucher.codigo
+      if (valorBase > 0) {
+        voucherPercentual = Math.round((descontoAplicado / valorBase) * 10000) / 100
+      }
+      voucherValor = descontoAplicado
+    }
+
     const cadastro = await this.repository.upsertCheckoutCustomer(body)
     const titular = await this.repository.upsertCheckoutHolder(body)
     const access = await this.ensurePortalAccess(body)
@@ -93,6 +124,10 @@ export class CheckoutService {
       tabela,
       cadastroBaseId: cadastro.id,
       titularId: titular.id,
+      desconto: descontoAplicado,
+      voucherCodigo,
+      voucherPercentual,
+      voucherValor,
     })
 
     if (body.agendamento) {
@@ -107,7 +142,7 @@ export class CheckoutService {
     const charge = await this.paymentService.createChargeForSale({
       vendaId: venda.id,
       formaPagamentoId: body.pagamento.forma_pagamento_id,
-      valor: Number(item.valor ?? 0),
+      valor: Number(item.valor ?? 0) - descontoAplicado,
       descricao: `${item.certificados?.tipo ?? 'Certificado digital'} - ${body.comprador.nome}`,
       comprador: {
         nome: body.comprador.nome,

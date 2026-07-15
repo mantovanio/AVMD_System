@@ -4746,16 +4746,16 @@ export default function Comercial() {
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
               <div className="flex flex-wrap items-end gap-3">
                 <TextInput label="Cliente / Documento" value={vendaFilters.cliente}
-                  onChange={v => setVendaFilters(p => ({ ...p, cliente: v }))} className="flex-1 min-w-[280px]" />
+                  onChange={v => setVendaFilters(p => ({ ...p, cliente: v }))} className="flex-1 min-w-0 w-full sm:w-auto" />
                 <SelectInput label="Status" value={vendaFilters.status}
                   onChange={v => setVendaFilters(p => ({ ...p, status: v }))}
                   options={[{ value: '', label: 'Todos' }, ...STATUS_VENDA_V2_OPTIONS.map(s => ({ value: s, label: STATUS_VENDA_LABEL[s] }))]}
-                  className="min-w-[200px]"
+                  className="min-w-0 w-full sm:w-auto"
                 />
                 <label className="flex flex-col gap-1">
                   <span className="text-xs text-gray-500">Período</span>
                   <select value={vendaFilters.filtroData} onChange={e => aplicarPresetData(e.target.value)}
-                    className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px]">
+                    className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0 w-full sm:w-auto">
                     <option value="geral">Geral</option>
                     <option value="hoje">Hoje</option>
                     <option value="semana">Esta semana</option>
@@ -4881,7 +4881,7 @@ export default function Comercial() {
             {/* ── TABELA ───────────────────────────────────────── */}
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[1600px]">
+                <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left border-b border-gray-200 dark:border-gray-800">
                       <th className="px-3 py-3 w-8">
@@ -4891,9 +4891,22 @@ export default function Comercial() {
                           className="rounded cursor-pointer" />
                       </th>
                       <th className="px-3 py-3">Ações</th>
-                      {['Pedido','Protocolo','Tipo Emissão','Tipo Venda','Status Venda','Pagamento','Data Status','Forma Pagamento','Valor Venda','Produto','Doc. Cliente','Cliente','PA','Data Venda','Vendedor','Observação'].map(h => (
-                        <th key={h} className="px-3 py-3 whitespace-nowrap">{h}</th>
-                      ))}
+                      <th className="px-3 py-3 whitespace-nowrap">Pedido</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden lg:table-cell">Protocolo</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell">Tipo Emissão</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell">Tipo Venda</th>
+                      <th className="px-3 py-3 whitespace-nowrap">Status</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden md:table-cell">Pagamento</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell">Data Status</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden lg:table-cell">Forma Pagamento</th>
+                      <th className="px-3 py-3 whitespace-nowrap text-right">Valor</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden md:table-cell">Produto</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden lg:table-cell">Doc. Cliente</th>
+                      <th className="px-3 py-3 whitespace-nowrap">Cliente</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell">PA</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden sm:table-cell">Data Venda</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell">Vendedor</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden 2xl:table-cell">Observação</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -4911,7 +4924,7 @@ export default function Comercial() {
                             onChange={() => toggleSelected(v.id)} className="rounded cursor-pointer" />
                         </td>
                         <td className="px-3 py-2">
-                          <div className="flex items-center gap-0.5">
+                          <div className="flex items-center gap-0.5 flex-wrap">
                             <VendaIconBtn title="Notifica Eventos"  icon={Bell}          color="blue"    onClick={() => openFeatureNotice('Notificações de eventos', 'A central de notificações dessa venda ainda não foi conectada aos eventos operacionais.', 'Pode ser ligada depois ao histórico de contato e automações.')} />
                             <VendaIconBtn title="Emitir Protocolo"  icon={ClipboardList} color="purple"  onClick={() => abrirProtocolo(v)} />
                             <VendaIconBtn title="Agendar"           icon={Calendar}      color="emerald" onClick={() => prepararAgendamento(v)} />
@@ -4929,9 +4942,9 @@ export default function Comercial() {
                           </div>
                         </td>
                         <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{v.pedido_numero ?? '—'}</td>
-                        <td className="px-3 py-2 text-blue-600 dark:text-blue-400 whitespace-nowrap">{v.protocolo_numero ?? '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{v.tipo_emissao ? capitalize(v.tipo_emissao.replace(/_/g, ' ')) : '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{v.tipo_venda ? capitalize(v.tipo_venda) : '—'}</td>
+                        <td className="px-3 py-2 text-blue-600 dark:text-blue-400 whitespace-nowrap hidden lg:table-cell">{v.protocolo_numero ?? '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap hidden xl:table-cell">{v.tipo_emissao ? capitalize(v.tipo_emissao.replace(/_/g, ' ')) : '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap hidden xl:table-cell">{v.tipo_venda ? capitalize(v.tipo_venda) : '—'}</td>
                         <td className="px-3 py-2">
                           <select
                             title="Status da venda"
@@ -4943,7 +4956,7 @@ export default function Comercial() {
                             ))}
                           </select>
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-2 hidden md:table-cell">
                           <select
                             title="Status do pagamento"
                             value={v.status_pagamento}
@@ -4954,10 +4967,10 @@ export default function Comercial() {
                             ))}
                           </select>
                         </td>
-                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
+                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap hidden xl:table-cell">
                           {new Date(v.updated_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}
                         </td>
-                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap hidden lg:table-cell">
                           {isAdmin ? (
                             <select
                               title="Alterar forma de pagamento (somente administrador)"
@@ -4982,23 +4995,23 @@ export default function Comercial() {
                         <td className="px-3 py-2 text-right font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">
                           {formatCurrency(v.valor_venda ?? 0)}
                         </td>
-                        <td className="px-3 py-2 text-gray-500 max-w-[180px] truncate" title={descricaoProdutoVenda(v)}>{descricaoProdutoVenda(v)}</td>
-                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                        <td className="px-3 py-2 text-gray-500 max-w-[180px] truncate hidden md:table-cell" title={descricaoProdutoVenda(v)}>{descricaoProdutoVenda(v)}</td>
+                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap hidden lg:table-cell">
                           {(v.cadastros_base as { cpf_cnpj?: string } | null)?.cpf_cnpj ?? v.documento_faturamento ?? '—'}
                         </td>
                         <td className="px-3 py-2 font-medium max-w-[160px] truncate">
                           {(v.cadastros_base as { nome?: string } | null)?.nome ?? v.nome_faturamento ?? '—'}
                         </td>
-                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap hidden xl:table-cell">
                           {(v.pontos_atendimento as { nome?: string } | null)?.nome ?? '—'}
                         </td>
-                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
+                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap hidden sm:table-cell">
                           {new Date(v.created_at).toLocaleDateString('pt-BR')}
                         </td>
-                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap hidden xl:table-cell">
                           {v.vendedor_id ? (vendedorNomes.get(v.vendedor_id) ?? '—') : '—'}
                         </td>
-                        <td className="px-3 py-2 text-gray-500 max-w-[120px] truncate">{v.observacoes ?? '—'}</td>
+                        <td className="px-3 py-2 text-gray-500 max-w-[120px] truncate hidden 2xl:table-cell">{v.observacoes ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -5552,7 +5565,7 @@ export default function Comercial() {
             <div className="flex flex-wrap items-end gap-3">
               <TextInput label="Buscar" value={certFilters.busca}
                 onChange={v => setCertFilters(p => ({ ...p, busca: v }))}
-                className="flex-1 min-w-[200px]" placeholder="Nome, código, hash, produto AC..." />
+                className="flex-1 min-w-0" placeholder="Nome, código, hash, produto AC..." />
               <SelectInput label="Status" value={certFilters.status}
                 onChange={v => setCertFilters(p => ({ ...p, status: v }))}
                 options={[
@@ -5560,7 +5573,7 @@ export default function Comercial() {
                   { value: 'ativo', label: 'Ativo' },
                   { value: 'inativo', label: 'Inativo' },
                 ]}
-                className="min-w-[140px]" />
+                className="min-w-0" />
               <SelectInput label="Categoria" value={certFilters.categoria}
                 onChange={v => setCertFilters(p => ({ ...p, categoria: v }))}
                 options={[

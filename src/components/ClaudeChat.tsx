@@ -70,7 +70,7 @@ export default function ClaudeChat({ onClose }: Props) {
   }
 
   return (
-    <div className="fixed top-14 right-4 w-96 h-[520px] bg-white dark:bg-gray-950 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 flex flex-col z-50 overflow-hidden">
+    <div className="fixed top-14 right-2 sm:right-4 w-[calc(100vw-16px)] sm:w-96 h-[calc(100vh-80px)] sm:h-[520px] bg-white dark:bg-gray-950 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 flex flex-col z-50 overflow-hidden">
 
       {/* Header */}
       <div className="flex items-center gap-2.5 px-4 py-3 bg-gray-50 dark:bg-gray-900 shrink-0 border-b border-gray-200 dark:border-gray-800">

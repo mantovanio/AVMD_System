@@ -13,12 +13,14 @@ import {
   MapPin,
   Phone,
   Store,
+  Tag,
   UserRound,
   Wallet,
 } from 'lucide-react'
 import { buscarCep } from '@/lib/cep'
 import { buscarCnpj } from '@/lib/cnpj'
 import { cn } from '@/lib/utils'
+import { getApiUrl } from '@/lib/api'
 import type { LojaMarketplace, TabelaPreco } from '@/types'
 import { loadMarketplaceCheckoutContext, lookupExistingCheckoutCustomer, submitMarketplaceCheckout, type AgendaAgent, type AgendaPoint, type AgendaSlot, type LojaItemRow, type PaymentOption, type PaymentRuntime } from '@/lib/checkout'
 import {
@@ -341,6 +343,11 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [cadastroLoading, setCadastroLoading] = useState(false)
   const [cnpjLoading, setCnpjLoading] = useState(false)
   const formStartRef = useRef<HTMLDivElement | null>(null)
+
+  const [voucherCodigo, setVoucherCodigo] = useState('')
+  const [voucherDesconto, setVoucherDesconto] = useState(0)
+  const [voucherAplicando, setVoucherAplicando] = useState(false)
+  const [voucherErro, setVoucherErro] = useState('')
 
   useEffect(() => {
     let active = true
@@ -786,6 +793,47 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     setIsSchedulingOpen(false)
   }
 
+  async function aplicarVoucher() {
+    if (!voucherCodigo.trim() || !itemSelecionado) return
+    setVoucherAplicando(true)
+    setVoucherErro('')
+    setVoucherDesconto(0)
+    try {
+      const resp = await fetch(getApiUrl('/catalog/tabelas'))
+      const data = await resp.json()
+      const tabelas = data.tabelas ?? []
+      const tabela = tabelas.find((t: { id: string; codigo_voucher?: string; ativo: boolean }) => {
+        if (!t.codigo_voucher || !t.ativo) return false
+        return t.codigo_voucher.toLowerCase() === voucherCodigo.trim().toLowerCase()
+      })
+      if (!tabela) {
+        setVoucherErro('Cupom inválido ou não encontrado.')
+        return
+      }
+      if (tabela.id !== itemSelecionado.tabela_preco_id) {
+        setVoucherErro('Este cupom não é válido para o produto selecionado.')
+        return
+      }
+      const valorBase = Number(itemSelecionado.valor) || 0
+      let desconto = 0
+      if (Number(tabela.max_desconto_percentual) > 0) {
+        desconto = valorBase * Number(tabela.max_desconto_percentual) / 100
+      }
+      if (Number(tabela.max_desconto_valor) > 0 && (desconto === 0 || Number(tabela.max_desconto_valor) < desconto)) {
+        desconto = Number(tabela.max_desconto_valor)
+      }
+      if (desconto <= 0) {
+        setVoucherErro('Este cupom não possui desconto configurado.')
+        return
+      }
+      setVoucherDesconto(Math.round((desconto + Number.EPSILON) * 100) / 100)
+    } catch {
+      setVoucherErro('Erro ao validar cupom. Tente novamente.')
+    } finally {
+      setVoucherAplicando(false)
+    }
+  }
+
   async function iniciarCheckout(card?: {
     token: string
     payment_method_id: string
@@ -859,6 +907,10 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
           data_agendada: selectedSlot.inicio,
         } : null,
         observacoes: checkoutNotes(form),
+        voucher: voucherDesconto > 0 ? {
+          codigo: voucherCodigo,
+          desconto: voucherDesconto,
+        } : null,
       })
 
       const mensagens = [result.message, result.access_message].filter(Boolean)
@@ -1569,6 +1621,49 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
               )}
               {isMercadoPagoCard && !pagamentoSelecionado?.public_key && (
                 <p className="mt-3 text-sm text-amber-700">A Public Key do Mercado Pago ainda não foi configurada.</p>
+              )}
+            </SectionCard>
+            )}
+
+            {canShowPagamento && (
+            <SectionCard
+              title="Cupom de desconto"
+              description="Se você possui um cupom de desconto, insira o código abaixo para aplicar o desconto no valor total."
+              icon={Tag}
+              highlight={false}
+              done={false}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Código do cupom</label>
+                  <input
+                    type="text"
+                    value={voucherCodigo}
+                    onChange={e => setVoucherCodigo(e.target.value.toUpperCase())}
+                    placeholder="Digite o código do cupom"
+                    className="w-full rounded-[14px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#ea7b18] focus:border-transparent"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={aplicarVoucher}
+                  disabled={!voucherCodigo.trim() || voucherAplicando}
+                  className="rounded-[14px] bg-[#17346b] px-5 py-3 text-sm font-semibold text-white hover:bg-[#1a3d7a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {voucherAplicando ? 'Validando...' : 'Aplicar'}
+                </button>
+              </div>
+              {voucherErro && (
+                <p className="mt-2 text-sm text-red-600">{voucherErro}</p>
+              )}
+              {voucherDesconto > 0 && (
+                <div className="mt-3 rounded-[14px] border border-green-200 bg-green-50 px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-green-600" />
+                    <span className="text-sm font-medium text-green-800">Cupom aplicado: {voucherCodigo}</span>
+                  </div>
+                  <span className="text-sm font-bold text-green-700">-{formatCurrency(voucherDesconto)}</span>
+                </div>
               )}
             </SectionCard>
             )}

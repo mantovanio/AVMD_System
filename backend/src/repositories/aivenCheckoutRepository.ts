@@ -463,21 +463,24 @@ export class AivenCheckoutRepository implements CheckoutRepository {
     return this.db.transaction(async trx => {
       const saleId = randomUUID()
       const payload = input.payload
+      const valorFinal = Number(input.item.valor ?? 0) - (input.desconto ?? 0)
       const sql = `
         insert into vendas_certificados (
           id, loja_marketplace_id, cadastro_base_id, titular_id, certificado_id, tabela_preco_id,
           tabela_preco_item_id, forma_pagamento_id, pago, tipo_produto, tipo_emissao, tabela_preco,
-          valor_venda, valor_custo, documento_faturamento, nome_faturamento, email_faturamento,
+          valor_venda, valor_custo, desconto, voucher_codigo, voucher_percentual, voucher_valor,
+          documento_faturamento, nome_faturamento, email_faturamento,
           telefone_faturamento, logradouro, numero, complemento, bairro, cidade, uf, cep,
           ponto_atendimento_id, observacoes, pedido_status, protocolo_status,
           api_payload_pedido, api_payload_protocolo, created_at, updated_at
         ) values (
           $1, $2, $3, $4, $5, $6,
           $7, $8, $9, $10, $11, $12,
-          $13, $14, $15, $16, $17,
-          $18, $19, $20, $21, $22, $23, $24, $25,
-          $26, $27, $28, $29,
-          $30::jsonb, $31::jsonb, now(), now()
+          $13, $14, $15, $16, $17, $18,
+          $19, $20, $21,
+          $22, $23, $24, $25, $26, $27, $28, $29, $30,
+          $31, $32, $33, $34,
+          $35::jsonb, $36::jsonb, now(), now()
         )
         returning id, protocolo_numero
       `
@@ -494,8 +497,12 @@ export class AivenCheckoutRepository implements CheckoutRepository {
         input.item.certificados?.tipo ?? 'Certificado digital',
         input.item.certificados?.tipo_emissao_padrao ?? null,
         input.tabela?.nome ?? null,
-        input.item.valor,
+        valorFinal,
         input.item.valor_custo,
+        input.desconto ?? 0,
+        input.voucherCodigo ?? null,
+        input.voucherPercentual ?? null,
+        input.voucherValor ?? null,
         onlyDigits(payload.comprador.cpf_cnpj),
         payload.comprador.nome,
         payload.comprador.email,

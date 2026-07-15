@@ -51,7 +51,7 @@ export default function DebugPanel({ onClose }: { onClose: () => void }) {
   const warnCount  = entries.filter(e => e.level === 'warn').length
 
   return (
-    <div className="fixed bottom-4 left-4 w-[560px] h-[500px] bg-white dark:bg-gray-950 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 flex flex-col z-50 overflow-hidden">
+    <div className="fixed bottom-4 left-2 sm:left-4 w-[calc(100vw-16px)] sm:w-[560px] h-[calc(100vh-120px)] sm:h-[500px] bg-white dark:bg-gray-950 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 flex flex-col z-50 overflow-hidden">
 
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 shrink-0">

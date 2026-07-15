@@ -70,6 +70,10 @@ export type CreateCheckoutSaleInput = {
   tabela: CheckoutPriceTable | null
   cadastroBaseId: string
   titularId: string | null
+  desconto?: number
+  voucherCodigo?: string | null
+  voucherPercentual?: number | null
+  voucherValor?: number | null
 }
 
 export type CreateCheckoutScheduleInput = {

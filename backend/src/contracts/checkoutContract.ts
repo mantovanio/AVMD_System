@@ -193,6 +193,10 @@ export type CheckoutSubmitRequest = {
     data_agendada: string
   } | null
   observacoes: string | null
+  voucher?: {
+    codigo: string
+    desconto: number
+  } | null
 }
 
 export type CheckoutSubmitResponse = {
