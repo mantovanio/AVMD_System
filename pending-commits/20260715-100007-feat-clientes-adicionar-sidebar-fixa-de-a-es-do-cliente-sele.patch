@@ -1,0 +1,468 @@
+From: pending-queue <queue@avmd.local>
+Date: Wed, 15 Jul 2026 10:00:08 -0300
+Subject: feat(clientes): adicionar sidebar fixa de ações do cliente selecionado
+Patch-Hash: sha256:4c007256e62d8c66c24b1320713a6bc710ead513126677fa693e797e9bdbb4cd
+---
+diff --git a/src/pages/Clientes.tsx b/src/pages/Clientes.tsx
+index 64b5aba..0256e02 100644
+--- a/src/pages/Clientes.tsx
++++ b/src/pages/Clientes.tsx
+@@ -1,5 +1,5 @@
+ import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react'
+-import { Search, X, ChevronDown, ChevronUp, Loader2, RefreshCcw, Plus, Pencil, MessageCircle, Mail, LifeBuoy, Save, Upload, Check } from 'lucide-react'
++import { Search, X, ChevronDown, ChevronUp, Loader2, RefreshCcw, Plus, Pencil, MessageCircle, Mail, LifeBuoy, Save, Upload, Check, Phone, UserCog, Shield, Archive } from 'lucide-react'
+ import { getApiUrl } from '@/lib/api'
+ import { supabase } from '@/lib/supabase'
+ import { cn } from '@/lib/utils'
+@@ -1311,19 +1311,21 @@ export default function Clientes() {
+         <span className="text-xs text-gray-400 ml-auto">{total.toLocaleString('pt-BR')} clientes</span>
+       </div>
+ 
+-      {/* table */}
+-      <div className="flex-1 overflow-auto">
++      {/* table + sidebar */}
++      <div className="flex-1 overflow-hidden flex">
+         {loading ? (
+-          <div className="flex items-center justify-center py-20 text-gray-400">
++          <div className="flex items-center justify-center py-20 text-gray-400 w-full">
+             <Loader2 size={20} className="animate-spin mr-2" /> Carregando...
+           </div>
+         ) : clientes.length === 0 ? (
+-          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
++          <div className="flex flex-col items-center justify-center py-20 text-gray-400 w-full">
+             <p className="font-medium">Nenhum cliente encontrado.</p>
+             {search && <p className="text-sm mt-1">Tente uma busca diferente.</p>}
+           </div>
+         ) : (
+-          <table className="w-full text-sm">
++          <>
++            <div className="flex-1 overflow-auto min-w-0">
++              <table className="w-full text-sm">
+             <thead className="sticky top-0 z-10">
+               <tr className="bg-gray-50 dark:bg-gray-800/80 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left">
+                 <th className="px-4 py-3 font-medium"></th>
+@@ -1419,23 +1421,6 @@ export default function Clientes() {
+                           </div>
+                         ) : (
+                           <div className="space-y-4">
+-                            <div className="flex flex-wrap items-center gap-2">
+-                              <ActionToolbarBtn icon={Pencil} label="Editar cliente" onClick={() => openEditCliente(c)} />
+-                              {canAccessChat && <ActionToolbarBtn icon={MessageCircle} label="Abrir chat" onClick={() => void openChatFromCliente(c)} />}
+-                              {canAccessChat && <ActionToolbarBtn icon={LifeBuoy} label="Ir para o Kanban" onClick={() => void openKanbanFromCliente(c)} />}
+-                              <ActionToolbarBtn
+-                                icon={Mail}
+-                                label="E-mail"
+-                                onClick={() => {
+-                                  if (!c.email) {
+-                                    alert('Este cliente ainda nao possui e-mail cadastrado.')
+-                                    return
+-                                  }
+-                                  window.location.href = `mailto:${c.email}`
+-                                }}
+-                              />
+-                            </div>
+-
+                             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+                               <InfoMini label="Cadastro desde" value={formatDate(c.created_at)} />
+                               <InfoMini label="Renovações em aberto" value={String(renovacoesAbertas)} />
+@@ -1652,11 +1637,205 @@ export default function Clientes() {
+                 </Fragment>
+               )})}
+             </tbody>
+-          </table>
++</table>
++            </div>
++
++            {/* Sidebar de ações do cliente selecionado */}
++            {expandedId && (
++              <aside className="hidden lg:block w-80 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 flex flex-col lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)]">
++                <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
++                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Ações do cliente</h3>
++                </div>
++
++                <div className="flex-1 overflow-y-auto p-4 space-y-4">
++                  {(function() {
++                    const cliente = clientes.find(c => c.id === expandedId)
++                    const detalhe = cliente ? detalhes[cliente.id] : null
++                    if (!cliente || !detalhe) return null
++
++                    const portalAccess = detalhe.portal_access
++                    const hasPortalAccess = !!portalAccess
++
++                    return (
++                      <>
++                        {/* Cliente info */}
++                        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-4">
++                          <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{cliente.nome}</p>
++                          {cliente.nome_fantasia && cliente.nome_fantasia !== cliente.nome && (
++                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{cliente.nome_fantasia}</p>
++                          )}
++                          <p className="text-xs font-mono text-gray-500 dark:text-gray-400 mt-1">
++                            {cliente.tipo_cliente === 'pessoa_fisica' ? 'CPF' : 'CNPJ'} {cliente.cpf_cnpj ? `· ${formatDoc(cliente.cpf_cnpj)}` : ''}
++                          </p>
++                          <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${
++                            cliente.status === 'ativo'
++                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
++                              : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
++                          }`}>
++                            {cliente.status === 'ativo' ? 'Ativo' : 'Inativo'}
++                          </span>
++                        </div>
++
++                        {/* Ações principais */}
++                        <div>
++                          <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Ações rápidas</h4>
++                          <div className="space-y-2">
++                            <button
++                              type="button"
++                              onClick={() => openEditCliente(cliente)}
++                              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-blue-100 dark:border-blue-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-blue-300 hover:text-blue-700 transition-colors"
++                            >
++                              <Pencil size={14} />
++                              Editar cliente
++                            </button>
++
++                            {canAccessChat && (
++                              <>
++                                <button
++                                  type="button"
++                                  onClick={() => void openChatFromCliente(cliente)}
++                                  className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-green-100 dark:border-green-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-green-300 hover:text-green-700 transition-colors"
++                                >
++                                  <MessageCircle size={14} />
++                                  Abrir chat
++                                </button>
++                                <button
++                                  type="button"
++                                  onClick={() => void openKanbanFromCliente(cliente)}
++                                  className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-purple-100 dark:border-purple-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-purple-300 hover:text-purple-700 transition-colors"
++                                >
++                                  <LifeBuoy size={14} />
++                                  Ir para o Kanban
++                                </button>
++                              </>
++                            )}
++
++                            <button
++                              type="button"
++                              onClick={() => {
++                                if (!cliente.email) {
++                                  alert('Este cliente ainda nao possui e-mail cadastrado.')
++                                  return
++                                }
++                                window.location.href = `mailto:${cliente.email}`
++                              }}
++                              disabled={!cliente.email}
++                              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-amber-100 dark:border-amber-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-amber-300 hover:text-amber-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
++                            >
++                              <Mail size={14} />
++                              E-mail
++                            </button>
++
++                            <button
++                              type="button"
++                              onClick={() => {
++                                if (!cliente.telefone) {
++                                  alert('Este cliente ainda nao possui telefone cadastrado.')
++                                  return
++                                }
++                                window.location.href = `tel:${normalizeDigits(cliente.telefone)}`
++                              }}
++                              disabled={!cliente.telefone}
++                              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-indigo-100 dark:border-indigo-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-indigo-300 hover:text-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
++                            >
++                              <Phone size={14} />
++                              Ligar
++                            </button>
++                          </div>
++                        </div>
++
++                        {/* Acesso ao portal */}
++                        <div>
++                          <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Acesso ao portal</h4>
++                          <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
++                            {!hasPortalAccess ? (
++                              <div className="text-center py-4">
++                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Este cliente ainda não possui um acesso de portal vinculado.</p>
++                                <button
++                                  type="button"
++                                  onClick={() => openEditCliente(cliente)}
++                                  className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
++                                >
++                                  Criar acesso ao portal
++                                </button>
++                              </div>
++                            ) : (
++                              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
++                                <div>
++                                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{portalAccess.nome}</p>
++                                  <p className="text-xs text-gray-500 mt-1">{portalAccess.email ?? cliente.email ?? 'Sem e-mail informado'}</p>
++                                  <div className="mt-2 flex items-center gap-2">
++                                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
++                                      portalAccess.status === 'ativo'
++                                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
++                                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
++                                    }`}>
++                                      {portalAccess.status === 'ativo' ? 'Liberado' : 'Aguardando/liberação bloqueada'}
++                                    </span>
++                                    <span className="text-xs text-gray-400">Cliente do portal</span>
++                                  </div>
++                                </div>
++                                <div className="flex gap-2">
++                                  <button
++                                    type="button"
++                                    onClick={() => void togglePortalAccess(cliente, portalAccess.status)}
++                                    className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
++                                      portalAccess.status === 'ativo'
++                                        ? 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400'
++                                        : 'bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400'
++                                    }`}
++                                  >
++                                    {portalAccess.status === 'ativo' ? 'Desativar acesso' : 'Liberar acesso'}
++                                  </button>
++                                </div>
++                              </div>
++                            )}
++                          </div>
++                        </div>
++
++                        {/* Ações avançadas */}
++                        <div>
++                          <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Avançado</h4>
++                          <div className="space-y-2">
++                            <button
++                              type="button"
++                              onClick={() => openEditCliente(cliente)}
++                              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
++                            >
++                              <UserCog size={14} />
++                              Gerenciar perfil de acesso
++                            </button>
++                            <button
++                              type="button"
++                              onClick={() => {
++                                // TODO: Implementar bloqueio/desbloqueio
++                              }}
++                              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
++                            >
++                              <Shield size={14} />
++                              Bloquear/Desbloquear login
++                            </button>
++                            <button
++                              type="button"
++                              onClick={() => {
++                                // TODO: Implementar arquivar cliente
++                              }}
++                              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
++                            >
++                              <Archive size={14} />
++                              Arquivar cliente
++                            </button>
++                          </div>
++                        </div>
++                      </>
++                    )
++                  })()}
++                </div>
++              </aside>
++            )}
++          </>
+         )}
+       </div>
+-
+-      {/* pagination */}
+       {totalPages > 1 && (
+         <div className="px-6 py-3 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex items-center justify-between shrink-0">
+           <div className="flex items-center gap-3">
+@@ -1974,6 +2153,191 @@ function ActionToolbarBtn({
+   )
+ }
+ 
++function ClienteActionsSidebar({
++  cliente,
++  detalhe,
++  onEdit,
++  onChat,
++  onKanban,
++  onEmail,
++  onTogglePortal,
++  canAccessChat,
++}: {
++  cliente: ClienteComVendas | null
++  detalhe: ClienteDetalhe | null
++  onEdit: () => void
++  onChat: () => void
++  onKanban: () => void
++  onEmail: () => void
++  onTogglePortal: () => void
++  canAccessChat: boolean
++}) {
++  if (!cliente || !detalhe) return null
++
++  const portalAccess = detalhe.portal_access
++  const hasPortalAccess = !!portalAccess
++
++  return (
++    <aside className="fixed right-0 top-0 bottom-0 w-80 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 shadow-xl z-40 flex flex-col">
++      <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
++        <h3 className="font-semibold text-gray-900 dark:text-gray-100">Ações do cliente</h3>
++        <button
++          type="button"
++          onClick={onEdit}
++          className="text-xs text-blue-600 hover:underline"
++        >
++          Editar cadastro
++        </button>
++      </div>
++
++      <div className="flex-1 overflow-y-auto p-4 space-y-4">
++        {/* Cliente info */}
++        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-4">
++          <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{cliente.nome}</p>
++          {cliente.nome_fantasia && cliente.nome_fantasia !== cliente.nome && (
++            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{cliente.nome_fantasia}</p>
++          )}
++          <p className="text-xs font-mono text-gray-500 dark:text-gray-400 mt-1">
++            {cliente.tipo_cliente === 'pessoa_fisica' ? 'CPF' : 'CNPJ'} {cliente.cpf_cnpj ? `· ${formatDoc(cliente.cpf_cnpj)}` : ''}
++          </p>
++          <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${
++            cliente.status === 'ativo'
++              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
++              : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
++          }`}>
++            {cliente.status === 'ativo' ? 'Ativo' : 'Inativo'}
++          </span>
++        </div>
++
++        {/* Ações principais */}
++        <div>
++          <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Ações rápidas</h4>
++          <div className="space-y-2">
++            <button
++              type="button"
++              onClick={onEdit}
++              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-blue-100 dark:border-blue-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-blue-300 hover:text-blue-700 transition-colors"
++            >
++              <Pencil size={14} />
++              Editar cliente
++            </button>
++
++            {canAccessChat && (
++              <>
++                <button
++                  type="button"
++                  onClick={onChat}
++                  className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-green-100 dark:border-green-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-green-300 hover:text-green-700 transition-colors"
++                >
++                  <MessageCircle size={14} />
++                  Abrir chat
++                </button>
++                <button
++                  type="button"
++                  onClick={onKanban}
++                  className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-purple-100 dark:border-purple-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-purple-300 hover:text-purple-700 transition-colors"
++                >
++                  <LifeBuoy size={14} />
++                  Ir para o Kanban
++                </button>
++              </>
++            )}
++
++            <button
++              type="button"
++              onClick={onEmail}
++              disabled={!cliente.email}
++              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-amber-100 dark:border-amber-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-amber-300 hover:text-amber-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
++            >
++              <Mail size={14} />
++              Enviar e-mail
++            </button>
++
++            <button
++              type="button"
++              onClick={() => window.open(`tel:${normalizePhoneBR(cliente.telefone ?? '')}`, '_self')}
++              disabled={!cliente.telefone}
++              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-teal-100 dark:border-teal-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-teal-300 hover:text-teal-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
++            >
++              <Phone size={14} />
++              Ligar
++            </button>
++          </div>
++        </div>
++
++        {/* Acesso ao portal */}
++        <div>
++          <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Portal do cliente</h4>
++          <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-4 space-y-3">
++            {hasPortalAccess ? (
++              <>
++                <div className="flex items-center justify-between">
++                  <div>
++                    <p className="font-medium text-gray-900 dark:text-gray-100">{portalAccess!.nome}</p>
++                    <p className="text-xs text-gray-500 dark:text-gray-400">{portalAccess!.email ?? cliente.email ?? 'Sem e-mail'}</p>
++                  </div>
++                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
++                    portalAccess!.status === 'ativo'
++                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
++                      : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
++                  }`}>
++                    {portalAccess!.status === 'ativo' ? 'Liberado' : 'Bloqueado'}
++                  </span>
++                </div>
++                <button
++                  type="button"
++                  onClick={onTogglePortal}
++                  className={`w-full px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
++                    portalAccess!.status === 'ativo'
++                      ? 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400'
++                      : 'bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400'
++                  }`}
++                >
++                  {portalAccess!.status === 'ativo' ? 'Desativar acesso ao portal' : 'Liberar acesso ao portal'}
++                </button>
++              </>
++            ) : (
++              <div className="text-center text-sm text-gray-500 dark:text-gray-400 py-2">
++                <p>Este cliente não possui acesso ao portal.</p>
++                <p className="text-xs mt-1">Ao liberar, será criado um usuário com o e-mail do cliente.</p>
++              </div>
++            )}
++          </div>
++        </div>
++
++        {/* Resumo rápido */}
++        <div>
++          <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Resumo</h4>
++          <div className="grid grid-cols-2 gap-3 text-xs">
++            <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-3 text-center">
++              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{cliente.total_vendas}</p>
++              <p className="text-gray-500 dark:text-gray-400">Vendas</p>
++            </div>
++            <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-3 text-center">
++              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(cliente.valor_total)}</p>
++              <p className="text-gray-500 dark:text-gray-400">Total</p>
++            </div>
++            <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-3 text-center">
++              <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{detalhe.renovacoes.filter(r => r.status !== 'convertido' && r.status !== 'perdido').length}</p>
++              <p className="text-gray-500 dark:text-gray-400">Renovações abertas</p>
++            </div>
++            <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-3 text-center">
++              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{detalhe.agendamentos.filter(a => a.status === 'aguardando' || a.status === 'confirmado').length}</p>
++              <p className="text-gray-500 dark:text-gray-400">Agendamentos</p>
++            </div>
++          </div>
++        </div>
++      </div>
++
++      <div className="p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50">
++        <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
++          Clique em outra linha para selecionar outro cliente
++        </p>
++      </div>
++    </aside>
++  )
++}
++
+ function ClienteEditorModal({
+   mode,
+   form,
