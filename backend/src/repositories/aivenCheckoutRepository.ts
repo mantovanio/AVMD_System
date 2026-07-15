@@ -463,6 +463,10 @@ export class AivenCheckoutRepository implements CheckoutRepository {
     return this.db.transaction(async trx => {
       const saleId = randomUUID()
       const payload = input.payload
+
+      const seqResult = await trx.query<{ nextval: string }>(`select nextval('vendas_pedido_numero_seq') as nextval`)
+      const pedidoNumero = seqResult.rows[0]?.nextval ?? null
+
       const valorFinal = Number(input.item.valor ?? 0) - (input.desconto ?? 0)
       const sql = `
         insert into vendas_certificados (
@@ -471,7 +475,7 @@ export class AivenCheckoutRepository implements CheckoutRepository {
           valor_venda, valor_custo, desconto, voucher_codigo, voucher_percentual, voucher_valor,
           documento_faturamento, nome_faturamento, email_faturamento,
           telefone_faturamento, logradouro, numero, complemento, bairro, cidade, uf, cep,
-          ponto_atendimento_id, observacoes, pedido_status, protocolo_status,
+          ponto_atendimento_id, observacoes, pedido_numero, pedido_status, protocolo_status,
           api_payload_pedido, api_payload_protocolo, created_at, updated_at
         ) values (
           $1, $2, $3, $4, $5, $6,
@@ -479,8 +483,8 @@ export class AivenCheckoutRepository implements CheckoutRepository {
           $13, $14, $15, $16, $17, $18,
           $19, $20, $21,
           $22, $23, $24, $25, $26, $27, $28, $29, $30,
-          $31, $32, $33, $34,
-          $35::jsonb, $36::jsonb, now(), now()
+          $31, $32, $33, $34, $35,
+          $36::jsonb, $37::jsonb, now(), now()
         )
         returning id, protocolo_numero
       `
@@ -516,6 +520,7 @@ export class AivenCheckoutRepository implements CheckoutRepository {
         payload.fiscal.cep,
         payload.agendamento?.ponto_atendimento_id ?? null,
         payload.observacoes,
+        pedidoNumero,
         'pendente',
         'nao_gerado',
         JSON.stringify({ origem: 'checkout_aiven' }),
