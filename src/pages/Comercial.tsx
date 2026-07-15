@@ -4927,7 +4927,6 @@ export default function Comercial() {
                           onChange={toggleAll}
                           className="rounded cursor-pointer" />
                       </th>
-                      <th className="px-3 py-3">Ações</th>
                       <th className="px-3 py-3 whitespace-nowrap">Pedido</th>
                       <th className="px-3 py-3 whitespace-nowrap hidden lg:table-cell">Protocolo</th>
                       <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell">Tipo Emissão</th>
@@ -4959,24 +4958,6 @@ export default function Comercial() {
                         <td className="px-3 py-2">
                           <input type="checkbox" checked={selectedIds.has(v.id)}
                             onChange={() => toggleSelected(v.id)} className="rounded cursor-pointer" />
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-0.5 flex-wrap">
-                            <VendaIconBtn title="Notifica Eventos"  icon={Bell}          color="blue"    onClick={() => openFeatureNotice('Notificações de eventos', 'A central de notificações dessa venda ainda não foi conectada aos eventos operacionais.', 'Pode ser ligada depois ao histórico de contato e automações.')} />
-                            <VendaIconBtn title="Emitir Protocolo"  icon={ClipboardList} color="purple"  onClick={() => abrirProtocolo(v)} />
-                            <VendaIconBtn title="Agendar"           icon={Calendar}      color="emerald" onClick={() => prepararAgendamento(v)} />
-                            <VendaIconBtn title="Upload Documentos" icon={Upload}        color="orange"  onClick={() => openFeatureNotice('Upload de documentos', 'A estrutura de documentos financeiros existe, mas o fluxo de upload desta tela ainda não foi conectado.', 'Próximo bloco: ligar `documentos_financeiros` a esta venda.')} />
-                            <VendaIconBtn title="Fatura"            icon={Receipt}       color="teal"    onClick={() => void abrirFaturaVenda(v)} />
-                            {isAdmin && <VendaIconBtn title="Editar Venda" icon={Edit3} color="blue" onClick={() => { const vo = v as unknown as Record<string, unknown>; setEditForm({ id: v.id, tipo_produto: v.tipo_produto, tipo_venda: v.tipo_venda ?? '', tipo_emissao: v.tipo_emissao ?? '', tabela_preco_id: v.tabela_preco_id ?? '', tabela_preco_item_id: v.tabela_preco_item_id ?? '', forma_pagamento_id: v.forma_pagamento_id ?? '', valor_venda: v.valor_venda ?? 0, desconto: (vo.desconto as number) ?? 0, observacoes: v.observacoes ?? '', data_vencimento: v.data_vencimento ?? '', vendedor_id: v.vendedor_id ?? null, contador_id: v.contador_id ?? null }); setEditandoVenda(v) }} />}
-                            {isAdmin && <VendaIconBtn title="Cancelar Venda" icon={XCircle} color="red" onClick={() => setCancelandoVenda(v)} />}
-                            <VendaIconBtn title="Excluir"           icon={Trash2}        color="red"     onClick={() => void excluirVenda(v.id)} />
-                            {nfseAutomationSettings.permitir_emissao_manual_rapida && (
-                              <VendaIconBtn title="Emitir NFS-e"      icon={FileText}      color="gray"    onClick={() => void emitirNfseParaVenda(v)} />
-                            )}
-                            <VendaIconBtn title="Ver NF-e"          icon={Eye}           color="gray"    onClick={() => void abrirNfseVenda(v)} />
-                            <VendaIconBtn title="Cancelar NF-e"     icon={XCircle}       color="red"     onClick={() => openFeatureNotice('Cancelamento de NFS-e', 'O cancelamento fiscal ainda não foi implementado porque depende da integração municipal final.', 'Entrará na fase fiscal após homologação da emissão.')} />
-                            <VendaIconBtn title="Liberar Emissão"   icon={Unlock}        color="green"   onClick={() => void liberarEmissao(v)} />
-                          </div>
                         </td>
                         <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{v.pedido_numero ?? '—'}</td>
                         <td className="px-3 py-2 text-blue-600 dark:text-blue-400 whitespace-nowrap hidden lg:table-cell">{v.protocolo_numero ?? '—'}</td>
