@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Clock,
   Copy,
   CreditCard,
   Download,
@@ -456,6 +457,15 @@ function limparRascunhoVenda() {
   try { localStorage.removeItem(NOVA_VENDA_DRAFT_KEY) } catch { /* localStorage indisponível */ }
 }
 
+const WIZARD_STEPS = [
+  { key: 'tipo_venda', label: 'Tipo de Venda', icon: ShoppingBag },
+  { key: 'cliente',    label: 'Cliente',        icon: UserCheck },
+  { key: 'parceiro',   label: 'Parceiro',       icon: TrendingUp },
+  { key: 'emissao',    label: 'Emissão / PA',   icon: MapPin },
+  { key: 'produto',    label: 'Produto',        icon: Tag },
+  { key: 'pagamento',  label: 'Pagamento',      icon: CreditCard },
+] as const
+
 
 const EMPTY_CLIENTE_BASE: NovoCadastroBase = {
   tipo_cliente: 'pessoa_fisica',
@@ -752,6 +762,9 @@ export default function Comercial() {
   const [formProtocolo, setFormProtocolo]         = useState<ProtocoloForm>(EMPTY_PROTOCOLO)
   const [validandoProtocolo, setValidandoProtocolo] = useState(false)
   const [emitindoProtocolo, setEmitindoProtocolo]   = useState(false)
+
+  // ── wizard step state ─────────────────────────────────────────
+  const [currentFormStep, setCurrentFormStep]     = useState(0)
 
   // ── derived ──────────────────────────────────────────────────
   const certificadosAtivos = useMemo(() => certificados.filter(c => c.ativo), [certificados])
@@ -1070,6 +1083,59 @@ export default function Comercial() {
     }
     return { step: current.key, mensagem: msgs[current.key] ?? 'Preencha os campos obrigatórios para avançar.' }
   }, [vendaStepStatus, vendaSteps])
+
+  // ── wizard step tracking ──────────────────────────────────────
+  const wizardStepDone = useCallback((stepKey: string): boolean => {
+    switch (stepKey) {
+      case 'tipo_venda': return vendaStepStatus.tipoVendaOk
+      case 'cliente':    return vendaStepStatus.clienteOk
+      case 'parceiro':   return vendaStepStatus.parceiroOk
+      case 'emissao':    return vendaStepStatus.emissaoOk && vendaStepStatus.pontoOk
+      case 'produto':    return vendaStepStatus.produtoOk
+      case 'pagamento':  return vendaStepStatus.pagamentoOk
+      default: return false
+    }
+  }, [vendaStepStatus])
+
+  const canAdvanceWizard = useMemo(() => {
+    const step = WIZARD_STEPS[currentFormStep]
+    if (!step) return false
+    return wizardStepDone(step.key)
+  }, [currentFormStep, wizardStepDone])
+
+  const advanceWizard = useCallback(() => {
+    if (!canAdvanceWizard) return
+    if (currentFormStep < WIZARD_STEPS.length - 1) {
+      setCurrentFormStep(prev => prev + 1)
+    }
+  }, [canAdvanceWizard, currentFormStep])
+
+  const goBackWizard = useCallback(() => {
+    if (currentFormStep > 0) setCurrentFormStep(prev => prev - 1)
+  }, [currentFormStep])
+
+  const goToWizardStep = useCallback((index: number) => {
+    const target = WIZARD_STEPS[index]
+    if (!target) return
+    const stepsBeforeTargetDone = WIZARD_STEPS.slice(0, index).every(s => wizardStepDone(s.key))
+    if (stepsBeforeTargetDone || index <= currentFormStep) {
+      setCurrentFormStep(index)
+    }
+  }, [currentFormStep, wizardStepDone])
+
+  // auto-advance wizard when current step completes
+  useEffect(() => {
+    if (!showFormV) return
+    const current = WIZARD_STEPS[currentFormStep]
+    if (!current) return
+    if (wizardStepDone(current.key) && currentFormStep < WIZARD_STEPS.length - 1) {
+      const nextStep = WIZARD_STEPS[currentFormStep + 1]
+      if (nextStep && !wizardStepDone(nextStep.key)) {
+        setCurrentFormStep(prev => prev + 1)
+      }
+    }
+  }, [showFormV, currentFormStep, wizardStepDone])
+
   const parceiroIdsPermitidosAgente = useMemo(() => {
     if (profile?.perfil !== 'agente_registro' || !currentUserId) return new Set<string>()
     return new Set(
@@ -1724,6 +1790,7 @@ export default function Comercial() {
     setContadorSearch('')
     setContadorDropdownOpen(false)
     setContadorStepHandled(false)
+    setCurrentFormStep(0)
   }
 
   async function salvarVendaV2() {
@@ -2021,6 +2088,7 @@ export default function Comercial() {
     setContadorSearch('')
     setContadorDropdownOpen(false)
     setContadorStepHandled(false)
+    setCurrentFormStep(0)
     setShowFormV(true)
     setShowClienteForm(true)
   }
@@ -2029,9 +2097,10 @@ export default function Comercial() {
     setFormV2(p => ({ ...p, cadastro_base_id: cadastroId }))
     const c = clientes.find(x => x.id === cadastroId)
     setClienteSelecionadoObj(c ?? null)
-    setContadorSearch('')
+    setClienteSearch('')
     setContadorDropdownOpen(false)
     setContadorStepHandled(false)
+    setCurrentFormStep(0)
     setShowFormV(true)
     setShowClienteForm(false)
   }
@@ -4316,21 +4385,30 @@ export default function Comercial() {
                     ))}
                   </div>
                 )}
-                {/* indicadores de passo */}
-                <div className="flex flex-wrap gap-1.5 mb-5">
-                  {vendaSteps.steps.map((step, index) => (
-                    <div key={step.key} className={cn(
-                      'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium',
-                      step.done
-                        ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/30 dark:bg-green-950/20 dark:text-green-300'
-                        : index === vendaSteps.currentStepIndex
-                          ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300'
-                          : 'border-gray-200 bg-gray-50 text-gray-400 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-500'
-                    )}>
-                      {step.done && <span className="text-green-600 dark:text-green-400">✓</span>}
-                      {step.label}
-                    </div>
-                  ))}
+                {/* ── WIZARD STEP INDICATORS ── */}
+                <div className="flex items-center gap-1 mb-5 overflow-x-auto pb-1">
+                  {WIZARD_STEPS.map((step, index) => {
+                    const done = wizardStepDone(step.key)
+                    const isCurrent = index === currentFormStep
+                    const Icon = step.icon
+                    return (
+                      <button key={step.key} type="button"
+                        onClick={() => goToWizardStep(index)}
+                        className={cn(
+                          'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all shrink-0',
+                          done
+                            ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/30 dark:bg-green-950/20 dark:text-green-300 hover:bg-green-100'
+                            : isCurrent
+                              ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300 shadow-sm'
+                              : 'border-gray-200 bg-gray-50 text-gray-400 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-500 hover:bg-gray-100'
+                        )}
+                        disabled={!done && !isCurrent && index > 0}>
+                        {done ? <Check size={12} className="text-green-600 dark:text-green-400" /> : <Icon size={12} />}
+                        <span className="hidden sm:inline">{step.label}</span>
+                        <span className="sm:hidden">{index + 1}</span>
+                      </button>
+                    )
+                  })}
                 </div>
 
                 {/* ── Aviso do passo atual ── */}
@@ -4340,398 +4418,453 @@ export default function Comercial() {
                   </div>
                 )}
 
-                {/* ── FORMULÁRIO DE NOVA VENDA ─────────────────── */}
+                {/* ── WIZARD STEP CONTENT ── */}
                 <div className="space-y-4">
 
-                  {/* 1. Cliente */}
-                  <div className="grid grid-cols-1 md:grid-cols-[160px_1fr_auto] gap-3">
-                    <SelectInput label="Tipo Venda" value={formV2.tipo_venda}
-                      onChange={v => setFormV2(p => ({ ...p, tipo_venda: v }))}
-                      options={[{ value: '', label: 'Selecione' }, ...TIPO_VENDA_OPTIONS]} />
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">Cliente *</label>
-                      <div className="relative flex gap-2">
-                        <div className="relative flex-1">
+                  {/* STEP 0: Tipo de Venda */}
+                  {currentFormStep === 0 && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                      <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+                        <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Tipo de Venda</h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                          {TIPO_VENDA_OPTIONS.map(opt => (
+                            <button key={opt.value} type="button"
+                              onClick={() => setFormV2(p => ({ ...p, tipo_venda: opt.value }))}
+                              className={cn(
+                                'px-3 py-3 rounded-xl border text-sm font-medium transition-all text-center',
+                                formV2.tipo_venda === opt.value
+                                  ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-600 dark:bg-blue-950/30 dark:text-blue-300 shadow-sm'
+                                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
+                              )}>
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STEP 1: Cliente */}
+                  {currentFormStep === 1 && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                      <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+                        <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Buscar Cliente</h4>
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <input
+                              value={formV2.cadastro_base_id && clienteSelecionadoObj
+                                ? `${clienteSelecionadoObj.cpf_cnpj} · ${clienteSelecionadoObj.nome}`
+                                : clienteSearch}
+                              onChange={e => {
+                                const v = e.target.value
+                                setClienteSearch(v)
+                                if (formV2.cadastro_base_id) {
+                                  setFormV2(p => ({ ...p, cadastro_base_id: '' }))
+                                  setClienteSelecionadoObj(null)
+                                }
+                                if (clienteSearchTimerRef.current) clearTimeout(clienteSearchTimerRef.current)
+                                clienteSearchTimerRef.current = setTimeout(() => void buscarClientes(v), 300)
+                              }}
+                              onFocus={() => { if (clienteResultados.length > 0) setClienteDropdownOpen(true) }}
+                              onBlur={() => setTimeout(() => setClienteDropdownOpen(false), 150)}
+                              placeholder="Nome, CPF, CNPJ ou telefone (mín. 3 caracteres)"
+                              className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 pr-8 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            {clienteBuscando && (
+                              <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-gray-400 pointer-events-none" />
+                            )}
+                            {clienteDropdownOpen && clienteResultados.length > 0 && (
+                              <div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+                                {clienteResultados.map(c => (
+                                  <button key={c.id} type="button"
+                                    onMouseDown={e => e.preventDefault()}
+                                    onClick={() => {
+                                      setFormV2(p => ({ ...p, cadastro_base_id: c.id, contador_id: null }))
+                                      setClienteSelecionadoObj(c)
+                                      setClienteSearch('')
+                                      setClienteDropdownOpen(false)
+                                      setClienteResultados([])
+                                      setContadorSearch('')
+                                      setContadorStepHandled(false)
+                                    }}
+                                    className="w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 border-b border-gray-100 dark:border-gray-800 last:border-0 transition-colors">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-medium truncate">{c.nome}</p>
+                                        {c.nome_fantasia && <p className="text-xs text-gray-400 truncate">{c.nome_fantasia}</p>}
+                                      </div>
+                                      <div className="text-right shrink-0">
+                                        <p className="text-xs text-gray-500 font-mono">{c.cpf_cnpj}</p>
+                                        {c.telefone && <p className="text-xs text-gray-400">{c.telefone}</p>}
+                                        {(c.cidade || c.uf) && <p className="text-xs text-gray-400">{[c.cidade, c.uf].filter(Boolean).join('/')}</p>}
+                                      </div>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {clienteDropdownOpen && !clienteBuscando && clienteResultados.length === 0 && clienteSearch.length >= 3 && (
+                              <div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl px-4 py-3 text-sm text-gray-400">
+                                Nenhum cliente encontrado para "{clienteSearch}"
+                              </div>
+                            )}
+                          </div>
+                          {formV2.cadastro_base_id && (
+                            <button type="button" title="Limpar cliente"
+                              onClick={() => {
+                                setFormV2(p => ({ ...p, cadastro_base_id: '', contador_id: null, tipo_emissao: '', ponto_atendimento_id: '', tabela_preco_id: '', tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '', forma_pagamento: '', data_vencimento: '' }))
+                                setClienteSearch('')
+                                setClienteSelecionadoObj(null)
+                                setContadorSearch('')
+                                setContadorStepHandled(false)
+                              }}
+                              className="px-2 text-gray-400 hover:text-gray-600">
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+                        {formV2.cadastro_base_id && clienteSelecionadoObj && (
+                          <div className="mt-3 rounded-lg border border-green-200 dark:border-green-800/40 bg-green-50 dark:bg-green-950/20 px-3 py-2">
+                            <p className="text-xs text-green-700 dark:text-green-300">
+                              <Check size={12} className="inline mr-1" />
+                              Cliente selecionado: <strong>{clienteSelecionadoObj.nome}</strong> ({clienteSelecionadoObj.cpf_cnpj})
+                            </p>
+                          </div>
+                        )}
+                        <button type="button" onClick={() => {
+                          if (showClienteForm) { setShowClienteForm(false); setEditingClienteId(null); setFormCliente({ ...EMPTY_CLIENTE_BASE }) }
+                          else abrirNovoCliente()
+                        }}
+                          className="mt-3 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium">
+                          {showClienteForm ? '← Fechar formulário' : '+ Cadastrar novo cliente'}
+                        </button>
+                      </div>
+
+                      {showClienteForm && (
+                        <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 bg-gray-50 dark:bg-gray-900/40">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-200">
+                              {editingClienteId ? 'Editar Pessoa / Empresa' : 'Cadastro de Pessoa / Empresa'}
+                            </h4>
+                            <button type="button" onClick={() => { setShowClienteForm(false); setEditingClienteId(null); setFormCliente({ ...EMPTY_CLIENTE_BASE }) }} className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Fechar</button>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <SelectInput label="Tipo" value={formCliente.tipo_cliente}
+                              onChange={v => setFormCliente(p => ({ ...p, tipo_cliente: v as NovoCadastroBase['tipo_cliente'] }))}
+                              options={[{ value: 'pessoa_fisica', label: 'Pessoa Física' }, { value: 'pessoa_juridica', label: 'Pessoa Jurídica' }]} />
+                            <TextInput label="CPF / CNPJ *" value={formCliente.cpf_cnpj}
+                              onChange={v => setFormCliente(p => ({ ...p, cpf_cnpj: v }))} />
+                            <TextInput label="Nome / Razão Social *" value={formCliente.nome}
+                              onChange={v => setFormCliente(p => ({ ...p, nome: v }))} className="md:col-span-2" />
+                            <TextInput label="Nome Fantasia" value={formCliente.nome_fantasia ?? ''}
+                              onChange={v => setFormCliente(p => ({ ...p, nome_fantasia: v || null }))} className="md:col-span-2" />
+                            <TextInput label="E-mail" type="email" value={formCliente.email ?? ''}
+                              onChange={v => setFormCliente(p => ({ ...p, email: v || null }))} />
+                            <TextInput label="Telefone" value={formCliente.telefone ?? ''}
+                              onChange={v => setFormCliente(p => ({ ...p, telefone: v || null }))} />
+                            <TextInput label="CEP" value={formCliente.cep ?? ''}
+                              onChange={v => setFormCliente(p => ({ ...p, cep: v || null }))}
+                              onBlur={async () => {
+                                const r = await buscarCep(formCliente.cep ?? '')
+                                if (!r) return
+                                setFormCliente(p => ({ ...p, logradouro: r.logradouro || p.logradouro, bairro: r.bairro || p.bairro, cidade: r.localidade || p.cidade, uf: r.uf || p.uf }))
+                              }} />
+                            <TextInput label="Cidade" value={formCliente.cidade ?? ''} onChange={v => setFormCliente(p => ({ ...p, cidade: v || null }))} />
+                            <TextInput label="UF" value={formCliente.uf ?? ''} onChange={v => setFormCliente(p => ({ ...p, uf: v || null }))} />
+                            <TextInput label="Logradouro" value={formCliente.logradouro ?? ''} onChange={v => setFormCliente(p => ({ ...p, logradouro: v || null }))} className="md:col-span-2" />
+                            <TextInput label="Número" value={formCliente.numero ?? ''} onChange={v => setFormCliente(p => ({ ...p, numero: v || null }))} />
+                            <TextInput label="Bairro" value={formCliente.bairro ?? ''} onChange={v => setFormCliente(p => ({ ...p, bairro: v || null }))} />
+                          </div>
+                          <div className="mt-4 flex justify-end gap-2">
+                            <button type="button" onClick={() => { setShowClienteForm(false); setEditingClienteId(null); setFormCliente({ ...EMPTY_CLIENTE_BASE }) }}
+                              className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">Cancelar</button>
+                            <button type="button" onClick={() => void salvarCliente()} disabled={salvandoCliente}
+                              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50">
+                              {salvandoCliente ? 'Salvando...' : editingClienteId ? 'Salvar alterações' : 'Salvar cliente'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* STEP 2: Parceiro */}
+                  {currentFormStep === 2 && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                      <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+                        <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Parceiro vendedor / indicador</h4>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Selecione o parceiro que indicou esta venda ou siga sem parceiro.</p>
+                        <div className="relative">
                           <input
-                            value={formV2.cadastro_base_id && clienteSelecionadoObj
-                              ? `${clienteSelecionadoObj.cpf_cnpj} · ${clienteSelecionadoObj.nome}`
-                              : clienteSearch}
+                            value={formV2.contador_id
+                              ? (() => { const p = parceiros.find(x => x.id === formV2.contador_id); return p ? `${p.cpf_cnpj ?? ''} - ${(p.tipo_parceiro ?? '').toUpperCase()} - ${p.nome}` : '' })()
+                              : contadorSearch}
                             onChange={e => {
                               const v = e.target.value
-                              setClienteSearch(v)
-                              if (formV2.cadastro_base_id) {
-                                setFormV2(p => ({ ...p, cadastro_base_id: '' }))
-                                setClienteSelecionadoObj(null)
-                              }
-                              if (clienteSearchTimerRef.current) clearTimeout(clienteSearchTimerRef.current)
-                              clienteSearchTimerRef.current = setTimeout(() => void buscarClientes(v), 300)
+                              if (formV2.contador_id) setFormV2(p => ({ ...p, contador_id: null }))
+                              setContadorSearch(v)
+                              setContadorDropdownOpen(true)
+                              setContadorStepHandled(false)
                             }}
-                            onFocus={() => { if (clienteResultados.length > 0) setClienteDropdownOpen(true) }}
-                            onBlur={() => setTimeout(() => setClienteDropdownOpen(false), 150)}
-                            disabled={!formV2.tipo_venda}
-                            placeholder="Nome, CPF, CNPJ ou telefone (mín. 3 caracteres)"
-                            className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 pr-8 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60" />
-                          {clienteBuscando && (
-                            <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-gray-400 pointer-events-none" />
-                          )}
-                          {clienteDropdownOpen && clienteResultados.length > 0 && (
-                            <div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl max-h-64 overflow-y-auto">
-                              {clienteResultados.map(c => (
-                                <button key={c.id} type="button"
+                            onFocus={() => setContadorDropdownOpen(true)}
+                            onBlur={() => setTimeout(() => setContadorDropdownOpen(false), 150)}
+                            placeholder="Busque um parceiro vendedor..."
+                            className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                          {contadorDropdownOpen && parceirosParaContador.length > 0 && (
+                            <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                              {parceirosParaContador.map(p => (
+                                <button key={p.id} type="button"
                                   onMouseDown={e => e.preventDefault()}
                                   onClick={() => {
-                                    setFormV2(p => ({ ...p, cadastro_base_id: c.id, contador_id: null }))
-                                    setClienteSelecionadoObj(c)
-                                    setClienteSearch('')
-                                    setClienteDropdownOpen(false)
-                                    setClienteResultados([])
+                                    setFormV2(prev => ({ ...prev, contador_id: p.id }))
+                                    setContadorStepHandled(true)
                                     setContadorSearch('')
-                                    setContadorStepHandled(false)
+                                    setContadorDropdownOpen(false)
                                   }}
-                                  className="w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 border-b border-gray-100 dark:border-gray-800 last:border-0 transition-colors">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div className="min-w-0">
-                                      <p className="text-sm font-medium truncate">{c.nome}</p>
-                                      {c.nome_fantasia && <p className="text-xs text-gray-400 truncate">{c.nome_fantasia}</p>}
-                                    </div>
-                                    <div className="text-right shrink-0">
-                                      <p className="text-xs text-gray-500 font-mono">{c.cpf_cnpj}</p>
-                                      {c.telefone && <p className="text-xs text-gray-400">{c.telefone}</p>}
-                                      {(c.cidade || c.uf) && <p className="text-xs text-gray-400">{[c.cidade, c.uf].filter(Boolean).join('/')}</p>}
-                                    </div>
-                                  </div>
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                                  {p.cpf_cnpj ?? ''} - {(p.tipo_parceiro ?? '').toUpperCase()} - {p.nome}{p.nome_fantasia ? ` - ${p.nome_fantasia}` : ''}
                                 </button>
                               ))}
                             </div>
                           )}
-                          {clienteDropdownOpen && !clienteBuscando && clienteResultados.length === 0 && clienteSearch.length >= 3 && (
-                            <div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl px-4 py-3 text-sm text-gray-400">
-                              Nenhum cliente encontrado para "{clienteSearch}"
+                          {contadorDropdownOpen && parceirosParaContador.length === 0 && (
+                            <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400">
+                              {contadorSearch.trim() ? 'Nenhum parceiro vinculado corresponde a esta busca.' : 'Nenhum parceiro vinculado foi encontrado para o seu usuário.'}
+                            </div>
+                          )}
+                          {formV2.contador_id && (
+                            <button type="button" onClick={() => { setFormV2(p => ({ ...p, contador_id: null })); setContadorSearch(''); setContadorDropdownOpen(false); setContadorStepHandled(false) }}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>
+                          )}
+                        </div>
+                        {formV2.contador_id && (
+                          <div className="mt-3 rounded-lg border border-green-200 dark:border-green-800/40 bg-green-50 dark:bg-green-950/20 px-3 py-2">
+                            <p className="text-xs text-green-700 dark:text-green-300">
+                              <Check size={12} className="inline mr-1" />
+                              Parceiro selecionado
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      <button type="button"
+                        onClick={() => { setFormV2(p => ({ ...p, contador_id: null })); setContadorSearch(''); setContadorDropdownOpen(false); setContadorStepHandled(true) }}
+                        className={cn(
+                          'px-4 py-2 text-sm rounded-xl border transition-colors w-full',
+                          vendaStepStatus.parceiroOk && !formV2.contador_id
+                            ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/30 dark:bg-green-950/20 dark:text-green-300'
+                            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+                        )}>
+                        Seguir sem parceiro vendedor
+                      </button>
+                    </div>
+                  )}
+
+                  {/* STEP 3: Emissão + Ponto */}
+                  {currentFormStep === 3 && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                      <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+                        <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Emissão e Ponto de Atendimento</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <SelectInput label="Tipo de Emissão *" value={formV2.tipo_emissao}
+                            onChange={v => setFormV2(p => ({
+                              ...p, tipo_emissao: v,
+                              tabela_preco_id: '', tabela_preco_item_id: '', certificado_id: '',
+                              valor_venda: 0, desconto: 0, voucher_codigo: '',
+                            }))}
+                            options={[{ value: '', label: 'Selecione o tipo de emissão' }, ...TIPO_EMISSAO_OPTIONS]} />
+                          <SelectInput label="Ponto de Atendimento *" value={formV2.ponto_atendimento_id}
+                            onChange={v => setFormV2(p => ({
+                              ...p, ponto_atendimento_id: v,
+                              tabela_preco_id: '', tabela_preco_item_id: '', certificado_id: '',
+                              valor_venda: 0, desconto: 0, voucher_codigo: '',
+                            }))}
+                            disabled={!vendaStepStatus.emissaoOk}
+                            options={[
+                              { value: '', label: !vendaStepStatus.emissaoOk ? 'Selecione a emissão primeiro' : pontosAtivos.length ? 'Selecione o ponto' : 'Cadastre um ponto primeiro' },
+                              ...pontosAtivos.map(ponto => ({
+                                value: ponto.id,
+                                label: [ponto.nome, ponto.cidade, ponto.uf].filter(Boolean).join(' · '),
+                              })),
+                            ]} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STEP 4: Produto (grid de cards com filtros) */}
+                  {currentFormStep === 4 && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                      <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+                        <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Tabela de Preço e Produto</h4>
+                        <SelectInput label="Tabela de Preço *" value={formV2.tabela_preco_id}
+                          onChange={v => setFormV2(p => ({ ...p, tabela_preco_id: v, certificado_id: '', tabela_preco_item_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))}
+                          options={[
+                            { value: '', label: 'Selecione a tabela' },
+                            ...tabelasDisponiveisVenda.map(t => ({ value: t.id, label: t.nome })),
+                          ]} />
+                      </div>
+
+                      {formV2.tabela_preco_id && (
+                        <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Produtos Disponíveis</h4>
+                            <span className="text-xs text-gray-400">{certsDaTabela.length} produto(s)</span>
+                          </div>
+                          {certsDaTabela.length === 0 ? (
+                            <div className="text-center py-6 text-sm text-gray-400">
+                              {motivoSemCertificados ?? 'Nenhum produto disponível para esta tabela.'}
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {certsDaTabela.map(({ item, cert }) => {
+                                const isSelected = formV2.tabela_preco_item_id === item.id
+                                return (
+                                  <button key={item.id} type="button"
+                                    onClick={() => {
+                                      setFormV2(p => ({
+                                        ...p,
+                                        tabela_preco_item_id: item.id,
+                                        certificado_id: item.certificado_id ?? '',
+                                        valor_venda: item.valor ?? 0,
+                                        desconto: 0,
+                                        voucher_codigo: '',
+                                      }))
+                                    }}
+                                    className={cn(
+                                      'text-left rounded-xl border p-3 transition-all',
+                                      isSelected
+                                        ? 'border-blue-400 bg-blue-50 dark:border-blue-600 dark:bg-blue-950/30 shadow-sm ring-1 ring-blue-200 dark:ring-blue-800'
+                                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                    )}>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">
+                                          {cert?.tipo ?? 'Produto'}
+                                        </p>
+                                        {cert?.modelo && (
+                                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{cert.modelo}</p>
+                                        )}
+                                      </div>
+                                      {isSelected && <Check size={14} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />}
+                                    </div>
+                                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                      {cert?.validade && (
+                                        <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-400">
+                                          <Clock size={10} /> {cert.validade}
+                                        </span>
+                                      )}
+                                      {cert?.tipo_emissao_padrao && (
+                                        <span className="inline-flex items-center rounded-md bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-400">
+                                          {cert.tipo_emissao_padrao}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="mt-2 text-sm font-bold text-green-700 dark:text-green-400">
+                                      {item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </p>
+                                  </button>
+                                )
+                              })}
                             </div>
                           )}
                         </div>
-                        {formV2.cadastro_base_id && (
-                          <button type="button" title="Limpar cliente"
-                            onClick={() => {
-                              setFormV2(p => ({ ...p, cadastro_base_id: '', contador_id: null, tipo_emissao: '', ponto_atendimento_id: '', tabela_preco_id: '', tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '', forma_pagamento: '', data_vencimento: '' }))
-                              setClienteSearch('')
-                              setClienteSelecionadoObj(null)
-                              setContadorSearch('')
-                              setContadorStepHandled(false)
-                            }}
-                            className="px-2 text-gray-400 hover:text-gray-600">
-                            <X size={14} />
-                          </button>
-                        )}
-                      </div>
+                      )}
+
+                      {formV2.tabela_preco_item_id && (
+                        <div className="rounded-xl border border-green-200 dark:border-green-800/40 bg-green-50 dark:bg-green-950/20 p-3 flex items-center gap-3">
+                          <Check size={16} className="text-green-600 dark:text-green-400 shrink-0" />
+                          <div className="text-xs text-green-700 dark:text-green-300">
+                            <strong>Produto selecionado:</strong> {certificadoSelecionadoVenda?.tipo} {certificadoSelecionadoVenda?.modelo ? `· ${certificadoSelecionadoVenda.modelo}` : ''} — {formatCurrency(valorBaseProduto)}
+                            {validadeSelecionadaMeses && <span className="ml-2 text-green-600 dark:text-green-400">({validadeSelecionadaMeses})</span>}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-end">
-                      <button type="button" onClick={() => {
-                        if (showClienteForm) { setShowClienteForm(false); setEditingClienteId(null); setFormCliente({ ...EMPTY_CLIENTE_BASE }) }
-                        else abrirNovoCliente()
-                      }}
-                        className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium whitespace-nowrap">
-                        {showClienteForm ? '← Fechar' : '+ Novo Cliente'}
+                  )}
+
+                  {/* STEP 5: Pagamento */}
+                  {currentFormStep === 5 && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                      <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+                        <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Pagamento e Desconto</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <NumberInput label="Valor Final (R$) *" value={formV2.valor_venda}
+                            onChange={v => setFormV2(p => ({ ...p, valor_venda: v }))} />
+                          <SelectInput label="Forma de Pagamento *" value={formV2.forma_pagamento}
+                            onChange={v => setFormV2(p => ({ ...p, forma_pagamento: v }))}
+                            options={[{ value: '', label: 'Selecione' }, ...formasPagamento.map(n => ({ value: n, label: n }))]} />
+                          <TextInput label="Vencimento *" type="date" value={formV2.data_vencimento}
+                            onChange={v => setFormV2(p => ({ ...p, data_vencimento: v }))} />
+                          <TextInput label="Cupom / Voucher" value={formV2.voucher_codigo}
+                            onChange={v => setFormV2(p => ({ ...p, voucher_codigo: v }))}
+                            placeholder={tabelaSelecionadaVenda?.codigo_voucher ? `Tabela aceita: ${tabelaSelecionadaVenda.codigo_voucher}` : 'Opcional'} />
+                        </div>
+                        <div className="mt-3">
+                          <label className="flex flex-col gap-1">
+                            <span className="text-xs text-gray-500">Observações</span>
+                            <textarea rows={2} value={formV2.observacoes ?? ''}
+                              onChange={e => setFormV2(p => ({ ...p, observacoes: e.target.value || null }))}
+                              className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                          </label>
+                        </div>
+                      </div>
+
+                      {vendaStepStatus.produtoOk && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/40 p-3">
+                          <div>
+                            <p className="text-[11px] uppercase tracking-wide text-gray-400">Preço base</p>
+                            <p className="mt-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{formatCurrency(valorBaseProduto)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] uppercase tracking-wide text-gray-400">Desconto</p>
+                            <p className={cn('mt-1 text-sm font-semibold', descontoDentroDoLimite ? 'text-gray-700 dark:text-gray-200' : 'text-red-600 dark:text-red-400')}>
+                              {formatCurrency(formV2.desconto || 0)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] uppercase tracking-wide text-gray-400">Limite tabela</p>
+                            <p className="mt-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{formatCurrency(descontoMaximoPermitido)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] uppercase tracking-wide text-gray-400">Voucher</p>
+                            <p className={cn('mt-1 text-sm font-semibold', voucherAplicadoValido ? 'text-gray-700 dark:text-gray-200' : 'text-red-600 dark:text-red-400')}>
+                              {tabelaSelecionadaVenda?.codigo_voucher ?? 'Nenhum'}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {vendaStepStatus.produtoOk && (!descontoDentroDoLimite || !voucherAplicadoValido) && (
+                        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800/40 dark:bg-red-950/20 dark:text-red-300">
+                          {!descontoDentroDoLimite && <p>O desconto atual ultrapassa o limite permitido pela tabela.</p>}
+                          {!voucherAplicadoValido && <p>O cupom informado não corresponde ao voucher configurado para esta tabela.</p>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── NAVIGATION BUTTONS ── */}
+                  <div className="flex items-center gap-3 border-t border-gray-100 dark:border-gray-800 pt-4">
+                    {currentFormStep > 0 && (
+                      <button type="button" onClick={goBackWizard}
+                        className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg flex items-center gap-1">
+                        <ChevronLeft size={14} /> Voltar
                       </button>
-                    </div>
-                  </div>
-
-                  {showClienteForm && (
-                    <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 bg-gray-50 dark:bg-gray-900/40">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-200">
-                          {editingClienteId ? 'Editar Pessoa / Empresa' : 'Cadastro de Pessoa / Empresa'}
-                        </h4>
-                        <button type="button" onClick={() => {
-                          setShowClienteForm(false)
-                          setEditingClienteId(null)
-                          setFormCliente({ ...EMPTY_CLIENTE_BASE })
-                        }} className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Fechar</button>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <SelectInput label="Tipo" value={formCliente.tipo_cliente}
-                          onChange={v => setFormCliente(p => ({ ...p, tipo_cliente: v as NovoCadastroBase['tipo_cliente'] }))}
-                          options={[{ value: 'pessoa_fisica', label: 'Pessoa Física' }, { value: 'pessoa_juridica', label: 'Pessoa Jurídica' }]} />
-                        <TextInput label="CPF / CNPJ *" value={formCliente.cpf_cnpj}
-                          onChange={v => setFormCliente(p => ({ ...p, cpf_cnpj: v }))} />
-                        <TextInput label="Nome / Razão Social *" value={formCliente.nome}
-                          onChange={v => setFormCliente(p => ({ ...p, nome: v }))} className="md:col-span-2" />
-                        <TextInput label="Nome Fantasia" value={formCliente.nome_fantasia ?? ''}
-                          onChange={v => setFormCliente(p => ({ ...p, nome_fantasia: v || null }))} className="md:col-span-2" />
-                        <TextInput label="E-mail" type="email" value={formCliente.email ?? ''}
-                          onChange={v => setFormCliente(p => ({ ...p, email: v || null }))} />
-                        <TextInput label="Telefone" value={formCliente.telefone ?? ''}
-                          onChange={v => setFormCliente(p => ({ ...p, telefone: v || null }))} />
-                        <TextInput label="CEP" value={formCliente.cep ?? ''}
-                          onChange={v => setFormCliente(p => ({ ...p, cep: v || null }))}
-                          onBlur={async () => {
-                            const r = await buscarCep(formCliente.cep ?? '')
-                            if (!r) return
-                            setFormCliente(p => ({
-                              ...p,
-                              logradouro: r.logradouro || p.logradouro,
-                              bairro:     r.bairro     || p.bairro,
-                              cidade:     r.localidade || p.cidade,
-                              uf:         r.uf         || p.uf,
-                            }))
-                          }} />
-                        <TextInput label="Cidade" value={formCliente.cidade ?? ''}
-                          onChange={v => setFormCliente(p => ({ ...p, cidade: v || null }))} />
-                        <TextInput label="UF" value={formCliente.uf ?? ''}
-                          onChange={v => setFormCliente(p => ({ ...p, uf: v || null }))} />
-                        <TextInput label="Inscrição Municipal" value={formCliente.inscricao_municipal ?? ''}
-                          onChange={v => setFormCliente(p => ({ ...p, inscricao_municipal: v || null }))} />
-                        <TextInput label="Inscrição Estadual" value={formCliente.inscricao_estadual ?? ''}
-                          onChange={v => setFormCliente(p => ({ ...p, inscricao_estadual: v || null }))} />
-                        <TextInput label="Logradouro" value={formCliente.logradouro ?? ''}
-                          onChange={v => setFormCliente(p => ({ ...p, logradouro: v || null }))} className="md:col-span-2" />
-                        <TextInput label="Número" value={formCliente.numero ?? ''}
-                          onChange={v => setFormCliente(p => ({ ...p, numero: v || null }))} />
-                        <TextInput label="Complemento" value={formCliente.complemento ?? ''}
-                          onChange={v => setFormCliente(p => ({ ...p, complemento: v || null }))} className="md:col-span-2" />
-                        <TextInput label="Bairro" value={formCliente.bairro ?? ''}
-                          onChange={v => setFormCliente(p => ({ ...p, bairro: v || null }))} />
-                        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-                          <input type="checkbox" checked={formCliente.iss_retido}
-                            onChange={e => setFormCliente(p => ({ ...p, iss_retido: e.target.checked }))} />
-                          ISS retido
-                        </label>
-                      </div>
-                      <div className="mt-4 flex justify-end gap-2">
-                        <button type="button" onClick={() => {
-                          setShowClienteForm(false)
-                          setEditingClienteId(null)
-                          setFormCliente({ ...EMPTY_CLIENTE_BASE })
-                        }}
-                          className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">Cancelar</button>
-                        <button type="button" onClick={() => void salvarCliente()} disabled={salvandoCliente}
-                          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50">
-                          {salvandoCliente ? 'Salvando...' : editingClienteId ? 'Salvar alterações' : 'Salvar cliente'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 3. Parceiro vendedor */}
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
-                    <div>
-                      <label className="block text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">Parceiro vendedor / indicador da venda</label>
-                      <div className="relative">
-                        <input
-                          value={formV2.contador_id
-                            ? (() => { const p = parceiros.find(x => x.id === formV2.contador_id); return p ? `${p.cpf_cnpj ?? ''} - ${(p.tipo_parceiro ?? '').toUpperCase()} - ${p.nome}` : '' })()
-                            : contadorSearch}
-                          onChange={e => {
-                            const v = e.target.value
-                            if (formV2.contador_id) setFormV2(p => ({ ...p, contador_id: null }))
-                            setContadorSearch(v)
-                            setContadorDropdownOpen(true)
-                            setContadorStepHandled(false)
-                          }}
-                          onFocus={() => setContadorDropdownOpen(true)}
-                          onBlur={() => setTimeout(() => setContadorDropdownOpen(false), 150)}
-                          disabled={!formV2.cadastro_base_id}
-                          placeholder={!formV2.cadastro_base_id ? 'Selecione o cliente primeiro' : 'Busque um parceiro vendedor'}
-                          className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60" />
-                        {contadorDropdownOpen && parceirosParaContador.length > 0 && (
-                          <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                            {parceirosParaContador.map(p => (
-                              <button key={p.id} type="button"
-                                onMouseDown={e => e.preventDefault()}
-                                onClick={() => {
-                                  setFormV2(prev => ({ ...prev, contador_id: p.id }))
-                                  setContadorStepHandled(true)
-                                  setContadorSearch('')
-                                  setContadorDropdownOpen(false)
-                                }}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
-                                {p.cpf_cnpj ?? ''} - {(p.tipo_parceiro ?? '').toUpperCase()} - {p.nome}{p.nome_fantasia ? ` - ${p.nome_fantasia}` : ''}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {contadorDropdownOpen && parceirosParaContador.length === 0 && (
-                          <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400">
-                            {contadorSearch.trim() ? 'Nenhum parceiro vinculado corresponde a esta busca.' : 'Nenhum parceiro vinculado foi encontrado para o seu usuário.'}
-                          </div>
-                        )}
-                        {formV2.contador_id && (
-                          <button type="button" onClick={() => { setFormV2(p => ({ ...p, contador_id: null })); setContadorSearch(''); setContadorDropdownOpen(false); setContadorStepHandled(false) }}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>
-                        )}
-                      </div>
-                    </div>
-                    <button type="button"
-                      onClick={() => { setFormV2(p => ({ ...p, contador_id: null })); setContadorSearch(''); setContadorDropdownOpen(false); setContadorStepHandled(true) }}
-                      disabled={!formV2.cadastro_base_id}
-                      className={cn(
-                        'px-3 py-2 text-xs rounded-lg border transition-colors whitespace-nowrap',
-                        vendaStepStatus.parceiroOk && !formV2.contador_id
-                          ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/30 dark:bg-green-950/20 dark:text-green-300'
-                          : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50'
-                      )}>
-                      Seguir sem parceiro vendedor
-                    </button>
-                  </div>
-
-                  {/* 4. Emissão e ponto */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <SelectInput label="Tipo Emissão *" value={formV2.tipo_emissao}
-                      onChange={v => setFormV2(p => ({
-                        ...p,
-                        tipo_emissao: v,
-                        tabela_preco_id: '',
-                        tabela_preco_item_id: '',
-                        certificado_id: '',
-                        valor_venda: 0,
-                        desconto: 0,
-                        voucher_codigo: '',
-                      }))}
-                      disabled={!vendaStepStatus.parceiroOk}
-                      options={[{ value: '', label: vendaStepStatus.parceiroOk ? 'Selecione' : 'Confirme o parceiro primeiro' }, ...TIPO_EMISSAO_OPTIONS]} />
-                    <SelectInput label="Ponto de Atendimento *" value={formV2.ponto_atendimento_id}
-                      onChange={v => setFormV2(p => ({
-                        ...p,
-                        ponto_atendimento_id: v,
-                        tabela_preco_id: '',
-                        tabela_preco_item_id: '',
-                        certificado_id: '',
-                        valor_venda: 0,
-                        desconto: 0,
-                        voucher_codigo: '',
-                      }))}
-                      disabled={!vendaStepStatus.emissaoOk}
-                      options={[
-                        { value: '', label: !vendaStepStatus.emissaoOk ? 'Selecione o tipo de emissão primeiro' : pontosAtivos.length ? 'Selecione' : 'Cadastre um ponto primeiro' },
-                        ...pontosAtivos.map(ponto => ({
-                          value: ponto.id,
-                          label: [ponto.nome, ponto.cidade, ponto.uf].filter(Boolean).join(' · '),
-                        })),
-                      ]} />
-                  </div>
-
-                  {/* 5. Tabela */}
-                  <div>
-                    <SelectInput label="Tabela de Preço *" value={formV2.tabela_preco_id}
-                      onChange={v => setFormV2(p => ({ ...p, tabela_preco_id: v, certificado_id: '', tabela_preco_item_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))}
-                      disabled={!vendaStepStatus.pontoOk}
-                      options={[
-                        { value: '', label: !vendaStepStatus.pontoOk ? 'Selecione o ponto primeiro' : 'Selecione a tabela' },
-                        ...tabelasDisponiveisVenda.map(t => ({ value: t.id, label: t.nome })),
-                      ]} />
-                  </div>
-
-                  {/* 6. Produto */}
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_220px] gap-3">
-                    <SelectInput label="Produto *" value={formV2.tabela_preco_item_id}
-                      onChange={v => {
-                        const item = itensTabela.find(i => i.id === v)
-                        setFormV2(p => ({
-                          ...p,
-                          tabela_preco_item_id: v,
-                          certificado_id: item?.certificado_id ?? '',
-                          valor_venda: item?.valor ?? 0,
-                          desconto: 0,
-                          voucher_codigo: '',
-                        }))
-                      }}
-                      disabled={!formV2.tabela_preco_id}
-                      options={[
-                        { value: '', label: formV2.tabela_preco_id ? 'Selecione o produto' : 'Selecione a tabela primeiro' },
-                        ...certsDaTabela.map(({ item, cert }) => {
-                          const label = cert
-                            ? `${cert.tipo}${cert.modelo ? ' · ' + cert.modelo : ''}${cert.validade ? ' · ' + cert.validade : ''} — ${item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
-                            : item.id
-                          return { value: item.id, label }
-                        }),
-                      ]} />
-                    <TextInput
-                      label="Validade (Meses)"
-                      value={validadeSelecionadaMeses}
-                      onChange={() => {}}
-                      disabled
-                      placeholder="Será preenchida pelo produto"
-                    />
-                  </div>
-
-                  {motivoSemCertificados && vendaStepStatus.pontoOk && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                      {motivoSemCertificados}
-                    </div>
-                  )}
-
-                  {/* 7. Pagamento / Desconto */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <NumberInput label="Valor Final (R$) *" value={formV2.valor_venda}
-                      onChange={v => setFormV2(p => ({ ...p, valor_venda: v }))}
-                      disabled={!vendaStepStatus.produtoOk} />
-                    <SelectInput label="Forma de Pagamento *" value={formV2.forma_pagamento}
-                      onChange={v => setFormV2(p => ({ ...p, forma_pagamento: v }))}
-                      disabled={!vendaStepStatus.produtoOk}
-                      options={[{ value: '', label: 'Selecione' }, ...formasPagamento.map(n => ({ value: n, label: n }))]} />
-                    <TextInput label="Vencimento *" type="date" value={formV2.data_vencimento}
-                      onChange={v => setFormV2(p => ({ ...p, data_vencimento: v }))}
-                      disabled={!vendaStepStatus.produtoOk} />
-                    <TextInput label="Cupom / Voucher" value={formV2.voucher_codigo}
-                      onChange={v => setFormV2(p => ({ ...p, voucher_codigo: v }))}
-                      disabled={!vendaStepStatus.produtoOk}
-                      placeholder={tabelaSelecionadaVenda?.codigo_voucher ? `Tabela aceita: ${tabelaSelecionadaVenda.codigo_voucher}` : 'Opcional'} />
-                  </div>
-
-                  <div>
-                    <label className="flex flex-col gap-1">
-                      <span className="text-xs text-gray-500">Observações</span>
-                      <textarea rows={2} value={formV2.observacoes ?? ''}
-                        onChange={e => setFormV2(p => ({ ...p, observacoes: e.target.value || null }))}
-                        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-                    </label>
-                  </div>
-
-                  {vendaStepStatus.produtoOk && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/40 p-3">
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wide text-gray-400">Preço base</p>
-                        <p className="mt-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{formatCurrency(valorBaseProduto)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wide text-gray-400">Desconto aplicado</p>
-                        <p className={cn('mt-1 text-sm font-semibold', descontoDentroDoLimite ? 'text-gray-700 dark:text-gray-200' : 'text-red-600 dark:text-red-400')}>
-                          {formatCurrency(formV2.desconto || 0)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wide text-gray-400">Limite da tabela</p>
-                        <p className="mt-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{formatCurrency(descontoMaximoPermitido)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wide text-gray-400">Voucher configurado</p>
-                        <p className={cn('mt-1 text-sm font-semibold', voucherAplicadoValido ? 'text-gray-700 dark:text-gray-200' : 'text-red-600 dark:text-red-400')}>
-                          {tabelaSelecionadaVenda?.codigo_voucher ?? 'Nenhum'}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {vendaStepStatus.produtoOk && (!descontoDentroDoLimite || !voucherAplicadoValido) && (
-                    <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800/40 dark:bg-red-950/20 dark:text-red-300">
-                      {!descontoDentroDoLimite && <p>O desconto atual ultrapassa o limite permitido pela tabela.</p>}
-                      {!voucherAplicadoValido && <p>O cupom informado não corresponde ao voucher configurado para esta tabela.</p>}
-                    </div>
-                  )}
-
-                  {/* 8. Ações */}
-                  <div className="flex justify-end items-center gap-3 border-t border-gray-100 dark:border-gray-800 pt-4">
-                    {!vendaStepStatus.pagamentoOk && (
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mr-auto">
-                        Preencha todos os passos para salvar a venda.
-                      </p>
                     )}
-                    <FormActions
-                      onSave={salvarVendaV2}
-                      onCancel={fecharFormVenda}
-                      saving={salvandoV}
-                      disabled={!vendaStepStatus.pagamentoOk}
-                    />
+                    <div className="flex-1" />
+                    {currentFormStep < WIZARD_STEPS.length - 1 ? (
+                      <button type="button" onClick={advanceWizard}
+                        disabled={!canAdvanceWizard}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 flex items-center gap-1">
+                        Próximo <ChevronRight size={14} />
+                      </button>
+                    ) : (
+                      <FormActions
+                        onSave={salvarVendaV2}
+                        onCancel={fecharFormVenda}
+                        saving={salvandoV}
+                        disabled={!vendaStepStatus.pagamentoOk}
+                      />
+                    )}
                   </div>
 
                 </div>
@@ -4796,6 +4929,7 @@ export default function Comercial() {
                     setContadorDropdownOpen(false)
                     setContadorStepHandled(false)
                     setShowClienteForm(false)
+                    setCurrentFormStep(0)
                     setShowFormV(true)
                   }}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm shadow-blue-600/20 transition-all">
