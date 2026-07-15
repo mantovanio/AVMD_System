@@ -765,6 +765,9 @@ export default function Comercial() {
 
   // ── wizard step state ─────────────────────────────────────────
   const [currentFormStep, setCurrentFormStep]     = useState(0)
+  const [produtoKindFilter, setProdutoKindFilter] = useState('')
+  const [produtoEmissaoFilter, setProdutoEmissaoFilter] = useState('')
+  const [produtoValidadeFilter, setProdutoValidadeFilter] = useState('')
 
   // ── derived ──────────────────────────────────────────────────
   const certificadosAtivos = useMemo(() => certificados.filter(c => c.ativo), [certificados])
@@ -970,6 +973,48 @@ export default function Comercial() {
       return tipoPadrao === tipoEmissaoSelecionado
     })
   }, [certsDaTabelaBruta, formV2.tipo_emissao])
+  // ── product filter derivations (cascata tipo→emissao→validade) ──
+  function productKind(cert: Certificado): string {
+    const raw = (cert.tipo ?? '').trim().toLowerCase()
+    if (raw.includes('cnpj')) return 'e-CNPJ'
+    if (raw.includes('cpf')) return 'e-CPF'
+    if (raw.includes('nf-e') || raw.includes('nfe')) return 'NF-e'
+    if (raw.includes('ssl')) return 'SSL'
+    if (raw.includes('combo')) return 'Combo'
+    return cert.tipo?.trim() || 'Outros'
+  }
+  function productEmission(cert: Certificado): string {
+    return (cert.tipo_emissao_padrao ?? '').trim() || 'Não definido'
+  }
+  function productValidity(cert: Certificado): string {
+    return (cert.validade ?? '').trim() || 'Não definido'
+  }
+
+  const produtoKindOptions = useMemo(
+    () => Array.from(new Set(certsDaTabela.map(c => productKind(c.cert)))).sort(),
+    [certsDaTabela]
+  )
+  const produtosByKind = useMemo(
+    () => certsDaTabela.filter(c => !produtoKindFilter || productKind(c.cert) === produtoKindFilter),
+    [produtoKindFilter, certsDaTabela]
+  )
+  const produtoEmissaoOptions = useMemo(
+    () => Array.from(new Set(produtosByKind.map(c => productEmission(c.cert)))).sort(),
+    [produtosByKind]
+  )
+  const produtosByEmissao = useMemo(
+    () => produtosByKind.filter(c => !produtoEmissaoFilter || productEmission(c.cert) === produtoEmissaoFilter),
+    [produtoEmissaoFilter, produtosByKind]
+  )
+  const produtoValidadeOptions = useMemo(
+    () => Array.from(new Set(produtosByEmissao.map(c => productValidity(c.cert)))).sort(),
+    [produtosByEmissao]
+  )
+  const produtosFiltrados = useMemo(
+    () => produtosByEmissao.filter(c => !produtoValidadeFilter || productValidity(c.cert) === produtoValidadeFilter),
+    [produtoValidadeFilter, produtosByEmissao]
+  )
+
   const motivoSemCertificados = useMemo(() => {
     if (!formV2.tipo_emissao) return 'Selecione primeiro o tipo de emissão.'
     if (!formV2.ponto_atendimento_id) return 'Selecione primeiro o ponto de atendimento.'
@@ -1791,6 +1836,9 @@ export default function Comercial() {
     setContadorDropdownOpen(false)
     setContadorStepHandled(false)
     setCurrentFormStep(0)
+    setProdutoKindFilter('')
+    setProdutoEmissaoFilter('')
+    setProdutoValidadeFilter('')
   }
 
   async function salvarVendaV2() {
@@ -2089,6 +2137,9 @@ export default function Comercial() {
     setContadorDropdownOpen(false)
     setContadorStepHandled(false)
     setCurrentFormStep(0)
+    setProdutoKindFilter('')
+    setProdutoEmissaoFilter('')
+    setProdutoValidadeFilter('')
     setShowFormV(true)
     setShowClienteForm(true)
   }
@@ -2101,6 +2152,9 @@ export default function Comercial() {
     setContadorDropdownOpen(false)
     setContadorStepHandled(false)
     setCurrentFormStep(0)
+    setProdutoKindFilter('')
+    setProdutoEmissaoFilter('')
+    setProdutoValidadeFilter('')
     setShowFormV(true)
     setShowClienteForm(false)
   }
@@ -4696,76 +4750,127 @@ export default function Comercial() {
                       <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
                         <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Tabela de Preço e Produto</h4>
                         <SelectInput label="Tabela de Preço *" value={formV2.tabela_preco_id}
-                          onChange={v => setFormV2(p => ({ ...p, tabela_preco_id: v, certificado_id: '', tabela_preco_item_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))}
+                          onChange={v => {
+                            setFormV2(p => ({ ...p, tabela_preco_id: v, certificado_id: '', tabela_preco_item_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
+                            setProdutoKindFilter('')
+                            setProdutoEmissaoFilter('')
+                            setProdutoValidadeFilter('')
+                          }}
                           options={[
                             { value: '', label: 'Selecione a tabela' },
                             ...tabelasDisponiveisVenda.map(t => ({ value: t.id, label: t.nome })),
                           ]} />
                       </div>
 
-                      {formV2.tabela_preco_id && (
-                        <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Produtos Disponíveis</h4>
-                            <span className="text-xs text-gray-400">{certsDaTabela.length} produto(s)</span>
-                          </div>
-                          {certsDaTabela.length === 0 ? (
-                            <div className="text-center py-6 text-sm text-gray-400">
-                              {motivoSemCertificados ?? 'Nenhum produto disponível para esta tabela.'}
+                      {formV2.tabela_preco_id && certsDaTabela.length > 0 && (
+                        <>
+                          {/* Filtros cascata */}
+                          <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+                            <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Selecione as opções para encontrar seu certificado</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <label className="flex flex-col gap-1">
+                                <span className="text-xs text-gray-500 font-medium">Tipo *</span>
+                                <select value={produtoKindFilter}
+                                  onChange={e => {
+                                    setProdutoKindFilter(e.target.value)
+                                    setProdutoEmissaoFilter('')
+                                    setProdutoValidadeFilter('')
+                                    setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
+                                  }}
+                                  className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                  <option value="">Todos</option>
+                                  {produtoKindOptions.map(k => <option key={k} value={k}>{k}</option>)}
+                                </select>
+                              </label>
+                              <label className="flex flex-col gap-1">
+                                <span className="text-xs text-gray-500 font-medium">Emissão *</span>
+                                <select value={produtoEmissaoFilter}
+                                  onChange={e => {
+                                    setProdutoEmissaoFilter(e.target.value)
+                                    setProdutoValidadeFilter('')
+                                    setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
+                                  }}
+                                  disabled={!produtoKindFilter}
+                                  className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60">
+                                  <option value="">{!produtoKindFilter ? 'Selecione o tipo' : 'Todas'}</option>
+                                  {produtoEmissaoOptions.map(e => <option key={e} value={e}>{e}</option>)}
+                                </select>
+                              </label>
+                              <label className="flex flex-col gap-1">
+                                <span className="text-xs text-gray-500 font-medium">Validade *</span>
+                                <select value={produtoValidadeFilter}
+                                  onChange={e => {
+                                    setProdutoValidadeFilter(e.target.value)
+                                    setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
+                                  }}
+                                  disabled={!produtoEmissaoFilter}
+                                  className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60">
+                                  <option value="">{!produtoEmissaoFilter ? 'Selecione a emissão' : 'Todas'}</option>
+                                  {produtoValidadeOptions.map(v => <option key={v} value={v}>{v}</option>)}
+                                </select>
+                              </label>
                             </div>
-                          ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                              {certsDaTabela.map(({ item, cert }) => {
-                                const isSelected = formV2.tabela_preco_item_id === item.id
-                                return (
-                                  <button key={item.id} type="button"
-                                    onClick={() => {
-                                      setFormV2(p => ({
-                                        ...p,
-                                        tabela_preco_item_id: item.id,
-                                        certificado_id: item.certificado_id ?? '',
-                                        valor_venda: item.valor ?? 0,
-                                        desconto: 0,
-                                        voucher_codigo: '',
-                                      }))
-                                    }}
-                                    className={cn(
-                                      'text-left rounded-xl border p-3 transition-all',
-                                      isSelected
-                                        ? 'border-blue-400 bg-blue-50 dark:border-blue-600 dark:bg-blue-950/30 shadow-sm ring-1 ring-blue-200 dark:ring-blue-800'
-                                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
-                                    )}>
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="min-w-0">
-                                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">
-                                          {cert?.tipo ?? 'Produto'}
-                                        </p>
-                                        {cert?.modelo && (
-                                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{cert.modelo}</p>
-                                        )}
+                          </div>
+
+                          {/* Lista de produtos filtrados */}
+                          {produtoValidadeFilter && (
+                            <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+                              <div className="grid grid-cols-[1fr_auto] bg-gray-50 dark:bg-gray-900/60 px-4 py-2.5 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                <span>Produtos</span>
+                                <span>Valores</span>
+                              </div>
+                              {produtosFiltrados.length === 0 ? (
+                                <div className="px-4 py-6 text-center text-sm text-gray-400">
+                                  Nenhum produto encontrado para esta combinação.
+                                </div>
+                              ) : (
+                                produtosFiltrados.map(({ item, cert }) => {
+                                  const isSelected = formV2.tabela_preco_item_id === item.id
+                                  return (
+                                    <button key={item.id} type="button"
+                                      onClick={() => {
+                                        setFormV2(p => ({
+                                          ...p,
+                                          tabela_preco_item_id: item.id,
+                                          certificado_id: item.certificado_id ?? '',
+                                          valor_venda: item.valor ?? 0,
+                                          desconto: 0,
+                                          voucher_codigo: '',
+                                        }))
+                                      }}
+                                      className={cn(
+                                        'grid w-full grid-cols-[1fr_auto] items-center gap-4 border-t border-gray-100 dark:border-gray-800 px-4 py-3 text-left transition-colors',
+                                        isSelected
+                                          ? 'bg-blue-600 text-white dark:bg-blue-700'
+                                          : 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-gray-800'
+                                      )}>
+                                      <div>
+                                        <span className="text-sm font-semibold">{cert?.tipo ?? 'Produto'}</span>
+                                        {cert?.modelo && <span className="text-xs ml-2 opacity-70">{cert.modelo}</span>}
                                       </div>
-                                      {isSelected && <Check size={14} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />}
-                                    </div>
-                                    <div className="mt-2 flex items-center gap-2 flex-wrap">
-                                      {cert?.validade && (
-                                        <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-400">
-                                          <Clock size={10} /> {cert.validade}
+                                      <div className="flex items-center gap-3">
+                                        <span className="text-sm font-semibold whitespace-nowrap">
+                                          {item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                         </span>
-                                      )}
-                                      {cert?.tipo_emissao_padrao && (
-                                        <span className="inline-flex items-center rounded-md bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-400">
-                                          {cert.tipo_emissao_padrao}
+                                        <span className={cn(
+                                          'h-5 w-5 rounded-full border-2 p-1 shrink-0',
+                                          isSelected ? 'border-white' : 'border-gray-300 dark:border-gray-600'
+                                        )}>
+                                          {isSelected && <span className="block h-full w-full rounded-full bg-white" />}
                                         </span>
-                                      )}
-                                    </div>
-                                    <p className="mt-2 text-sm font-bold text-green-700 dark:text-green-400">
-                                      {item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                    </p>
-                                  </button>
-                                )
-                              })}
+                                      </div>
+                                    </button>
+                                  )
+                                })
+                              )}
                             </div>
                           )}
+                        </>
+                      )}
+
+                      {formV2.tabela_preco_id && certsDaTabela.length === 0 && (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                          {motivoSemCertificados ?? 'Nenhum produto disponível para esta tabela.'}
                         </div>
                       )}
 
@@ -4930,6 +5035,9 @@ export default function Comercial() {
                     setContadorStepHandled(false)
                     setShowClienteForm(false)
                     setCurrentFormStep(0)
+                    setProdutoKindFilter('')
+                    setProdutoEmissaoFilter('')
+                    setProdutoValidadeFilter('')
                     setShowFormV(true)
                   }}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm shadow-blue-600/20 transition-all">
