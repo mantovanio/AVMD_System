@@ -42,6 +42,7 @@ import {
 } from 'lucide-react'
 import NfseDocumentPreview from '@/components/NfseDocumentPreview'
 import ModulePageShell from '@/components/ModulePageShell'
+import { RecordActionBar, type ActionBarAction } from '@/components/RecordActionBar'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig, type AgencyConfig } from '@/lib/agencyConfig'
 import {
   buildNfseDiscriminacaoFromVenda,
@@ -621,6 +622,7 @@ export default function Comercial() {
   const [showVendaFiltrosExtras, setShowVendaFiltrosExtras] = useState(false)
   const [showVendaAcoesExtras, setShowVendaAcoesExtras] = useState(false)
   const [selectedIds, setSelectedIds]           = useState<Set<string>>(new Set())
+  const [selectedRowId, setSelectedRowId]       = useState<string | null>(null)
   const [nfseAutomationSettings, setNfseAutomationSettings] = useState<NfseAutomationSettings>(DEFAULT_NFSE_AUTOMATION_SETTINGS)
   const vendaAutomationSnapshotRef = useRef<Map<string, VendaAutomationSnapshot>>(new Map())
   const agendaAutomationSnapshotRef = useRef<Record<string, StatusAgendamentoValidacao | null>>({})
@@ -4878,6 +4880,41 @@ export default function Comercial() {
               </div>
             )}
 
+            {/* ── BARRA DE AÇÕES DO REGISTRO SELECIONADO ────────── */}
+            {selectedRowId && (() => {
+              const v = vendasPaginadas.find(row => row.id === selectedRowId)
+              if (!v) return null
+              const clienteNome = v.cadastros_base?.nome ?? (v as unknown as { nome_faturamento?: string }).nome_faturamento ?? '—'
+              const statusLabel = STATUS_VENDA_LABEL[v.status_venda] ?? v.status_venda
+              const actions: ActionBarAction[] = [
+                { key: 'protocolo', icon: <ClipboardList size={13} />, label: 'Protocolo', onClick: () => abrirProtocolo(v), variant: 'purple' as const },
+                { key: 'agendar', icon: <Calendar size={13} />, label: 'Agendar', onClick: () => void prepararAgendamento(v), variant: 'green' as const },
+                { key: 'fatura', icon: <Receipt size={13} />, label: 'Fatura', onClick: () => void abrirFaturaVenda(v), variant: 'default' as const },
+                ...(isAdmin ? [
+                  { key: 'editar', icon: <Edit3 size={13} />, label: 'Editar', onClick: () => { const vo = v as unknown as Record<string, unknown>; setEditForm({ id: v.id, tipo_produto: v.tipo_produto, tipo_venda: v.tipo_venda ?? '', tipo_emissao: v.tipo_emissao ?? '', tabela_preco_id: v.tabela_preco_id ?? '', tabela_preco_item_id: v.tabela_preco_item_id ?? '', forma_pagamento_id: v.forma_pagamento_id ?? '', valor_venda: v.valor_venda ?? 0, desconto: (vo.desconto as number) ?? 0, observacoes: v.observacoes ?? '', data_vencimento: v.data_vencimento ?? '', vendedor_id: v.vendedor_id ?? null, contador_id: v.contador_id ?? null }); setEditandoVenda(v) }, variant: 'blue' as const },
+                  { key: 'cancelar', icon: <XCircle size={13} />, label: 'Cancelar', onClick: () => setCancelandoVenda(v), variant: 'red' as const },
+                ] as ActionBarAction[] : []),
+                { key: 'excluir', icon: <Trash2 size={13} />, label: 'Excluir', onClick: () => void excluirVenda(v.id), variant: 'red' as const },
+                { key: 'nfse', icon: <FileText size={13} />, label: 'NFS-e', onClick: () => void emitirNfseParaVenda(v), hidden: !nfseAutomationSettings.permitir_emissao_manual_rapida },
+                { key: 'verNfse', icon: <Eye size={13} />, label: 'Ver NF-e', onClick: () => void abrirNfseVenda(v) },
+                { key: 'liberar', icon: <Unlock size={13} />, label: 'Liberar', onClick: () => void liberarEmissao(v), variant: 'green' as const },
+              ]
+              return (
+                <RecordActionBar
+                  recordName={clienteNome}
+                  recordBadge={
+                    <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full',
+                      v.status_venda === 'emitido' && 'bg-blue-100 text-blue-700',
+                      v.status_venda === 'cancelado' && 'bg-red-100 text-red-700',
+                      v.status_venda === 'rascunho' && 'bg-yellow-100 text-yellow-700',
+                    )}>{statusLabel}</span>
+                  }
+                  actions={actions}
+                  onClose={() => setSelectedRowId(null)}
+                />
+              )
+            })()}
+
             {/* ── TABELA ───────────────────────────────────────── */}
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
               <div className="overflow-x-auto">
@@ -4999,7 +5036,8 @@ export default function Comercial() {
                         <td className="px-3 py-2 text-gray-500 whitespace-nowrap hidden lg:table-cell">
                           {(v.cadastros_base as { cpf_cnpj?: string } | null)?.cpf_cnpj ?? v.documento_faturamento ?? '—'}
                         </td>
-                        <td className="px-3 py-2 font-medium max-w-[160px] truncate">
+                        <td className="px-3 py-2 font-medium max-w-[160px] truncate cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
+                          onClick={() => setSelectedRowId(selectedRowId === v.id ? null : v.id)}>
                           {(v.cadastros_base as { nome?: string } | null)?.nome ?? v.nome_faturamento ?? '—'}
                         </td>
                         <td className="px-3 py-2 text-gray-500 whitespace-nowrap hidden xl:table-cell">
