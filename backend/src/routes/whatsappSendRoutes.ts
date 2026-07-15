@@ -5,6 +5,7 @@ import type { ExternalIntegrationRepository } from '../repositories/externalInte
 import type { LinksProdutosRepository } from '../repositories/linksProdutosRepository.js'
 import type { RenovacaoRepository, RenovacaoRow } from '../repositories/renovacaoRepository.js'
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
+import type { ConfigRepository } from '../repositories/configRepository.js'
 import { CommunicationEventRepository } from '../repositories/communicationEventRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
 
@@ -401,11 +402,30 @@ async function forwardInboundToN8n(
   leadId: string | null,
   renovacaoRepo: RenovacaoRepository,
   linksRepo: LinksProdutosRepository,
+  configRepository: ConfigRepository,
 ) {
   if (!config.n8nWebhookUrl || event.fromMe) return { forwarded: false, error: null as string | null }
 
+  const canal = inferCanalFromInstance(event.instanceName)
+
+  const aiControl = await configRepository.get<{
+    enabled: boolean
+    atendimento_ia_enabled: boolean
+    renovacao_ia_enabled: boolean
+  }>('ai_control')
+
+  if (!aiControl?.enabled) {
+    return { forwarded: false, error: 'IA desabilitada globalmente' }
+  }
+
+  const iaEnabledForChannel =
+    canal === 'renovacao' ? aiControl.renovacao_ia_enabled : aiControl.atendimento_ia_enabled
+
+  if (!iaEnabledForChannel) {
+    return { forwarded: false, error: `IA desabilitada para canal ${canal}` }
+  }
+
   try {
-    const canal = inferCanalFromInstance(event.instanceName)
     let renovacao: RenovacaoRow | null = null
     let linkRenovacao: string | null = null
 
@@ -523,6 +543,7 @@ export async function handleWhatsappSendRoutes(
   linksRepo: LinksProdutosRepository,
   outboxRepo: CommunicationOutboxRepository,
   corsOrigin: string,
+  configRepository: ConfigRepository,
 ): Promise<boolean> {
   const url = req.url ?? ''
   const method = req.method ?? ''
@@ -613,7 +634,7 @@ export async function handleWhatsappSendRoutes(
       payload,
     })
 
-    const forwarded = await forwardInboundToN8n(normalized, lead?.id ?? null, renovacaoRepo, linksRepo)
+    const forwarded = await forwardInboundToN8n(normalized, lead?.id ?? null, renovacaoRepo, linksRepo, configRepository)
 
     writeJson(res, 200, {
       ok: true,

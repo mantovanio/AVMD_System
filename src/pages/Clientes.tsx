@@ -1,5 +1,6 @@
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Search, X, ChevronDown, ChevronUp, Loader2, RefreshCcw, Plus, Pencil, MessageCircle, Mail, LifeBuoy, Save, Upload, Check, Phone, UserCog, Shield, Archive } from 'lucide-react'
+import { RecordActionBar, type ActionBarAction } from '@/components/RecordActionBar'
 import { getApiUrl } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -1311,8 +1312,38 @@ export default function Clientes() {
         <span className="text-xs text-gray-400 ml-auto">{total.toLocaleString('pt-BR')} clientes</span>
       </div>
 
-      {/* table + sidebar */}
-      <div className="flex-1 overflow-hidden flex">
+      {/* action bar + table */}
+      <div className="flex-1 overflow-auto flex flex-col">
+        {expandedId && (() => {
+          const cliente = clientes.find(c => c.id === expandedId)
+          const detalhe = cliente ? detalhes[cliente.id] : null
+          if (!cliente) return null
+          const actions: ActionBarAction[] = [
+            { key: 'edit', icon: <Pencil size={13} />, label: 'Editar', onClick: () => openEditCliente(cliente), variant: 'blue' },
+            ...(canAccessChat ? [
+              { key: 'chat', icon: <MessageCircle size={13} />, label: 'Chat', onClick: () => void openChatFromCliente(cliente), variant: 'green' },
+              { key: 'kanban', icon: <LifeBuoy size={13} />, label: 'Kanban', onClick: () => void openKanbanFromCliente(cliente), variant: 'purple' },
+            ] as ActionBarAction[] : []),
+            { key: 'email', icon: <Mail size={13} />, label: 'E-mail', onClick: () => { if (cliente.email) window.location.href = `mailto:${cliente.email}` }, disabled: !cliente.email, variant: 'amber' },
+            { key: 'phone', icon: <Phone size={13} />, label: 'Ligar', onClick: () => { if (cliente.telefone) window.location.href = `tel:${normalizeDigits(cliente.telefone)}` }, disabled: !cliente.telefone },
+            ...(detalhe?.portal_access ? [{
+              key: 'portal', icon: <Check size={13} />, label: detalhe.portal_access.status === 'ativo' ? 'Portal: liberado' : 'Portal: bloqueado',
+              onClick: () => void togglePortalAccess(cliente, detalhe.portal_access!.status), variant: detalhe.portal_access.status === 'ativo' ? 'green' as const : 'red' as const,
+            }] as ActionBarAction[] : []),
+          ]
+          return (
+            <RecordActionBar
+              recordName={cliente.nome}
+              recordBadge={
+                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${cliente.status === 'ativo' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500'}`}>
+                  {cliente.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                </span>
+              }
+              actions={actions}
+              onClose={() => setExpandedId(null)}
+            />
+          )
+        })()}
         {loading ? (
           <div className="flex items-center justify-center py-20 text-gray-400 w-full">
             <Loader2 size={20} className="animate-spin mr-2" /> Carregando...
@@ -1323,7 +1354,6 @@ export default function Clientes() {
             {search && <p className="text-sm mt-1">Tente uma busca diferente.</p>}
           </div>
         ) : (
-          <>
             <div className="flex-1 overflow-auto min-w-0">
               <table className="w-full text-sm">
             <thead className="sticky top-0 z-10">
@@ -1639,201 +1669,6 @@ export default function Clientes() {
             </tbody>
 </table>
             </div>
-
-            {/* Sidebar de ações do cliente selecionado */}
-            {expandedId && (
-              <aside className="hidden lg:block w-80 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 flex flex-col lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)]">
-                <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Ações do cliente</h3>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                  {(function() {
-                    const cliente = clientes.find(c => c.id === expandedId)
-                    const detalhe = cliente ? detalhes[cliente.id] : null
-                    if (!cliente || !detalhe) return null
-
-                    const portalAccess = detalhe.portal_access
-                    const hasPortalAccess = !!portalAccess
-
-                    return (
-                      <>
-                        {/* Cliente info */}
-                        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-4">
-                          <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{cliente.nome}</p>
-                          {cliente.nome_fantasia && cliente.nome_fantasia !== cliente.nome && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{cliente.nome_fantasia}</p>
-                          )}
-                          <p className="text-xs font-mono text-gray-500 dark:text-gray-400 mt-1">
-                            {cliente.tipo_cliente === 'pessoa_fisica' ? 'CPF' : 'CNPJ'} {cliente.cpf_cnpj ? `· ${formatDoc(cliente.cpf_cnpj)}` : ''}
-                          </p>
-                          <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${
-                            cliente.status === 'ativo'
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                              : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
-                          }`}>
-                            {cliente.status === 'ativo' ? 'Ativo' : 'Inativo'}
-                          </span>
-                        </div>
-
-                        {/* Ações principais */}
-                        <div>
-                          <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Ações rápidas</h4>
-                          <div className="space-y-2">
-                            <button
-                              type="button"
-                              onClick={() => openEditCliente(cliente)}
-                              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-blue-100 dark:border-blue-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-blue-300 hover:text-blue-700 transition-colors"
-                            >
-                              <Pencil size={14} />
-                              Editar cliente
-                            </button>
-
-                            {canAccessChat && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => void openChatFromCliente(cliente)}
-                                  className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-green-100 dark:border-green-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-green-300 hover:text-green-700 transition-colors"
-                                >
-                                  <MessageCircle size={14} />
-                                  Abrir chat
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void openKanbanFromCliente(cliente)}
-                                  className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-purple-100 dark:border-purple-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-purple-300 hover:text-purple-700 transition-colors"
-                                >
-                                  <LifeBuoy size={14} />
-                                  Ir para o Kanban
-                                </button>
-                              </>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!cliente.email) {
-                                  alert('Este cliente ainda nao possui e-mail cadastrado.')
-                                  return
-                                }
-                                window.location.href = `mailto:${cliente.email}`
-                              }}
-                              disabled={!cliente.email}
-                              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-amber-100 dark:border-amber-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-amber-300 hover:text-amber-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                            >
-                              <Mail size={14} />
-                              E-mail
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!cliente.telefone) {
-                                  alert('Este cliente ainda nao possui telefone cadastrado.')
-                                  return
-                                }
-                                window.location.href = `tel:${normalizeDigits(cliente.telefone)}`
-                              }}
-                              disabled={!cliente.telefone}
-                              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-indigo-100 dark:border-indigo-900/20 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-indigo-300 hover:text-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                            >
-                              <Phone size={14} />
-                              Ligar
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Acesso ao portal */}
-                        <div>
-                          <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Acesso ao portal</h4>
-                          <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
-                            {!hasPortalAccess ? (
-                              <div className="text-center py-4">
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Este cliente ainda não possui um acesso de portal vinculado.</p>
-                                <button
-                                  type="button"
-                                  onClick={() => openEditCliente(cliente)}
-                                  className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
-                                >
-                                  Criar acesso ao portal
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                                <div>
-                                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{portalAccess.nome}</p>
-                                  <p className="text-xs text-gray-500 mt-1">{portalAccess.email ?? cliente.email ?? 'Sem e-mail informado'}</p>
-                                  <div className="mt-2 flex items-center gap-2">
-                                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                                      portalAccess.status === 'ativo'
-                                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                                    }`}>
-                                      {portalAccess.status === 'ativo' ? 'Liberado' : 'Aguardando/liberação bloqueada'}
-                                    </span>
-                                    <span className="text-xs text-gray-400">Cliente do portal</span>
-                                  </div>
-                                </div>
-                                <div className="flex gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => void togglePortalAccess(cliente, portalAccess.status)}
-                                    className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                                      portalAccess.status === 'ativo'
-                                        ? 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400'
-                                        : 'bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400'
-                                    }`}
-                                  >
-                                    {portalAccess.status === 'ativo' ? 'Desativar acesso' : 'Liberar acesso'}
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Ações avançadas */}
-                        <div>
-                          <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Avançado</h4>
-                          <div className="space-y-2">
-                            <button
-                              type="button"
-                              onClick={() => openEditCliente(cliente)}
-                              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-                            >
-                              <UserCog size={14} />
-                              Gerenciar perfil de acesso
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                // TODO: Implementar bloqueio/desbloqueio
-                              }}
-                              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-                            >
-                              <Shield size={14} />
-                              Bloquear/Desbloquear login
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                // TODO: Implementar arquivar cliente
-                              }}
-                              className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-                            >
-                              <Archive size={14} />
-                              Arquivar cliente
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )
-                  })()}
-                </div>
-              </aside>
-            )}
-          </>
         )}
       </div>
       {totalPages > 1 && (

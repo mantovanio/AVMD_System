@@ -3,13 +3,14 @@ import {
   AlertTriangle, Bell, Check, CheckCircle, Clock,
   Download, Edit3, Eye, EyeOff, ExternalLink, Link2, Loader2, Mail, MessageSquare, Plus,
   RefreshCw, Save, Send, Trash2, Upload, Users, X, Zap,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, Pencil, LifeBuoy,
 } from 'lucide-react'
 import { getApiBaseUrl } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
 import { queueEmailMessage, queueWhatsAppMessage, queueWhatsAppFollowUp, renderTemplate } from '@/lib/communication'
 import { openCentralChat } from '@/lib/chatNavigation'
+import { RecordActionBar, type ActionBarAction } from '@/components/RecordActionBar'
 import {
   fetchRenovacoes as apiFetchRenovacoes,
   fetchTemplates as apiFetchTemplates,
@@ -455,6 +456,9 @@ export default function Renovacoes() {
   // ── bulk selection ───────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkSending, setBulkSending] = useState(false)
+
+  // ── single row selection (for action bar) ────────────────────
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null)
 
   // ── import CSV ───────────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null)
@@ -2384,6 +2388,38 @@ export default function Renovacoes() {
           </div>
         )}
 
+        {/* ── Single Row Action Bar ────────────────────────────── */}
+        {selectedRowId && (() => {
+          const r = listagem.find(item => item.id === selectedRowId)
+          if (!r) return null
+          const actions: ActionBarAction[] = [
+            { key: 'renovado', icon: <Check size={13} />, label: r.status === 'convertido' ? 'Desmarcar' : 'Renovado', onClick: () => void marcarRenovado(r), variant: 'green' as const },
+            { key: 'nao_renovado', icon: <X size={13} />, label: r.status === 'perdido' ? 'Desmarcar' : 'Não renovado', onClick: () => void marcarNaoRenovado(r), variant: 'red' as const },
+            { key: 'whatsapp', icon: <Send size={13} />, label: 'WhatsApp', onClick: () => void enviarWhatsApp(r), disabled: !r.telefone, variant: 'green' as const },
+            ...(canEditCadastro ? [{ key: 'editar', icon: <Pencil size={13} />, label: 'Editar', onClick: () => abrirEditarContato(r), variant: 'amber' as const }] as ActionBarAction[] : []),
+            { key: 'email', icon: <Mail size={13} />, label: 'E-mail', onClick: () => void enviarEmail(r), disabled: !r.email, variant: 'blue' as const },
+            { key: 'kanban', icon: <Users size={13} />, label: 'Kanban', onClick: () => void criarLeadKanban(r), variant: 'purple' as const },
+            { key: 'chat', icon: <MessageSquare size={13} />, label: 'Chat', onClick: () => openChat(r), disabled: !r.telefone, variant: 'green' as const },
+            { key: 'cancelar', icon: <Bell size={13} />, label: 'Cancelar avisos', onClick: () => void cancelarFollowUps(r.id), variant: 'default' as const },
+            ...(isAdmin ? [{ key: 'excluir', icon: <Trash2 size={13} />, label: 'Excluir', onClick: () => void excluirRenovacao(r), variant: 'red' as const }] as ActionBarAction[] : []),
+          ]
+          return (
+            <RecordActionBar
+              recordName={r.cliente}
+              recordBadge={
+                <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full',
+                  r.status === 'convertido' && 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+                  r.status === 'perdido' && 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                  r.status === 'contatado' && 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                  r.status === 'pendente' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+                )}>{r.status}</span>
+              }
+              actions={actions}
+              onClose={() => setSelectedRowId(null)}
+            />
+          )
+        })()}
+
         {/* ── Bulk Action Bar ──────────────────────────────────── */}
         {selCount > 0 && (
           <div className="sticky top-0 z-10 bg-blue-600 text-white rounded-xl px-4 py-3 flex flex-wrap items-center gap-2 shadow-lg">
@@ -2566,7 +2602,9 @@ export default function Renovacoes() {
                           {r.dias_restantes > 0 ? `${r.dias_restantes}d` : 'Vencido'}
                         </span>
                       </td>
-                      <td className="px-3 py-3 font-medium overflow-hidden" style={{ width: `${columnWidths.cliente}px` }}><span className="truncate block">{r.cliente}</span></td>
+                      <td className="px-3 py-3 font-medium overflow-hidden cursor-pointer hover:text-blue-600 dark:hover:text-blue-400" style={{ width: `${columnWidths.cliente}px` }}
+                        onClick={() => setSelectedRowId(selectedRowId === r.id ? null : r.id)}>
+                        <span className="truncate block">{r.cliente}</span></td>
                       <td className="px-3 py-3 text-xs text-gray-500 overflow-hidden" style={{ width: `${columnWidths.email}px` }}><span className="truncate block">{r.email ?? '—'}</span></td>
                       <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: `${columnWidths.telefone}px` }}>{r.telefone ?? '—'}</td>
                       <td className="px-3 py-3 text-xs text-gray-500 overflow-hidden" style={{ width: `${columnWidths.produto}px` }}><span className="truncate block">{r.tipo_certificado}</span></td>
