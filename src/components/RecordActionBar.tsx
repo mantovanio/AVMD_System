@@ -6,6 +6,7 @@ export interface ActionBarAction {
   key: string
   icon: ReactNode
   label: string
+  tooltip?: string
   onClick: () => void
   variant?: 'default' | 'blue' | 'green' | 'amber' | 'purple' | 'red'
   disabled?: boolean
@@ -55,7 +56,7 @@ export function RecordActionBar({ recordName, recordBadge, actions, onClose, cla
             type="button"
             onClick={action.onClick}
             disabled={action.disabled}
-            title={action.label}
+            title={action.tooltip ?? action.label}
             className={cn(
               'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors',
               'disabled:opacity-40 disabled:cursor-not-allowed',

@@ -4887,17 +4887,17 @@ export default function Comercial() {
               const clienteNome = v.cadastros_base?.nome ?? (v as unknown as { nome_faturamento?: string }).nome_faturamento ?? '—'
               const statusLabel = STATUS_VENDA_LABEL[v.status_venda] ?? v.status_venda
               const actions: ActionBarAction[] = [
-                { key: 'protocolo', icon: <ClipboardList size={13} />, label: 'Protocolo', onClick: () => abrirProtocolo(v), variant: 'purple' as const },
-                { key: 'agendar', icon: <Calendar size={13} />, label: 'Agendar', onClick: () => void prepararAgendamento(v), variant: 'green' as const },
-                { key: 'fatura', icon: <Receipt size={13} />, label: 'Fatura', onClick: () => void abrirFaturaVenda(v), variant: 'default' as const },
+                { key: 'protocolo', icon: <ClipboardList size={13} />, label: 'Protocolo', tooltip: 'Emitir ou visualizar o protocolo desta venda', onClick: () => abrirProtocolo(v), variant: 'purple' as const },
+                { key: 'agendar', icon: <Calendar size={13} />, label: 'Agendar', tooltip: 'Agendar uma ação ou retorno para esta venda', onClick: () => void prepararAgendamento(v), variant: 'green' as const },
+                { key: 'fatura', icon: <Receipt size={13} />, label: 'Fatura', tooltip: 'Gerar e enviar a fatura desta venda por e-mail', onClick: () => void abrirFaturaVenda(v), variant: 'default' as const },
                 ...(isAdmin ? [
-                  { key: 'editar', icon: <Edit3 size={13} />, label: 'Editar', onClick: () => { const vo = v as unknown as Record<string, unknown>; setEditForm({ id: v.id, tipo_produto: v.tipo_produto, tipo_venda: v.tipo_venda ?? '', tipo_emissao: v.tipo_emissao ?? '', tabela_preco_id: v.tabela_preco_id ?? '', tabela_preco_item_id: v.tabela_preco_item_id ?? '', forma_pagamento_id: v.forma_pagamento_id ?? '', valor_venda: v.valor_venda ?? 0, desconto: (vo.desconto as number) ?? 0, observacoes: v.observacoes ?? '', data_vencimento: v.data_vencimento ?? '', vendedor_id: v.vendedor_id ?? null, contador_id: v.contador_id ?? null }); setEditandoVenda(v) }, variant: 'blue' as const },
-                  { key: 'cancelar', icon: <XCircle size={13} />, label: 'Cancelar', onClick: () => setCancelandoVenda(v), variant: 'red' as const },
+                  { key: 'editar', icon: <Edit3 size={13} />, label: 'Editar', tooltip: 'Alterar dados desta venda', onClick: () => { const vo = v as unknown as Record<string, unknown>; setEditForm({ id: v.id, tipo_produto: v.tipo_produto, tipo_venda: v.tipo_venda ?? '', tipo_emissao: v.tipo_emissao ?? '', tabela_preco_id: v.tabela_preco_id ?? '', tabela_preco_item_id: v.tabela_preco_item_id ?? '', forma_pagamento_id: v.forma_pagamento_id ?? '', valor_venda: v.valor_venda ?? 0, desconto: (vo.desconto as number) ?? 0, observacoes: v.observacoes ?? '', data_vencimento: v.data_vencimento ?? '', vendedor_id: v.vendedor_id ?? null, contador_id: v.contador_id ?? null }); setEditandoVenda(v) }, variant: 'blue' as const },
+                  { key: 'cancelar', icon: <XCircle size={13} />, label: 'Cancelar', tooltip: 'Cancelar esta venda (somente admin)', onClick: () => setCancelandoVenda(v), variant: 'red' as const },
                 ] as ActionBarAction[] : []),
-                { key: 'excluir', icon: <Trash2 size={13} />, label: 'Excluir', onClick: () => void excluirVenda(v.id), variant: 'red' as const },
-                { key: 'nfse', icon: <FileText size={13} />, label: 'NFS-e', onClick: () => void emitirNfseParaVenda(v), hidden: !nfseAutomationSettings.permitir_emissao_manual_rapida },
-                { key: 'verNfse', icon: <Eye size={13} />, label: 'Ver NF-e', onClick: () => void abrirNfseVenda(v) },
-                { key: 'liberar', icon: <Unlock size={13} />, label: 'Liberar', onClick: () => void liberarEmissao(v), variant: 'green' as const },
+                { key: 'excluir', icon: <Trash2 size={13} />, label: 'Excluir', tooltip: 'Excluir permanentemente esta venda', onClick: () => void excluirVenda(v.id), variant: 'red' as const },
+                { key: 'nfse', icon: <FileText size={13} />, label: 'NFS-e', tooltip: 'Emitir a nota fiscal de serviço (NFS-e)', onClick: () => void emitirNfseParaVenda(v), hidden: !nfseAutomationSettings.permitir_emissao_manual_rapida },
+                { key: 'verNfse', icon: <Eye size={13} />, label: 'Ver NF-e', tooltip: 'Visualizar a nota fiscal já emitida', onClick: () => void abrirNfseVenda(v) },
+                { key: 'liberar', icon: <Unlock size={13} />, label: 'Liberar', tooltip: 'Liberar emissão quando há pendência fiscal', onClick: () => void liberarEmissao(v), variant: 'green' as const },
               ]
               return (
                 <RecordActionBar
