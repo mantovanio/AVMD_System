@@ -4947,15 +4947,17 @@ export default function Comercial() {
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                     {loadingV ? (
-                      <LoadingRow colSpan={18} />
+                      <LoadingRow colSpan={17} />
                     ) : vendasPaginadas.length === 0 ? (
-                      <EmptyRow colSpan={18} label="Nenhuma venda encontrada com esses filtros." />
+                      <EmptyRow colSpan={17} label="Nenhuma venda encontrada com esses filtros." />
                     ) : vendasPaginadas.map(v => (
-                      <tr key={v.id} className={cn(
-                        'hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors',
-                        selectedIds.has(v.id) && 'bg-blue-50 dark:bg-blue-900/10',
-                      )}>
-                        <td className="px-3 py-2">
+                      <tr key={v.id}
+                        onClick={() => setSelectedRowId(prev => prev === v.id ? null : v.id)}
+                        className={cn(
+                          'hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer',
+                          selectedRowId === v.id && 'bg-blue-50 dark:bg-blue-900/20 ring-1 ring-inset ring-blue-300 dark:ring-blue-700',
+                        )}>
+                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                           <input type="checkbox" checked={selectedIds.has(v.id)}
                             onChange={() => toggleSelected(v.id)} className="rounded cursor-pointer" />
                         </td>
