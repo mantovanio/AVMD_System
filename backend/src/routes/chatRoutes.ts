@@ -418,8 +418,12 @@ export async function handleChatRoutes(
 
   if (url === '/api/chat/crm/config') {
     if (method === 'GET') {
-      const value = await configRepository.get('timeout_automation')
-      writeJson(res, 200, { ok: true, ...value }, corsOrigin)
+      const value = await configRepository.get<{
+        enabled: boolean
+        minutes: number
+        clara_webhook: string
+      }>('timeout_automation')
+      writeJson(res, 200, { ok: true, enabled: value.enabled, minutes: value.minutes, clara_webhook: value.clara_webhook }, corsOrigin)
       return true
     }
     if (method === 'PUT') {
@@ -433,8 +437,39 @@ export async function handleChatRoutes(
     }
   }
 
+  if (url === '/api/chat/crm/ai-control') {
+    if (method === 'GET') {
+      const value = await configRepository.get<{
+        enabled: boolean
+        atendimento_ia_enabled: boolean
+        renovacao_ia_enabled: boolean
+      }>('ai_control')
+      writeJson(res, 200, { ok: true, config: value }, corsOrigin)
+      return true
+    }
+    if (method === 'POST') {
+      const body = await readJson<{
+        enabled?: boolean
+        atendimento_ia_enabled?: boolean
+        renovacao_ia_enabled?: boolean
+      }>(req)
+      const current = await configRepository.get<{
+        enabled: boolean
+        atendimento_ia_enabled: boolean
+        renovacao_ia_enabled: boolean
+      }>('ai_control')
+      await configRepository.set('ai_control', {
+        enabled: body.enabled ?? current.enabled,
+        atendimento_ia_enabled: body.atendimento_ia_enabled ?? current.atendimento_ia_enabled,
+        renovacao_ia_enabled: body.renovacao_ia_enabled ?? current.renovacao_ia_enabled,
+      })
+      writeJson(res, 200, { ok: true }, corsOrigin)
+      return true
+    }
+  }
+
   if (method === 'POST' && url === '/api/chat/crm/check-timeout') {
-    const config = await configRepository.get('timeout_automation')
+    const config = await configRepository.get<{ enabled: boolean; minutes: number; clara_webhook: string }>('timeout_automation')
     if (!config.enabled) {
       writeJson(res, 200, { ok: true, triggered: 0, message: 'timeout desligado' }, corsOrigin)
       return true

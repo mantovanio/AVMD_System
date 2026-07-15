@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { BackendConfig } from '../config/env.js'
 import type { CommunicationEventRepository } from '../repositories/communicationEventRepository.js'
 import type { LeadRepository } from '../repositories/leadRepository.js'
+import type { ConfigRepository } from '../repositories/configRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
 
 type JsonRecord = Record<string, unknown>
@@ -251,10 +252,33 @@ async function configureEvolutionWebhook(input: EvolutionControlInput) {
   }
 }
 
-async function forwardInboundToN8n(config: BackendConfig, event: NormalizedEvolutionEvent, leadId: string | null) {
+async function forwardInboundToN8n(
+  config: BackendConfig,
+  event: NormalizedEvolutionEvent,
+  leadId: string | null,
+  configRepository: ConfigRepository,
+) {
   if (!config.n8nWebhookUrl || event.fromMe) return { forwarded: false, error: null as string | null }
 
   const canal = inferCanalFromInstance(event.instanceName)
+
+  // Verifica controle de IA
+  const aiControl = await configRepository.get<{
+    enabled: boolean
+    atendimento_ia_enabled: boolean
+    renovacao_ia_enabled: boolean
+  }>('ai_control')
+
+  if (!aiControl?.enabled) {
+    return { forwarded: false, error: 'IA desabilitada globalmente' }
+  }
+
+  const iaEnabledForChannel =
+    canal === 'renovacao' ? aiControl.renovacao_ia_enabled : aiControl.atendimento_ia_enabled
+
+  if (!iaEnabledForChannel) {
+    return { forwarded: false, error: `IA desabilitada para canal ${canal}` }
+  }
 
   try {
     const response = await fetch(config.n8nWebhookUrl, {
@@ -315,6 +339,7 @@ export async function handleEvolutionWebhookRoutes(
   communicationEventRepository: CommunicationEventRepository,
   config: BackendConfig,
   corsOrigin: string,
+  configRepository: ConfigRepository,
 ): Promise<boolean> {
   const url = req.url ?? ''
   const method = req.method ?? ''
@@ -371,7 +396,7 @@ export async function handleEvolutionWebhookRoutes(
       payload,
     })
 
-    const forwarded = await forwardInboundToN8n(config, normalized, lead?.id ?? null)
+    const forwarded = await forwardInboundToN8n(config, normalized, lead?.id ?? null, configRepository)
 
     writeJson(res, 200, {
       ok: true,

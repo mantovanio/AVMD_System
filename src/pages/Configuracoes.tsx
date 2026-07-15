@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, MapPin, Pencil, X, Check, KeyRound, UserPlus, Eye, EyeOff, MessageCircle, Mail, Webhook, Save, Send, Trash2, Plus, ToggleLeft, ToggleRight, CreditCard, FileText, Upload, ShieldCheck, ChevronDown, ChevronRight, Users, Link, Network, Percent, Clock } from 'lucide-react'
+import { Loader2, MapPin, Pencil, X, Check, KeyRound, UserPlus, Eye, EyeOff, MessageCircle, Mail, Webhook, Save, Send, Trash2, Plus, ToggleLeft, ToggleRight, CreditCard, FileText, Upload, ShieldCheck, ChevronDown, ChevronRight, Users, Link, Network, Percent, Clock, Bot, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase, getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { getEvolutionConnectionTestUrl, getEvolutionWebhookConfigureUrl, getEvolutionWebhookUrl } from '@/lib/evolutionApi'
@@ -2875,6 +2875,16 @@ function AbaAutomacoes() {
   const [savingId, setSavingId] = useState<string | null>(null)
   const [toastA, setToastA] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
 
+  // AI Control state
+  const [aiControl, setAiControl] = useState<{
+    enabled: boolean
+    atendimento_ia_enabled: boolean
+    renovacao_ia_enabled: boolean
+  } | null>(null)
+  const [aiControlLoading, setAiControlLoading] = useState(true)
+  const [aiControlSaving, setAiControlSaving] = useState(false)
+  const [aiControlError, setAiControlError] = useState<string | null>(null)
+
   function showMsgA(msg: string, type: 'ok' | 'err' = 'err') {
     setToastA({ msg, type })
     setTimeout(() => setToastA(null), 4000)
@@ -2895,7 +2905,25 @@ function AbaAutomacoes() {
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  const loadAiControl = useCallback(async () => {
+    setAiControlLoading(true)
+    try {
+      const resp = await fetch(getApiUrl('/chat/crm/ai-control'))
+      const data = await resp.json()
+      if (resp.ok && data.ok) {
+        setAiControl(data.config)
+      }
+    } catch (e) {
+      console.error('Erro ao carregar controle de IA', e)
+    } finally {
+      setAiControlLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+    void loadAiControl()
+  }, [load, loadAiControl])
 
   async function toggleAutomacao(rule: AutomationRule) {
     setSavingId(rule.id)
@@ -2915,6 +2943,28 @@ function AbaAutomacoes() {
     }
   }
 
+  async function saveAiControl(field: 'enabled' | 'atendimento_ia_enabled' | 'renovacao_ia_enabled', value: boolean) {
+    if (!isAdmin) return
+    setAiControlSaving(true)
+    setAiControlError(null)
+    try {
+      const next = { ...aiControl!, [field]: value }
+      const resp = await fetch(getApiUrl('/chat/crm/ai-control'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(next),
+      })
+      const data = await resp.json()
+      if (!resp.ok || !data.ok) throw new Error(data?.error ?? 'Erro ao salvar')
+      setAiControl(next)
+      showMsgA('Configuração de IA salva', 'ok')
+    } catch (e) {
+      setAiControlError(e instanceof Error ? e.message : 'Erro ao salvar configuração de IA')
+    } finally {
+      setAiControlSaving(false)
+    }
+  }
+
   if (loading) {
     return <div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-gray-400" /></div>
   }
@@ -2929,6 +2979,118 @@ function AbaAutomacoes() {
 
   return (
     <div className="space-y-4">
+      {/* Controle de IA (Clara/N8N) */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-4">
+        <div>
+          <h2 className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+            <Bot size={18} className="text-purple-600" />
+            Controle de Respostas da IA (Clara / N8N)
+          </h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Define se a IA deve responder automaticamente nas conversas. Quando desativado para um canal, as mensagens não são encaminhadas para o N8N/Clara.
+          </p>
+        </div>
+
+        {aiControlLoading ? (
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <Loader2 size={16} className="animate-spin" /> Carregando configuração de IA...
+          </div>
+        ) : aiControl ? (
+          <div className="space-y-4">
+            {/* Master switch */}
+            <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">IA Globalmente Ativa</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Liga/desliga o processamento de IA para todos os canais de uma vez.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={!isAdmin || aiControlSaving}
+                  onClick={() => saveAiControl('enabled', !aiControl.enabled)}
+                  className={cn('relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 disabled:opacity-50',
+                    aiControl.enabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700')}
+                >
+                  <span className={cn('pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200',
+                    aiControl.enabled ? 'translate-x-5' : 'translate-x-0')} />
+                </button>
+              </div>
+            </div>
+
+            {/* Canal Atendimento */}
+            <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 space-y-3"
+              style={{ opacity: aiControl.enabled ? 1 : 0.5 }}>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                    <MessageCircle size={14} className="text-blue-600" />
+                    Canal <strong>Atendimento</strong> (número dia a dia)
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Controla se a IA responde no número usado para atendimento humano geral.
+                    <span className="text-red-500 font-medium ml-1">⚠ Desligue se a IA estiver alucinando!</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={!isAdmin || aiControlSaving || !aiControl.enabled}
+                  onClick={() => saveAiControl('atendimento_ia_enabled', !aiControl.atendimento_ia_enabled)}
+                  className={cn('relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 disabled:opacity-50',
+                    aiControl.atendimento_ia_enabled ? 'bg-green-600' : 'bg-gray-200 dark:bg-gray-700')}
+                >
+                  <span className={cn('pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200',
+                    aiControl.atendimento_ia_enabled ? 'translate-x-5' : 'translate-x-0')} />
+                </button>
+              </div>
+              <p className={`text-xs ${aiControl.atendimento_ia_enabled ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                {aiControl.atendimento_ia_enabled ? '✓ IA ATIVA - Responde automaticamente no canal Atendimento' : '✗ IA DESLIGADA - Mensagens vão direto para fila humana'}
+              </p>
+            </div>
+
+            {/* Canal Renovação */}
+            <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 space-y-3"
+              style={{ opacity: aiControl.enabled ? 1 : 0.5 }}>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                    <RotateCcw size={14} className="text-purple-600" />
+                    Canal <strong>Renovação</strong> (CertiID)
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Controla se a IA responde no número dedicado a renovações de certificados.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={!isAdmin || aiControlSaving || !aiControl.enabled}
+                  onClick={() => saveAiControl('renovacao_ia_enabled', !aiControl.renovacao_ia_enabled)}
+                  className={cn('relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 disabled:opacity-50',
+                    aiControl.renovacao_ia_enabled ? 'bg-green-600' : 'bg-gray-200 dark:bg-gray-700')}
+                >
+                  <span className={cn('pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200',
+                    aiControl.renovacao_ia_enabled ? 'translate-x-5' : 'translate-x-0')} />
+                </button>
+              </div>
+              <p className={`text-xs ${aiControl.renovacao_ia_enabled ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                {aiControl.renovacao_ia_enabled ? '✓ IA ATIVA - Responde automaticamente no canal Renovação' : '✗ IA DESLIGADA - Mensagens vão direto para fila humana'}
+              </p>
+            </div>
+
+            {aiControlError && (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-lg p-3 text-sm">
+                Erro: {aiControlError}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+            Não foi possível carregar a configuração de IA.
+          </div>
+        )}
+      </div>
+
       <div>
         <h2 className="font-semibold text-gray-800 dark:text-gray-200">Regras de Automação</h2>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">

@@ -139,6 +139,7 @@ const server = createServer(async (req, res) => {
       communicationEventRepository,
       config,
       config.corsOrigin,
+      configRepository,
     )
     if (handledEvolutionWebhook) return
 
