@@ -482,49 +482,49 @@ export class AivenCheckoutRepository implements CheckoutRepository {
           $7, $8, $9, $10, $11, $12,
           $13, $14, $15, $16, $17, $18,
           $19, $20, $21,
-          $22, $23, $24, $25, $26, $27, $28, $29, $30,
-          $31, $32, $33, $34, $35,
-          $36::jsonb, $37::jsonb, now(), now()
+          $22, $23, $24, $25, $26, $27, $28, $29,
+          $30, $31, $32, $33, $34,
+          $35::jsonb, $36::jsonb, now(), now()
         )
         returning id, protocolo_numero
       `
       const result = await trx.query<{ id: string; protocolo_numero: string | null }>(sql, [
-        saleId,
-        input.loja.id,
-        input.cadastroBaseId,
-        input.titularId,
-        input.item.certificado_id,
-        input.loja.tabela_preco_id,
-        input.item.id,
-        payload.pagamento.forma_pagamento_id,
-        false,
-        input.item.certificados?.tipo ?? 'Certificado digital',
-        input.item.certificados?.tipo_emissao_padrao ?? null,
-        input.tabela?.nome ?? null,
-        valorFinal,
-        input.item.valor_custo,
-        input.desconto ?? 0,
-        input.voucherCodigo ?? null,
-        input.voucherPercentual ?? null,
-        input.voucherValor ?? null,
-        onlyDigits(payload.comprador.cpf_cnpj),
-        payload.comprador.nome,
-        payload.comprador.email,
-        payload.comprador.telefone,
-        payload.fiscal.logradouro,
-        payload.fiscal.numero,
-        payload.fiscal.complemento || null,
-        payload.fiscal.bairro,
-        payload.fiscal.cidade,
-        payload.fiscal.uf,
-        payload.fiscal.cep,
-        payload.agendamento?.ponto_atendimento_id ?? null,
-        payload.observacoes,
-        pedidoNumero,
-        'pendente',
-        'nao_gerado',
-        JSON.stringify({ origem: 'checkout_aiven' }),
-        JSON.stringify({}),
+        saleId,                                              // $1  id
+        input.loja.id,                                      // $2  loja_marketplace_id
+        input.cadastroBaseId,                               // $3  cadastro_base_id
+        input.titularId,                                    // $4  titular_id
+        input.item.certificado_id,                          // $5  certificado_id
+        input.loja.tabela_preco_id,                         // $6  tabela_preco_id
+        input.item.id,                                      // $7  tabela_preco_item_id
+        payload.pagamento.forma_pagamento_id,               // $8  forma_pagamento_id
+        false,                                              // $9  pago
+        input.item.certificados?.tipo ?? 'Certificado digital', // $10 tipo_produto
+        input.item.certificados?.tipo_emissao_padrao ?? null,   // $11 tipo_emissao
+        input.tabela?.nome ?? null,                         // $12 tabela_preco
+        valorFinal,                                         // $13 valor_venda
+        input.item.valor_custo,                             // $14 valor_custo
+        input.desconto ?? 0,                                // $15 desconto
+        input.voucherCodigo ?? null,                        // $16 voucher_codigo
+        input.voucherPercentual ?? null,                    // $17 voucher_percentual
+        input.voucherValor ?? null,                         // $18 voucher_valor
+        payload.comprador.cpf_cnpj ? onlyDigits(payload.comprador.cpf_cnpj) : null, // $19 documento_faturamento
+        payload.comprador.nome,                             // $20 nome_faturamento
+        payload.comprador.email,                            // $21 email_faturamento
+        payload.comprador.telefone,                         // $22 telefone_faturamento
+        payload.fiscal.logradouro,                          // $23 logradouro
+        payload.fiscal.numero,                              // $24 numero
+        payload.fiscal.complemento || null,                 // $25 complemento
+        payload.fiscal.bairro,                              // $26 bairro
+        payload.fiscal.cidade,                              // $27 cidade
+        payload.fiscal.uf,                                  // $28 uf
+        payload.fiscal.cep,                                 // $29 cep
+        payload.agendamento?.ponto_atendimento_id ?? null,  // $30 ponto_atendimento_id
+        payload.observacoes,                                // $31 observacoes
+        pedidoNumero,                                       // $32 pedido_numero
+        'pendente',                                         // $33 pedido_status
+        'nao_gerado',                                       // $34 protocolo_status
+        JSON.stringify({ origem: 'checkout_aiven' }),       // $35 api_payload_pedido
+        JSON.stringify({}),                                 // $36 api_payload_protocolo
       ])
       return result.rows[0] ?? { id: saleId, protocolo_numero: null }
     })
