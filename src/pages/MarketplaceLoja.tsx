@@ -281,6 +281,11 @@ function normalizedSearch(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 }
 
+function dedupeLabel(parts: Array<string | null | undefined>) {
+  const normalized = parts.map(part => (part ?? '').trim()).filter(Boolean)
+  return normalized.filter((part, index) => normalized.findIndex(other => other.toLowerCase() === part.toLowerCase()) === index).join(' · ')
+}
+
 function productKind(item: LojaItemRow) {
   const name = normalizedSearch(item.certificados?.tipo ?? '')
   if (name.includes('combo')) return 'Combo'
@@ -1178,7 +1183,11 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                         <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white">
                           {itemSelecionado ? (
                             <>
-                              <div className="p-5"><p className="font-bold text-slate-900">{itemSelecionado.certificados?.tipo}</p><p className="mt-2 text-sm text-slate-600">Classe: {productCertificateClass(itemSelecionado)}</p><p className="text-sm text-slate-600">Validade: {productValidity(itemSelecionado)}</p><ProductTags item={itemSelecionado} compact /></div>
+                              <div className="p-5">
+                                <p className="font-bold text-slate-900">{itemSelecionado.certificados?.tipo}</p>
+                                <p className="mt-2 text-sm text-slate-600">Detalhes: {dedupeLabel([productKind(itemSelecionado), productCertificateClass(itemSelecionado), productValidity(itemSelecionado)])}</p>
+                                <ProductTags item={itemSelecionado} compact />
+                              </div>
                               <div className="border-t border-slate-200 px-5 py-6 text-center text-3xl font-bold text-emerald-600">{formatCurrency(itemSelecionado.valor)}</div>
                             </>
                           ) : <div className="p-8 text-center text-sm text-slate-500">Escolha um produto para continuar.</div>}
@@ -1204,8 +1213,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   <div className="p-5">
                     <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Item no carrinho</p>
                     <p className="mt-2 text-lg font-bold text-slate-900">{itemSelecionado.certificados?.tipo ?? 'Produto'}</p>
-                    <p className="mt-2 text-sm text-slate-600">Classe: {productCertificateClass(itemSelecionado)}</p>
-                    <p className="text-sm text-slate-600">Prazo: {productValidity(itemSelecionado)}</p>
+                    <p className="mt-2 text-sm text-slate-600">Detalhes: {dedupeLabel([productKind(itemSelecionado), productCertificateClass(itemSelecionado), productValidity(itemSelecionado)])}</p>
                     <div className="mt-4">
                       <ProductTags item={itemSelecionado} compact />
                     </div>

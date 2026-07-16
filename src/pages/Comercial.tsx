@@ -465,6 +465,19 @@ function resolveModelo(cert: Certificado): string | null {
   return m ? m[1].toUpperCase() : null
 }
 
+function cleanRepeatedProductLabel(parts: Array<string | null | undefined>) {
+  const normalized = parts
+    .map(part => (part ?? '').trim())
+    .filter(Boolean)
+  const unique: string[] = []
+  for (const part of normalized) {
+    if (!unique.some(existing => existing.toLowerCase() === part.toLowerCase())) {
+      unique.push(part)
+    }
+  }
+  return unique.join(' · ')
+}
+
 const WIZARD_STEPS = [
   { key: 'tipo_venda', label: 'Tipo de Venda', icon: ShoppingBag },
   { key: 'cliente',    label: 'Cliente',        icon: UserCheck },
@@ -1017,6 +1030,13 @@ export default function Comercial() {
     if (/\ba3\b/.test(text) || /cart|token|leitora|midia|mídia|pendrive/.test(text)) return 'A3'
     if (/\ba1\b/.test(text)) return 'A1'
     return '—'
+  }
+  function productDisplayName(cert: Certificado) {
+    return cleanRepeatedProductLabel([
+      cert.tipo,
+      resolveModelo(cert) && productClass(cert) !== resolveModelo(cert) ? resolveModelo(cert) : null,
+      cert.categoria && !String(cert.tipo ?? '').toLowerCase().includes(String(cert.categoria).toLowerCase()) ? cert.categoria : null,
+    ]) || 'Produto'
   }
   function productValidity(cert: Certificado): string {
     return (cert.validade ?? '').trim() || 'Não definido'
@@ -4869,7 +4889,11 @@ export default function Comercial() {
                               ) : (
                                 produtosFiltrados.map(({ item, cert }) => {
                                   const isSelected = formV2.tabela_preco_item_id === item.id
-                                  const productMeta = [resolveModelo(cert), productClass(cert), productValidity(cert)].filter(Boolean).join(' · ') || '—'
+                                  const productMeta = cleanRepeatedProductLabel([
+                                    cert?.modelo,
+                                    productClass(cert),
+                                    productValidity(cert),
+                                  ]) || '—'
                                   return (
                                     <button key={item.id} type="button"
                                       onClick={() => {
@@ -4889,7 +4913,7 @@ export default function Comercial() {
                                           : 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-gray-800'
                                       )}>
                                       <div className="flex flex-col">
-                                        <span className="text-sm font-semibold">{cert?.tipo ?? 'Produto'}</span>
+                                        <span className="text-sm font-semibold">{productDisplayName(cert)}</span>
                                         <span className="text-xs opacity-70">{productMeta}</span>
                                       </div>
                                       <div className="flex items-center gap-3">
@@ -4922,7 +4946,7 @@ export default function Comercial() {
                         <div className="rounded-xl border border-green-200 dark:border-green-800/40 bg-green-50 dark:bg-green-950/20 p-3 flex items-center gap-3">
                           <Check size={16} className="text-green-600 dark:text-green-400 shrink-0" />
                           <div className="text-xs text-green-700 dark:text-green-300">
-                            <strong>Produto selecionado:</strong> {certificadoSelecionadoVenda?.tipo} {certificadoSelecionadoVenda ? `· ${resolveModelo(certificadoSelecionadoVenda) ?? '—'}` : ''} — {formatCurrency(valorBaseProduto)}
+                            <strong>Produto selecionado:</strong> {certificadoSelecionadoVenda ? productDisplayName(certificadoSelecionadoVenda) : 'Produto'} — {formatCurrency(valorBaseProduto)}
                             {validadeSelecionadaMeses && <span className="ml-2 text-green-600 dark:text-green-400">({validadeSelecionadaMeses})</span>}
                           </div>
                         </div>
