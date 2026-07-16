@@ -6,6 +6,7 @@ import type {
   CheckoutSubmitRequest,
   CheckoutSubmitResponse,
 } from '../contracts/checkoutContract.js'
+import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
 import type { CheckoutRepository } from '../repositories/checkoutRepository.js'
 import type { ProfileRepository } from '../repositories/profileRepository.js'
 import { CheckoutPaymentService } from './checkoutPaymentService.js'
@@ -20,6 +21,7 @@ export class CheckoutService {
   constructor(
     private readonly repository: CheckoutRepository,
     private readonly paymentService: CheckoutPaymentService = new CheckoutPaymentService(repository),
+    private readonly outboxRepository?: CommunicationOutboxRepository,
     private readonly profileRepository?: ProfileRepository,
     private readonly clerkSecretKey?: string,
   ) {}
@@ -155,6 +157,17 @@ export class CheckoutService {
     })
 
     const chargeLink = charge.chargeUrl ?? null
+    await this.queuePurchaseNotifications({
+      saleId: venda.id,
+      compradorNome: body.comprador.nome,
+      email: body.comprador.email,
+      telefone: body.comprador.telefone,
+      linkPagamento: chargeLink ?? this.pickPaymentLink(charge.details),
+      valor: Number(item.valor ?? 0) - descontoAplicado,
+      descricao: `${item.certificados?.tipo ?? 'Certificado digital'} - ${body.comprador.nome}`,
+      paymentStatus: charge.status,
+      mocked: Boolean(charge.mocked),
+    })
     const message = charge.ok
       ? (charge.mocked
           ? 'Pedido criado com sucesso. Cobranca gerada em modo de testes.'
@@ -291,8 +304,73 @@ export class CheckoutService {
 
     return clerkUser.id
   }
+
+  private pickPaymentLink(details: CheckoutSubmitResponse['payment_details'] | Record<string, unknown> | null | undefined) {
+    const paymentDetails = details && typeof details === 'object' ? details : null
+    const link = paymentDetails ? String(paymentDetails.ticket_url ?? '').trim() : ''
+    return link || null
+  }
+
+  private async queuePurchaseNotifications(input: {
+    saleId: string
+    compradorNome: string
+    email: string
+    telefone: string
+    linkPagamento: string | null
+    valor: number
+    descricao: string
+    paymentStatus: string
+    mocked: boolean
+  }) {
+    if (!this.outboxRepository) return
+
+    const link = input.linkPagamento
+    const resumo = [
+      `Olá, ${input.compradorNome}.`,
+      `Recebemos sua compra${input.mocked ? ' em ambiente de teste' : ''}: ${input.descricao}.`,
+      `Valor: ${formatCurrency(input.valor)}.`,
+      link ? `Link de pagamento: ${link}` : 'Seu pagamento foi registrado e está em processamento.',
+      `Status: ${input.paymentStatus}.`,
+    ].join(' ')
+
+    const payload = {
+      sale_id: input.saleId,
+      tipo: 'checkout_payment_link',
+      canal: 'checkout',
+      payment_status: input.paymentStatus,
+      mocked: input.mocked,
+      link_pagamento: link,
+    }
+
+    const tasks: Array<Promise<unknown>> = []
+    if (input.email?.trim()) {
+      tasks.push(this.outboxRepository.create({
+        channel: 'email',
+        provider: 'email_smtp',
+        to_address: input.email.trim(),
+        subject: input.linkPagamento ? 'Seu link de pagamento' : 'Sua compra foi recebida',
+        body: resumo,
+        payload,
+      }))
+    }
+    if (input.telefone?.trim()) {
+      tasks.push(this.outboxRepository.create({
+        channel: 'whatsapp',
+        provider: 'evolution',
+        to_address: input.telefone.trim(),
+        body: resumo,
+        payload,
+      }))
+    }
+
+    await Promise.allSettled(tasks)
+  }
 }
 
 function onlyDigits(value: string) {
   return String(value ?? '').replace(/\D/g, '')
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
 }

@@ -75,9 +75,9 @@ const integrationRegistry = createIntegrationRegistry(config)
 const integrationEventProcessor = new IntegrationEventProcessor(integrationEventRepository, integrationRegistry)
 const outboxProcessor = new OutboxProcessor(communicationOutboxRepository, config, db)
 const renewalReminderService = new RenewalReminderService(db, communicationOutboxRepository)
-const checkoutPaymentService = new CheckoutPaymentService(checkoutRepository)
+const checkoutPaymentService = new CheckoutPaymentService(checkoutRepository, communicationOutboxRepository)
 const portalRepository = new PortalRepository(db, checkoutRepository, commercialRepository)
-const service = new CheckoutService(checkoutRepository, checkoutPaymentService, profileRepository, config.clerkSecretKey)
+const service = new CheckoutService(checkoutRepository, checkoutPaymentService, communicationOutboxRepository, profileRepository, config.clerkSecretKey)
 
 const server = createServer(async (req, res) => {
   try {

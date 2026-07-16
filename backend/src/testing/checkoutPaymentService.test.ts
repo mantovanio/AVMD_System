@@ -97,7 +97,7 @@ test('cria preferencia do Mercado Pago e devolve link de pagamento', async () =>
     },
     async attachPaymentChargeToSale(input: unknown) { attached.push(input as Record<string, unknown>) },
     async applyPaymentWebhook() {},
-  } as never, async (_url, init) => {
+  } as never, undefined, async (_url, init) => {
     const body = JSON.parse(String(init?.body))
     assert.equal(body.external_reference, 'venda-mp')
     assert.equal(body.items[0].currency_id, 'BRL')
@@ -116,6 +116,46 @@ test('cria preferencia do Mercado Pago e devolve link de pagamento', async () =>
   assert.equal(attached[0].gateway, 'mercado_pago')
 })
 
+test('enfileira email e whatsapp ao gerar link de pagamento', async () => {
+  const attached: Array<Record<string, unknown>> = []
+  const created: Array<Record<string, unknown>> = []
+  const service = new CheckoutPaymentService({
+    async getCheckoutPaymentMethodConfig() {
+      return {
+        id: 'mp1', nome: 'Mercado Pago', codigo: 'checkout_pro', tipo: 'link', gateway: 'mercado_pago',
+        ambiente: 'producao', client_id: null, secret_key: null,
+        webhook_url: 'https://api.certiid.mantovan.com.br/api/checkout/webhook/mercado-pago',
+        provider_base_url: 'https://api.mercadopago.com', provider_api_token: 'APP_USR-token', provider_metadata: {},
+        runtime: { modo_teste_geral: false, bloquear_integracoes_reais: false, aviso_checkout: '' },
+      }
+    },
+    async attachPaymentChargeToSale(input: unknown) { attached.push(input as Record<string, unknown>) },
+    async applyPaymentWebhook() {},
+  } as never, {
+    async create(input: unknown) {
+      created.push(input as Record<string, unknown>)
+      return null as never
+    },
+  } as never, async (_url, init) => {
+    return new Response(JSON.stringify({ id: 'pref-1', init_point: 'https://mercadopago.com/pay/pref-1' }), { status: 201 })
+  })
+
+  const result = await service.createChargeForSale({
+    vendaId: 'venda-mp',
+    formaPagamentoId: 'mp1',
+    valor: 149.9,
+    descricao: 'Certificado A1',
+    comprador: { nome: 'Cliente', email: 'cliente@teste.com', telefone: '11999999999', documento: '12345678901' },
+    fiscal: { cep: '01001000', logradouro: 'Praça da Sé', numero: '1', bairro: 'Sé', cidade: 'São Paulo', uf: 'SP' },
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(created.length, 2)
+  assert.equal(created.some(item => item.channel === 'email'), true)
+  assert.equal(created.some(item => item.channel === 'whatsapp'), true)
+  assert.equal(attached[0].gateway, 'mercado_pago')
+})
+
 test('consulta pagamento do Mercado Pago antes de confirmar webhook', async () => {
   const applied: Array<Record<string, unknown>> = []
   const service = new CheckoutPaymentService({
@@ -130,7 +170,7 @@ test('consulta pagamento do Mercado Pago antes de confirmar webhook', async () =
     },
     async attachPaymentChargeToSale() {},
     async applyPaymentWebhook(input: unknown) { applied.push(input as Record<string, unknown>) },
-  } as never, async url => {
+  } as never, undefined, async url => {
     assert.match(String(url), /\/v1\/payments\/987$/)
     return new Response(JSON.stringify({ id: 987, external_reference: 'venda-mp', status: 'approved' }), { status: 200 })
   })
@@ -152,7 +192,7 @@ test('cria order Pix e retorna QR Code para o checkout', async () => {
     },
     async attachPaymentChargeToSale() {},
     async applyPaymentWebhook() {},
-  } as never, async (url, init) => {
+  } as never, undefined, async (url, init) => {
     assert.match(String(url), /\/v1\/orders$/)
     const body = JSON.parse(String(init?.body))
     assert.equal(body.processing_mode, 'automatic')
@@ -192,7 +232,7 @@ test('valida HMAC e consulta order antes de confirmar pagamento', async () => {
     },
     async attachPaymentChargeToSale() {},
     async applyPaymentWebhook(input: unknown) { applied.push(input as Record<string, unknown>) },
-  } as never, async url => {
+  } as never, undefined, async url => {
     assert.match(String(url), /\/v1\/orders\/ORD01ABC$/)
     return new Response(JSON.stringify({
       id: dataId, external_reference: 'venda-1', status: 'processed', status_detail: 'accredited',

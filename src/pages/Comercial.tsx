@@ -457,6 +457,13 @@ function limparRascunhoVenda() {
   try { localStorage.removeItem(NOVA_VENDA_DRAFT_KEY) } catch { /* localStorage indisponível */ }
 }
 
+function resolveModelo(cert: Certificado): string | null {
+  if (cert.modelo?.trim()) return cert.modelo.trim()
+  const raw = (cert.tipo ?? '').trim()
+  const m = raw.match(/\b(A[13])\b/i)
+  return m ? m[1].toUpperCase() : null
+}
+
 const WIZARD_STEPS = [
   { key: 'tipo_venda', label: 'Tipo de Venda', icon: ShoppingBag },
   { key: 'cliente',    label: 'Cliente',        icon: UserCheck },
@@ -794,7 +801,7 @@ export default function Comercial() {
   function descricaoProdutoVenda(v: { certificado_id?: string | null; tipo_produto?: string | null }): string {
     const cert = v.certificado_id ? certificadoById.get(v.certificado_id) : undefined
     if (!cert) return v.tipo_produto?.trim() || '—'
-    return [cert.tipo, cert.modelo, cert.validade].filter(Boolean).join(' · ')
+    return [cert.tipo, resolveModelo(cert), cert.validade].filter(Boolean).join(' · ')
   }
 
   const pontosAtivos       = useMemo(() => pontos.filter(p => p.status === 'ativo'), [pontos])
@@ -4810,7 +4817,7 @@ export default function Comercial() {
                                       <div className="flex flex-col">
                                         <span className="text-sm font-semibold">{cert?.tipo ?? 'Produto'}</span>
                                         <span className="text-xs opacity-70">
-                                          {[cert?.modelo, cert?.validade].filter(Boolean).join(' · ') || '—'}
+                                          {[resolveModelo(cert), productValidity(cert)].filter(Boolean).join(' · ') || '—'}
                                         </span>
                                       </div>
                                       <div className="flex items-center gap-3">
@@ -4843,7 +4850,7 @@ export default function Comercial() {
                         <div className="rounded-xl border border-green-200 dark:border-green-800/40 bg-green-50 dark:bg-green-950/20 p-3 flex items-center gap-3">
                           <Check size={16} className="text-green-600 dark:text-green-400 shrink-0" />
                           <div className="text-xs text-green-700 dark:text-green-300">
-                            <strong>Produto selecionado:</strong> {certificadoSelecionadoVenda?.tipo} {certificadoSelecionadoVenda?.modelo ? `· ${certificadoSelecionadoVenda.modelo}` : ''} — {formatCurrency(valorBaseProduto)}
+                            <strong>Produto selecionado:</strong> {certificadoSelecionadoVenda?.tipo} {certificadoSelecionadoVenda ? `· ${resolveModelo(certificadoSelecionadoVenda) ?? '—'}` : ''} — {formatCurrency(valorBaseProduto)}
                             {validadeSelecionadaMeses && <span className="ml-2 text-green-600 dark:text-green-400">({validadeSelecionadaMeses})</span>}
                           </div>
                         </div>

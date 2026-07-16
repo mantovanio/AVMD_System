@@ -1,4 +1,5 @@
 import type { CheckoutPaymentMethodConfig, CheckoutRepository } from '../repositories/checkoutRepository.js'
+import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
 type FetchLike = typeof fetch
@@ -45,55 +46,21 @@ type ChargeResult = {
 export class CheckoutPaymentService {
   constructor(
     private readonly repository: Pick<CheckoutRepository, 'getCheckoutPaymentMethodConfig' | 'getCheckoutPaymentMethodConfigByGateway' | 'findCommercialSalePaymentData' | 'attachPaymentChargeToSale' | 'applyPaymentWebhook'>,
+    private readonly outboxRepository?: CommunicationOutboxRepository,
     private readonly fetchImpl: FetchLike = fetch,
   ) {}
 
   async createCommercialPaymentLink(input: { vendaId: string; profileId: string }): Promise<ChargeResult> {
     const sale = await this.repository.findCommercialSalePaymentData?.(input.vendaId, input.profileId)
     if (!sale) return { ok: false, status: 'error', error: 'Venda não encontrada ou acesso não autorizado.' }
-    const config = await this.repository.getCheckoutPaymentMethodConfig(sale.forma_pagamento_id)
-    if (!config) return { ok: false, status: 'error', error: 'Forma de pagamento indisponível.' }
-    if (config.gateway !== 'mercado_pago') {
-      return this.createChargeForSale({
-        vendaId: sale.id, formaPagamentoId: sale.forma_pagamento_id, valor: sale.valor, descricao: sale.descricao,
-        comprador: { nome: sale.nome, email: sale.email, telefone: sale.telefone, documento: sale.documento },
-        fiscal: { cep: sale.cep, logradouro: sale.logradouro, numero: sale.numero, bairro: sale.bairro, cidade: sale.cidade, uf: sale.uf },
-      })
-    }
-    if (config.runtime.bloquear_integracoes_reais) return { ok: false, status: 'error', error: 'As integrações externas estão bloqueadas nas configurações.' }
-    if (!config.provider_api_token) return { ok: false, status: 'error', error: 'Access Token do Mercado Pago não configurado.' }
-
-    const method = String(config.codigo || config.tipo || '').toLowerCase()
-    const excludedTypes = method === 'pix'
-      ? [{ id: 'credit_card' }, { id: 'debit_card' }, { id: 'ticket' }]
-      : method === 'boleto'
-        ? [{ id: 'credit_card' }, { id: 'debit_card' }, { id: 'bank_transfer' }]
-        : [{ id: 'ticket' }, { id: 'bank_transfer' }]
-    const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/checkout/preferences`
-    const response = await this.fetchImpl(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.provider_api_token}`, 'X-Idempotency-Key': `commercial-${sale.id}-${method}` },
-      body: JSON.stringify({
-        items: [{ id: sale.id, title: sale.descricao, quantity: 1, currency_id: 'BRL', unit_price: Number(sale.valor.toFixed(2)) }],
-        payer: { name: sale.nome, email: sale.email },
-        external_reference: sale.id,
-        notification_url: this.resolveMercadoPagoCallbackUrl(config).replace(/\/orders\/?$/, ''),
-        payment_methods: { excluded_payment_types: excludedTypes },
-        metadata: { venda_id: sale.id, gateway: 'mercado_pago', payment_method: method },
-      }),
+    return this.createChargeForSale({
+      vendaId: sale.id,
+      formaPagamentoId: sale.forma_pagamento_id,
+      valor: sale.valor,
+      descricao: sale.descricao,
+      comprador: { nome: sale.nome, email: sale.email, telefone: sale.telefone, documento: sale.documento },
+      fiscal: { cep: sale.cep, logradouro: sale.logradouro, numero: sale.numero, bairro: sale.bairro, cidade: sale.cidade, uf: sale.uf },
     })
-    const payload = await response.json().catch(() => ({})) as Record<string, unknown>
-    if (!response.ok) return { ok: false, status: 'error', error: String(payload.message || payload.error || `Mercado Pago respondeu ${response.status}`) }
-    const result: ChargeResult = {
-      ok: true,
-      status: 'pending',
-      externalId: this.pickString(payload, ['id']),
-      chargeUrl: this.pickString(payload, config.ambiente === 'sandbox' ? ['sandbox_init_point', 'init_point'] : ['init_point']),
-      payload,
-      details: { kind: method },
-    }
-    await this.repository.attachPaymentChargeToSale({ vendaId: sale.id, gateway: 'mercado_pago', externalId: result.externalId, chargeUrl: result.chargeUrl, status: result.status, payload, details: result.details })
-    return result
   }
 
   async createChargeForSale(input: {
@@ -124,6 +91,17 @@ export class CheckoutPaymentService {
       status: result.status,
       payload: result.payload ?? (result.error ? { error: result.error } : {}),
       details: result.details ?? null,
+    })
+    await this.queuePurchaseNotifications({
+      saleId: input.vendaId,
+      compradorNome: input.comprador.nome,
+      email: input.comprador.email,
+      telefone: input.comprador.telefone,
+      linkPagamento: result.chargeUrl ?? this.pickPaymentLink(result.details),
+      valor: input.valor,
+      descricao: input.descricao,
+      paymentStatus: result.status,
+      mocked: Boolean(result.mocked),
     })
     return result
   }
@@ -541,5 +519,64 @@ export class CheckoutPaymentService {
   private asObject(value: unknown): Record<string, unknown> {
     if (!value) return {}
     return typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+  }
+
+  private pickPaymentLink(details: Record<string, unknown> | null | undefined) {
+    if (!details) return null
+    const link = typeof details.ticket_url === 'string' ? details.ticket_url.trim() : ''
+    return link || null
+  }
+
+  private async queuePurchaseNotifications(input: {
+    saleId: string
+    compradorNome: string
+    email: string
+    telefone: string
+    linkPagamento: string | null
+    valor: number
+    descricao: string
+    paymentStatus: string
+    mocked: boolean
+  }) {
+    if (!this.outboxRepository) return
+    const link = input.linkPagamento
+    const body = [
+      `Olá, ${input.compradorNome}.`,
+      `Recebemos sua compra${input.mocked ? ' em ambiente de teste' : ''}: ${input.descricao}.`,
+      `Valor: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(input.valor)}.`,
+      link ? `Link de pagamento: ${link}` : 'Seu pagamento foi registrado e segue em processamento.',
+      `Status: ${input.paymentStatus}.`,
+    ].join(' ')
+    const payload = {
+      sale_id: input.saleId,
+      tipo: 'checkout_payment_link',
+      canal: 'checkout',
+      payment_status: input.paymentStatus,
+      mocked: input.mocked,
+      link_pagamento: link,
+    }
+
+    const jobs: Array<Promise<unknown>> = []
+    if (input.email.trim()) {
+      jobs.push(this.outboxRepository.create({
+        channel: 'email',
+        provider: 'email_smtp',
+        to_address: input.email.trim(),
+        subject: link ? 'Seu link de pagamento' : 'Sua compra foi recebida',
+        body,
+        payload,
+      }))
+    }
+    if (input.telefone.trim()) {
+      jobs.push(this.outboxRepository.create({
+        channel: 'whatsapp',
+        provider: 'evolution',
+        to_address: input.telefone.trim(),
+        body,
+        payload,
+      }))
+    }
+
+    await Promise.allSettled(jobs)
   }
 }

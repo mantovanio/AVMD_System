@@ -32,8 +32,9 @@ export class CommunicationOutboxRepository {
   async create(input: CreateOutboxInput): Promise<OutboxRow> {
     const payload = input.payload ?? {}
     const scheduledFor = input.scheduled_for ?? new Date().toISOString()
-    const renovacaoId = typeof payload.renovacao_id === 'string' ? payload.renovacao_id : null
     const tipo = typeof payload.tipo === 'string' ? payload.tipo : null
+    const saleId = typeof payload.sale_id === 'string' ? payload.sale_id : null
+    const renovacaoId = typeof payload.renovacao_id === 'string' ? payload.renovacao_id : null
     const followupRound = typeof payload.followup_round === 'number' ? payload.followup_round : null
 
     if (renovacaoId && tipo && tipo.startsWith('renovacao')) {
@@ -54,6 +55,23 @@ export class CommunicationOutboxRepository {
         isFollowup
           ? [input.channel, input.to_address, input.body, renovacaoId, tipo, followupRound]
           : [input.channel, input.to_address, input.body, renovacaoId, tipo],
+      )
+      if (existing.rows[0]) return existing.rows[0]
+    }
+
+    if (saleId && tipo === 'checkout_payment_link') {
+      const existing = await this.db.query<OutboxRow>(
+        `SELECT *
+           FROM communication_outbox
+          WHERE channel = $1
+            AND to_address = $2
+            AND payload->>'sale_id' = $3
+            AND payload->>'tipo' = $4
+            AND status IN ('pending', 'sent')
+            AND scheduled_for >= NOW() - INTERVAL '6 hours'
+          ORDER BY created_at DESC
+          LIMIT 1`,
+        [input.channel, input.to_address, saleId, tipo],
       )
       if (existing.rows[0]) return existing.rows[0]
     }
