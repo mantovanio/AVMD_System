@@ -983,12 +983,18 @@ export default function Comercial() {
   // ── product filter derivations (cascata tipo→validade) ──
   function productKind(cert: Certificado): string {
     const raw = (cert.tipo ?? '').trim().toLowerCase()
-    if (raw.includes('cnpj')) return 'e-CNPJ'
-    if (raw.includes('cpf')) return 'e-CPF'
-    if (raw.includes('nf-e') || raw.includes('nfe')) return 'NF-e'
-    if (raw.includes('ssl')) return 'SSL'
-    if (raw.includes('combo')) return 'Combo'
-    return cert.tipo?.trim() || 'Outros'
+    const modelo = resolveModelo(cert)
+    let base = ''
+    if (raw.includes('cnpj')) base = 'e-CNPJ'
+    else if (raw.includes('cpf')) base = 'e-CPF'
+    else if (raw.includes('nf-e') || raw.includes('nfe')) base = 'NF-e'
+    else if (raw.includes('ssl')) base = 'SSL'
+    else if (raw.includes('combo')) base = 'Combo'
+    else base = cert.tipo?.trim() || 'Outros'
+    if (modelo && !base.toLowerCase().includes(modelo.toLowerCase())) {
+      return `${base} ${modelo}`
+    }
+    return base || cert.tipo?.trim() || 'Outros'
   }
   function productValidity(cert: Certificado): string {
     return (cert.validade ?? '').trim() || 'Não definido'

@@ -14,6 +14,7 @@ export interface GuidedFieldProps {
   type?: string
   multiline?: boolean
   icon?: typeof Mail
+  rightElement?: ReactNode
   loading?: boolean
   loadingLabel?: string
   onFocus?: () => void
@@ -33,6 +34,7 @@ export function GuidedField({
   type = 'text',
   multiline = false,
   icon: Icon,
+  rightElement,
   loading = false,
   loadingLabel = 'Carregando',
   onFocus,
@@ -50,6 +52,7 @@ export function GuidedField({
     className: cn(
       'w-full rounded-[20px] border px-4 py-3.5 text-sm bg-white outline-none',
       Icon ? 'pl-11' : '',
+      rightElement ? 'pr-20' : '',
       error
         ? 'border-red-300 ring-2 ring-red-100'
         : focused
@@ -81,6 +84,11 @@ export function GuidedField({
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
             <Icon size={16} />
           </span>
+        )}
+        {rightElement && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            {rightElement}
+          </div>
         )}
         {multiline ? (
           <textarea {...shared} rows={4} />

@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils'
 import { getApiUrl } from '@/lib/api'
 import type { LojaMarketplace, TabelaPreco } from '@/types'
 import { loadMarketplaceCheckoutContext, lookupExistingCheckoutCustomer, submitMarketplaceCheckout, type AgendaAgent, type AgendaPoint, type AgendaSlot, type LojaItemRow, type PaymentOption, type PaymentRuntime } from '@/lib/checkout'
+import { maskEmail } from '@/lib/checkout'
 import {
   GuidedField,
   ChoiceCard,
@@ -249,10 +250,6 @@ function validateForm(form: FormState, itemSelecionado: LojaItemRow | null) {
   if (!form.comprador.email.trim()) errors['comprador.email'] = 'Informe o e-mail.'
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.comprador.email.trim())) errors['comprador.email'] = 'Informe um e-mail válido.'
   if (phoneDigits.length < 10) errors['comprador.telefone'] = 'Informe um telefone com WhatsApp válido.'
-  if (!form.acesso.senha.trim()) errors['acesso.senha'] = 'Crie uma senha para o portal do cliente.'
-  else if (form.acesso.senha.trim().length < 8) errors['acesso.senha'] = 'A senha precisa ter pelo menos 8 caracteres.'
-  if (!form.acesso.confirmar_senha.trim()) errors['acesso.confirmar_senha'] = 'Confirme a senha de acesso.'
-  else if (form.acesso.senha !== form.acesso.confirmar_senha) errors['acesso.confirmar_senha'] = 'As senhas informadas não conferem.'
   if (cepDigits.length !== 8) errors['comprador.cep'] = 'Informe um CEP válido.'
   if (!form.comprador.logradouro.trim()) errors['comprador.logradouro'] = 'Informe o endereço.'
   if (!form.comprador.numero.trim()) errors['comprador.numero'] = 'Informe o número.'
@@ -348,6 +345,12 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [voucherDesconto, setVoucherDesconto] = useState(0)
   const [voucherAplicando, setVoucherAplicando] = useState(false)
   const [voucherErro, setVoucherErro] = useState('')
+  const [recoveryDocumento, setRecoveryDocumento] = useState('')
+  const [recoveryEmailMasked, setRecoveryEmailMasked] = useState<string | null>(null)
+  const [recoveryLoading, setRecoveryLoading] = useState(false)
+  const [recoveryError, setRecoveryError] = useState('')
+  const [showAcessoSenha, setShowAcessoSenha] = useState(false)
+  const [showConfirmSenha, setShowConfirmSenha] = useState(false)
   const [mockCard, setMockCard] = useState({
     numero: '',
     nome: '',
@@ -704,6 +707,33 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     })
 
     return true
+  }
+
+  async function localizarEmailRecuperacao() {
+    const documento = onlyDigits(recoveryDocumento)
+    if (![11, 14].includes(documento.length)) {
+      setRecoveryEmailMasked(null)
+      setRecoveryError('Informe um CPF ou CNPJ válido.')
+      return
+    }
+
+    setRecoveryLoading(true)
+    setRecoveryError('')
+    try {
+      const cadastro = await lookupExistingCheckoutCustomer(documento)
+      const masked = maskEmail(cadastro?.email ?? null)
+      if (!masked) {
+        setRecoveryEmailMasked(null)
+        setRecoveryError('Não encontramos e-mail para este documento.')
+        return
+      }
+      setRecoveryEmailMasked(masked)
+    } catch {
+      setRecoveryEmailMasked(null)
+      setRecoveryError('Não foi possível consultar o cadastro agora.')
+    } finally {
+      setRecoveryLoading(false)
+    }
   }
 
   async function handleCepBlur() {
@@ -1262,32 +1292,81 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   />
                   <GuidedField
                     id="acesso.senha"
-                    label="Senha de acesso *"
+                    label="Senha de acesso"
                     value={form.acesso.senha}
                     onChange={value => setForm(prev => ({ ...prev, acesso: { ...prev.acesso, senha: value } }))}
-                    type="password"
-                    helper="Esta senha será usada pelo cliente para entrar e acompanhar pedido, pagamento e videoconferência."
+                    type={showAcessoSenha ? 'text' : 'password'}
+                    helper="Opcional na compra. Se deixar em branco, a confirmação seguirá por e-mail e a senha poderá ser criada depois no portal."
                     error={fieldErrors['acesso.senha']}
                     focused={focusedField === 'acesso.senha'}
                     highlight={nextFieldId === 'acesso.senha'}
                     icon={Lock}
+                    rightElement={(
+                      <button
+                        type="button"
+                        onClick={() => setShowAcessoSenha(prev => !prev)}
+                        className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
+                      >
+                        {showAcessoSenha ? 'Ocultar' : 'Ver'}
+                      </button>
+                    )}
                     onFocus={() => setFocusedField('acesso.senha')}
                     onBlurField={() => setFocusedField(null)}
                   />
                   <GuidedField
                     id="acesso.confirmar_senha"
-                    label="Confirmar senha *"
+                    label="Confirmar senha"
                     value={form.acesso.confirmar_senha}
                     onChange={value => setForm(prev => ({ ...prev, acesso: { ...prev.acesso, confirmar_senha: value } }))}
-                    type="password"
-                    helper="Repita a mesma senha para concluir a criação automática do acesso."
+                    type={showConfirmSenha ? 'text' : 'password'}
+                    helper="Repita a senha apenas se estiver criando o acesso agora."
                     error={fieldErrors['acesso.confirmar_senha']}
                     focused={focusedField === 'acesso.confirmar_senha'}
                     highlight={nextFieldId === 'acesso.confirmar_senha'}
                     icon={Lock}
+                    rightElement={(
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmSenha(prev => !prev)}
+                        className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
+                      >
+                        {showConfirmSenha ? 'Ocultar' : 'Ver'}
+                      </button>
+                    )}
                     onFocus={() => setFocusedField('acesso.confirmar_senha')}
                     onBlurField={() => setFocusedField(null)}
                   />
+                </div>
+
+                <div className="rounded-[24px] border border-emerald-200 bg-emerald-50/80 p-4">
+                  <p className="text-sm font-semibold text-emerald-900">Recuperar e-mail cadastrado</p>
+                  <p className="mt-1 text-xs text-emerald-800">
+                    Se o cliente não lembrar o e-mail, digite o CPF ou CNPJ do representante para localizar o cadastro.
+                  </p>
+                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+                    <input
+                      type="text"
+                      value={recoveryDocumento}
+                      onChange={event => setRecoveryDocumento(formatCpfCnpj(event.target.value))}
+                      placeholder="CPF ou CNPJ do representante"
+                      className="w-full rounded-[20px] border border-slate-200 bg-white px-4 py-3.5 text-sm outline-none focus:border-[#17346b] focus:ring-2 focus:ring-sky-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void localizarEmailRecuperacao()}
+                      disabled={recoveryLoading}
+                      className="rounded-[20px] bg-[#17346b] px-5 py-3.5 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {recoveryLoading ? 'Localizando...' : 'Ver e-mail'}
+                    </button>
+                  </div>
+                  {recoveryError && <p className="mt-2 text-sm text-red-600">{recoveryError}</p>}
+                  {recoveryEmailMasked && (
+                    <div className="mt-3 rounded-2xl border border-emerald-200 bg-white px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.18em] text-emerald-700 font-semibold">E-mail encontrado</p>
+                      <p className="mt-1 text-sm font-medium text-slate-900">{recoveryEmailMasked}</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">

@@ -246,3 +246,12 @@ function formatCpfCnpj(value: string) {
     .replace(/\.(\d{3})(\d)/, '.$1/$2')
     .replace(/(\d{4})(\d)/, '$1-$2')
 }
+
+export function maskEmail(email: string | null | undefined) {
+  const value = String(email ?? '').trim()
+  if (!value || !value.includes('@')) return null
+  const [local, domain] = value.split('@')
+  if (!local || !domain) return null
+  const visibleLocal = local.slice(0, Math.min(2, local.length))
+  return `${visibleLocal}${local.length > 2 ? '***' : '*'}@${domain}`
+}

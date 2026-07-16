@@ -54,7 +54,7 @@ export class ProfileRepository {
   }
 
   async createProfile(input: {
-    clerk_user_id: string
+    clerk_user_id?: string | null
     nome: string
     email: string
     perfil: string
@@ -70,7 +70,7 @@ export class ProfileRepository {
        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10)
        RETURNING *`,
       [
-        input.clerk_user_id,
+        input.clerk_user_id ?? null,
         input.nome,
         input.email,
         input.perfil,

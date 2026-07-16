@@ -31,6 +31,7 @@ export type CheckoutContextApiResponse = {
 export type CheckoutLookupCustomerApiResponse = {
   ok: boolean
   cadastro?: CheckoutExistingCustomerLookup | null
+  email_masked?: string | null
   error?: string
 }
 
@@ -73,7 +74,7 @@ export type CheckoutSubmitRequest = {
     } | null
   }
   acesso: {
-    senha: string
+    senha?: string | null
   }
   agendamento: {
     agente_registro_id: string

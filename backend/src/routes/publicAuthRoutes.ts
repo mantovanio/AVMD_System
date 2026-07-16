@@ -67,8 +67,10 @@ export async function handlePublicAuthRoutes(
 
   const existingProfile = await profileRepository.findByEmail(email)
   if (existingProfile) {
-    writeJson(res, 409, { ok: false, error: 'Este email já está cadastrado.' }, corsOrigin)
-    return true
+    if (existingProfile.clerk_user_id) {
+      writeJson(res, 409, { ok: false, error: 'Este email já está cadastrado.' }, corsOrigin)
+      return true
+    }
   }
 
   const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
@@ -87,15 +89,27 @@ export async function handlePublicAuthRoutes(
       lastName,
     })
 
-    await profileRepository.createProfile({
-      clerk_user_id: clerkUser.id,
-      nome,
-      email,
-      perfil: 'usuario',
-      tipo_vinculo: 'usuario_comum',
-      permissoes: [],
-      status: 'inativo',
-    })
+    if (existingProfile) {
+      await profileRepository.update(existingProfile.id, {
+        clerk_user_id: clerkUser.id,
+        nome,
+        email,
+        perfil: existingProfile.perfil || 'usuario',
+        tipo_vinculo: existingProfile.tipo_vinculo || 'usuario_comum',
+        permissoes: existingProfile.permissoes ?? [],
+        status: 'ativo',
+      })
+    } else {
+      await profileRepository.createProfile({
+        clerk_user_id: clerkUser.id,
+        nome,
+        email,
+        perfil: 'usuario',
+        tipo_vinculo: 'usuario_comum',
+        permissoes: [],
+        status: 'inativo',
+      })
+    }
 
     const emailMessage = buildPendingApprovalEmail(nome)
     await outboxRepository.create({

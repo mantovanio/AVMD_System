@@ -29,7 +29,7 @@ export class CheckoutService {
   async handleContext(body: CheckoutContextApiRequest): Promise<CheckoutContextApiResponse | CheckoutLookupCustomerApiResponse> {
     if (body.action === 'lookup_customer') {
       const cadastro = await this.repository.findLatestActiveCustomerByDocument(body.documento)
-      return { ok: true, cadastro }
+      return { ok: true, cadastro, email_masked: maskEmail(cadastro?.email ?? null) }
     }
 
     const loja = await this.repository.findMarketplaceStore(body.slug)
@@ -200,8 +200,6 @@ export class CheckoutService {
     if (!isValidEmail(body.titular.email)) return 'Email do titular invalido.'
     if (!isValidPhone(body.titular.telefone)) return 'Telefone do titular invalido.'
     if (!body.pagamento.forma_pagamento_id.trim()) return 'Forma de pagamento obrigatoria.'
-    if (!body.acesso?.senha?.trim()) return 'Defina a senha de acesso do cliente.'
-    if (body.acesso.senha.trim().length < 8) return 'A senha de acesso precisa ter pelo menos 8 caracteres.'
     if (!body.fiscal.logradouro.trim()) return 'Logradouro obrigatorio.'
     if (!body.fiscal.numero.trim()) return 'Numero obrigatorio.'
     if (!body.fiscal.bairro.trim()) return 'Bairro obrigatorio.'
@@ -227,15 +225,13 @@ export class CheckoutService {
 
     const email = String(body.comprador.email ?? '').trim().toLowerCase()
     const nome = String(body.comprador.nome ?? '').trim()
-    const senha = String(body.acesso?.senha ?? '')
+    const senha = String(body.acesso?.senha ?? '').trim()
     const documento = onlyDigits(body.comprador.cpf_cnpj)
     const telefone = onlyDigits(body.comprador.telefone)
     const cidade = String(body.fiscal.cidade ?? '').trim() || null
 
     const existingProfile = await this.profileRepository.findByEmail(email)
-    const clerkUserId = existingProfile?.clerk_user_id
-      ? existingProfile.clerk_user_id
-      : await this.findOrCreateClerkUser({ email, nome, senha })
+    const clerkUserId = existingProfile?.clerk_user_id || (senha ? await this.findOrCreateClerkUser({ email, nome, senha }) : null)
 
     if (existingProfile) {
       const canConvertToPortal = existingProfile.tipo_vinculo === 'cliente_portal' || (existingProfile.status === 'inativo' && !(existingProfile.permissoes?.length ?? 0))
@@ -261,6 +257,25 @@ export class CheckoutService {
             status: 'existing',
             message: 'Seu acesso ja existia. Depois da compra, entre com o mesmo e-mail e senha para acompanhar o pedido.',
           }
+    }
+
+    if (!senha) {
+      await this.profileRepository.createProfile({
+        nome,
+        email,
+        perfil: 'usuario',
+        tipo_vinculo: 'cliente_portal',
+        permissoes: ['portal'],
+        status: 'ativo',
+        documento,
+        telefone,
+        cidade,
+      })
+
+      return {
+        status: 'created',
+        message: 'Seu cadastro foi registrado sem senha. Quando quiser consultar sua compra, entre pelo portal e crie a senha com validação por e-mail.',
+      }
     }
 
     await this.profileRepository.createProfile({
@@ -373,4 +388,13 @@ function onlyDigits(value: string) {
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+}
+
+function maskEmail(email: string | null) {
+  const value = String(email ?? '').trim()
+  if (!value || !value.includes('@')) return null
+  const [local, domain] = value.split('@')
+  if (!local || !domain) return null
+  const visibleLocal = local.slice(0, Math.min(2, local.length))
+  return `${visibleLocal}${local.length > 2 ? '***' : '*'}@${domain}`
 }
