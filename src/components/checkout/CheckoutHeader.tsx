@@ -4,15 +4,17 @@ import type { PaymentRuntime } from '@/lib/checkout'
 interface CheckoutHeaderProps {
   lojaNome: string
   paymentRuntime: PaymentRuntime
+  logoUrl?: string | null
 }
 
-export function CheckoutHeader({ lojaNome, paymentRuntime }: CheckoutHeaderProps) {
+export function CheckoutHeader({ lojaNome, paymentRuntime, logoUrl }: CheckoutHeaderProps) {
+  const src = logoUrl?.trim() || '/favicon.svg'
   return (
     <header className="border-b border-slate-200/80 bg-white/95 backdrop-blur-md sticky top-0 z-30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-14 h-14 rounded-2xl border border-slate-200 bg-white flex items-center justify-center shadow-sm p-2">
-            <img src="/favicon.svg" alt="CertiID" className="w-full h-full object-contain" />
+          <div className="w-14 h-14 rounded-2xl border border-slate-200 bg-white flex items-center justify-center shadow-sm p-2 overflow-hidden">
+            <img src={src} alt="CertiID" className="w-full h-full object-contain" />
           </div>
           <div>
             <p className="text-[11px] uppercase tracking-[0.24em] text-[#ea7b18] font-semibold">Checkout por link</p>

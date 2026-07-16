@@ -258,6 +258,9 @@ function AppContent() {
               className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
               <Menu size={18} />
             </button>
+            {agencyConfig.logo_interna_url?.trim() ? (
+              <img src={agencyConfig.logo_interna_url} alt={agencyConfig.nome_agencia} className="h-7 w-auto object-contain" />
+            ) : null}
             <span className="font-semibold text-blue-600 dark:text-blue-400">
               {PAGE_LABELS[activePage]}
             </span>

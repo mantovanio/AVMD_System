@@ -22,6 +22,7 @@ import { buscarCep } from '@/lib/cep'
 import { buscarCnpj } from '@/lib/cnpj'
 import { cn } from '@/lib/utils'
 import { getApiUrl } from '@/lib/api'
+import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig, type AgencyConfig } from '@/lib/agencyConfig'
 import type { LojaMarketplace, TabelaPreco } from '@/types'
 import { loadMarketplaceCheckoutContext, lookupExistingCheckoutCustomer, submitMarketplaceCheckout, type AgendaAgent, type AgendaPoint, type AgendaSlot, type LojaItemRow, type PaymentOption, type PaymentRuntime } from '@/lib/checkout'
 import { maskEmail } from '@/lib/checkout'
@@ -327,6 +328,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     aviso_checkout: 'O atendimento será liberado após a confirmação do pagamento.',
   })
   const [slots, setSlots] = useState<AgendaSlot[]>([])
+  const [agencyConfig, setAgencyConfig] = useState<AgencyConfig>(DEFAULT_AGENCY_CONFIG)
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [focusedField, setFocusedField] = useState<string | null>(null)
@@ -371,8 +373,13 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
       setError(null)
 
       try {
-        const context = await loadMarketplaceCheckoutContext(slug)
+        const [context, agencyResult] = await Promise.all([
+          loadMarketplaceCheckoutContext(slug),
+          fetchAgencyConfig(),
+        ])
         if (!active) return
+
+        if (agencyResult.data) setAgencyConfig(agencyResult.data)
 
         const produtosAtivos = context.produtos.filter(item => item.certificados ? item.certificados.ativo : true)
         const initialItemId = resolveInitialItemId(produtosAtivos, context.loja)
@@ -1019,7 +1026,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f6f8fc_0%,#ffffff_42%,#edf3fb_100%)] text-slate-900 pb-28 lg:pb-10">
-      <CheckoutHeader lojaNome={loja.nome_loja} paymentRuntime={paymentRuntime} />
+      <CheckoutHeader lojaNome={loja.nome_loja} paymentRuntime={paymentRuntime} logoUrl={agencyConfig.logo_interna_url || agencyConfig.logo_url} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.55fr)_340px] gap-6 items-start">
