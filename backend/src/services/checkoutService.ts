@@ -156,6 +156,19 @@ export class CheckoutService {
       card: body.pagamento.card ?? null,
     }))
 
+    if (!charge.ok) {
+      return {
+        ok: false,
+        error: charge.error || 'O pagamento não foi gerado pelo gateway.',
+        venda_id: venda.id,
+        protocolo_numero: venda.protocolo_numero,
+        payment_status: charge.status,
+        payment_details: charge.details as CheckoutSubmitResponse['payment_details'],
+        access_status: access.status,
+        access_message: access.message,
+      }
+    }
+
     const chargeLink = charge.chargeUrl ?? null
     await this.runSubmitStage('notificacoes', () => this.queuePurchaseNotifications({
       saleId: venda.id,

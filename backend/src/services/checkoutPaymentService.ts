@@ -94,17 +94,19 @@ export class CheckoutPaymentService {
       payload: result.payload ?? (result.error ? { error: result.error } : {}),
       details: result.details ?? null,
     })
-    await this.queuePurchaseNotifications({
-      saleId: input.vendaId,
-      compradorNome: input.comprador.nome,
-      email: input.comprador.email,
-      telefone: input.comprador.telefone,
-      linkPagamento: result.chargeUrl ?? this.pickPaymentLink(result.details),
-      valor: input.valor,
-      descricao: input.descricao,
-      paymentStatus: result.status,
-      mocked: Boolean(result.mocked),
-    })
+    if (result.ok) {
+      await this.queuePurchaseNotifications({
+        saleId: input.vendaId,
+        compradorNome: input.comprador.nome,
+        email: input.comprador.email,
+        telefone: input.comprador.telefone,
+        linkPagamento: result.chargeUrl ?? this.pickPaymentLink(result.details),
+        valor: input.valor,
+        descricao: input.descricao,
+        paymentStatus: result.status,
+        mocked: Boolean(result.mocked),
+      })
+    }
     return result
   }
 
@@ -236,7 +238,11 @@ export class CheckoutPaymentService {
     if (isPix) payment.expiration_time = 'P1D'
     if (isBoleto) payment.expiration_time = 'P3D'
     const payer: Record<string, unknown> = {
-      email: input.comprador.email,
+      // O Mercado Pago aceita somente este comprador nos testes de boleto.
+      // O e-mail real continua sendo usado para as notificações da CertiID.
+      email: config.ambiente === 'sandbox' && isBoleto
+        ? 'test_user_br@testuser.com'
+        : input.comprador.email,
       first_name: firstName,
       last_name: lastName,
       identification: {
@@ -274,7 +280,9 @@ export class CheckoutPaymentService {
       body: JSON.stringify(body),
     })
     const payload = await response.json().catch(() => ({})) as Record<string, unknown>
-    if (!response.ok) throw new Error(String(payload.message || payload.error || `Mercado Pago respondeu ${response.status}`))
+    if (!response.ok) {
+      throw new Error(this.describeMercadoPagoError(payload, response.status))
+    }
     const transaction = this.firstPayment(payload)
     const paymentMethodResponse = this.asObject(transaction.payment_method)
     const status = this.normalizeOrderStatus(payload, transaction)
@@ -539,6 +547,22 @@ export class CheckoutPaymentService {
     if (!details) return null
     const link = typeof details.ticket_url === 'string' ? details.ticket_url.trim() : ''
     return link || null
+  }
+
+  private describeMercadoPagoError(payload: Record<string, unknown>, status: number) {
+    const message = this.pickString(payload, ['message', 'error', 'status_detail'])
+    const causes = Array.isArray(payload.cause)
+      ? payload.cause
+          .map(item => {
+            const cause = this.asObject(item)
+            return this.pickString(cause, ['description', 'message', 'code'])
+          })
+          .filter(Boolean)
+      : []
+    const detail = [message, ...causes].filter(Boolean).join(' | ')
+    return detail
+      ? `Mercado Pago recusou a cobrança (${status}): ${detail}`
+      : `Mercado Pago recusou a cobrança (${status}).`
   }
 
   private async queuePurchaseNotifications(input: {

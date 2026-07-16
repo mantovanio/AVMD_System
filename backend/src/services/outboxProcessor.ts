@@ -11,7 +11,7 @@ export type OutboxProcessorResult = {
 
 function pickInstance(config: BackendConfig, payload: Record<string, unknown>) {
   const canal = String(payload.canal ?? 'atendimento').trim()
-  return canal === 'renovacao'
+  return canal === 'renovacao' || canal === 'checkout'
     ? config.evolutionCertiid
     : config.evolutionAtendimento
 }

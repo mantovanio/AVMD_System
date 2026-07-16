@@ -237,6 +237,8 @@ test('infere boleto mesmo quando o cadastro da forma de pagamento usa nome descr
     assert.match(String(url), /\/v1\/orders$/)
     const body = JSON.parse(String(init?.body))
     assert.equal(body.transactions.payments[0].payment_method.id, 'boleto')
+    assert.equal(body.payer.email, 'test_user_br@testuser.com')
+    assert.equal(body.payer.address.zip_code, '01001000')
     return new Response(JSON.stringify({
       id: 'ORD-BOLETO-1',
       status: 'action_required',
