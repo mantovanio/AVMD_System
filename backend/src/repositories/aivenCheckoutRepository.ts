@@ -319,7 +319,10 @@ export class AivenCheckoutRepository implements CheckoutRepository {
              logradouro, numero, complemento, bairro, cidade, uf
       from cadastros_base
       where status = 'ativo'
-        and cpf_cnpj in ($1, $2)
+        and (
+          cpf_cnpj = $1::text
+          or cpf_cnpj = $2::text
+        )
       order by updated_at desc
       limit 1
     `
@@ -736,7 +739,10 @@ export class AivenCheckoutRepository implements CheckoutRepository {
              logradouro, numero, complemento, bairro, cidade, uf
       from cadastros_base
       where status = 'ativo'
-        and cpf_cnpj in ($1, $2)
+        and (
+          cpf_cnpj = $1::text
+          or cpf_cnpj = $2::text
+        )
       order by updated_at desc
       limit 1
     `

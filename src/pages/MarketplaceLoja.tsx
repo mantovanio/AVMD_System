@@ -612,6 +612,15 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     { label: 'Agendamento', done: agendamentoDone, icon: CalendarDays },
   ]
 
+  const checkoutStep = useMemo(() => {
+    if (!itemSelecionado || !productConfirmed) return 1
+    if (!faturamentoDone) return 2
+    if (!titularDone) return 3
+    if (!pagamentoDone) return 4
+    if (!agendamentoDone) return 5
+    return 6
+  }, [agendamentoDone, faturamentoDone, itemSelecionado, pagamentoDone, productConfirmed, titularDone])
+
   const canShowFaturamento = !!itemSelecionado && productConfirmed
   const canShowTitular = canShowFaturamento && faturamentoDone
   const canShowPagamento = canShowTitular && titularDone
@@ -1048,6 +1057,19 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   )
                 })}
               </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  { n: 1, label: 'Tipo' },
+                  { n: 2, label: 'Classe' },
+                  { n: 3, label: 'Prazo' },
+                  { n: 4, label: 'Produto final' },
+                ].map(step => (
+                  <div key={step.n} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-center">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Etapa {step.n}</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-800">{step.label}</div>
+                  </div>
+                ))}
+              </div>
               <details className="mt-5 rounded-2xl border border-sky-200 bg-sky-50/70 px-4 py-3">
                 <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-[#17346b]">
                   <CircleHelp size={17} /> Como funciona e como acompanhar depois
@@ -1144,7 +1166,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
               )}
             </SectionCard>
 
-            {canShowFaturamento && (
+            {checkoutStep >= 2 && canShowFaturamento && (
             <div
               ref={formStartRef}
               className="space-y-6"
@@ -1167,6 +1189,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
               </ul>
             </div>
 
+            {checkoutStep === 2 && (
             <SectionCard
               title="Dados do faturamento"
               description="Preencha os dados de quem vai pagar e receber a nota fiscal. Se for pessoa jurídica, o certificado sempre será emitido para uma pessoa física como titular."
@@ -1493,8 +1516,9 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                 </div>
               </div>
             </SectionCard>
+            )}
 
-            {canShowTitular && (
+            {checkoutStep === 3 && canShowTitular && (
             <SectionCard
               title="Dados do titular do certificado"
               description="O titular é a pessoa física que vai receber e usar o certificado digital. Pode ser você mesmo(a) ou outra pessoa."
@@ -1650,7 +1674,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
             </SectionCard>
             )}
 
-            {canShowPagamento && (
+            {checkoutStep === 4 && canShowPagamento && (
             <SectionCard
               title="Forma de pagamento"
               description="Escolha como você vai pagar. Depois da compensação, liberamos o atendimento da validação."
@@ -1835,7 +1859,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
             </SectionCard>
             )}
 
-            {canShowAgendamento && (
+            {checkoutStep === 5 && canShowAgendamento && (
             <SectionCard
               title="Agendamento da validação"
               description="Reserve um horário para validar seus documentos. A validação só acontece depois do pagamento, mas você já pode deixar agendado."
@@ -1908,7 +1932,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
             </SectionCard>
             )}
 
-            {canShowAvisos && (
+            {checkoutStep >= 5 && canShowAvisos && (
             <SectionCard
               title="Avisos importantes"
               description="Revise estes avisos antes de concluir a compra."
