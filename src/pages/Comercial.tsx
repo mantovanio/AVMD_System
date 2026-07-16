@@ -482,8 +482,8 @@ const WIZARD_STEPS = [
   { key: 'tipo_venda', label: 'Tipo de Venda', icon: ShoppingBag },
   { key: 'cliente',    label: 'Cliente',        icon: UserCheck },
   { key: 'parceiro',   label: 'Parceiro',       icon: TrendingUp },
-  { key: 'emissao',    label: 'Emissão / PA',   icon: MapPin },
   { key: 'produto',    label: 'Produto',        icon: Tag },
+  { key: 'emissao',    label: 'Validação / PA', icon: MapPin },
   { key: 'pagamento',  label: 'Pagamento',      icon: CreditCard },
 ] as const
 
@@ -787,7 +787,6 @@ export default function Comercial() {
   // ── wizard step state ─────────────────────────────────────────
   const [currentFormStep, setCurrentFormStep]     = useState(0)
   const [produtoKindFilter, setProdutoKindFilter] = useState('')
-  const [produtoClassFilter, setProdutoClassFilter] = useState('')
   const [produtoEmissaoFilter, setProdutoEmissaoFilter] = useState('')
   const [produtoValidadeFilter, setProdutoValidadeFilter] = useState('')
 
@@ -897,7 +896,6 @@ export default function Comercial() {
   )
 
   const tabelasDisponiveisVenda = useMemo(() => {
-    const tipoEmissaoSelecionado = normalizeTipoEmissao(formV2.tipo_emissao)
     const tabelasBase = tabelasAtivas.filter(t =>
       tabelaItens.some(item => item.tabela_preco_id === t.id && item.ativo)
     )
@@ -909,8 +907,7 @@ export default function Comercial() {
               agentesTabelaPreco
                 .filter(item =>
                   item.ativo &&
-                  item.agente_registro_id === currentUserId &&
-                  (!formV2.ponto_atendimento_id || item.ponto_atendimento_id === formV2.ponto_atendimento_id)
+                  item.agente_registro_id === currentUserId
                 )
                 .map(item => item.tabela_preco_id)
             )
@@ -942,21 +939,11 @@ export default function Comercial() {
         if (!parceiroCompativel) return false
       }
 
-      if (!tipoEmissaoSelecionado) return true
-      return tabelaItens.some(item => {
-        if (item.tabela_preco_id !== tabela.id || !item.ativo) return false
-        const cert = certificadoById.get(item.certificado_id)
-        if (!cert) return false
-        const tipoPadrao = normalizeTipoEmissao(cert.tipo_emissao_padrao)
-        return !tipoPadrao || tipoPadrao === tipoEmissaoSelecionado
-      })
+      return true
     })
   }, [
     agentesTabelaPreco,
-    certificadoById,
     currentUserId,
-    formV2.ponto_atendimento_id,
-    formV2.tipo_emissao,
     parceiroSelecionadoVenda,
     tabelaParticipantes,
     profile?.perfil,
@@ -986,15 +973,7 @@ export default function Comercial() {
     }).filter(Boolean) as { item: TabelaPrecoItem; cert: Certificado }[],
     [itensTabela, certificadoById]
   )
-  const certsDaTabela = useMemo(() => {
-    const tipoEmissaoSelecionado = normalizeTipoEmissao(formV2.tipo_emissao)
-    return certsDaTabelaBruta.filter(({ cert }) => {
-      const tipoPadrao = normalizeTipoEmissao(cert.tipo_emissao_padrao)
-      if (!tipoEmissaoSelecionado) return true
-      if (!tipoPadrao) return true
-      return tipoPadrao === tipoEmissaoSelecionado
-    })
-  }, [certsDaTabelaBruta, formV2.tipo_emissao])
+  const certsDaTabela = certsDaTabelaBruta
   const PRODUCT_KIND_ORDER = ['e-CPF', 'e-CNPJ', 'Nuvem', 'SafeID', 'NF-e', 'SSL', 'Combo', 'Outros']
   const PRODUCT_CLASS_ORDER = ['SafeID', 'A3', 'A1']
   const sortByPriority = (values: string[], priority: string[]) =>
@@ -1019,9 +998,6 @@ export default function Comercial() {
     else if (raw.includes('ssl')) base = 'SSL'
     else if (raw.includes('combo')) base = 'Combo'
     else base = cert.tipo?.trim() || 'Outros'
-    if (modelo && !base.toLowerCase().includes(modelo.toLowerCase())) {
-      return `${base} ${modelo}`
-    }
     return base || cert.tipo?.trim() || 'Outros'
   }
   function productClass(cert: Certificado): string {
@@ -1053,35 +1029,33 @@ export default function Comercial() {
     () => certsDaTabela.filter(c => !produtoKindFilter || productKind(c.cert) === produtoKindFilter),
     [produtoKindFilter, certsDaTabela]
   )
-  const produtoClassOptions = useMemo(
+  const produtoEmissaoOptions = useMemo(
     () => sortByPriority(produtosByKind.map(c => productClass(c.cert)), PRODUCT_CLASS_ORDER),
     [produtosByKind]
   )
-  const produtosByClass = useMemo(
-    () => produtosByKind.filter(c => !produtoClassFilter || productClass(c.cert) === produtoClassFilter),
-    [produtoClassFilter, produtosByKind]
+  const produtosByEmissao = useMemo(
+    () => produtosByKind.filter(c => !produtoEmissaoFilter || productClass(c.cert) === produtoEmissaoFilter),
+    [produtoEmissaoFilter, produtosByKind]
   )
   const produtoValidadeOptions = useMemo(
     () => sortByPriority(
-      produtosByClass.map(c => productValidity(c.cert)),
+      produtosByEmissao.map(c => productValidity(c.cert)),
       ['1 mês', '3 meses', '6 meses', '12 meses', '24 meses', '36 meses', '48 meses', '60 meses']
     ),
-    [produtosByClass]
+    [produtosByEmissao]
   )
   const produtosFiltrados = useMemo(
-    () => produtosByClass.filter(c => !produtoValidadeFilter || productValidity(c.cert) === produtoValidadeFilter),
-    [produtoValidadeFilter, produtosByClass]
+    () => produtosByEmissao.filter(c => !produtoValidadeFilter || productValidity(c.cert) === produtoValidadeFilter),
+    [produtoValidadeFilter, produtosByEmissao]
   )
 
   const motivoSemCertificados = useMemo(() => {
-    if (!formV2.tipo_emissao) return 'Selecione primeiro o tipo de emissão.'
-    if (!formV2.ponto_atendimento_id) return 'Selecione primeiro o ponto de atendimento.'
     if (!formV2.tabela_preco_id) return 'Selecione primeiro uma tabela de venda.'
     if (itensTabelaTodos.length === 0) return 'Esta tabela ainda não possui produtos vinculados em Produtos e Preços.'
     if (itensTabela.length === 0) return 'Esta tabela possui produtos vinculados, mas todos estão inativos.'
-    if (certsDaTabela.length === 0) return `Nenhum certificado desta tabela está compatível com o tipo de emissão "${capitalize(formV2.tipo_emissao)}".`
+    if (certsDaTabela.length === 0) return 'Nenhum certificado ativo foi encontrado nesta tabela.'
     return null
-  }, [formV2.ponto_atendimento_id, formV2.tabela_preco_id, formV2.tipo_emissao, itensTabelaTodos.length, itensTabela.length, certsDaTabela.length])
+  }, [formV2.tabela_preco_id, itensTabelaTodos.length, itensTabela.length, certsDaTabela.length])
 
   const itemTabelaSelecionado = useMemo(
     () => itensTabela.find(item => item.id === formV2.tabela_preco_item_id) ?? null,
@@ -1128,10 +1102,10 @@ export default function Comercial() {
     const tipoVendaOk = !!formV2.tipo_venda
     const clienteOk = tipoVendaOk && !!formV2.cadastro_base_id
     const parceiroOk = clienteOk && (contadorStepHandled || !!formV2.contador_id)
-    const emissaoOk = parceiroOk && !!formV2.tipo_emissao
+    const produtoOk = parceiroOk && !!formV2.tabela_preco_id && !!formV2.tabela_preco_item_id && !!formV2.certificado_id
+    const emissaoOk = produtoOk && !!formV2.tipo_emissao
     const pontoOk = emissaoOk && !!formV2.ponto_atendimento_id
-    const produtoOk = pontoOk && !!formV2.tabela_preco_id && !!formV2.tabela_preco_item_id && !!formV2.certificado_id
-    const pagamentoOk = produtoOk
+    const pagamentoOk = pontoOk
       && !!formV2.forma_pagamento
       && !!formV2.data_vencimento
       && formV2.valor_venda > 0
@@ -1159,10 +1133,9 @@ export default function Comercial() {
       { key: 'tipo_venda', label: '1. Tipo de venda', done: vendaStepStatus.tipoVendaOk },
       { key: 'cliente', label: '2. Cliente', done: vendaStepStatus.clienteOk },
       { key: 'parceiro', label: '3. Parceiro vendedor', done: vendaStepStatus.parceiroOk },
-      { key: 'emissao', label: '4. Tipo de emissão', done: vendaStepStatus.emissaoOk },
-      { key: 'ponto', label: '5. Ponto de atendimento', done: vendaStepStatus.pontoOk },
-      { key: 'produto', label: '6. Tabela e produto', done: vendaStepStatus.produtoOk },
-      { key: 'pagamento', label: '7. Pagamento e desconto', done: vendaStepStatus.pagamentoOk },
+      { key: 'produto', label: '4. Produto, emissão e validade', done: vendaStepStatus.produtoOk },
+      { key: 'emissao', label: '5. Validação e ponto de atendimento', done: vendaStepStatus.emissaoOk && vendaStepStatus.pontoOk },
+      { key: 'pagamento', label: '6. Pagamento e desconto', done: vendaStepStatus.pagamentoOk },
     ] as const
     const currentStepIndex = steps.findIndex(step => !step.done)
     return {
@@ -1179,9 +1152,8 @@ export default function Comercial() {
       tipo_venda: 'Selecione o tipo de venda para começar.',
       cliente: 'Informe o tipo de venda e depois busque ou cadastre um cliente.',
       parceiro: 'Selecione ou dispense o parceiro vendedor antes de continuar. Esta etapa é obrigatória para definir as regras de comissão.',
-      emissao: 'Confirme o parceiro vendedor e depois selecione o tipo de emissão (Balcão, Ecommerce etc.).',
-      ponto: 'Selecione o tipo de emissão e depois escolha o ponto de atendimento.',
-      produto: 'Defina o ponto de atendimento, escolha uma tabela de preço e selecione um produto.',
+      produto: 'Escolha a tabela e selecione na ordem: produto, emissão e validade.',
+      emissao: 'Com o produto confirmado, defina a modalidade de validação e o ponto de atendimento.',
       pagamento: 'Preencha valor final, forma de pagamento, vencimento e cupom/voucher. Confira o limite de desconto da tabela.',
     }
     return { step: current.key, mensagem: msgs[current.key] ?? 'Preencha os campos obrigatórios para avançar.' }
@@ -4763,28 +4735,24 @@ export default function Comercial() {
                     </div>
                   )}
 
-                  {/* STEP 3: Emissão + Ponto */}
-                  {currentFormStep === 3 && (
+                  {/* STEP 4: Validação + Ponto */}
+                  {currentFormStep === 4 && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
                       <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-                        <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Emissão e Ponto de Atendimento</h4>
+                        <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Validação e Ponto de Atendimento</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <SelectInput label="Tipo de Emissão *" value={formV2.tipo_emissao}
+                          <SelectInput label="Modalidade de Validação *" value={formV2.tipo_emissao}
                             onChange={v => setFormV2(p => ({
-                              ...p, tipo_emissao: v,
-                              tabela_preco_id: '', tabela_preco_item_id: '', certificado_id: '',
-                              valor_venda: 0, desconto: 0, voucher_codigo: '',
+                              ...p,
+                              tipo_emissao: v,
+                              ponto_atendimento_id: '',
                             }))}
-                            options={[{ value: '', label: 'Selecione o tipo de emissão' }, ...TIPO_EMISSAO_OPTIONS]} />
+                            options={[{ value: '', label: 'Selecione a modalidade' }, ...TIPO_EMISSAO_OPTIONS]} />
                           <SelectInput label="Ponto de Atendimento *" value={formV2.ponto_atendimento_id}
-                            onChange={v => setFormV2(p => ({
-                              ...p, ponto_atendimento_id: v,
-                              tabela_preco_id: '', tabela_preco_item_id: '', certificado_id: '',
-                              valor_venda: 0, desconto: 0, voucher_codigo: '',
-                            }))}
+                            onChange={v => setFormV2(p => ({ ...p, ponto_atendimento_id: v }))}
                             disabled={!vendaStepStatus.emissaoOk}
                             options={[
-                              { value: '', label: !vendaStepStatus.emissaoOk ? 'Selecione a emissão primeiro' : pontosAtivos.length ? 'Selecione o ponto' : 'Cadastre um ponto primeiro' },
+                              { value: '', label: !vendaStepStatus.emissaoOk ? 'Selecione a modalidade primeiro' : pontosAtivos.length ? 'Selecione o ponto' : 'Cadastre um ponto primeiro' },
                               ...pontosAtivos.map(ponto => ({
                                 value: ponto.id,
                                 label: [ponto.nome, ponto.cidade, ponto.uf].filter(Boolean).join(' · '),
@@ -4795,8 +4763,8 @@ export default function Comercial() {
                     </div>
                   )}
 
-                  {/* STEP 4: Produto (grid de cards com filtros) */}
-                  {currentFormStep === 4 && (
+                  {/* STEP 3: Produto (grid de cards com filtros) */}
+                  {currentFormStep === 3 && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
                       <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
                         <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Tabela de Preço e Produto</h4>
@@ -4820,10 +4788,10 @@ export default function Comercial() {
                             <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
                               <div>
                                 <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Selecione na ordem certa</h4>
-                                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Tipo, depois classe, depois prazo e por fim o produto final.</p>
+                                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Produto, depois emissão, depois validade e por fim o produto final.</p>
                               </div>
                               <div className="flex flex-wrap gap-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">
-                                {['Tipo', 'Classe', 'Prazo', 'Produto final'].map((etapa, idx) => (
+                                {['Produto', 'Emissão', 'Validade', 'Produto final'].map((etapa, idx) => (
                                   <span key={etapa} className={cn(
                                     'rounded-full border px-3 py-1',
                                     idx === 0 ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300' : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900'
@@ -4835,43 +4803,43 @@ export default function Comercial() {
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <label className="flex flex-col gap-1">
-                                <span className="text-xs text-gray-500 font-medium">Tipo *</span>
+                                <span className="text-xs text-gray-500 font-medium">Produto *</span>
                                 <select value={produtoKindFilter}
                                   onChange={e => {
                                     setProdutoKindFilter(e.target.value)
-                                    setProdutoClassFilter('')
+                                    setProdutoEmissaoFilter('')
                                     setProdutoValidadeFilter('')
                                     setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
                                   }}
                                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                  <option value="">Todos</option>
+                                  <option value="">Selecione</option>
                                   {produtoKindOptions.map(k => <option key={k} value={k}>{k}</option>)}
                                 </select>
                               </label>
                               <label className="flex flex-col gap-1">
-                                <span className="text-xs text-gray-500 font-medium">Classe *</span>
-                                <select value={produtoClassFilter}
+                                <span className="text-xs text-gray-500 font-medium">Emissão *</span>
+                                <select value={produtoEmissaoFilter}
                                   onChange={e => {
-                                    setProdutoClassFilter(e.target.value)
+                                    setProdutoEmissaoFilter(e.target.value)
                                     setProdutoValidadeFilter('')
                                     setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
                                   }}
                                   disabled={!produtoKindFilter}
                                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60">
-                                  <option value="">{!produtoKindFilter ? 'Selecione o tipo' : 'Todas'}</option>
-                                  {produtoClassOptions.map(v => <option key={v} value={v}>{v}</option>)}
+                                  <option value="">{!produtoKindFilter ? 'Selecione o produto' : 'Selecione'}</option>
+                                  {produtoEmissaoOptions.map(v => <option key={v} value={v}>{v}</option>)}
                                 </select>
                               </label>
                               <label className="flex flex-col gap-1">
-                                <span className="text-xs text-gray-500 font-medium">Prazo *</span>
+                                <span className="text-xs text-gray-500 font-medium">Validade *</span>
                                 <select value={produtoValidadeFilter}
                                   onChange={e => {
                                     setProdutoValidadeFilter(e.target.value)
                                     setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
                                   }}
-                                  disabled={!produtoClassFilter}
+                                  disabled={!produtoEmissaoFilter}
                                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60">
-                                  <option value="">{!produtoClassFilter ? 'Selecione a classe' : 'Todas'}</option>
+                                  <option value="">{!produtoEmissaoFilter ? 'Selecione a emissão' : 'Selecione'}</option>
                                   {produtoValidadeOptions.map(v => <option key={v} value={v}>{v}</option>)}
                                 </select>
                               </label>
