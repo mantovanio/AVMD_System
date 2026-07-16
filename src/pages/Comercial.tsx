@@ -5355,7 +5355,14 @@ export default function Comercial() {
             </div>
 
             {showFormA && profile?.perfil !== 'agente_registro' && (
-              <Panel title="Novo Agendamento" onClose={() => setShowFormA(false)}>
+              <FlowModal
+                open
+                title="Novo Agendamento"
+                subtitle="Registre um agendamento manual de forma rápida."
+                onClose={() => setShowFormA(false)}
+                contentClassName="max-w-4xl"
+              >
+                <div className="max-h-[90vh] overflow-y-auto p-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <ClienteSearchInput
                     value={formA.cliente}
@@ -5369,11 +5376,19 @@ export default function Comercial() {
                   <TextInput label="Data e Hora *" type="datetime-local" value={formA.data_hora} onChange={v => setFormA(p => ({ ...p, data_hora: v }))} />
                 </div>
                 <FormActions onSave={salvarAgendamento} onCancel={() => setShowFormA(false)} saving={salvandoA} />
-              </Panel>
+                </div>
+              </FlowModal>
             )}
 
             {showAgendaV2Panel && formAgendaV2 && (
-              <Panel title="Agendar Validação da Venda" onClose={() => { setShowAgendaV2Panel(false); setFormAgendaV2(null); setErroAgendaV2(null) }}>
+              <FlowModal
+                open
+                title="Agendar Validação da Venda"
+                subtitle="Este agendamento já nasce vinculado à venda."
+                onClose={() => { setShowAgendaV2Panel(false); setFormAgendaV2(null); setErroAgendaV2(null) }}
+                contentClassName="max-w-4xl"
+              >
+                <div className="max-h-[90vh] overflow-y-auto p-6">
                 {erroAgendaV2 && (
                   <div className="mb-4 rounded-xl border border-red-200 dark:border-red-900/40 bg-red-50/80 dark:bg-red-950/20 px-4 py-3">
                     <p className="text-sm text-red-700 dark:text-red-300">{erroAgendaV2}</p>
@@ -5437,7 +5452,8 @@ export default function Comercial() {
                   onCancel={() => { setShowAgendaV2Panel(false); setFormAgendaV2(null) }}
                   saving={salvandoAgendaV2}
                 />
-              </Panel>
+                </div>
+              </FlowModal>
             )}
 
             {canManageAgenda && showFormDisp && (
@@ -6796,8 +6812,14 @@ export default function Comercial() {
         )}
 
         {vendaFinanceiroModal && (
-          <Panel title={`Fatura da venda ${vendaFinanceiroModal.venda.protocolo_numero ?? vendaFinanceiroModal.venda.pedido_numero ?? ''}`.trim()} onClose={() => setVendaFinanceiroModal(null)}>
-            <div className="space-y-4">
+          <FlowModal
+            open
+            title={`Fatura da venda ${vendaFinanceiroModal.venda.protocolo_numero ?? vendaFinanceiroModal.venda.pedido_numero ?? ''}`.trim()}
+            subtitle="Confira lançamentos e documentos vinculados a esta venda."
+            onClose={() => setVendaFinanceiroModal(null)}
+            contentClassName="max-w-4xl"
+          >
+            <div className="max-h-[90vh] overflow-y-auto p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <InfoCardMini label="Cliente" value={(vendaFinanceiroModal.venda.cadastros_base as { nome?: string } | null)?.nome ?? vendaFinanceiroModal.venda.nome_faturamento ?? '—'} />
                 <InfoCardMini label="Valor da venda" value={formatCurrency(vendaFinanceiroModal.venda.valor_venda ?? 0)} />
@@ -6862,7 +6884,7 @@ export default function Comercial() {
                 </div>
               </div>
             </div>
-          </Panel>
+          </FlowModal>
         )}
 
         {loadingVendaNfse && (
@@ -6873,8 +6895,14 @@ export default function Comercial() {
         )}
 
         {vendaNfseModal && (
-          <Panel title={`NFS-e da venda ${vendaNfseModal.venda.protocolo_numero ?? vendaNfseModal.venda.pedido_numero ?? ''}`.trim()} onClose={() => setVendaNfseModal(null)}>
-            <div className="space-y-4">
+          <FlowModal
+            open
+            title={`NFS-e da venda ${vendaNfseModal.venda.protocolo_numero ?? vendaNfseModal.venda.pedido_numero ?? ''}`.trim()}
+            subtitle="Gerencie emissão, PDFs, XMLs e compartilhamento."
+            onClose={() => setVendaNfseModal(null)}
+            contentClassName="max-w-5xl"
+          >
+            <div className="max-h-[90vh] overflow-y-auto p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <InfoCardMini label="Cliente" value={(vendaNfseModal.venda.cadastros_base as { nome?: string } | null)?.nome ?? vendaNfseModal.venda.nome_faturamento ?? '—'} />
                 <InfoCardMini label="Status venda" value={STATUS_VENDA_LABEL[vendaNfseModal.venda.status_venda]} />
@@ -7000,15 +7028,18 @@ export default function Comercial() {
                 </button>
               </div>
             </div>
-          </Panel>
+          </FlowModal>
         )}
 
         {nfseOverrideModal && (
-          <Panel
+          <FlowModal
+            open
             title={nfseOverrideModal.lote ? 'Emitir NFS-e fora da etapa em lote' : 'Emitir NFS-e fora da etapa'}
+            subtitle="Use a emissão excepcional somente quando necessário e deixe justificativa registrada."
             onClose={() => { if (!emitindoNfseLote) setNfseOverrideModal(null) }}
+            contentClassName="max-w-3xl"
           >
-            <div className="space-y-4">
+            <div className="max-h-[90vh] overflow-y-auto p-6 space-y-4">
               <div className="rounded-xl border border-amber-200 dark:border-amber-900/30 bg-amber-50 dark:bg-amber-950/20 px-4 py-3">
                 <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
                   {nfseOverrideModal.motivoPadrao}
@@ -7055,7 +7086,7 @@ export default function Comercial() {
                 </button>
               </div>
             </div>
-          </Panel>
+          </FlowModal>
         )}
 
         {showVendaNfsePreviewTelaCheia && vendaNfseModal && (
