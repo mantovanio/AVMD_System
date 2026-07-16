@@ -284,7 +284,8 @@ function normalizedSearch(value: string) {
 function productKind(item: LojaItemRow) {
   const name = normalizedSearch(item.certificados?.tipo ?? '')
   if (name.includes('combo')) return 'Combo'
-  if (/nuvem|cloud|safeid/.test(name)) return 'Nuvem'
+  if (/safeid/.test(name)) return 'SafeID'
+  if (/nuvem|cloud/.test(name)) return 'Nuvem'
   if (/token|cartao|leitora|validacao domiciliar/.test(name) && !/e-cpf|e-pf|e-cnpj|e-pj|safeid/.test(name)) return 'Mídias e serviços'
   if (/e-cnpj|e-pj/.test(name)) return 'e-CNPJ'
   if (/e-cpf|e-pf/.test(name)) return 'e-CPF'
@@ -293,6 +294,7 @@ function productKind(item: LojaItemRow) {
 
 function productCertificateClass(item: LojaItemRow) {
   const name = normalizedSearch([item.certificados?.tipo, item.certificados?.descricao_produto, item.certificados?.descricao, item.certificados?.modelo].filter(Boolean).join(' '))
+  if (/safeid/.test(name)) return 'SafeID'
   if (/\ba3\b/.test(name) || /cartao|cartão|token|leitora|mídia|midia|pendrive/.test(name)) return 'A3'
   if (/\ba1\b/.test(name) || /arquivo|software|certificado em arquivo|cloud/.test(name)) return 'A1'
   return 'Não informado'
@@ -1054,28 +1056,28 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   <h2 className="text-lg font-semibold mt-1 leading-snug text-slate-900">
                     Solicitação de certificado digital
                   </h2>
-                  <div className="mt-3">
-                    <a
-                      href="/?page=portal"
-                      className="inline-flex items-center gap-2 rounded-full border border-[#17346b] bg-[#17346b] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#102654]"
-                    >
-                      Meus pedidos
-                      <ArrowRight size={14} />
-                    </a>
-                  </div>
                 </div>
               </div>
-              <div className="mt-5 grid grid-cols-5">
+              <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
                 {sectionStatuses.map((section, index) => {
                   const completedCount = sectionStatuses.filter(item => item.done).length
                   const active = index === Math.min(completedCount, sectionStatuses.length - 1)
                   return (
-                    <div key={section.label} className="relative flex flex-col items-center text-center">
-                      {index > 0 && <span className={cn('absolute right-1/2 top-3 h-0.5 w-full', index <= completedCount ? 'bg-emerald-500' : 'bg-slate-200')} />}
-                      <span className={cn('relative z-10 flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white', section.done ? 'bg-emerald-600' : active ? 'bg-[#17346b]' : 'bg-slate-300')}>
+                    <div
+                      key={section.label}
+                      className={cn(
+                        'rounded-2xl border px-4 py-3 text-center shadow-sm transition-colors',
+                        section.done
+                          ? 'border-emerald-200 bg-emerald-50/80'
+                          : active
+                            ? 'border-[#17346b] bg-[#f6f9ff]'
+                            : 'border-slate-200 bg-slate-50/60'
+                      )}
+                    >
+                      <span className={cn('mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white', section.done ? 'bg-emerald-600' : active ? 'bg-[#17346b]' : 'bg-slate-300')}>
                         {section.done ? <CheckCircle2 size={15} /> : index + 1}
                       </span>
-                      <span className={cn('relative z-10 mt-2 text-[10px] font-semibold sm:text-xs', section.done || active ? 'text-slate-800' : 'text-slate-400')}>{section.label}</span>
+                      <span className={cn('mt-2 block text-xs font-semibold sm:text-sm', section.done || active ? 'text-slate-800' : 'text-slate-400')}>{section.label}</span>
                     </div>
                   )
                 })}

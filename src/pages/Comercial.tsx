@@ -992,7 +992,8 @@ export default function Comercial() {
     else if (raw.includes('nf-e') || raw.includes('nfe')) base = 'NF-e'
     else if (raw.includes('ssl')) base = 'SSL'
     else if (raw.includes('combo')) base = 'Combo'
-    else if (/nuvem|cloud|safeid/.test(raw) || /nuvem|cloud|safeid/.test(`${cert.modelo ?? ''} ${cert.categoria ?? ''}`.toLowerCase())) base = 'Nuvem'
+    else if (/safeid/.test(raw) || /safeid/.test(`${cert.modelo ?? ''} ${cert.categoria ?? ''}`.toLowerCase())) base = 'SafeID'
+    else if (/nuvem|cloud/.test(raw) || /nuvem|cloud/.test(`${cert.modelo ?? ''} ${cert.categoria ?? ''}`.toLowerCase())) base = 'Nuvem'
     else base = cert.tipo?.trim() || 'Outros'
     if (modelo && !base.toLowerCase().includes(modelo.toLowerCase())) {
       return `${base} ${modelo}`
@@ -1001,6 +1002,7 @@ export default function Comercial() {
   }
   function productClass(cert: Certificado): string {
     const text = `${cert.tipo ?? ''} ${resolveModelo(cert) ?? ''} ${cert.categoria ?? ''} ${cert.periodo_uso ?? ''}`.toLowerCase()
+    if (/safeid/.test(text)) return 'SafeID'
     if (/\ba3\b/.test(text) || /cart|token|leitora|midia|mídia|pendrive/.test(text)) return 'A3'
     if (/\ba1\b/.test(text)) return 'A1'
     return 'A1'
