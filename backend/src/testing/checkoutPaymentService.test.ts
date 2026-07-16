@@ -212,6 +212,64 @@ test('cria order Pix e retorna QR Code para o checkout', async () => {
   assert.equal(result.details?.qr_code, 'copia-cola')
 })
 
+test('infere boleto mesmo quando o cadastro da forma de pagamento usa nome descritivo', async () => {
+  const service = new CheckoutPaymentService({
+    async getCheckoutPaymentMethodConfig() {
+      return {
+        id: 'mp-boleto',
+        nome: 'Boleto - Mercado Pago',
+        codigo: null,
+        tipo: null,
+        gateway: 'mercado_pago',
+        ambiente: 'sandbox',
+        client_id: null,
+        secret_key: null,
+        webhook_url: null,
+        provider_base_url: null,
+        provider_api_token: 'APP_USR-token',
+        provider_metadata: {},
+        runtime: { modo_teste_geral: true, bloquear_integracoes_reais: false, aviso_checkout: '' },
+      }
+    },
+    async attachPaymentChargeToSale() {},
+    async applyPaymentWebhook() {},
+  } as never, undefined, async (url, init) => {
+    assert.match(String(url), /\/v1\/orders$/)
+    const body = JSON.parse(String(init?.body))
+    assert.equal(body.transactions.payments[0].payment_method.id, 'boleto')
+    return new Response(JSON.stringify({
+      id: 'ORD-BOLETO-1',
+      status: 'action_required',
+      transactions: {
+        payments: [{
+          id: 'PAY-BOLETO-1',
+          status: 'action_required',
+          payment_method: {
+            id: 'boleto',
+            type: 'ticket',
+            ticket_url: 'https://mp/boleto',
+            digitable_line: '34191.79001 01043.510047 91020.150008 7 1234',
+          },
+        }],
+      },
+    }), { status: 201 })
+  })
+
+  const result = await service.createChargeForSale({
+    vendaId: 'venda-boleto',
+    formaPagamentoId: 'mp-boleto',
+    valor: 125,
+    descricao: 'Certificado',
+    comprador: { nome: 'Cliente Teste', email: 'cliente@teste.com', telefone: '11999999999', documento: '12345678901' },
+    fiscal: { cep: '01001000', logradouro: 'Praça da Sé', numero: '1', bairro: 'Sé', cidade: 'São Paulo', uf: 'SP' },
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.details?.kind, 'boleto')
+  assert.equal(result.details?.ticket_url, 'https://mp/boleto')
+  assert.equal(result.details?.digitable_line, '34191.79001 01043.510047 91020.150008 7 1234')
+})
+
 test('valida HMAC e consulta order antes de confirmar pagamento', async () => {
   const applied: Array<Record<string, unknown>> = []
   const secret = 'webhook-secret'

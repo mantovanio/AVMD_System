@@ -43,6 +43,8 @@ type ChargeResult = {
   details?: Record<string, unknown> | null
 }
 
+type PaymentFlowKind = 'pix' | 'boleto' | 'card' | 'link'
+
 export class CheckoutPaymentService {
   constructor(
     private readonly repository: Pick<CheckoutRepository, 'getCheckoutPaymentMethodConfig' | 'getCheckoutPaymentMethodConfigByGateway' | 'findCommercialSalePaymentData' | 'attachPaymentChargeToSale' | 'applyPaymentWebhook'>,
@@ -106,6 +108,18 @@ export class CheckoutPaymentService {
     return result
   }
 
+  private inferMercadoPagoMethod(config: CheckoutPaymentMethodConfig): PaymentFlowKind {
+    const source = [config.codigo, config.tipo, config.nome]
+      .map(value => String(value ?? '').toLowerCase().trim())
+      .filter(Boolean)
+      .join(' ')
+
+    if (/boleto|bill|ticket/.test(source)) return 'boleto'
+    if (/pix/.test(source)) return 'pix'
+    if (/card|cart|cr[eé]dito|debito|d[eé]bito/.test(source)) return 'card'
+    return 'link'
+  }
+
   async applyWebhook(input: {
     gateway: string
     payload: Record<string, unknown>
@@ -145,8 +159,8 @@ export class CheckoutPaymentService {
   }
 
   private async createMercadoPagoCharge(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): Promise<ChargeResult> {
-    const method = String(config.codigo || config.tipo || '').toLowerCase()
-    if (method === 'pix' || method === 'boleto' || method === 'card' || method.includes('cart')) {
+    const method = this.inferMercadoPagoMethod(config)
+    if (method === 'pix' || method === 'boleto' || method === 'card') {
       return this.createMercadoPagoOrder(config, input, method)
     }
 
@@ -324,7 +338,7 @@ export class CheckoutPaymentService {
 
   private buildMockCharge(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): ChargeResult {
     const base = (config.webhook_url || 'https://pagamento.exemplo.local').replace(/\/$/, '')
-    const method = String(config.codigo || config.tipo || '').toLowerCase()
+    const method = this.inferMercadoPagoMethod(config)
     const isPix = method === 'pix'
     const isBoleto = method === 'boleto'
     const isCard = method === 'card' || method.includes('cart')
