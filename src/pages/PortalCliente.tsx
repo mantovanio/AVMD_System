@@ -184,7 +184,7 @@ export default function PortalCliente() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#ea7b18]">Acesso rápido</p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-900">Fale com a empresa e gerencie sua compra</h2>
+              <h2 className="mt-1 text-lg font-semibold text-slate-900">Fale com a CertiID</h2>
               <p className="mt-1 text-sm text-slate-600">
                 Aqui você consegue revisar o pedido, conferir a forma de pagamento, agendar ou reagendar a validação e chamar a equipe quando precisar.
               </p>
