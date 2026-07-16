@@ -249,9 +249,9 @@ export class AivenCheckoutRepository implements CheckoutRepository {
              coalesce(venda.cidade, cliente.cidade, '') as cidade,
              coalesce(venda.uf, cliente.uf, '') as uf
       from vendas_certificados venda
-      join profiles solicitante on solicitante.id = $2 and solicitante.status = 'ativo'
+      join profiles solicitante on solicitante.id = $2::uuid and solicitante.status = 'ativo'
       left join cadastros_base cliente on cliente.id = venda.cadastro_base_id
-      where venda.id = $1 and venda.forma_pagamento_id is not null
+      where venda.id = $1::uuid and venda.forma_pagamento_id is not null
       limit 1
     `, [vendaId, profileId])
     return result.rows[0] ?? null

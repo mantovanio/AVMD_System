@@ -973,7 +973,7 @@ export default function Comercial() {
       return tipoPadrao === tipoEmissaoSelecionado
     })
   }, [certsDaTabelaBruta, formV2.tipo_emissao])
-  // ── product filter derivations (cascata tipo→emissao→validade) ──
+  // ── product filter derivations (cascata tipo→validade) ──
   function productKind(cert: Certificado): string {
     const raw = (cert.tipo ?? '').trim().toLowerCase()
     if (raw.includes('cnpj')) return 'e-CNPJ'
@@ -982,9 +982,6 @@ export default function Comercial() {
     if (raw.includes('ssl')) return 'SSL'
     if (raw.includes('combo')) return 'Combo'
     return cert.tipo?.trim() || 'Outros'
-  }
-  function productEmission(cert: Certificado): string {
-    return (cert.tipo_emissao_padrao ?? '').trim() || 'Não definido'
   }
   function productValidity(cert: Certificado): string {
     return (cert.validade ?? '').trim() || 'Não definido'
@@ -998,21 +995,13 @@ export default function Comercial() {
     () => certsDaTabela.filter(c => !produtoKindFilter || productKind(c.cert) === produtoKindFilter),
     [produtoKindFilter, certsDaTabela]
   )
-  const produtoEmissaoOptions = useMemo(
-    () => Array.from(new Set(produtosByKind.map(c => productEmission(c.cert)))).sort(),
+  const produtoValidadeOptions = useMemo(
+    () => Array.from(new Set(produtosByKind.map(c => productValidity(c.cert)))).sort(),
     [produtosByKind]
   )
-  const produtosByEmissao = useMemo(
-    () => produtosByKind.filter(c => !produtoEmissaoFilter || productEmission(c.cert) === produtoEmissaoFilter),
-    [produtoEmissaoFilter, produtosByKind]
-  )
-  const produtoValidadeOptions = useMemo(
-    () => Array.from(new Set(produtosByEmissao.map(c => productValidity(c.cert)))).sort(),
-    [produtosByEmissao]
-  )
   const produtosFiltrados = useMemo(
-    () => produtosByEmissao.filter(c => !produtoValidadeFilter || productValidity(c.cert) === produtoValidadeFilter),
-    [produtoValidadeFilter, produtosByEmissao]
+    () => produtosByKind.filter(c => !produtoValidadeFilter || productValidity(c.cert) === produtoValidadeFilter),
+    [produtoValidadeFilter, produtosByKind]
   )
 
   const motivoSemCertificados = useMemo(() => {
@@ -4767,13 +4756,12 @@ export default function Comercial() {
                           {/* Filtros cascata */}
                           <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
                             <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Selecione as opções para encontrar seu certificado</h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <label className="flex flex-col gap-1">
                                 <span className="text-xs text-gray-500 font-medium">Tipo *</span>
                                 <select value={produtoKindFilter}
                                   onChange={e => {
                                     setProdutoKindFilter(e.target.value)
-                                    setProdutoEmissaoFilter('')
                                     setProdutoValidadeFilter('')
                                     setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
                                   }}
@@ -4783,29 +4771,15 @@ export default function Comercial() {
                                 </select>
                               </label>
                               <label className="flex flex-col gap-1">
-                                <span className="text-xs text-gray-500 font-medium">Emissão *</span>
-                                <select value={produtoEmissaoFilter}
-                                  onChange={e => {
-                                    setProdutoEmissaoFilter(e.target.value)
-                                    setProdutoValidadeFilter('')
-                                    setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
-                                  }}
-                                  disabled={!produtoKindFilter}
-                                  className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60">
-                                  <option value="">{!produtoKindFilter ? 'Selecione o tipo' : 'Todas'}</option>
-                                  {produtoEmissaoOptions.map(e => <option key={e} value={e}>{e}</option>)}
-                                </select>
-                              </label>
-                              <label className="flex flex-col gap-1">
                                 <span className="text-xs text-gray-500 font-medium">Validade *</span>
                                 <select value={produtoValidadeFilter}
                                   onChange={e => {
                                     setProdutoValidadeFilter(e.target.value)
                                     setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
                                   }}
-                                  disabled={!produtoEmissaoFilter}
+                                  disabled={!produtoKindFilter}
                                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60">
-                                  <option value="">{!produtoEmissaoFilter ? 'Selecione a emissão' : 'Todas'}</option>
+                                  <option value="">{!produtoKindFilter ? 'Selecione o tipo' : 'Todas'}</option>
                                   {produtoValidadeOptions.map(v => <option key={v} value={v}>{v}</option>)}
                                 </select>
                               </label>
