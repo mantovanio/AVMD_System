@@ -1157,18 +1157,7 @@ export default function Comercial() {
     }
   }, [currentFormStep, wizardStepDone])
 
-  // auto-advance wizard when current step completes
-  useEffect(() => {
-    if (!showFormV) return
-    const current = WIZARD_STEPS[currentFormStep]
-    if (!current) return
-    if (wizardStepDone(current.key) && currentFormStep < WIZARD_STEPS.length - 1) {
-      const nextStep = WIZARD_STEPS[currentFormStep + 1]
-      if (nextStep && !wizardStepDone(nextStep.key)) {
-        setCurrentFormStep(prev => prev + 1)
-      }
-    }
-  }, [showFormV, currentFormStep, wizardStepDone])
+
 
   const parceiroIdsPermitidosAgente = useMemo(() => {
     if (profile?.perfil !== 'agente_registro' || !currentUserId) return new Set<string>()
@@ -4818,9 +4807,11 @@ export default function Comercial() {
                                           ? 'bg-blue-600 text-white dark:bg-blue-700'
                                           : 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-gray-800'
                                       )}>
-                                      <div>
+                                      <div className="flex flex-col">
                                         <span className="text-sm font-semibold">{cert?.tipo ?? 'Produto'}</span>
-                                        {cert?.modelo && <span className="text-xs ml-2 opacity-70">{cert.modelo}</span>}
+                                        <span className="text-xs opacity-70">
+                                          {[cert?.modelo, cert?.validade].filter(Boolean).join(' · ') || '—'}
+                                        </span>
                                       </div>
                                       <div className="flex items-center gap-3">
                                         <span className="text-sm font-semibold whitespace-nowrap">
