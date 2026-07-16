@@ -5457,7 +5457,14 @@ export default function Comercial() {
             )}
 
             {canManageAgenda && showFormDisp && (
-              <Panel title="Disponibilidade do Agente" onClose={() => setShowFormDisp(false)}>
+              <FlowModal
+                open
+                title="Disponibilidade do Agente"
+                subtitle="Cadastre blocos de horário de forma clara e recorrente."
+                onClose={() => setShowFormDisp(false)}
+                contentClassName="max-w-5xl"
+              >
+                <div className="max-h-[90vh] overflow-y-auto p-6">
                 <div className="mb-4 rounded-xl border border-blue-200 dark:border-blue-900/40 bg-blue-50/80 dark:bg-blue-950/20 px-4 py-3">
                   <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
                     Manhã e tarde são cadastradas em blocos separados.
@@ -5569,11 +5576,19 @@ export default function Comercial() {
                   <NumberInput label="Capacidade" value={formDisp.capacidade_por_slot} onChange={v => setFormDisp(p => ({ ...p, capacidade_por_slot: v }))} step={1} />
                 </div>
                 <FormActions onSave={salvarDisponibilidade} onCancel={() => setShowFormDisp(false)} saving={salvandoDisp} />
-              </Panel>
+                </div>
+              </FlowModal>
             )}
 
             {canManageAgenda && showFormIndisp && (
-              <Panel title="Bloqueio e Indisponibilidade" onClose={() => setShowFormIndisp(false)}>
+              <FlowModal
+                open
+                title="Bloqueio e Indisponibilidade"
+                subtitle="Registre exceções operacionais sem quebrar a agenda."
+                onClose={() => setShowFormIndisp(false)}
+                contentClassName="max-w-5xl"
+              >
+                <div className="max-h-[90vh] overflow-y-auto p-6">
                 <div className="mb-4 rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/80 dark:bg-amber-950/20 px-4 py-3">
                   <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
                     Use este bloco para exceções da agenda.
@@ -5626,7 +5641,8 @@ export default function Comercial() {
                   <TextInput label="Motivo" value={formIndisp.motivo} onChange={v => setFormIndisp(p => ({ ...p, motivo: v }))} className="md:col-span-1" />
                 </div>
                 <FormActions onSave={salvarIndisponibilidade} onCancel={() => setShowFormIndisp(false)} saving={salvandoIndisp} />
-              </Panel>
+                </div>
+              </FlowModal>
             )}
 
             <div className="flex flex-wrap items-end gap-3">
@@ -5971,7 +5987,14 @@ export default function Comercial() {
               </div>
 
               {showFormTabela && (
-                <Panel title={editingTabelaId ? 'Editar Tabela' : 'Nova Tabela de Preço'} onClose={() => setShowFormTabela(false)}>
+                <FlowModal
+                  open
+                  title={editingTabelaId ? 'Editar Tabela' : 'Nova Tabela de Preço'}
+                  subtitle="Ajuste nome, desconto, comissão e voucher da tabela."
+                  onClose={() => setShowFormTabela(false)}
+                  contentClassName="max-w-5xl"
+                >
+                  <div className="max-h-[90vh] overflow-y-auto p-6">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <TextInput label="Nome *" value={formTabela.nome} onChange={v => setFormTabela(p => ({ ...p, nome: v }))} className="md:col-span-2" />
                     <TextInput label="Código Voucher" value={formTabela.codigo_voucher ?? ''} onChange={v => setFormTabela(p => ({ ...p, codigo_voucher: v || null }))} />
@@ -5984,7 +6007,8 @@ export default function Comercial() {
                     <TextInput label="Descrição" value={formTabela.descricao ?? ''} onChange={v => setFormTabela(p => ({ ...p, descricao: v || null }))} className="md:col-span-3" />
                   </div>
                   <FormActions onSave={salvarTabela} onCancel={() => setShowFormTabela(false)} saving={salvandoCatalogo} />
-                </Panel>
+                  </div>
+                </FlowModal>
               )}
 
               <DataTable headers={['Sel.', 'Tabela', 'Voucher', 'Produtos', 'Participantes', 'Desconto R$', 'Desconto %', '% Comissão', 'Status', 'Ações']}
