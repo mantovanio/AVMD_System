@@ -1039,7 +1039,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   </h2>
                 </div>
               </div>
-              <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 {sectionStatuses.map((section, index) => {
                   const completedCount = sectionStatuses.filter(item => item.done).length
                   const active = index === Math.min(completedCount, sectionStatuses.length - 1)

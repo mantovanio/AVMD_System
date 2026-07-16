@@ -482,53 +482,53 @@ export class AivenCheckoutRepository implements CheckoutRepository {
           ponto_atendimento_id, observacoes, pedido_numero, pedido_status, protocolo_status,
           api_payload_pedido, api_payload_protocolo, created_at, updated_at
         ) values (
-          $1, $2, $3, $4, $5, $6,
-          $7, $8, $9, $10, $11, $12,
-          $13, $14, $15, $16, $17, $18,
-          $19, $20, $21,
-          $22, $23, $24, $25, $26, $27, $28, $29,
-          $30, $31, $32, $33, $34,
+          $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6::uuid,
+          $7::uuid, $8::uuid, $9::boolean, $10::text, $11::text, $12::text,
+          $13::float8, $14::float8, $15::float8, $16::text, $17::float8, $18::float8,
+          $19::text, $20::text, $21::text,
+          $22::text, $23::text, $24::text, $25::text, $26::text, $27::text, $28::text, $29::text,
+          $30::uuid, $31::text, $32::text, $33::text, $34::text,
           $35::jsonb, $36::jsonb, now(), now()
         )
         returning id, protocolo_numero
       `
       const result = await trx.query<{ id: string; protocolo_numero: string | null }>(sql, [
         saleId,                                              // $1  id
-        input.loja.id,                                      // $2  loja_marketplace_id
-        input.cadastroBaseId,                               // $3  cadastro_base_id
-        input.titularId,                                    // $4  titular_id
-        input.item.certificado_id,                          // $5  certificado_id
-        input.loja.tabela_preco_id,                         // $6  tabela_preco_id
-        input.item.id,                                      // $7  tabela_preco_item_id
-        payload.pagamento.forma_pagamento_id,               // $8  forma_pagamento_id
-        false,                                              // $9  pago
-        input.item.certificados?.tipo ?? 'Certificado digital', // $10 tipo_produto
-        input.item.certificados?.tipo_emissao_padrao ?? null,   // $11 tipo_emissao
-        input.tabela?.nome ?? null,                         // $12 tabela_preco
-        valorFinal,                                         // $13 valor_venda
-        input.item.valor_custo,                             // $14 valor_custo
-        input.desconto ?? 0,                                // $15 desconto
-        input.voucherCodigo ?? null,                        // $16 voucher_codigo
-        input.voucherPercentual ?? null,                    // $17 voucher_percentual
-        input.voucherValor ?? null,                         // $18 voucher_valor
+        String(input.loja.id),                               // $2  loja_marketplace_id
+        String(input.cadastroBaseId),                        // $3  cadastro_base_id
+        input.titularId ? String(input.titularId) : null,    // $4  titular_id
+        String(input.item.certificado_id),                   // $5  certificado_id
+        String(input.loja.tabela_preco_id),                  // $6  tabela_preco_id
+        String(input.item.id),                               // $7  tabela_preco_item_id
+        String(payload.pagamento.forma_pagamento_id),        // $8  forma_pagamento_id
+        false,                                               // $9  pago
+        String(input.item.certificados?.tipo ?? 'Certificado digital'), // $10 tipo_produto
+        input.item.certificados?.tipo_emissao_padrao ? String(input.item.certificados.tipo_emissao_padrao) : null, // $11 tipo_emissao
+        input.tabela?.nome ? String(input.tabela.nome) : null, // $12 tabela_preco
+        Number(valorFinal),                                  // $13 valor_venda
+        Number(input.item.valor_custo ?? 0),                 // $14 valor_custo
+        Number(input.desconto ?? 0),                         // $15 desconto
+        input.voucherCodigo ? String(input.voucherCodigo) : null, // $16 voucher_codigo
+        input.voucherPercentual ?? null,                     // $17 voucher_percentual
+        input.voucherValor ?? null,                          // $18 voucher_valor
         payload.comprador.cpf_cnpj ? onlyDigits(payload.comprador.cpf_cnpj) : null, // $19 documento_faturamento
-        payload.comprador.nome,                             // $20 nome_faturamento
-        payload.comprador.email,                            // $21 email_faturamento
-        payload.comprador.telefone,                         // $22 telefone_faturamento
-        payload.fiscal.logradouro,                          // $23 logradouro
-        payload.fiscal.numero,                              // $24 numero
-        payload.fiscal.complemento || null,                 // $25 complemento
-        payload.fiscal.bairro,                              // $26 bairro
-        payload.fiscal.cidade,                              // $27 cidade
-        payload.fiscal.uf,                                  // $28 uf
-        payload.fiscal.cep,                                 // $29 cep
-        payload.agendamento?.ponto_atendimento_id ?? null,  // $30 ponto_atendimento_id
-        payload.observacoes,                                // $31 observacoes
-        pedidoNumero,                                       // $32 pedido_numero
-        'pendente',                                         // $33 pedido_status
-        'nao_gerado',                                       // $34 protocolo_status
-        JSON.stringify({ origem: 'checkout_aiven' }),       // $35 api_payload_pedido
-        JSON.stringify({}),                                 // $36 api_payload_protocolo
+        String(payload.comprador.nome),                      // $20 nome_faturamento
+        String(payload.comprador.email),                     // $21 email_faturamento
+        String(payload.comprador.telefone),                  // $22 telefone_faturamento
+        String(payload.fiscal.logradouro),                   // $23 logradouro
+        String(payload.fiscal.numero),                       // $24 numero
+        payload.fiscal.complemento ? String(payload.fiscal.complemento) : null, // $25 complemento
+        String(payload.fiscal.bairro),                       // $26 bairro
+        String(payload.fiscal.cidade),                      // $27 cidade
+        String(payload.fiscal.uf),                          // $28 uf
+        String(payload.fiscal.cep),                         // $29 cep
+        payload.agendamento?.ponto_atendimento_id ? String(payload.agendamento.ponto_atendimento_id) : null, // $30 ponto_atendimento_id
+        payload.observacoes ? String(payload.observacoes) : null, // $31 observacoes
+        pedidoNumero ? String(pedidoNumero) : null,          // $32 pedido_numero
+        'pendente',                                          // $33 pedido_status
+        'nao_gerado',                                        // $34 protocolo_status
+        JSON.stringify({ origem: 'checkout_aiven' }),        // $35 api_payload_pedido
+        JSON.stringify({}),                                  // $36 api_payload_protocolo
       ])
       return result.rows[0] ?? { id: saleId, protocolo_numero: null }
     })

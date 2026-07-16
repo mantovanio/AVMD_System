@@ -115,10 +115,10 @@ function formatValidityLabel(validity: string) {
 }
 
 function buildCommercialDescription(kind: string, certificateClass: string, validity: string) {
-  const typeLabel = kind === 'Outros' ? 'produto digital' : kind.toLowerCase()
-  const classLabel = certificateClass !== 'Não informado' ? certificateClass : 'classe informada'
+  const typeLabel = kind === 'Outros' ? 'Produto digital' : `Certificado ${kind}`
+  const classLabel = certificateClass !== 'Não informado' ? certificateClass : 'classe sob consulta'
   const validityLabel = formatValidityLabel(validity)
-  return `${typeLabel} ${classLabel}, com ${validityLabel}.`
+  return `${typeLabel} ${classLabel} para emissão segura, com ${validityLabel}.`
 }
 
 export function getProductProfile(cert: Pick<Certificado, 'tipo' | 'descricao' | 'validade' | 'modelo' | 'categoria' | 'tipo_emissao_padrao' | 'periodo_uso' | 'descricao_produto'> | null | undefined): ProductProfile {
@@ -129,7 +129,7 @@ export function getProductProfile(cert: Pick<Certificado, 'tipo' | 'descricao' |
       validity: 'Não informada',
       displayName: 'Produto',
       details: '—',
-      commercialDescription: 'Produto digital para validação da compra.',
+      commercialDescription: 'Produto digital para validação segura da compra.',
     }
   }
   const kindText = normalizeText([cert.tipo, cert.descricao_produto, cert.descricao, cert.modelo, cert.categoria].filter(Boolean).join(' '))
