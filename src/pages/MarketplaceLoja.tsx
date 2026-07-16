@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils'
 import { getApiUrl } from '@/lib/api'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig, type AgencyConfig } from '@/lib/agencyConfig'
 import type { LojaMarketplace, TabelaPreco } from '@/types'
-import { loadMarketplaceCheckoutContext, lookupExistingCheckoutCustomer, submitMarketplaceCheckout, type AgendaAgent, type AgendaPoint, type AgendaSlot, type LojaItemRow, type PaymentOption, type PaymentRuntime } from '@/lib/checkout'
+import { getProductProfile, loadMarketplaceCheckoutContext, lookupExistingCheckoutCustomer, submitMarketplaceCheckout, type AgendaAgent, type AgendaPoint, type AgendaSlot, type LojaItemRow, type PaymentOption, type PaymentRuntime } from '@/lib/checkout'
 import { maskEmail } from '@/lib/checkout'
 import {
   GuidedField,
@@ -281,43 +281,16 @@ function normalizedSearch(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 }
 
-function dedupeLabel(parts: Array<string | null | undefined>) {
-  const normalized = parts.map(part => (part ?? '').trim()).filter(Boolean)
-  return normalized.filter((part, index) => normalized.findIndex(other => other.toLowerCase() === part.toLowerCase()) === index).join(' · ')
-}
-
 function productKind(item: LojaItemRow) {
-  const name = normalizedSearch(item.certificados?.tipo ?? '')
-  if (name.includes('combo')) return 'Combo'
-  if (/safeid/.test(name)) return 'SafeID'
-  if (/nuvem|cloud/.test(name)) return 'Nuvem'
-  if (/token|cartao|leitora|validacao domiciliar/.test(name) && !/e-cpf|e-pf|e-cnpj|e-pj|safeid/.test(name)) return 'Mídias e serviços'
-  if (/e-cnpj|e-pj/.test(name)) return 'e-CNPJ'
-  if (/e-cpf|e-pf/.test(name)) return 'e-CPF'
-  return 'Outros'
+  return getProductProfile(item.certificados ?? null).kind
 }
 
 function productCertificateClass(item: LojaItemRow) {
-  const name = normalizedSearch([item.certificados?.tipo, item.certificados?.descricao_produto, item.certificados?.descricao, item.certificados?.modelo].filter(Boolean).join(' '))
-  if (/safeid/.test(name)) return 'SafeID'
-  if (/\ba3\b/.test(name) || /cartao|cartão|token|leitora|mídia|midia|pendrive/.test(name)) return 'A3'
-  if (/\ba1\b/.test(name) || /arquivo|software|certificado em arquivo|cloud/.test(name)) return 'A1'
-  return 'Não informado'
+  return getProductProfile(item.certificados ?? null).certificateClass
 }
 
 function productValidity(item: LojaItemRow) {
-  const isSafeId = productCertificateClass(item) === 'SafeID'
-  const explicit = isSafeId
-    ? (item.certificados?.periodo_uso?.trim() || item.certificados?.validade?.trim())
-    : item.certificados?.validade?.trim()
-  if (explicit) return explicit
-  const name = normalizedSearch(item.certificados?.tipo ?? '')
-  const totalMonths = name.match(/validade(?: total)?(?: de)? (\d+) meses?/)?.[1]
-  if (totalMonths) return Number(totalMonths) === 24 ? '2 anos' : `${totalMonths} meses`
-  if (/validade (?:de )?2 anos|validade 2 anos/.test(name)) return '2 anos'
-  if (/4 meses|degustacao/.test(name)) return '4 meses'
-  if (/12 meses|1 ano/.test(name)) return '1 ano'
-  return 'Não informada'
+  return getProductProfile(item.certificados ?? null).validity
 }
 
 export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
@@ -1188,7 +1161,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                             <>
                               <div className="p-5">
                                 <p className="font-bold text-slate-900">{itemSelecionado.certificados?.tipo}</p>
-                                <p className="mt-2 text-sm text-slate-600">Detalhes: {dedupeLabel([productKind(itemSelecionado), productCertificateClass(itemSelecionado), productValidity(itemSelecionado)])}</p>
+                                <p className="mt-2 text-sm text-slate-600">Detalhes: {getProductProfile(itemSelecionado.certificados).details}</p>
                                 <ProductTags item={itemSelecionado} compact />
                               </div>
                               <div className="border-t border-slate-200 px-5 py-6 text-center text-3xl font-bold text-emerald-600">{formatCurrency(itemSelecionado.valor)}</div>
@@ -1216,7 +1189,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   <div className="p-5">
                     <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Item no carrinho</p>
                     <p className="mt-2 text-lg font-bold text-slate-900">{itemSelecionado.certificados?.tipo ?? 'Produto'}</p>
-                    <p className="mt-2 text-sm text-slate-600">Detalhes: {dedupeLabel([productKind(itemSelecionado), productCertificateClass(itemSelecionado), productValidity(itemSelecionado)])}</p>
+                    <p className="mt-2 text-sm text-slate-600">Detalhes: {getProductProfile(itemSelecionado.certificados).details}</p>
                     <div className="mt-4">
                       <ProductTags item={itemSelecionado} compact />
                     </div>

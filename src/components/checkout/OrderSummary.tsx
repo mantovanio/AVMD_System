@@ -2,7 +2,7 @@ import { Loader2 } from 'lucide-react'
 import { ProductTags } from './ProductTags'
 import { InfoLine } from './InfoLine'
 import { formatCurrency, formatDateTime } from './formatUtils'
-import type { LojaItemRow, PaymentOption, AgendaSlot } from '@/lib/checkout'
+import { getProductProfile, type LojaItemRow, type PaymentOption, type AgendaSlot } from '@/lib/checkout'
 
 interface OrderSummaryProps {
   item: LojaItemRow | null
@@ -36,12 +36,8 @@ export function OrderSummary({
         {item ? (
           <>
             <div className="mt-4 rounded-[24px] bg-slate-50 p-4">
-              <p className="text-lg font-semibold text-slate-900">{item.certificados?.tipo ?? 'Produto'}</p>
-              {(item.certificados?.descricao_produto ?? item.certificados?.descricao) && (
-                <p className="text-sm text-slate-500 mt-2 leading-relaxed">
-                  {item.certificados?.descricao_produto ?? item.certificados?.descricao}
-                </p>
-              )}
+              <p className="text-lg font-semibold text-slate-900">{getProductProfile(item.certificados).displayName}</p>
+              <p className="text-sm text-slate-500 mt-2 leading-relaxed">{getProductProfile(item.certificados).details}</p>
               <ProductTags item={item} compact />
               <p className="text-3xl font-semibold text-emerald-600 mt-4">{formatCurrency(item.valor)}</p>
             </div>

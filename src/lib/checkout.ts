@@ -9,6 +9,7 @@ import type {
   CheckoutSubmitRequest,
   CheckoutSubmitResponse,
 } from '@/lib/checkoutContract'
+import { normalizeText } from '@/lib/utils'
 
 export type LojaItemRow = TabelaPrecoItem & {
   certificados: Certificado | null
@@ -72,6 +73,78 @@ export type MarketplaceCheckoutContext = {
   agentes: AgendaAgent[]
   pontos: AgendaPoint[]
   slots: AgendaSlot[]
+}
+
+export type ProductProfile = {
+  kind: string
+  certificateClass: string
+  validity: string
+  displayName: string
+  details: string
+}
+
+function dedupeParts(parts: Array<string | null | undefined>) {
+  const normalized = parts.map(part => (part ?? '').trim()).filter(Boolean)
+  return normalized.filter((part, index) => normalized.findIndex(other => other.toLowerCase() === part.toLowerCase()) === index)
+}
+
+function getProductKindFromText(raw: string) {
+  if (raw.includes('combo')) return 'Combo'
+  if (/safeid/.test(raw)) return 'SafeID'
+  if (/nuvem|cloud/.test(raw)) return 'Nuvem'
+  if (/token|cartao|cartão|leitora|validacao domiciliar/.test(raw) && !/e-cpf|e-pf|e-cnpj|e-pj|safeid/.test(raw)) return 'Mídias e serviços'
+  if (/e-cnpj|e-pj/.test(raw)) return 'e-CNPJ'
+  if (/e-cpf|e-pf/.test(raw)) return 'e-CPF'
+  return 'Outros'
+}
+
+function formatValidityFromText(raw: string) {
+  const totalMonths = raw.match(/validade(?: total)?(?: de)? (\d+) meses?/)?.[1]
+  if (totalMonths) return Number(totalMonths) === 24 ? '2 anos' : `${totalMonths} meses`
+  if (/validade (?:de )?2 anos|validade 2 anos/.test(raw)) return '2 anos'
+  if (/4 meses|degustacao/.test(raw)) return '4 meses'
+  if (/12 meses|1 ano/.test(raw)) return '1 ano'
+  return 'Não informada'
+}
+
+export function getProductProfile(cert: Pick<Certificado, 'tipo' | 'descricao' | 'validade' | 'modelo' | 'categoria' | 'tipo_emissao_padrao' | 'periodo_uso' | 'descricao_produto'> | null | undefined): ProductProfile {
+  if (!cert) {
+    return {
+      kind: 'Outros',
+      certificateClass: 'Não informado',
+      validity: 'Não informada',
+      displayName: 'Produto',
+      details: '—',
+    }
+  }
+  const kindText = normalizeText([cert.tipo, cert.descricao_produto, cert.descricao, cert.modelo, cert.categoria].filter(Boolean).join(' '))
+  const kind = getProductKindFromText(kindText)
+
+  const classText = normalizeText([cert.tipo, cert.descricao_produto, cert.descricao, cert.modelo, cert.categoria, cert.periodo_uso].filter(Boolean).join(' '))
+  const certificateClass = /safeid/.test(classText)
+    ? 'SafeID'
+    : (/\ba3\b/.test(classText) || /cartao|cartão|token|leitora|mídia|midia|pendrive/.test(classText))
+      ? 'A3'
+      : (/\ba1\b/.test(classText) ? 'A1' : 'Não informado')
+
+  const validitySource = certificateClass === 'SafeID'
+    ? (cert.periodo_uso?.trim() || cert.validade?.trim() || '')
+    : (cert.validade?.trim() || '')
+  const validity = validitySource || formatValidityFromText(normalizeText([cert.tipo, cert.descricao_produto, cert.descricao].filter(Boolean).join(' ')))
+
+  const displayName = dedupeParts([
+    cert.tipo,
+    certificateClass !== 'Não informado' && !normalizeText(cert.tipo ?? '').includes(normalizeText(certificateClass)) ? certificateClass : null,
+    cert.categoria && !normalizeText(cert.tipo ?? '').includes(normalizeText(cert.categoria)) ? cert.categoria : null,
+  ]).join(' · ') || 'Produto'
+
+  const details = dedupeParts([
+    cert.modelo,
+    certificateClass,
+    validity,
+  ]).join(' · ') || '—'
+
+  return { kind, certificateClass, validity, displayName, details }
 }
 
 export type CheckoutExistingCustomerLookup = Pick<

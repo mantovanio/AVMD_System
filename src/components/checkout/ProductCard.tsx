@@ -2,7 +2,7 @@ import { CheckCircle2, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ProductTags } from './ProductTags'
 import { formatCurrency } from './formatUtils'
-import type { LojaItemRow } from '@/lib/checkout'
+import { getProductProfile, type LojaItemRow } from '@/lib/checkout'
 
 interface ProductCardProps {
   item: LojaItemRow
@@ -12,6 +12,7 @@ interface ProductCardProps {
 
 export function ProductCard({ item, selected, onSelect }: ProductCardProps) {
   const cert = item.certificados
+  const profile = getProductProfile(cert)
 
   return (
     <article
@@ -22,12 +23,8 @@ export function ProductCard({ item, selected, onSelect }: ProductCardProps) {
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold leading-snug">{cert?.tipo ?? 'Produto'}</h3>
-          {(cert?.descricao_produto ?? cert?.descricao) && (
-            <p className="text-sm text-slate-500 mt-2 leading-relaxed">
-              {cert?.descricao_produto ?? cert?.descricao}
-            </p>
-          )}
+          <h3 className="text-lg font-semibold leading-snug">{profile.displayName}</h3>
+          <p className="text-sm text-slate-500 mt-2 leading-relaxed">{profile.details}</p>
         </div>
         {selected && <CheckCircle2 size={18} className="text-[#ea7b18] shrink-0" />}
       </div>
