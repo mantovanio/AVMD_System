@@ -203,6 +203,7 @@ const server = createServer(async (req, res) => {
     await handleCheckoutRoutes(req, res, service, config.corsOrigin, checkoutPaymentService)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro interno do servidor.'
+    console.error(`[HTTP ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'}] ${message}`, error)
     writeJson(res, 500, { ok: false, error: message }, config.corsOrigin)
   }
 })

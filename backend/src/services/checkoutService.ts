@@ -116,10 +116,10 @@ export class CheckoutService {
       voucherValor = descontoAplicado
     }
 
-    const cadastro = await this.repository.upsertCheckoutCustomer(body)
-    const titular = await this.repository.upsertCheckoutHolder(body)
-    const access = await this.ensurePortalAccess(body)
-    const venda = await this.repository.createCheckoutSale({
+    const cadastro = await this.runSubmitStage('cadastro_comprador', () => this.repository.upsertCheckoutCustomer(body))
+    const titular = await this.runSubmitStage('cadastro_titular', () => this.repository.upsertCheckoutHolder(body))
+    const access = await this.runSubmitStage('acesso_portal', () => this.ensurePortalAccess(body))
+    const venda = await this.runSubmitStage('criacao_venda', () => this.repository.createCheckoutSale({
       payload: body,
       loja,
       item,
@@ -130,18 +130,18 @@ export class CheckoutService {
       voucherCodigo,
       voucherPercentual,
       voucherValor,
-    })
+    }))
 
     if (body.agendamento) {
-      await this.repository.createCheckoutSchedule({
+      await this.runSubmitStage('agendamento', () => this.repository.createCheckoutSchedule({
         payload: body,
         vendaId: venda.id,
         cadastroBaseId: cadastro.id,
         titularId: titular.id,
-      })
+      }))
     }
 
-    const charge = await this.paymentService.createChargeForSale({
+    const charge = await this.runSubmitStage('geracao_cobranca', () => this.paymentService.createChargeForSale({
       vendaId: venda.id,
       formaPagamentoId: body.pagamento.forma_pagamento_id,
       valor: Number(item.valor ?? 0) - descontoAplicado,
@@ -154,10 +154,10 @@ export class CheckoutService {
       },
       fiscal: body.fiscal,
       card: body.pagamento.card ?? null,
-    })
+    }))
 
     const chargeLink = charge.chargeUrl ?? null
-    await this.queuePurchaseNotifications({
+    await this.runSubmitStage('notificacoes', () => this.queuePurchaseNotifications({
       saleId: venda.id,
       compradorNome: body.comprador.nome,
       email: body.comprador.email,
@@ -167,7 +167,7 @@ export class CheckoutService {
       descricao: `${item.certificados?.tipo ?? 'Certificado digital'} - ${body.comprador.nome}`,
       paymentStatus: charge.status,
       mocked: Boolean(charge.mocked),
-    })
+    }))
     const message = charge.ok
       ? (charge.mocked
           ? 'Pedido criado com sucesso. Cobranca gerada em modo de testes.'
@@ -186,6 +186,16 @@ export class CheckoutService {
       payment_details: charge.details as CheckoutSubmitResponse['payment_details'],
       access_status: access.status,
       access_message: access.message,
+    }
+  }
+
+  private async runSubmitStage<T>(stage: string, action: () => Promise<T>): Promise<T> {
+    try {
+      return await action()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error(`[CheckoutSubmit:${stage}] ${message}`, error)
+      throw new Error(`Falha na etapa ${stage}: ${message}`)
     }
   }
 

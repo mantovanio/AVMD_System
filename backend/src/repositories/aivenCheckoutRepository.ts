@@ -548,10 +548,10 @@ export class AivenCheckoutRepository implements CheckoutRepository {
       `update vendas_certificados
        set metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
          'payment_charge', jsonb_build_object(
-           'gateway', $2,
-           'external_id', $3,
-           'charge_url', $4,
-           'status', $5,
+           'gateway', $2::text,
+           'external_id', $3::text,
+           'charge_url', $4::text,
+           'status', $5::text,
            'payload', $6::jsonb,
            'updated_at', now(),
            'details', $7::jsonb
@@ -559,7 +559,15 @@ export class AivenCheckoutRepository implements CheckoutRepository {
        ),
            updated_at = now()
        where id = $1::uuid`,
-      [input.vendaId, input.gateway, input.externalId ?? null, input.chargeUrl ?? null, input.status, JSON.stringify(input.payload ?? {}), JSON.stringify(input.details ?? {})],
+      [
+        String(input.vendaId),
+        String(input.gateway),
+        input.externalId ? String(input.externalId) : null,
+        input.chargeUrl ? String(input.chargeUrl) : null,
+        String(input.status),
+        JSON.stringify(input.payload ?? {}),
+        JSON.stringify(input.details ?? {}),
+      ],
     )
   }
 
@@ -576,27 +584,34 @@ export class AivenCheckoutRepository implements CheckoutRepository {
 
     await this.db.query(
       `update vendas_certificados
-       set pago = case when $2 then true else pago end,
-           data_pagamento = case when $2 then now() else data_pagamento end,
+       set pago = case when $2::boolean then true else pago end,
+           data_pagamento = case when $2::boolean then now() else data_pagamento end,
            status_pagamento = case
-             when $2 then 'pago'
-             when $5 = 'failed' and status_pagamento is distinct from 'pago' then 'recusado'
+             when $2::boolean then 'pago'
+             when $5::text = 'failed' and status_pagamento is distinct from 'pago' then 'recusado'
              else status_pagamento
            end,
-           status_venda = case when $2 then 'vendido' else status_venda end,
+           status_venda = case when $2::boolean then 'vendido' else status_venda end,
            metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
              'payment_charge', coalesce(metadata->'payment_charge', '{}'::jsonb) || jsonb_build_object(
-               'gateway', $3,
-               'external_id', $4,
-               'status', $5,
+               'gateway', $3::text,
+               'external_id', $4::text,
+               'status', $5::text,
                'webhook_payload', $6::jsonb,
-               'paid', $2,
+               'paid', $2::boolean,
                'updated_at', now()
              )
            ),
            updated_at = now()
        where id = $1::uuid`,
-      [vendaId, input.paid, input.gateway, input.externalId ?? null, input.status, JSON.stringify(input.payload ?? {})],
+      [
+        String(vendaId),
+        Boolean(input.paid),
+        String(input.gateway),
+        input.externalId ? String(input.externalId) : null,
+        String(input.status),
+        JSON.stringify(input.payload ?? {}),
+      ],
     )
   }
 
