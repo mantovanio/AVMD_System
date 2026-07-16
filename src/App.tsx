@@ -85,13 +85,14 @@ function PageLoader() {
 function AppContent() {
   const { user, profile, loading, signOut, isPasswordRecovery } = useAuth()
   const pathname = window.location.pathname
+  const initialPortal = new URLSearchParams(window.location.search).get('page') === 'portal'
   const isShopRoute  = /^\/shop\/?$/.test(pathname)
   const lojaMatch    = pathname.match(/^\/loja\/([^/]+)\/?$/)
   const lojaSlug     = lojaMatch?.[1] ? decodeURIComponent(lojaMatch[1]) : null
   const contestacaoMatch = pathname.match(/^\/contestacao\/([^/]+)\/?$/)
   const contestacaoToken = contestacaoMatch?.[1] ? decodeURIComponent(contestacaoMatch[1]) : null
 
-  const [page, setPage]         = useState<Page>('dashboard')
+  const [page, setPage]         = useState<Page>(initialPortal ? 'portal' : 'dashboard')
   const [dark, setDark]         = useState(() => localStorage.getItem('theme') === 'dark')
   const [agencyConfig, setAgencyConfig] = useState(DEFAULT_AGENCY_CONFIG)
   const [claudeOpen, setClaudeOpen]     = useState(false)

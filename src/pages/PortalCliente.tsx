@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays, CreditCard, Loader2, Package, ShieldCheck } from 'lucide-react'
+import { CalendarDays, CreditCard, ExternalLink, Loader2, MessageCircle, Package, Phone, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getApiUrl } from '@/lib/api'
+import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig } from '@/lib/agencyConfig'
 import { SchedulingModal, formatCurrency, formatDateTime } from '@/components/checkout'
 import type { AgendaAgent, AgendaPoint, AgendaSlot } from '@/lib/checkout'
 
@@ -41,6 +42,7 @@ function orderLabel(order: PortalOrder) {
 
 export default function PortalCliente() {
   const { user, profile } = useAuth()
+  const [agencyConfig, setAgencyConfig] = useState(DEFAULT_AGENCY_CONFIG)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -74,6 +76,16 @@ export default function PortalCliente() {
   useEffect(() => {
     void loadOrders()
   }, [user?.id])
+
+  useEffect(() => {
+    let active = true
+    async function loadAgency() {
+      const { data } = await fetchAgencyConfig()
+      if (active) setAgencyConfig(data)
+    }
+    void loadAgency()
+    return () => { active = false }
+  }, [])
 
   async function openSchedule(order: PortalOrder) {
     if (!user) return
@@ -159,10 +171,41 @@ export default function PortalCliente() {
               <h1 className="mt-2 text-2xl font-semibold text-slate-900">Acompanhe seus pedidos e agendamentos</h1>
               <p className="mt-2 text-sm text-slate-600">{profile.nome}, aqui voce consegue acompanhar pagamento, protocolo e reservar sua videoconferencia.</p>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <SummaryCard icon={Package} label="Pedidos" value={String(orders.length)} />
               <SummaryCard icon={CreditCard} label="Pagos" value={String(orders.filter(order => order.pago).length)} />
               <SummaryCard icon={CalendarDays} label="Agendados" value={String(orders.filter(order => order.data_agendada).length)} />
+              <SummaryCard icon={MessageCircle} label="Contato" value="Empresa" />
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#ea7b18]">Acesso rápido</p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-900">Fale com a empresa e gerencie sua compra</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Aqui você consegue revisar o pedido, conferir a forma de pagamento, agendar ou reagendar a validação e chamar a equipe quando precisar.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={agencyConfig.telefone ? `https://wa.me/${agencyConfig.telefone.replace(/\D/g, '')}` : '#'}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-2xl bg-[#17346b] px-4 py-3 text-sm font-semibold text-white hover:bg-[#102654]"
+              >
+                <Phone size={15} />
+                WhatsApp da empresa
+              </a>
+              <a
+                href="mailto:contato@certiid.com.br"
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <ExternalLink size={15} />
+                Enviar e-mail
+              </a>
             </div>
           </div>
         </section>
