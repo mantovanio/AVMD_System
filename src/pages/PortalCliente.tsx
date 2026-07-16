@@ -40,6 +40,13 @@ function orderLabel(order: PortalOrder) {
   return order.tipo_produto || 'Certificado digital'
 }
 
+function orderGuidance(order: PortalOrder) {
+  const label = (order.tipo_produto ?? '').toLowerCase()
+  if (label.includes('e-cnpj')) return 'Confira se o pedido é para pessoa jurídica e valide a classe antes de concluir.'
+  if (label.includes('e-cpf')) return 'Confira se o pedido é para pessoa física e confirme a validade antes de concluir.'
+  return 'Revise o tipo, a classe e a validade do certificado antes de seguir.'
+}
+
 export default function PortalCliente() {
   const { user, profile } = useAuth()
   const [agencyConfig, setAgencyConfig] = useState(DEFAULT_AGENCY_CONFIG)
@@ -231,6 +238,7 @@ export default function PortalCliente() {
                   <div>
                     <p className="text-lg font-semibold text-slate-900">{orderLabel(order)}</p>
                     <p className="mt-1 text-xs text-slate-500">Compra em {formatDateTime(order.created_at)}</p>
+                    <p className="mt-2 text-sm text-slate-600">{orderGuidance(order)}</p>
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs">
                     <Badge text={paymentLabel(order)} tone={order.pago ? 'success' : 'warning'} />
