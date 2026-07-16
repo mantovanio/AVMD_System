@@ -14,6 +14,7 @@ import {
   MapPin,
   Phone,
   Store,
+  ShoppingCart,
   Tag,
   UserRound,
   Wallet,
@@ -319,6 +320,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [productClassFilter, setProductClassFilter] = useState('')
   const [productValidityFilter, setProductValidityFilter] = useState('')
   const [productConfirmed, setProductConfirmed] = useState(false)
+  const [cartConfirmed, setCartConfirmed] = useState(false)
   const [pagamentos, setPagamentos] = useState<PaymentOption[]>([])
   const [agendaAgents, setAgendaAgents] = useState<AgendaAgent[]>([])
   const [agendaPoints, setAgendaPoints] = useState<AgendaPoint[]>([])
@@ -390,6 +392,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
         setItens(context.produtos)
         setSelectedItemId(initialItemId)
         setProductConfirmed(Boolean(initialItemId && normalizeLojaConfig(context.loja.configuracoes).modo_exibicao === 'link_direto'))
+        setCartConfirmed(false)
         setPagamentos(context.pagamentos)
         setAgendaAgents(context.agentes)
         setAgendaPoints(context.pontos)
@@ -613,6 +616,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
 
   const sectionStatuses: SectionStatus[] = [
     { label: 'Produto', done: !!itemSelecionado && productConfirmed, icon: Store },
+    { label: 'Carrinho', done: cartConfirmed, icon: ShoppingCart },
     { label: 'Faturamento', done: faturamentoDone, icon: Building2 },
     { label: 'Titular', done: titularDone, icon: UserRound },
     { label: 'Pagamento', done: pagamentoDone, icon: CreditCard },
@@ -621,14 +625,15 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
 
   const checkoutStep = useMemo(() => {
     if (!itemSelecionado || !productConfirmed) return 1
-    if (!faturamentoDone) return 2
-    if (!titularDone) return 3
-    if (!pagamentoDone) return 4
-    if (!agendamentoDone) return 5
-    return 6
-  }, [agendamentoDone, faturamentoDone, itemSelecionado, pagamentoDone, productConfirmed, titularDone])
+    if (!cartConfirmed) return 2
+    if (!faturamentoDone) return 3
+    if (!titularDone) return 4
+    if (!pagamentoDone) return 5
+    if (!agendamentoDone) return 6
+    return 7
+  }, [agendamentoDone, cartConfirmed, faturamentoDone, itemSelecionado, pagamentoDone, productConfirmed, titularDone])
 
-  const canShowFaturamento = !!itemSelecionado && productConfirmed
+  const canShowFaturamento = !!itemSelecionado && productConfirmed && cartConfirmed
   const canShowTitular = canShowFaturamento && faturamentoDone
   const canShowPagamento = canShowTitular && titularDone
   const canShowAgendamento = canShowPagamento && pagamentoDone
@@ -820,11 +825,21 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   function handleSelectProduct(itemId: string) {
     setSelectedItemId(itemId)
     setProductConfirmed(false)
+    setCartConfirmed(false)
   }
 
   function confirmProductSelection() {
     if (!itemSelecionado) return
     setProductConfirmed(true)
+    setCartConfirmed(false)
+    requestAnimationFrame(() => {
+      formStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
+  function confirmCartSelection() {
+    if (!itemSelecionado) return
+    setCartConfirmed(true)
     requestAnimationFrame(() => {
       formStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
@@ -1111,21 +1126,21 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   <p className="text-base font-semibold text-[#17346b]">Selecione as opções abaixo para encontrar seu Certificado Digital.</p>
                   <div className="grid overflow-hidden rounded-2xl border border-slate-300 sm:grid-cols-3">
                     <label className="border-b border-slate-300 p-4 sm:border-b-0 sm:border-r">
-                      <span className="block text-sm font-bold text-[#17346b]">Produto</span>
+                      <span className="block text-sm font-bold text-[#17346b]">Tipo</span>
                       <select value={productKindFilter} onChange={event => { setProductKindFilter(event.target.value); setProductClassFilter(''); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none">
                         <option value="">Selecione</option>
                         {productKindOptions.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
                     <label className="border-b border-slate-300 p-4 sm:border-b-0 sm:border-r">
-                      <span className="block text-sm font-bold text-[#17346b]">Tipo</span>
+                      <span className="block text-sm font-bold text-[#17346b]">Classe</span>
                       <select disabled={!productKindFilter} value={productClassFilter} onChange={event => { setProductClassFilter(event.target.value); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
                         <option value="">Selecione</option>
                         {productClassOptions.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
                     <label className="p-4">
-                      <span className="block text-sm font-bold text-[#17346b]">Validade</span>
+                      <span className="block text-sm font-bold text-[#17346b]">Prazo</span>
                       <select disabled={!productClassFilter} value={productValidityFilter} onChange={event => { setProductValidityFilter(event.target.value); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
                         <option value="">Selecione</option>
                         {productValidityOptions.map(option => <option key={option} value={option}>{option}</option>)}
@@ -1136,7 +1151,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   {!productKindFilter || !productClassFilter || !productValidityFilter ? (
                     <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-slate-300 bg-slate-50/40 px-6 text-center">
                       <Store size={54} strokeWidth={1.25} className="text-slate-300" />
-                      <p className="mt-5 text-lg font-semibold text-slate-600">Preencha os filtros na ordem: e-CPF/e-CNPJ, A1/A3 e prazo.</p>
+                      <p className="mt-5 text-lg font-semibold text-slate-600">Preencha os filtros na ordem: tipo, classe e prazo.</p>
                     </div>
                   ) : filteredProducts.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-slate-500">Nenhum produto disponível para esta combinação.</div>
@@ -1165,7 +1180,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                             </>
                           ) : <div className="p-8 text-center text-sm text-slate-500">Escolha um produto para continuar.</div>}
                         </div>
-                        <button type="button" disabled={!itemSelecionado} onClick={confirmProductSelection} className="mt-4 w-full rounded-xl bg-[#0b8fc1] px-5 py-4 text-sm font-bold text-white transition hover:bg-[#087ca8] disabled:cursor-not-allowed disabled:bg-slate-300">Avançar</button>
+                        <button type="button" disabled={!itemSelecionado} onClick={confirmProductSelection} className="mt-4 w-full rounded-xl bg-[#0b8fc1] px-5 py-4 text-sm font-bold text-white transition hover:bg-[#087ca8] disabled:cursor-not-allowed disabled:bg-slate-300">Ir para o carrinho</button>
                       </aside>
                     </div>
                   )}
@@ -1173,7 +1188,51 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
               )}
             </SectionCard>
 
-            {checkoutStep >= 2 && canShowFaturamento && (
+            {checkoutStep === 2 && itemSelecionado && productConfirmed && (
+            <SectionCard
+              title="Carrinho"
+              description="Revise o item escolhido antes de seguir para os dados pessoais."
+              icon={ShoppingCart}
+              highlight={false}
+              done={cartConfirmed}
+            >
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,.8fr)]">
+                <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white">
+                  <div className="p-5">
+                    <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Item no carrinho</p>
+                    <p className="mt-2 text-lg font-bold text-slate-900">{itemSelecionado.certificados?.tipo ?? 'Produto'}</p>
+                    <p className="mt-2 text-sm text-slate-600">Classe: {productCertificateClass(itemSelecionado)}</p>
+                    <p className="text-sm text-slate-600">Prazo: {productValidity(itemSelecionado)}</p>
+                    <div className="mt-4">
+                      <ProductTags item={itemSelecionado} compact />
+                    </div>
+                  </div>
+                  <div className="border-t border-slate-200 px-5 py-4 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-slate-600">Total do pedido</span>
+                    <span className="text-2xl font-bold text-emerald-600">{formatCurrency(itemSelecionado.valor)}</span>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-5">
+                  <p className="text-sm font-semibold text-sky-900">Antes de continuar</p>
+                  <ul className="mt-3 space-y-2 text-sm text-sky-800 leading-relaxed">
+                    <li>Confira se o tipo está correto: e-CPF ou e-CNPJ.</li>
+                    <li>Confira a classe: A1 ou A3, com ou sem mídia.</li>
+                    <li>Confira o prazo antes de seguir para os dados.</li>
+                  </ul>
+                  <div className="mt-5 flex flex-col gap-3">
+                    <button type="button" onClick={() => setProductConfirmed(false)} className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                      Voltar para o produto
+                    </button>
+                    <button type="button" onClick={confirmCartSelection} className="rounded-xl bg-[#17346b] px-4 py-3 text-sm font-semibold text-white hover:bg-[#102654]">
+                      Prosseguir para os dados
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+            )}
+
+            {checkoutStep >= 3 && canShowFaturamento && (
             <div
               ref={formStartRef}
               className="space-y-6"
@@ -1183,20 +1242,24 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
               <ul className="mt-2 space-y-1.5 text-sm text-sky-800">
                 <li className="flex items-start gap-2">
                   <span className="font-bold shrink-0">1.</span>
-                  <span><strong className="text-sky-950">Faturamento:</strong> quem vai pagar e receber a nota fiscal</span>
+                  <span><strong className="text-sky-950">Carrinho:</strong> confirme o produto antes de preencher os dados</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="font-bold shrink-0">2.</span>
-                  <span><strong className="text-sky-950">Titular do certificado:</strong> quem vai receber e usar o certificado digital</span>
+                  <span><strong className="text-sky-950">Faturamento:</strong> quem vai pagar e receber a nota fiscal</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="font-bold shrink-0">3.</span>
+                  <span><strong className="text-sky-950">Titular do certificado:</strong> quem vai receber e usar o certificado digital</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold shrink-0">4.</span>
                   <span>Se a mesma pessoa for pagar e usar o certificado, é só marcar a opção na etapa do titular</span>
                 </li>
               </ul>
             </div>
 
-            {checkoutStep === 2 && (
+            {checkoutStep === 3 && (
             <SectionCard
               title="Dados do faturamento"
               description="Preencha os dados de quem vai pagar e receber a nota fiscal. Se for pessoa jurídica, o certificado sempre será emitido para uma pessoa física como titular."
@@ -1525,7 +1588,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
             </SectionCard>
             )}
 
-            {checkoutStep === 3 && canShowTitular && (
+            {checkoutStep === 4 && canShowTitular && (
             <SectionCard
               title="Dados do titular do certificado"
               description="O titular é a pessoa física que vai receber e usar o certificado digital. Pode ser você mesmo(a) ou outra pessoa."
@@ -1681,7 +1744,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
             </SectionCard>
             )}
 
-            {checkoutStep === 4 && canShowPagamento && (
+            {checkoutStep === 5 && canShowPagamento && (
             <SectionCard
               title="Forma de pagamento"
               description="Escolha como você vai pagar. Depois da compensação, liberamos o atendimento da validação."
@@ -1866,7 +1929,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
             </SectionCard>
             )}
 
-            {checkoutStep === 5 && canShowAgendamento && (
+            {checkoutStep === 6 && canShowAgendamento && (
             <SectionCard
               title="Agendamento da validação"
               description="Reserve um horário para validar seus documentos. A validação só acontece depois do pagamento, mas você já pode deixar agendado."

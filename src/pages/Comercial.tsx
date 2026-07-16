@@ -773,6 +773,7 @@ export default function Comercial() {
   // ── wizard step state ─────────────────────────────────────────
   const [currentFormStep, setCurrentFormStep]     = useState(0)
   const [produtoKindFilter, setProdutoKindFilter] = useState('')
+  const [produtoClassFilter, setProdutoClassFilter] = useState('')
   const [produtoEmissaoFilter, setProdutoEmissaoFilter] = useState('')
   const [produtoValidadeFilter, setProdutoValidadeFilter] = useState('')
 
@@ -996,6 +997,12 @@ export default function Comercial() {
     }
     return base || cert.tipo?.trim() || 'Outros'
   }
+  function productClass(cert: Certificado): string {
+    const text = `${cert.tipo ?? ''} ${resolveModelo(cert) ?? ''} ${cert.categoria ?? ''} ${cert.periodo_uso ?? ''}`.toLowerCase()
+    if (/\ba3\b/.test(text) || /cart|token|leitora|midia|mídia|pendrive/.test(text)) return 'A3'
+    if (/\ba1\b/.test(text)) return 'A1'
+    return 'A1'
+  }
   function productValidity(cert: Certificado): string {
     return (cert.validade ?? '').trim() || 'Não definido'
   }
@@ -1008,13 +1015,21 @@ export default function Comercial() {
     () => certsDaTabela.filter(c => !produtoKindFilter || productKind(c.cert) === produtoKindFilter),
     [produtoKindFilter, certsDaTabela]
   )
-  const produtoValidadeOptions = useMemo(
-    () => Array.from(new Set(produtosByKind.map(c => productValidity(c.cert)))).sort(),
+  const produtoClassOptions = useMemo(
+    () => Array.from(new Set(produtosByKind.map(c => productClass(c.cert)))).sort(),
     [produtosByKind]
   )
+  const produtosByClass = useMemo(
+    () => produtosByKind.filter(c => !produtoClassFilter || productClass(c.cert) === produtoClassFilter),
+    [produtoClassFilter, produtosByKind]
+  )
+  const produtoValidadeOptions = useMemo(
+    () => Array.from(new Set(produtosByClass.map(c => productValidity(c.cert)))).sort(),
+    [produtosByClass]
+  )
   const produtosFiltrados = useMemo(
-    () => produtosByKind.filter(c => !produtoValidadeFilter || productValidity(c.cert) === produtoValidadeFilter),
-    [produtoValidadeFilter, produtosByKind]
+    () => produtosByClass.filter(c => !produtoValidadeFilter || productValidity(c.cert) === produtoValidadeFilter),
+    [produtoValidadeFilter, produtosByClass]
   )
 
   const motivoSemCertificados = useMemo(() => {
@@ -4758,12 +4773,13 @@ export default function Comercial() {
                           {/* Filtros cascata */}
                           <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
                             <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Selecione as opções para encontrar seu certificado</h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <label className="flex flex-col gap-1">
                                 <span className="text-xs text-gray-500 font-medium">Tipo *</span>
                                 <select value={produtoKindFilter}
                                   onChange={e => {
                                     setProdutoKindFilter(e.target.value)
+                                    setProdutoClassFilter('')
                                     setProdutoValidadeFilter('')
                                     setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
                                   }}
@@ -4773,15 +4789,29 @@ export default function Comercial() {
                                 </select>
                               </label>
                               <label className="flex flex-col gap-1">
-                                <span className="text-xs text-gray-500 font-medium">Validade *</span>
-                                <select value={produtoValidadeFilter}
+                                <span className="text-xs text-gray-500 font-medium">Classe *</span>
+                                <select value={produtoClassFilter}
                                   onChange={e => {
-                                    setProdutoValidadeFilter(e.target.value)
+                                    setProdutoClassFilter(e.target.value)
+                                    setProdutoValidadeFilter('')
                                     setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
                                   }}
                                   disabled={!produtoKindFilter}
                                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60">
                                   <option value="">{!produtoKindFilter ? 'Selecione o tipo' : 'Todas'}</option>
+                                  {produtoClassOptions.map(v => <option key={v} value={v}>{v}</option>)}
+                                </select>
+                              </label>
+                              <label className="flex flex-col gap-1">
+                                <span className="text-xs text-gray-500 font-medium">Prazo *</span>
+                                <select value={produtoValidadeFilter}
+                                  onChange={e => {
+                                    setProdutoValidadeFilter(e.target.value)
+                                    setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
+                                  }}
+                                  disabled={!produtoClassFilter}
+                                  className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60">
+                                  <option value="">{!produtoClassFilter ? 'Selecione a classe' : 'Todas'}</option>
                                   {produtoValidadeOptions.map(v => <option key={v} value={v}>{v}</option>)}
                                 </select>
                               </label>
@@ -4823,7 +4853,7 @@ export default function Comercial() {
                                       <div className="flex flex-col">
                                         <span className="text-sm font-semibold">{cert?.tipo ?? 'Produto'}</span>
                                         <span className="text-xs opacity-70">
-                                          {[resolveModelo(cert), productValidity(cert)].filter(Boolean).join(' · ') || '—'}
+                                          {[resolveModelo(cert), productClass(cert), productValidity(cert)].filter(Boolean).join(' · ') || '—'}
                                         </span>
                                       </div>
                                       <div className="flex items-center gap-3">
