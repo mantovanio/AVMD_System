@@ -301,7 +301,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [itens, setItens] = useState<LojaItemRow[]>([])
   const [selectedItemId, setSelectedItemId] = useState('')
   const [productKindFilter, setProductKindFilter] = useState('')
-  const [productClassFilter, setProductClassFilter] = useState('')
+  const [productEmissionFilter, setProductEmissionFilter] = useState('')
   const [productValidityFilter, setProductValidityFilter] = useState('')
   const [productConfirmed, setProductConfirmed] = useState(false)
   const [cartConfirmed, setCartConfirmed] = useState(false)
@@ -412,10 +412,10 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
 
   const productKindOptions = useMemo(() => ['e-CPF', 'e-CNPJ'], [])
   const productsByKind = useMemo(() => produtosAtivos.filter(item => !productKindFilter || productKind(item) === productKindFilter), [productKindFilter, produtosAtivos])
-  const productClassOptions = useMemo(() => Array.from(new Set(productsByKind.map(productCertificateClass))).filter(option => option !== 'Não informado').sort(), [productsByKind])
-  const productsByClass = useMemo(() => productsByKind.filter(item => !productClassFilter || productCertificateClass(item) === productClassFilter), [productClassFilter, productsByKind])
-  const productValidityOptions = useMemo(() => Array.from(new Set(productsByClass.map(productValidity))).sort(), [productsByClass])
-  const filteredProducts = useMemo(() => productsByClass.filter(item => !productValidityFilter || productValidity(item) === productValidityFilter), [productValidityFilter, productsByClass])
+  const productEmissionOptions = useMemo(() => Array.from(new Set(productsByKind.map(item => item.certificados?.tipo_emissao_padrao?.trim()).filter(Boolean))).sort(), [productsByKind])
+  const productsByEmission = useMemo(() => productsByKind.filter(item => !productEmissionFilter || (item.certificados?.tipo_emissao_padrao?.trim() ?? '') === productEmissionFilter), [productEmissionFilter, productsByKind])
+  const productValidityOptions = useMemo(() => Array.from(new Set(productsByEmission.map(productValidity))).sort(), [productsByEmission])
+  const filteredProducts = useMemo(() => productsByEmission.filter(item => !productValidityFilter || productValidity(item) === productValidityFilter), [productValidityFilter, productsByEmission])
 
   const lojaConfig = useMemo(
     () => normalizeLojaConfig(loja?.configuracoes),
@@ -1065,9 +1065,9 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
               </div>
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {[
-                  { n: 1, label: 'Tipo' },
-                  { n: 2, label: 'Classe' },
-                  { n: 3, label: 'Prazo' },
+                  { n: 1, label: 'Produto' },
+                  { n: 2, label: 'Emissão' },
+                  { n: 3, label: 'Validade' },
                   { n: 4, label: 'Produto final' },
                 ].map(step => (
                   <div key={step.n} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-center">
@@ -1107,35 +1107,35 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                 <ProductHero item={itemSelecionado} />
               ) : (
                 <div className="space-y-6">
-                  <p className="text-base font-semibold text-[#17346b]">Selecione as opções abaixo para encontrar seu Certificado Digital.</p>
-                  <div className="grid overflow-hidden rounded-2xl border border-slate-300 sm:grid-cols-3">
-                    <label className="border-b border-slate-300 p-4 sm:border-b-0 sm:border-r">
-                      <span className="block text-sm font-bold text-[#17346b]">Tipo</span>
-                      <select value={productKindFilter} onChange={event => { setProductKindFilter(event.target.value); setProductClassFilter(''); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none">
+                      <p className="text-base font-semibold text-[#17346b]">Selecione o produto, a emissão e a validade para encontrar seu certificado.</p>
+                      <div className="grid overflow-hidden rounded-2xl border border-slate-300 sm:grid-cols-3">
+                        <label className="border-b border-slate-300 p-4 sm:border-b-0 sm:border-r">
+                      <span className="block text-sm font-bold text-[#17346b]">Produto</span>
+                      <select value={productKindFilter} onChange={event => { setProductKindFilter(event.target.value); setProductEmissionFilter(''); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none">
                         <option value="">Selecione</option>
                         {productKindOptions.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
                     <label className="border-b border-slate-300 p-4 sm:border-b-0 sm:border-r">
-                      <span className="block text-sm font-bold text-[#17346b]">Classe</span>
-                      <select disabled={!productKindFilter} value={productClassFilter} onChange={event => { setProductClassFilter(event.target.value); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
+                      <span className="block text-sm font-bold text-[#17346b]">Emissão</span>
+                      <select disabled={!productKindFilter} value={productEmissionFilter} onChange={event => { setProductEmissionFilter(event.target.value); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
                         <option value="">Selecione</option>
-                        {productClassOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                        {productEmissionOptions.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
                     <label className="p-4">
-                      <span className="block text-sm font-bold text-[#17346b]">Prazo</span>
-                      <select disabled={!productClassFilter} value={productValidityFilter} onChange={event => { setProductValidityFilter(event.target.value); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
+                      <span className="block text-sm font-bold text-[#17346b]">Validade</span>
+                      <select disabled={!productEmissionFilter} value={productValidityFilter} onChange={event => { setProductValidityFilter(event.target.value); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
                         <option value="">Selecione</option>
                         {productValidityOptions.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
                   </div>
 
-                  {!productKindFilter || !productClassFilter || !productValidityFilter ? (
+                  {!productKindFilter || !productEmissionFilter || !productValidityFilter ? (
                     <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-slate-300 bg-slate-50/40 px-6 text-center">
                       <Store size={54} strokeWidth={1.25} className="text-slate-300" />
-                      <p className="mt-5 text-lg font-semibold text-slate-600">Preencha os filtros na ordem: tipo, classe e prazo.</p>
+                      <p className="mt-5 text-lg font-semibold text-slate-600">Preencha os filtros na ordem: produto, emissão e validade.</p>
                     </div>
                   ) : filteredProducts.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-slate-500">Nenhum produto disponível para esta combinação.</div>
