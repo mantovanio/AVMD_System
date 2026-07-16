@@ -5961,16 +5961,16 @@ export default function Comercial() {
                 const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s
               })
               return (
-                <DataTable headers={['', 'Status', 'Tipo emissão', 'Código', 'Nome', 'Validade total', 'Período de uso', 'Descrição', 'Descrição do Produto', 'Tipo', 'Produto vinculado na AC', 'Preço de venda', 'Valor Custo AC', 'Valor Custo AR', 'Agrupador', 'Hash', 'Ações']}
-                  initialWidths={[40, 60, 120, 70, 180, 80, 100, 180, 180, 100, 160, 100, 100, 100, 100, 100, 80]}>
+                <DataTable headers={['', 'Status', 'Tipo emissão', 'Código', 'Nome', 'Validade total', 'Período de uso', 'Descrição do Produto', 'Tipo', 'Produto vinculado na AC', 'Preço de venda', 'Valor Custo AC', 'Valor Custo AR', 'Agrupador', 'Hash', 'Ações']}
+                  initialWidths={[40, 60, 120, 70, 180, 80, 100, 220, 100, 160, 100, 100, 100, 100, 100, 80]}>
                   {certificados.length === 0 ? (
-                    <EmptyRow colSpan={17} label="Nenhum certificado cadastrado. Use 'Importar Planilha' ou 'Novo Certificado'." />
+                    <EmptyRow colSpan={16} label="Nenhum certificado cadastrado. Use 'Importar Planilha' ou 'Novo Certificado'." />
                   ) : certificadosFiltrados.length === 0 ? (
-                    <EmptyRow colSpan={17} label="Nenhum certificado encontrado com os filtros aplicados." />
+                    <EmptyRow colSpan={16} label="Nenhum certificado encontrado com os filtros aplicados." />
                   ) : (
                     <>
                       <tr className="bg-gray-50 dark:bg-gray-800/50">
-                        <td className="px-4 py-2" colSpan={14}>
+                        <td className="px-4 py-2" colSpan={13}>
                           <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-500 select-none">
                             <input type="checkbox" checked={allSelected} onChange={toggleAll}
                               className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer" />
@@ -5999,7 +5999,6 @@ export default function Comercial() {
                           <td className="px-4 py-3 font-medium text-sm">{c.tipo || '—'}</td>
                           <td className="px-4 py-3 text-sm">{formatarValidadeMeses(c.validade)}</td>
                           <td className="px-4 py-3 text-xs">{c.periodo_uso ?? '—'}</td>
-                          <td className="px-4 py-3 text-xs text-gray-400 max-w-[180px] truncate" title={c.descricao ?? ''}>{c.descricao ?? '—'}</td>
                           <td className="px-4 py-3 text-xs text-gray-400 max-w-[180px] truncate" title={c.descricao_produto ?? ''}>{c.descricao_produto ?? '—'}</td>
                           <td className="px-4 py-3 text-xs">{c.categoria ?? '—'}</td>
                           <td className="px-4 py-3 text-xs text-gray-400 max-w-[140px] truncate" title={c.produto_vinculado_ac ?? ''}>{c.produto_vinculado_ac ?? '—'}</td>
