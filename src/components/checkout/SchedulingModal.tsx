@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { CheckCircle2, X, Phone, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SelectField } from './SelectField'
+import { FlowModal } from './FlowModal'
 import { formatDayLabel, formatDateTime, formatTimeRange, buildSlotKey } from './SchedulingUtils'
 import type { AgendaAgent, AgendaPoint, AgendaSlot } from '@/lib/checkout'
 
@@ -98,33 +99,21 @@ export function SchedulingModal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6">
-      <div className="w-full sm:max-w-5xl max-h-[92vh] overflow-hidden rounded-t-[28px] sm:rounded-[30px] bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 px-5 sm:px-6 py-5 border-b border-slate-200">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.22em] text-[#ea7b18] font-semibold">Agendamento da validação</p>
-            <h3 className="text-xl font-semibold mt-1">Escolha seu horário de atendimento</h3>
-            <p className="text-sm text-slate-500 mt-2">
-              Você pode seguir sem agendar, mas será necessário voltar depois para definir seu atendimento.
+    <FlowModal
+      open
+      title="Agendamento da validação"
+      subtitle="Escolha seu horário de atendimento. Você pode seguir sem agendar agora."
+      onClose={onClose}
+      contentClassName="sm:max-w-5xl max-h-[92vh] rounded-t-[28px] sm:rounded-[30px]"
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <div className="border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/80 p-5 space-y-4">
+          <div className="rounded-[22px] border border-[#fde4cf] bg-[#fffaf4] p-4 text-sm text-slate-700">
+            <p className="font-semibold text-slate-900">Sobre a validação</p>
+            <p className="mt-2 leading-relaxed">
+              Após a compensação do pagamento, nossa equipe realiza a validação dos seus documentos neste horário.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-10 h-10 rounded-2xl border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <div className="border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/80 p-5 space-y-4">
-            <div className="rounded-[22px] border border-[#fde4cf] bg-[#fffaf4] p-4 text-sm text-slate-700">
-              <p className="font-semibold text-slate-900">Sobre a validação</p>
-              <p className="mt-2 leading-relaxed">
-                Após a compensação do pagamento, nossa equipe realiza a validação dos seus documentos neste horário.
-              </p>
-            </div>
 
             <div className="space-y-1">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Passo 1 — Atendente</p>
@@ -248,40 +237,38 @@ export function SchedulingModal({
               </>
             )}
           </div>
-        </div>
-
-        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 px-5 sm:px-6 py-4 border-t border-slate-200 bg-white">
+      </div>
+      <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
+        <button
+          type="button"
+          onClick={onSkip}
+          className="inline-flex items-center justify-center rounded-2xl px-4 py-3 border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+        >
+          Seguir sem agendar
+        </button>
+        <div className="flex flex-col sm:flex-row gap-3">
           <button
             type="button"
-            onClick={onSkip}
+            onClick={onClose}
             className="inline-flex items-center justify-center rounded-2xl px-4 py-3 border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50"
           >
-            Seguir sem agendar
+            Voltar
           </button>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex items-center justify-center rounded-2xl px-4 py-3 border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-            >
-              Voltar
-            </button>
-            <button
-              type="button"
-              onClick={() => onConfirm(draftSlotKey)}
-              disabled={!draftSlotKey}
-              className={cn(
-                'inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition-colors',
-                draftSlotKey
-                  ? 'bg-[#17346b] text-white hover:bg-[#102654]'
-                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              )}
-            >
-              {draftSlotKey ? 'Reservar horário' : 'Selecione um horário'}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => onConfirm(draftSlotKey)}
+            disabled={!draftSlotKey}
+            className={cn(
+              'inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition-colors',
+              draftSlotKey
+                ? 'bg-[#17346b] text-white hover:bg-[#102654]'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            )}
+          >
+            {draftSlotKey ? 'Reservar horário' : 'Selecione um horário'}
+          </button>
         </div>
       </div>
-    </div>
+    </FlowModal>
   )
 }

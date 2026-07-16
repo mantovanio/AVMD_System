@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import * as XLSX from 'xlsx'
 import { cn } from '@/lib/utils'
 import { generateAgendaSlotsPreview, resolveAgentesElegiveisPorTabela } from '@/lib/agenda'
+import { FlowModal } from '@/components/checkout'
 import {
   AlertCircle,
   Bell,
@@ -4400,10 +4401,14 @@ export default function Comercial() {
             )}
 
             {showFormV && createPortal(
-              <div
-                className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4 sm:p-6"
+              <FlowModal
+                open
+                title="Nova Venda"
+                subtitle="Use este fluxo para registrar a venda de forma guiada e consistente."
+                onClose={fecharFormVenda}
+                contentClassName="max-w-5xl"
               >
-                <div className="w-full max-w-5xl my-auto">
+                <div className="w-full my-auto">
               <Panel title="Nova Venda" onClose={fecharFormVenda}>
                 {loadingCatalogo ? (
                   <div className="flex items-center gap-2 text-gray-400 text-sm py-8 justify-center">
@@ -4987,7 +4992,7 @@ export default function Comercial() {
               )}
               </Panel>
                 </div>
-              </div>,
+              </FlowModal>,
               document.body
             )}
 
