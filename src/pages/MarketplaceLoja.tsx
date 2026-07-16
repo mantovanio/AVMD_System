@@ -284,6 +284,7 @@ function normalizedSearch(value: string) {
 function productKind(item: LojaItemRow) {
   const name = normalizedSearch(item.certificados?.tipo ?? '')
   if (name.includes('combo')) return 'Combo'
+  if (/nuvem|cloud|safeid/.test(name)) return 'Nuvem'
   if (/token|cartao|leitora|validacao domiciliar/.test(name) && !/e-cpf|e-pf|e-cnpj|e-pj|safeid/.test(name)) return 'Mídias e serviços'
   if (/e-cnpj|e-pj/.test(name)) return 'e-CNPJ'
   if (/e-cpf|e-pf/.test(name)) return 'e-CPF'

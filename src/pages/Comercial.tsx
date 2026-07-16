@@ -991,6 +991,7 @@ export default function Comercial() {
     else if (raw.includes('nf-e') || raw.includes('nfe')) base = 'NF-e'
     else if (raw.includes('ssl')) base = 'SSL'
     else if (raw.includes('combo')) base = 'Combo'
+    else if (/nuvem|cloud|safeid/.test(raw) || /nuvem|cloud|safeid/.test(`${cert.modelo ?? ''} ${cert.categoria ?? ''}`.toLowerCase())) base = 'Nuvem'
     else base = cert.tipo?.trim() || 'Outros'
     if (modelo && !base.toLowerCase().includes(modelo.toLowerCase())) {
       return `${base} ${modelo}`
@@ -8022,15 +8023,15 @@ function DataTable({ headers, children, initialWidths }: { headers: string[]; ch
   }, [])
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-x-auto">
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-auto max-h-[70vh]">
       <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
         <colgroup>
           {headers.map((_, i) => <col key={i} style={{ width: widths[i] }} />)}
         </colgroup>
-        <thead>
+        <thead className="sticky top-0 z-10">
           <tr className="bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left">
             {headers.map((h, i) => (
-              <th key={h} className="px-5 py-3 relative select-none group" style={{ width: widths[i] }}>
+              <th key={h} className="px-5 py-3 relative select-none group bg-gray-50 dark:bg-gray-800/50" style={{ width: widths[i] }}>
                 {h}
                 {i < headers.length - 1 && (
                   <div
