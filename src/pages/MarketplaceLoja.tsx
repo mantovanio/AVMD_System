@@ -306,7 +306,10 @@ function productCertificateClass(item: LojaItemRow) {
 }
 
 function productValidity(item: LojaItemRow) {
-  const explicit = item.certificados?.validade?.trim()
+  const isSafeId = productCertificateClass(item) === 'SafeID'
+  const explicit = isSafeId
+    ? (item.certificados?.periodo_uso?.trim() || item.certificados?.validade?.trim())
+    : item.certificados?.validade?.trim()
   if (explicit) return explicit
   const name = normalizedSearch(item.certificados?.tipo ?? '')
   const totalMonths = name.match(/validade(?: total)?(?: de)? (\d+) meses?/)?.[1]

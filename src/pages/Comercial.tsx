@@ -1039,6 +1039,9 @@ export default function Comercial() {
     ]) || 'Produto'
   }
   function productValidity(cert: Certificado): string {
+    if (productClass(cert) === 'SafeID') {
+      return (cert.periodo_uso ?? '').trim() || (cert.validade ?? '').trim() || 'Não definido'
+    }
     return (cert.validade ?? '').trim() || 'Não definido'
   }
 
