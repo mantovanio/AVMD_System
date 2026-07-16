@@ -6455,7 +6455,7 @@ export default function Comercial() {
                                           className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer" />
                                       </td>
                                       <td className="px-3 py-2 text-xs text-gray-400">{cert?.codigo ?? '—'}</td>
-                                      <td className="px-3 py-2 font-medium text-sm"><button type="button" onClick={() => editarItem(item)} className="text-left hover:text-blue-600 hover:underline max-w-[150px] truncate block" title={cert?.tipo ?? ''}>{cert?.tipo ?? 'Cert. removido'}</button></td>
+                                      <td className="px-3 py-2 font-medium text-sm"><button type="button" onClick={() => cert && editarCertificado(cert)} className="text-left hover:text-blue-600 hover:underline max-w-[150px] truncate block" title={cert?.tipo ?? ''}>{cert?.tipo ?? 'Cert. removido'}</button></td>
                                       <td className="px-3 py-2 text-xs text-gray-500 max-w-[120px] truncate" title={cert?.descricao_produto ?? cert?.descricao ?? ''}>{cert?.descricao_produto ?? cert?.descricao ?? '—'}</td>
                                       <td className="px-3 py-2 text-xs text-gray-500">{cert?.validade ?? '—'}</td>
                                       <td className="px-3 py-2 text-xs text-gray-500">{cert?.periodo_uso ?? '—'}</td>
@@ -7597,11 +7597,14 @@ export default function Comercial() {
 
       {/* ── Modal de Editar Venda ── */}
       {editandoVenda && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40"
-          onClick={() => { if (!editSaving) setEditandoVenda(null) }}>
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 max-h-[90vh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Editar Venda</h2>
+        <FlowModal
+          open
+          title="Editar Venda"
+          subtitle="Ajuste os dados comerciais desta venda sem sair do fluxo."
+          onClose={() => { if (!editSaving) setEditandoVenda(null) }}
+          contentClassName="max-w-lg"
+        >
+          <div className="max-h-[90vh] overflow-y-auto p-6">
 
             <div className="space-y-3">
               <div>
@@ -7706,17 +7709,20 @@ export default function Comercial() {
               </button>
             </div>
           </div>
-        </div>,
+        </FlowModal>,
         document.body
       )}
 
       {/* ── Modal de Cancelamento de Venda ── */}
       {cancelandoVenda && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40"
-          onClick={() => { if (!cancelSaving) setCancelandoVenda(null) }}>
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6"
-            onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Cancelar Venda</h2>
+        <FlowModal
+          open
+          title="Cancelar Venda"
+          subtitle="Revise os dados e confirme apenas se o cancelamento for realmente necessário."
+          onClose={() => { if (!cancelSaving) setCancelandoVenda(null) }}
+          contentClassName="max-w-lg"
+        >
+          <div className="max-h-[90vh] overflow-y-auto p-6">
 
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-4 space-y-1">
               <p><span className="font-medium">Pedido:</span> {cancelandoVenda.pedido_numero ?? '—'}</p>
@@ -7795,7 +7801,7 @@ export default function Comercial() {
               </button>
             </div>
           </div>
-        </div>,
+        </FlowModal>,
         document.body
       )}
     </ModulePageShell>
