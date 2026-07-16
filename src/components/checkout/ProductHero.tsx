@@ -16,7 +16,7 @@ export function ProductHero({ item }: ProductHeroProps) {
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="max-w-2xl">
           <h3 className="text-2xl font-semibold leading-tight text-slate-900">{title}</h3>
-          <p className="text-sm text-slate-500 mt-3 leading-relaxed">{profile.details}</p>
+          <p className="text-sm text-slate-500 mt-3 leading-relaxed">{profile.commercialDescription}</p>
           <div className="mt-4 rounded-[22px] border border-sky-200 bg-sky-50/70 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Como escolher certo</p>
             <div className="mt-3 grid gap-2 text-sm text-slate-700">

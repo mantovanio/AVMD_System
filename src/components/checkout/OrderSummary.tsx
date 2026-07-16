@@ -37,7 +37,7 @@ export function OrderSummary({
           <>
             <div className="mt-4 rounded-[24px] bg-slate-50 p-4">
               <p className="text-lg font-semibold text-slate-900">{getProductProfile(item.certificados).displayName}</p>
-              <p className="text-sm text-slate-500 mt-2 leading-relaxed">{getProductProfile(item.certificados).details}</p>
+              <p className="text-sm text-slate-500 mt-2 leading-relaxed">{getProductProfile(item.certificados).commercialDescription}</p>
               <ProductTags item={item} compact />
               <p className="text-3xl font-semibold text-emerald-600 mt-4">{formatCurrency(item.valor)}</p>
             </div>

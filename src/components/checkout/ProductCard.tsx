@@ -24,7 +24,7 @@ export function ProductCard({ item, selected, onSelect }: ProductCardProps) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold leading-snug">{profile.displayName}</h3>
-          <p className="text-sm text-slate-500 mt-2 leading-relaxed">{profile.details}</p>
+          <p className="text-sm text-slate-500 mt-2 leading-relaxed">{profile.commercialDescription}</p>
         </div>
         {selected && <CheckCircle2 size={18} className="text-[#ea7b18] shrink-0" />}
       </div>

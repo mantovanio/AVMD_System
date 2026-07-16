@@ -81,6 +81,7 @@ export type ProductProfile = {
   validity: string
   displayName: string
   details: string
+  commercialDescription: string
 }
 
 function dedupeParts(parts: Array<string | null | undefined>) {
@@ -107,6 +108,19 @@ function formatValidityFromText(raw: string) {
   return 'Não informada'
 }
 
+function formatValidityLabel(validity: string) {
+  const value = validity.trim()
+  if (!value || value === 'Não informada') return 'prazo não informado'
+  return value.toLowerCase()
+}
+
+function buildCommercialDescription(kind: string, certificateClass: string, validity: string) {
+  const typeLabel = kind === 'Outros' ? 'produto digital' : kind.toLowerCase()
+  const classLabel = certificateClass !== 'Não informado' ? certificateClass : 'classe informada'
+  const validityLabel = formatValidityLabel(validity)
+  return `${typeLabel} ${classLabel}, com ${validityLabel}.`
+}
+
 export function getProductProfile(cert: Pick<Certificado, 'tipo' | 'descricao' | 'validade' | 'modelo' | 'categoria' | 'tipo_emissao_padrao' | 'periodo_uso' | 'descricao_produto'> | null | undefined): ProductProfile {
   if (!cert) {
     return {
@@ -115,6 +129,7 @@ export function getProductProfile(cert: Pick<Certificado, 'tipo' | 'descricao' |
       validity: 'Não informada',
       displayName: 'Produto',
       details: '—',
+      commercialDescription: 'Produto digital para validação da compra.',
     }
   }
   const kindText = normalizeText([cert.tipo, cert.descricao_produto, cert.descricao, cert.modelo, cert.categoria].filter(Boolean).join(' '))
@@ -144,7 +159,9 @@ export function getProductProfile(cert: Pick<Certificado, 'tipo' | 'descricao' |
     validity,
   ]).join(' · ') || '—'
 
-  return { kind, certificateClass, validity, displayName, details }
+  const commercialDescription = buildCommercialDescription(kind, certificateClass, validity)
+
+  return { kind, certificateClass, validity, displayName, details, commercialDescription }
 }
 
 export type CheckoutExistingCustomerLookup = Pick<

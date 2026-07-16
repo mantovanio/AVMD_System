@@ -428,10 +428,6 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     () => produtosAtivos.find(item => item.id === selectedItemId) ?? null,
     [produtosAtivos, selectedItemId]
   )
-  const itemSelecionadoDescription = useMemo(
-    () => itemSelecionado?.certificados?.descricao_produto ?? itemSelecionado?.certificados?.descricao ?? null,
-    [itemSelecionado]
-  )
   const pagamentoSelecionado = useMemo(
     () => pagamentos.find(item => item.id === form.forma_pagamento_id) ?? null,
     [form.forma_pagamento_id, pagamentos]
@@ -1173,13 +1169,8 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                                   <div className="min-w-0">
                                     <p className="text-[11px] uppercase tracking-[0.18em] font-semibold opacity-70">{profile.kind}</p>
                                     <p className="mt-1 text-base font-semibold leading-snug">{profile.displayName}</p>
-                                    {(item.certificados?.descricao_produto || item.certificados?.descricao) && (
-                                      <p className={cn('mt-1 text-sm leading-relaxed line-clamp-2', selected ? 'text-white/80' : 'text-slate-500')}>
-                                        {item.certificados?.descricao_produto ?? item.certificados?.descricao}
-                                      </p>
-                                    )}
                                     <p className={cn('mt-1 text-sm leading-relaxed', selected ? 'text-white/80' : 'text-slate-500')}>
-                                      {profile.details}
+                                      {profile.commercialDescription}
                                     </p>
                                   </div>
                                   <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
@@ -1203,9 +1194,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                               <div className="p-5">
                                 <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">{getProductProfile(itemSelecionado.certificados).kind}</p>
                                 <p className="mt-1 text-lg font-bold text-slate-900">{getProductProfile(itemSelecionado.certificados).displayName}</p>
-                                {itemSelecionadoDescription && (
-                                  <p className="mt-2 text-sm text-slate-500 leading-relaxed">{itemSelecionadoDescription}</p>
-                                )}
+                                <p className="mt-2 text-sm text-slate-500 leading-relaxed">{getProductProfile(itemSelecionado.certificados).commercialDescription}</p>
                                 <p className="mt-2 text-sm text-slate-600">{getProductProfile(itemSelecionado.certificados).details}</p>
                                 <ProductTags item={itemSelecionado} compact />
                               </div>
@@ -1234,9 +1223,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   <div className="p-5">
                     <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Item no carrinho</p>
                     <p className="mt-2 text-lg font-bold text-slate-900">{itemSelecionado.certificados?.tipo ?? 'Produto'}</p>
-                    {itemSelecionadoDescription && (
-                      <p className="mt-2 text-sm text-slate-500 leading-relaxed">{itemSelecionadoDescription}</p>
-                    )}
+                    <p className="mt-2 text-sm text-slate-500 leading-relaxed">{getProductProfile(itemSelecionado.certificados).commercialDescription}</p>
                     <p className="mt-2 text-sm text-slate-600">Detalhes: {getProductProfile(itemSelecionado.certificados).details}</p>
                     <div className="mt-4">
                       <ProductTags item={itemSelecionado} compact />
@@ -2107,9 +2094,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                 <>
                   <div className="mt-4 rounded-[24px] bg-slate-50 p-4">
                     <p className="text-lg font-semibold text-slate-900">{itemSelecionado.certificados?.tipo ?? 'Produto'}</p>
-                    {itemSelecionadoDescription && (
-                      <p className="mt-2 text-sm text-slate-500 leading-relaxed">{itemSelecionadoDescription}</p>
-                    )}
+                    <p className="mt-2 text-sm text-slate-500 leading-relaxed">{getProductProfile(itemSelecionado.certificados).commercialDescription}</p>
                     <ProductTags item={itemSelecionado} compact />
                     <p className="text-3xl font-semibold text-emerald-600 mt-4">{formatCurrency(itemSelecionado.valor)}</p>
                   </div>
