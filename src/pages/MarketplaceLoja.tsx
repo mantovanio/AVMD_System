@@ -1557,41 +1557,47 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
               highlight={nextFieldId === 'forma_pagamento_id'}
               done={pagamentoDone}
             >
-              <div data-field-anchor="forma_pagamento_id" className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {pagamentos.map(option => {
-                  const active = form.forma_pagamento_id === option.id
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => {
-                        setForm(prev => ({ ...prev, forma_pagamento_id: option.id }))
-                        setFieldErrors(prev => {
-                          const next = { ...prev }
-                          delete next['forma_pagamento_id']
-                          return next
-                        })
-                      }}
-                      className={cn(
-                        'text-left rounded-[24px] border px-4 py-4 transition-all',
-                        active
-                          ? 'border-[#ea7b18] bg-[#fff8f1] ring-2 ring-[#fde4cf]'
-                          : (nextFieldId === 'forma_pagamento_id'
-                            ? 'border-[#17346b] bg-sky-50/70 ring-2 ring-sky-100'
-                            : 'border-slate-200 bg-white hover:border-slate-300')
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{option.nome}</p>
-                          <p className="text-xs text-slate-500 mt-1">{statusPagamentoLabel(option)}</p>
+              {pagamentos.length > 0 ? (
+                <div data-field-anchor="forma_pagamento_id" className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {pagamentos.map(option => {
+                    const active = form.forma_pagamento_id === option.id
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => {
+                          setForm(prev => ({ ...prev, forma_pagamento_id: option.id }))
+                          setFieldErrors(prev => {
+                            const next = { ...prev }
+                            delete next['forma_pagamento_id']
+                            return next
+                          })
+                        }}
+                        className={cn(
+                          'text-left rounded-[24px] border px-4 py-4 transition-all',
+                          active
+                            ? 'border-[#ea7b18] bg-[#fff8f1] ring-2 ring-[#fde4cf]'
+                            : (nextFieldId === 'forma_pagamento_id'
+                              ? 'border-[#17346b] bg-sky-50/70 ring-2 ring-sky-100'
+                              : 'border-slate-200 bg-white hover:border-slate-300')
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">{option.nome}</p>
+                            <p className="text-xs text-slate-500 mt-1">{statusPagamentoLabel(option)}</p>
+                          </div>
+                          {active ? <CheckCircle2 size={18} className="text-[#ea7b18]" /> : <CreditCard size={18} className="text-slate-400" />}
                         </div>
-                        {active ? <CheckCircle2 size={18} className="text-[#ea7b18]" /> : <CreditCard size={18} className="text-slate-400" />}
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+                  Nenhuma forma de pagamento ficou visível nesta loja agora. Isso normalmente indica configuração incompleta do Mercado Pago no ambiente de teste.
+                </div>
+              )}
               <div className="mt-4 rounded-[22px] border border-sky-100 bg-sky-50/50 px-4 py-3 text-xs text-sky-800 leading-relaxed">
                 <strong>Depois de escolher:</strong> você confirma a compra e recebe as instruções de pagamento.
                 Quando o pagamento for compensado, nossa equipe entra em contato para realizar a validação presencial ou por vídeo.
@@ -1620,7 +1626,10 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                 </div>
               )}
               {isMercadoPagoCard && !pagamentoSelecionado?.public_key && (
-                <p className="mt-3 text-sm text-amber-700">A Public Key do Mercado Pago ainda não foi configurada.</p>
+                <div className="mt-3 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+                  <p className="font-semibold">Cartão seguro do Mercado Pago ainda não carregou.</p>
+                  <p className="mt-1">A Public Key não veio da configuração atual. Pix e boleto continuam funcionando no fluxo de teste e o link de pagamento pode ser gerado pelo painel comercial.</p>
+                </div>
               )}
             </SectionCard>
             )}
