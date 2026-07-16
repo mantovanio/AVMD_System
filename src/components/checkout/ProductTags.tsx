@@ -31,9 +31,6 @@ export function ProductTags({ item, compact = false }: ProductTagsProps) {
       {cert?.periodo_uso && (
         <span className={cn(classes, 'bg-violet-50 text-violet-700')}>Uso: {cert.periodo_uso}</span>
       )}
-      {cert?.validade && (
-        <span className={cn(classes, 'bg-emerald-50 text-emerald-700')}>Validade: {cert.validade}</span>
-      )}
     </div>
   )
 }

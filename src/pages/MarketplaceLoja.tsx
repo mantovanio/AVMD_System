@@ -1141,34 +1141,67 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-slate-500">Nenhum produto disponível para esta combinação.</div>
                   ) : (
                     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,.85fr)]">
-                      <div className="overflow-hidden rounded-2xl border border-slate-300">
-                        <div className="grid grid-cols-[1fr_auto] bg-slate-50 px-5 py-3 text-sm font-bold text-[#17346b]"><span>Produtos</span><span>Valores</span></div>
-                        {filteredProducts.map(item => {
-                          const selected = selectedItemId === item.id
-                          return (
-                            <button key={item.id} type="button" onClick={() => handleSelectProduct(item.id)} className={cn('grid w-full grid-cols-[1fr_auto] items-center gap-4 border-t border-slate-200 px-5 py-3 text-left transition', selected ? 'bg-[#0b8fc1] text-white' : 'bg-white hover:bg-sky-50')}>
-                              <span className="text-sm font-semibold">{item.certificados?.tipo ?? 'Produto'}</span>
-                              <span className="flex items-center gap-3 whitespace-nowrap text-sm font-semibold">{formatCurrency(item.valor)}<span className={cn('h-5 w-5 rounded-full border-2 p-1', selected ? 'border-white' : 'border-slate-300')}><span className={cn('block h-full w-full rounded-full', selected && 'bg-white')} /></span></span>
-                            </button>
-                          )
-                        })}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-[#17346b]">Produtos disponíveis</p>
+                            <p className="text-xs text-slate-500">Escolha o produto final antes de seguir para o carrinho.</p>
+                          </div>
+                          <p className="text-xs font-semibold text-slate-400">{filteredProducts.length} opção(ões)</p>
+                        </div>
+                        <div className="grid gap-3">
+                          {filteredProducts.map(item => {
+                            const selected = selectedItemId === item.id
+                            const profile = getProductProfile(item.certificados)
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => handleSelectProduct(item.id)}
+                                className={cn(
+                                  'w-full rounded-[22px] border p-4 text-left transition-all',
+                                  selected
+                                    ? 'border-[#0b8fc1] bg-[#0b8fc1] text-white shadow-lg shadow-sky-100'
+                                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-sky-50'
+                                )}
+                              >
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] uppercase tracking-[0.18em] font-semibold opacity-70">{profile.kind}</p>
+                                    <p className="mt-1 text-base font-semibold leading-snug">{profile.displayName}</p>
+                                    <p className={cn('mt-1 text-sm leading-relaxed', selected ? 'text-white/80' : 'text-slate-500')}>
+                                      {profile.details}
+                                    </p>
+                                  </div>
+                                  <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
+                                    <span className="text-lg font-semibold">{formatCurrency(item.valor)}</span>
+                                    <span className={cn('h-5 w-5 rounded-full border-2 p-1', selected ? 'border-white' : 'border-slate-300')}>
+                                      <span className={cn('block h-full w-full rounded-full', selected && 'bg-white')} />
+                                    </span>
+                                  </div>
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
                       </div>
 
-                      <aside>
-                        <p className="mb-3 text-base font-bold text-[#17346b]">Resumo da compra</p>
+                      <aside className="space-y-3">
+                        <p className="text-base font-bold text-[#17346b]">Resumo da compra</p>
                         <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white">
                           {itemSelecionado ? (
                             <>
                               <div className="p-5">
-                                <p className="font-bold text-slate-900">{itemSelecionado.certificados?.tipo}</p>
-                                <p className="mt-2 text-sm text-slate-600">Detalhes: {getProductProfile(itemSelecionado.certificados).details}</p>
+                                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">{getProductProfile(itemSelecionado.certificados).kind}</p>
+                                <p className="mt-1 text-lg font-bold text-slate-900">{getProductProfile(itemSelecionado.certificados).displayName}</p>
+                                <p className="mt-2 text-sm text-slate-600">{getProductProfile(itemSelecionado.certificados).details}</p>
                                 <ProductTags item={itemSelecionado} compact />
                               </div>
                               <div className="border-t border-slate-200 px-5 py-6 text-center text-3xl font-bold text-emerald-600">{formatCurrency(itemSelecionado.valor)}</div>
                             </>
                           ) : <div className="p-8 text-center text-sm text-slate-500">Escolha um produto para continuar.</div>}
                         </div>
-                        <button type="button" disabled={!itemSelecionado} onClick={confirmProductSelection} className="mt-4 w-full rounded-xl bg-[#0b8fc1] px-5 py-4 text-sm font-bold text-white transition hover:bg-[#087ca8] disabled:cursor-not-allowed disabled:bg-slate-300">Ir para o carrinho</button>
+                        <button type="button" disabled={!itemSelecionado} onClick={confirmProductSelection} className="mt-2 w-full rounded-xl bg-[#0b8fc1] px-5 py-4 text-sm font-bold text-white transition hover:bg-[#087ca8] disabled:cursor-not-allowed disabled:bg-slate-300">Ir para o carrinho</button>
                       </aside>
                     </div>
                   )}
