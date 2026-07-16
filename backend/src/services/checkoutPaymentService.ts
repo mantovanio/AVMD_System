@@ -346,10 +346,16 @@ export class CheckoutPaymentService {
 
   private buildMockCharge(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): ChargeResult {
     const base = (config.webhook_url || 'https://pagamento.exemplo.local').replace(/\/$/, '')
+    const method = String(config.codigo || config.tipo || '').toLowerCase()
+    const isPix = method === 'pix'
+    const isBoleto = method === 'boleto'
+    const isCard = method === 'card' || method.includes('cart')
+    const kind = isPix ? 'pix' : isBoleto ? 'boleto' : isCard ? 'card' : 'link'
+    const paymentId = `mock_${input.vendaId}_${kind}`
     return {
       ok: true,
       status: 'pending',
-      externalId: `mock_${input.vendaId}`,
+      externalId: paymentId,
       chargeUrl: `${base}/pay/${input.vendaId}`,
       payload: {
         mocked: true,
@@ -357,6 +363,16 @@ export class CheckoutPaymentService {
         ambiente: config.ambiente,
       },
       mocked: true,
+      details: {
+        gateway: config.gateway ?? 'manual',
+        order_id: paymentId,
+        payment_id: paymentId,
+        kind,
+        ticket_url: `${base}/pay/${input.vendaId}`,
+        qr_code: isPix ? `PIX-MOCK-${input.vendaId}` : null,
+        digitable_line: isBoleto ? `34191.79001 01043.510047 91020.150008 7 ${String(input.vendaId).slice(0, 4)}` : null,
+        barcode_content: isBoleto ? `34197.${String(input.vendaId).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}` : null,
+      },
     }
   }
 

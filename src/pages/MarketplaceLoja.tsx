@@ -348,6 +348,13 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [voucherDesconto, setVoucherDesconto] = useState(0)
   const [voucherAplicando, setVoucherAplicando] = useState(false)
   const [voucherErro, setVoucherErro] = useState('')
+  const [mockCard, setMockCard] = useState({
+    numero: '',
+    nome: '',
+    validade: '',
+    cvv: '',
+    parcelas: '1',
+  })
 
   useEffect(() => {
     let active = true
@@ -426,6 +433,8 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   )
   const isMercadoPagoCard = pagamentoSelecionado?.gateway === 'mercado_pago'
     && /card|cart/i.test(`${pagamentoSelecionado.codigo ?? ''} ${pagamentoSelecionado.tipo ?? ''} ${pagamentoSelecionado.nome}`)
+  const isMockMercadoPagoCard = isMercadoPagoCard && !pagamentoSelecionado?.public_key
+  const mockCardEnabled = paymentRuntime.modo_teste_geral || paymentRuntime.bloquear_integracoes_reais
 
   useEffect(() => {
     if (isMercadoPagoCard && pagamentoSelecionado?.public_key) {
@@ -1625,7 +1634,64 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   />
                 </div>
               )}
-              {isMercadoPagoCard && !pagamentoSelecionado?.public_key && (
+              {isMockMercadoPagoCard && mockCardEnabled && (
+                <div className="mt-5 rounded-[24px] border border-slate-200 bg-white p-4">
+                  <p className="text-sm font-semibold text-slate-900">Cartão de teste do Mercado Pago</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Este formulário entra em modo simulado quando a Public Key não está configurada.
+                  </p>
+                  <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <input
+                      value={mockCard.numero}
+                      onChange={event => setMockCard(prev => ({ ...prev, numero: event.target.value }))}
+                      inputMode="numeric"
+                      placeholder="Número do cartão"
+                      className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#17346b] focus:ring-2 focus:ring-sky-100 md:col-span-2"
+                    />
+                    <input
+                      value={mockCard.nome}
+                      onChange={event => setMockCard(prev => ({ ...prev, nome: event.target.value }))}
+                      placeholder="Nome no cartão"
+                      className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#17346b] focus:ring-2 focus:ring-sky-100 md:col-span-2"
+                    />
+                    <input
+                      value={mockCard.validade}
+                      onChange={event => setMockCard(prev => ({ ...prev, validade: event.target.value }))}
+                      placeholder="Validade MM/AA"
+                      className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#17346b] focus:ring-2 focus:ring-sky-100"
+                    />
+                    <input
+                      value={mockCard.cvv}
+                      onChange={event => setMockCard(prev => ({ ...prev, cvv: event.target.value }))}
+                      inputMode="numeric"
+                      placeholder="CVV"
+                      className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#17346b] focus:ring-2 focus:ring-sky-100"
+                    />
+                    <input
+                      value={mockCard.parcelas}
+                      onChange={event => setMockCard(prev => ({ ...prev, parcelas: event.target.value }))}
+                      inputMode="numeric"
+                      placeholder="Parcelas"
+                      className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#17346b] focus:ring-2 focus:ring-sky-100"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void iniciarCheckout({
+                      token: `mock_${Date.now()}`,
+                      payment_method_id: 'visa',
+                      payment_type_id: 'credit_card',
+                      installments: Math.max(1, Number(mockCard.parcelas || 1)),
+                      identification_type: 'CPF',
+                      identification_number: onlyDigits(form.comprador.cpf_cnpj).slice(0, 11) || '00000000000',
+                    })}
+                    className="mt-4 w-full rounded-xl bg-[#17346b] px-4 py-3 font-semibold text-white hover:bg-[#102654]"
+                  >
+                    Simular pagamento no cartão
+                  </button>
+                </div>
+              )}
+              {isMercadoPagoCard && !pagamentoSelecionado?.public_key && !mockCardEnabled && (
                 <div className="mt-3 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
                   <p className="font-semibold">Cartão seguro do Mercado Pago ainda não carregou.</p>
                   <p className="mt-1">A Public Key não veio da configuração atual. Pix e boleto continuam funcionando no fluxo de teste e o link de pagamento pode ser gerado pelo painel comercial.</p>
