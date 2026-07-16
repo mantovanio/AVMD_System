@@ -2075,21 +2075,23 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
 
             {paymentDetails?.kind === 'pix' && (
               <div className="rounded-[24px] border border-blue-200 bg-white px-4 py-5 text-sm shadow-sm">
-                <p className="font-semibold text-slate-900">Pix gerado</p>
+                <p className="font-semibold text-slate-900">Pagamento via Pix gerado</p>
+                <p className="mt-1 text-xs text-slate-500">Use o QR Code ou copie o código Pix no seu app bancário. Após a compensação, seguimos com a validação.</p>
                 {paymentDetails.qr_code_base64 && <img className="mx-auto my-4 h-56 w-56" alt="QR Code Pix" src={`data:image/png;base64,${paymentDetails.qr_code_base64}`} />}
                 {paymentDetails.qr_code && (
                   <button type="button" onClick={() => void navigator.clipboard.writeText(paymentDetails.qr_code!)} className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white">Copiar código Pix</button>
                 )}
-                {paymentDetails.ticket_url && <a className="mt-3 block text-center text-blue-700 underline" href={paymentDetails.ticket_url} target="_blank" rel="noreferrer">Abrir instruções do Pix</a>}
+                {paymentDetails.ticket_url && <a className="mt-3 block text-center text-blue-700 underline" href={paymentDetails.ticket_url} target="_blank" rel="noreferrer">Abrir comprovante/ instruções do Pix</a>}
               </div>
             )}
 
             {paymentDetails?.kind === 'boleto' && (
               <div className="rounded-[24px] border border-amber-200 bg-white px-4 py-5 text-sm shadow-sm">
-                <p className="font-semibold text-slate-900">Boleto gerado</p>
+                <p className="font-semibold text-slate-900">Boleto gerado com sucesso</p>
+                <p className="mt-1 text-xs text-slate-500">Você pode abrir o boleto, copiar a linha digitável ou aguardar o e-mail cadastrado com o link de pagamento.</p>
                 {paymentDetails.digitable_line && <p className="my-3 break-all rounded-xl bg-slate-50 p-3 text-xs">{paymentDetails.digitable_line}</p>}
                 {paymentDetails.digitable_line && <button type="button" onClick={() => void navigator.clipboard.writeText(paymentDetails.digitable_line!)} className="w-full rounded-xl bg-amber-600 px-4 py-3 font-semibold text-white">Copiar linha digitável</button>}
-                {paymentDetails.ticket_url && <a className="mt-3 block text-center text-amber-700 underline" href={paymentDetails.ticket_url} target="_blank" rel="noreferrer">Abrir boleto</a>}
+                {paymentDetails.ticket_url && <a className="mt-3 block text-center text-amber-700 underline" href={paymentDetails.ticket_url} target="_blank" rel="noreferrer">Abrir boleto em nova aba</a>}
               </div>
             )}
 
