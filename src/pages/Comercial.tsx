@@ -982,18 +982,29 @@ export default function Comercial() {
       return tipoPadrao === tipoEmissaoSelecionado
     })
   }, [certsDaTabelaBruta, formV2.tipo_emissao])
+  const PRODUCT_KIND_ORDER = ['e-CPF', 'e-CNPJ', 'Nuvem', 'SafeID', 'NF-e', 'SSL', 'Combo', 'Outros']
+  const PRODUCT_CLASS_ORDER = ['SafeID', 'A3', 'A1']
+  const sortByPriority = (values: string[], priority: string[]) =>
+    [...new Set(values)].sort((a, b) => {
+      const ai = priority.indexOf(a)
+      const bi = priority.indexOf(b)
+      if (ai >= 0 && bi >= 0) return ai - bi
+      if (ai >= 0) return -1
+      if (bi >= 0) return 1
+      return a.localeCompare(b, 'pt-BR', { sensitivity: 'base' })
+    })
   // ── product filter derivations (cascata tipo→validade) ──
   function productKind(cert: Certificado): string {
-    const raw = (cert.tipo ?? '').trim().toLowerCase()
+    const raw = `${cert.tipo ?? ''} ${resolveModelo(cert) ?? ''} ${cert.modelo ?? ''} ${cert.categoria ?? ''}`.trim().toLowerCase()
     const modelo = resolveModelo(cert)
     let base = ''
-    if (raw.includes('cnpj')) base = 'e-CNPJ'
+    if (/safeid/.test(raw)) base = 'SafeID'
+    else if (/nuvem|cloud/.test(raw)) base = 'Nuvem'
+    else if (raw.includes('cnpj')) base = 'e-CNPJ'
     else if (raw.includes('cpf')) base = 'e-CPF'
     else if (raw.includes('nf-e') || raw.includes('nfe')) base = 'NF-e'
     else if (raw.includes('ssl')) base = 'SSL'
     else if (raw.includes('combo')) base = 'Combo'
-    else if (/safeid/.test(raw) || /safeid/.test(`${cert.modelo ?? ''} ${cert.categoria ?? ''}`.toLowerCase())) base = 'SafeID'
-    else if (/nuvem|cloud/.test(raw) || /nuvem|cloud/.test(`${cert.modelo ?? ''} ${cert.categoria ?? ''}`.toLowerCase())) base = 'Nuvem'
     else base = cert.tipo?.trim() || 'Outros'
     if (modelo && !base.toLowerCase().includes(modelo.toLowerCase())) {
       return `${base} ${modelo}`
@@ -1005,14 +1016,14 @@ export default function Comercial() {
     if (/safeid/.test(text)) return 'SafeID'
     if (/\ba3\b/.test(text) || /cart|token|leitora|midia|mídia|pendrive/.test(text)) return 'A3'
     if (/\ba1\b/.test(text)) return 'A1'
-    return 'A1'
+    return '—'
   }
   function productValidity(cert: Certificado): string {
     return (cert.validade ?? '').trim() || 'Não definido'
   }
 
   const produtoKindOptions = useMemo(
-    () => Array.from(new Set(certsDaTabela.map(c => productKind(c.cert)))).sort(),
+    () => sortByPriority(certsDaTabela.map(c => productKind(c.cert)), PRODUCT_KIND_ORDER),
     [certsDaTabela]
   )
   const produtosByKind = useMemo(
@@ -1020,7 +1031,7 @@ export default function Comercial() {
     [produtoKindFilter, certsDaTabela]
   )
   const produtoClassOptions = useMemo(
-    () => Array.from(new Set(produtosByKind.map(c => productClass(c.cert)))).sort(),
+    () => sortByPriority(produtosByKind.map(c => productClass(c.cert)), PRODUCT_CLASS_ORDER),
     [produtosByKind]
   )
   const produtosByClass = useMemo(
@@ -1028,7 +1039,10 @@ export default function Comercial() {
     [produtoClassFilter, produtosByKind]
   )
   const produtoValidadeOptions = useMemo(
-    () => Array.from(new Set(produtosByClass.map(c => productValidity(c.cert)))).sort(),
+    () => sortByPriority(
+      produtosByClass.map(c => productValidity(c.cert)),
+      ['1 mês', '3 meses', '6 meses', '12 meses', '24 meses', '36 meses', '48 meses', '60 meses']
+    ),
     [produtosByClass]
   )
   const produtosFiltrados = useMemo(
@@ -4780,7 +4794,22 @@ export default function Comercial() {
                         <>
                           {/* Filtros cascata */}
                           <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-                            <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Selecione as opções para encontrar seu certificado</h4>
+                            <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+                              <div>
+                                <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Selecione na ordem certa</h4>
+                                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Tipo, depois classe, depois prazo e por fim o produto final.</p>
+                              </div>
+                              <div className="flex flex-wrap gap-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                                {['Tipo', 'Classe', 'Prazo', 'Produto final'].map((etapa, idx) => (
+                                  <span key={etapa} className={cn(
+                                    'rounded-full border px-3 py-1',
+                                    idx === 0 ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300' : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900'
+                                  )}>
+                                    {etapa}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <label className="flex flex-col gap-1">
                                 <span className="text-xs text-gray-500 font-medium">Tipo *</span>
@@ -4829,9 +4858,9 @@ export default function Comercial() {
                           {/* Lista de produtos filtrados */}
                           {produtoValidadeFilter && (
                             <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-                              <div className="grid grid-cols-[1fr_auto] bg-gray-50 dark:bg-gray-900/60 px-4 py-2.5 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                <span>Produtos</span>
-                                <span>Valores</span>
+                              <div className="flex items-center justify-between gap-3 bg-gray-50 dark:bg-gray-900/60 px-4 py-3 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                <span>Produtos finalizados</span>
+                                <span>{produtosFiltrados.length} opção(ões)</span>
                               </div>
                               {produtosFiltrados.length === 0 ? (
                                 <div className="px-4 py-6 text-center text-sm text-gray-400">
@@ -4840,6 +4869,7 @@ export default function Comercial() {
                               ) : (
                                 produtosFiltrados.map(({ item, cert }) => {
                                   const isSelected = formV2.tabela_preco_item_id === item.id
+                                  const productMeta = [resolveModelo(cert), productClass(cert), productValidity(cert)].filter(Boolean).join(' · ') || '—'
                                   return (
                                     <button key={item.id} type="button"
                                       onClick={() => {
@@ -4853,16 +4883,14 @@ export default function Comercial() {
                                         }))
                                       }}
                                       className={cn(
-                                        'grid w-full grid-cols-[1fr_auto] items-center gap-4 border-t border-gray-100 dark:border-gray-800 px-4 py-3 text-left transition-colors',
+                                        'grid w-full grid-cols-[1fr_auto] items-center gap-4 border-t border-gray-100 dark:border-gray-800 px-4 py-4 text-left transition-colors',
                                         isSelected
                                           ? 'bg-blue-600 text-white dark:bg-blue-700'
                                           : 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-gray-800'
                                       )}>
                                       <div className="flex flex-col">
                                         <span className="text-sm font-semibold">{cert?.tipo ?? 'Produto'}</span>
-                                        <span className="text-xs opacity-70">
-                                          {[resolveModelo(cert), productClass(cert), productValidity(cert)].filter(Boolean).join(' · ') || '—'}
-                                        </span>
+                                        <span className="text-xs opacity-70">{productMeta}</span>
                                       </div>
                                       <div className="flex items-center gap-3">
                                         <span className="text-sm font-semibold whitespace-nowrap">
