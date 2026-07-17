@@ -45,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileLoading, setProfileLoading] = useState(true)
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false)
   const [authTransitioning, setAuthTransitioning] = useState(false)
+  const [authBootstrapReady, setAuthBootstrapReady] = useState(false)
 
   const currentUser = useMemo<AuthUser | null>(() => {
     if (!user || !userLoaded || !isSignedIn) return null
@@ -52,7 +53,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { id: user.id, email }
   }, [user, userLoaded, isSignedIn])
 
-  const loading = !signInLoaded || !userLoaded || !sessionLoaded || authTransitioning || (currentUser !== null && profileLoading)
+  const loading = (!authBootstrapReady && (!signInLoaded || !userLoaded || !sessionLoaded))
+    || authTransitioning
+    || (currentUser !== null && profileLoading)
 
   function hasRecoveryUrl() {
     const params = new URLSearchParams(window.location.search)
@@ -116,6 +119,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsPasswordRecovery(true)
     }
   }, [])
+
+  useEffect(() => {
+    if (signInLoaded && userLoaded && sessionLoaded) {
+      setAuthBootstrapReady(true)
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      setAuthBootstrapReady(true)
+    }, 4000)
+
+    return () => window.clearTimeout(timeout)
+  }, [signInLoaded, userLoaded, sessionLoaded])
 
   async function signInWithPassword(email: string, password: string) {
     if (!signInLoaded || !signIn) {
