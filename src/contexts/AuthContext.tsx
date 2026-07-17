@@ -190,16 +190,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function resetPassword(email: string) {
-    if (!signInLoaded || !signIn) {
-      return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
-    }
-
     try {
-      await signIn.create({
-        strategy: 'reset_password_email_code',
-        identifier: email,
+      const response = await fetch(getApiUrl('/auth/password-recovery/request'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
       })
-      return { error: null }
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; email?: string } | null
+      if (!response.ok || !data?.ok) {
+        return { error: data?.error ?? 'Falha ao enviar o código de recuperação.' }
+      }
+      return { error: `Código enviado para ${data.email ?? email}.` }
     } catch (error) {
       if (error instanceof Error) return { error: error.message }
       return { error: 'Falha ao enviar o email de recuperação. Tente novamente.' }
@@ -207,64 +208,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function confirmPasswordReset(code: string, newPassword: string) {
-    if (!signInLoaded || !signIn) {
-      return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
-    }
-
     try {
-      const firstFactor = await signIn.attemptFirstFactor({
-        strategy: 'reset_password_email_code',
-        code,
+      const response = await fetch(getApiUrl('/auth/password-recovery/verify'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: code, password: newPassword }),
       })
-
-      if (firstFactor.status === 'needs_new_password') {
-        const result = await signIn.resetPassword({ password: newPassword, signOutOfOtherSessions: false })
-        if (result.status === 'complete' && result.createdSessionId && setActive) {
-          try {
-            await setActive({ session: result.createdSessionId })
-          } catch {
-            await clerk.setActive?.({ session: result.createdSessionId })
-          }
-          const sessionToken = await waitForSessionToken()
-          if (!sessionToken) {
-            return { error: 'A sessão não foi confirmada no navegador. Verifique se os cookies estão liberados e tente novamente.' }
-          }
-          return { error: null }
-        }
-        if (result.status === 'complete' && result.createdSessionId && clerk.setActive) {
-          await clerk.setActive({ session: result.createdSessionId })
-          const sessionToken = await waitForSessionToken()
-          if (!sessionToken) {
-            return { error: 'A sessão não foi confirmada no navegador. Verifique se os cookies estão liberados e tente novamente.' }
-          }
-          return { error: null }
-        }
-        return { error: 'Não foi possível redefinir a senha. Tente novamente.' }
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
+      if (!response.ok || !data?.ok) {
+        return { error: data?.error ?? 'Código inválido ou expirado. Solicite um novo código.' }
       }
-
-      if (firstFactor.status === 'complete' && firstFactor.createdSessionId && setActive) {
-        try {
-          await setActive({ session: firstFactor.createdSessionId })
-        } catch {
-          await clerk.setActive?.({ session: firstFactor.createdSessionId })
-        }
-        const sessionToken = await waitForSessionToken()
-        if (!sessionToken) {
-          return { error: 'A sessão não foi confirmada no navegador. Verifique se os cookies estão liberados e tente novamente.' }
-        }
-        return { error: null }
-      }
-
-      if (firstFactor.status === 'complete' && firstFactor.createdSessionId && clerk.setActive) {
-        await clerk.setActive({ session: firstFactor.createdSessionId })
-        const sessionToken = await waitForSessionToken()
-        if (!sessionToken) {
-          return { error: 'A sessão não foi confirmada no navegador. Verifique se os cookies estão liberados e tente novamente.' }
-        }
-        return { error: null }
-      }
-
-      return { error: 'Código inválido ou expirado. Solicite um novo código.' }
+      return { error: null }
     } catch (error) {
       if (error instanceof Error) return { error: error.message }
       return { error: 'Falha ao verificar o código. Tente novamente.' }

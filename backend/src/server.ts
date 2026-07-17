@@ -19,6 +19,7 @@ import { handleAdminUsersRoutes } from './routes/adminUsersRoutes.js'
 import { PortalRepository } from './repositories/portalRepository.js'
 import { handlePortalRoutes } from './routes/portalRoutes.js'
 import { handlePublicAuthRoutes } from './routes/publicAuthRoutes.js'
+import { handlePasswordRecoveryRoutes } from './routes/passwordRecoveryRoutes.js'
 import { HierarquiaRepository } from './repositories/hierarquiaRepository.js'
 import { handleHierarquiaRoutes } from './routes/hierarquiaRoutes.js'
 import { ProfileRepository } from './repositories/profileRepository.js'
@@ -30,6 +31,7 @@ import { AutomationRulesRepository } from './repositories/automationRulesReposit
 import { LinksProdutosRepository } from './repositories/linksProdutosRepository.js'
 import { LeadRepository } from './repositories/leadRepository.js'
 import { CommunicationOutboxRepository } from './repositories/communicationOutboxRepository.js'
+import { PasswordRecoveryRepository } from './repositories/passwordRecoveryRepository.js'
 import { CommunicationEventRepository } from './repositories/communicationEventRepository.js'
 import { ConfigRepository } from './repositories/configRepository.js'
 import { FileRepository } from './repositories/fileRepository.js'
@@ -66,6 +68,7 @@ const automationRulesRepository = new AutomationRulesRepository(db)
 const linksProdutosRepository = new LinksProdutosRepository(db)
 const leadRepository = new LeadRepository(db)
 const communicationOutboxRepository = new CommunicationOutboxRepository(db)
+const passwordRecoveryRepository = new PasswordRecoveryRepository(db)
 const communicationEventRepository = new CommunicationEventRepository(db)
 const configRepository = new ConfigRepository(db)
 const fileRepository = new FileRepository(db)
@@ -99,6 +102,17 @@ const server = createServer(async (req, res) => {
 
     const handledPublicAuth = await handlePublicAuthRoutes(req, res, profileRepository, communicationOutboxRepository, config.clerkSecretKey, config.corsOrigin)
     if (handledPublicAuth) return
+
+    const handledPasswordRecovery = await handlePasswordRecoveryRoutes(
+      req,
+      res,
+      profileRepository,
+      passwordRecoveryRepository,
+      communicationOutboxRepository,
+      config.clerkSecretKey,
+      config.corsOrigin,
+    )
+    if (handledPasswordRecovery) return
 
     const handledPortal = await handlePortalRoutes(req, res, portalRepository, profileRepository, config.corsOrigin)
     if (handledPortal) return

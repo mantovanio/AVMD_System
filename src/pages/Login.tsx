@@ -17,6 +17,8 @@ function translateError(msg: string): string {
   if (msg.includes('A sessão não foi confirmada no navegador')) return 'O navegador não confirmou a sessão. Verifique cookies bloqueados, modo privado ou use outro navegador.'
   if (msg.includes('Autenticação concluída, mas sem sessão ativa no navegador')) return 'O login foi concluído, mas o navegador não manteve a sessão. Verifique cookies e privacidade.'
   if (msg.includes('Não foi possível concluir a autenticação')) return 'Não foi possível concluir o login. Tente novamente.'
+  if (msg.includes('Código enviado para')) return msg
+  if (msg.includes('Código inválido ou expirado')) return 'Código inválido ou expirado. Solicite um novo código.'
   if (msg.includes("Couldn't find your account"))    return 'Conta não encontrada. Verifique o email ou crie uma conta.'
   if (msg.includes('already exists') || msg.includes('já está cadastrado')) return 'Este email já está cadastrado.'
   if (msg.includes('data breach') || msg.includes('pwned') || msg.includes('online data breach'))
@@ -199,8 +201,16 @@ export default function Login() {
     setForgotError(null)
     setForgotLoading(true)
     const { error } = await resetPassword(forgotEmail)
-    if (error) setForgotError(translateError(error))
-    else setForgotOk(true)
+    if (error) {
+      if (error.startsWith('Código enviado para')) {
+        setForgotOk(true)
+        setForgotError(null)
+      } else {
+        setForgotError(translateError(error))
+      }
+    } else {
+      setForgotOk(true)
+    }
     setForgotLoading(false)
   }
 
@@ -379,7 +389,7 @@ export default function Login() {
               </button>
 
               <h2 className="text-xl font-bold text-white mb-1">Recuperar senha</h2>
-              <p className="text-sm text-white/80 mb-6">Informe seu email e enviaremos um link para redefinir sua senha.</p>
+              <p className="text-sm text-white/80 mb-6">Informe seu email e enviaremos um código interno para redefinir sua senha.</p>
 
               {forgotDone ? (
                 <div className="text-center py-6 space-y-4">
@@ -399,7 +409,7 @@ export default function Login() {
                   <div className="text-center pb-2">
                     <p className="text-sm text-white/80">
                       Enviamos um código para <strong>{forgotEmail}</strong>.<br />
-                      Digite o código e defina sua nova senha.
+                      Digite o código recebido e defina sua nova senha.
                     </p>
                   </div>
 
