@@ -10,7 +10,6 @@ import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig } from '@/lib/agencyConfig'
 import { PAGE_LABELS, PERFIL_LABEL, isAdminProfile, resolveAllowedPages as resolveLegacyPages, resolveDefaultPage } from '@/lib/security'
 import { PermissionsProvider, usePermissions } from '@/contexts/PermissionsContext'
 import { assertRuntimeConfig } from '@/lib/runtimeConfig'
-import { buildPublishableKey } from '@clerk/shared/keys'
 
 const Login = lazy(() => import('@/pages/Login'))
 const PortalCliente = lazy(() => import('@/pages/PortalCliente'))
@@ -396,9 +395,7 @@ export default function App() {
   const contestacaoMatch = pathname.match(/^\/contestacao\/([^/]+)\/?$/)
   const contestacaoToken = contestacaoMatch?.[1] ? decodeURIComponent(contestacaoMatch[1]) : null
   const runtime = assertRuntimeConfig()
-  const clerkPublishableKey = runtime.clerkFrontendApi
-    ? buildPublishableKey(runtime.clerkFrontendApi)
-    : runtime.clerkPublishableKey
+  const clerkPublishableKey = runtime.clerkPublishableKey
 
   if (isShopRoute) {
     return (
