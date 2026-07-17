@@ -14,6 +14,9 @@ function translateError(msg: string): string {
   if (msg.includes('signup is disabled'))             return 'Novos cadastros estão desabilitados. Contate o administrador.'
   if (msg.includes('rate limit'))                     return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
   if (msg.includes('Failed to fetch'))                return 'Falha de conexão com o servidor de autenticação. Atualize a página e tente novamente.'
+  if (msg.includes('A sessão não foi confirmada no navegador')) return 'O navegador não confirmou a sessão. Verifique cookies bloqueados, modo privado ou use outro navegador.'
+  if (msg.includes('Autenticação concluída, mas sem sessão ativa no navegador')) return 'O login foi concluído, mas o navegador não manteve a sessão. Verifique cookies e privacidade.'
+  if (msg.includes('Não foi possível concluir a autenticação')) return 'Não foi possível concluir o login. Tente novamente.'
   if (msg.includes("Couldn't find your account"))    return 'Conta não encontrada. Verifique o email ou crie uma conta.'
   if (msg.includes('already exists') || msg.includes('já está cadastrado')) return 'Este email já está cadastrado.'
   if (msg.includes('data breach') || msg.includes('pwned') || msg.includes('online data breach'))

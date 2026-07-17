@@ -64,6 +64,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.history.replaceState({}, document.title, window.location.pathname)
   }
 
+  async function waitForSessionToken(timeoutMs = 2500) {
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < timeoutMs) {
+      const token = await clerk.session?.getToken().catch(() => null)
+      if (token) return token
+      await new Promise(resolve => setTimeout(resolve, 150))
+    }
+    return null
+  }
+
   async function loadProfile(userId: string, email?: string) {
     setProfileLoading(true)
     try {
@@ -126,17 +136,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {
           await clerk.setActive?.({ session: result.createdSessionId })
         }
-        await new Promise(resolve => setTimeout(resolve, 350))
+        const sessionToken = await waitForSessionToken()
+        if (!sessionToken) {
+          return { error: 'A sessão não foi confirmada no navegador. Verifique se os cookies estão liberados e tente novamente.' }
+        }
         return { error: null }
       }
 
       if (result.status === 'complete' && result.createdSessionId && clerk.setActive) {
         await clerk.setActive({ session: result.createdSessionId })
-        await new Promise(resolve => setTimeout(resolve, 350))
+        const sessionToken = await waitForSessionToken()
+        if (!sessionToken) {
+          return { error: 'A sessão não foi confirmada no navegador. Verifique se os cookies estão liberados e tente novamente.' }
+        }
         return { error: null }
       }
 
-      return { error: `Fluxo de autenticação incompleto (${result.status}). Tente novamente.` }
+      if (result.status !== 'complete') {
+        return { error: `Não foi possível concluir a autenticação (${result.status}).` }
+      }
+
+      return { error: 'Autenticação concluída, mas sem sessão ativa no navegador.' }
     } catch (error) {
       if (error instanceof Error) return { error: error.message }
       return { error: 'Falha ao efetuar login. Tente novamente.' }
@@ -205,12 +225,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } catch {
             await clerk.setActive?.({ session: result.createdSessionId })
           }
-          await new Promise(resolve => setTimeout(resolve, 350))
+          const sessionToken = await waitForSessionToken()
+          if (!sessionToken) {
+            return { error: 'A sessão não foi confirmada no navegador. Verifique se os cookies estão liberados e tente novamente.' }
+          }
           return { error: null }
         }
         if (result.status === 'complete' && result.createdSessionId && clerk.setActive) {
           await clerk.setActive({ session: result.createdSessionId })
-          await new Promise(resolve => setTimeout(resolve, 350))
+          const sessionToken = await waitForSessionToken()
+          if (!sessionToken) {
+            return { error: 'A sessão não foi confirmada no navegador. Verifique se os cookies estão liberados e tente novamente.' }
+          }
           return { error: null }
         }
         return { error: 'Não foi possível redefinir a senha. Tente novamente.' }
@@ -222,13 +248,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {
           await clerk.setActive?.({ session: firstFactor.createdSessionId })
         }
-        await new Promise(resolve => setTimeout(resolve, 350))
+        const sessionToken = await waitForSessionToken()
+        if (!sessionToken) {
+          return { error: 'A sessão não foi confirmada no navegador. Verifique se os cookies estão liberados e tente novamente.' }
+        }
         return { error: null }
       }
 
       if (firstFactor.status === 'complete' && firstFactor.createdSessionId && clerk.setActive) {
         await clerk.setActive({ session: firstFactor.createdSessionId })
-        await new Promise(resolve => setTimeout(resolve, 350))
+        const sessionToken = await waitForSessionToken()
+        if (!sessionToken) {
+          return { error: 'A sessão não foi confirmada no navegador. Verifique se os cookies estão liberados e tente novamente.' }
+        }
         return { error: null }
       }
 
