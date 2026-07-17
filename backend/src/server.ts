@@ -31,7 +31,6 @@ import { AutomationRulesRepository } from './repositories/automationRulesReposit
 import { LinksProdutosRepository } from './repositories/linksProdutosRepository.js'
 import { LeadRepository } from './repositories/leadRepository.js'
 import { CommunicationOutboxRepository } from './repositories/communicationOutboxRepository.js'
-import { PasswordRecoveryRepository } from './repositories/passwordRecoveryRepository.js'
 import { CommunicationEventRepository } from './repositories/communicationEventRepository.js'
 import { ConfigRepository } from './repositories/configRepository.js'
 import { FileRepository } from './repositories/fileRepository.js'
@@ -68,7 +67,6 @@ const automationRulesRepository = new AutomationRulesRepository(db)
 const linksProdutosRepository = new LinksProdutosRepository(db)
 const leadRepository = new LeadRepository(db)
 const communicationOutboxRepository = new CommunicationOutboxRepository(db)
-const passwordRecoveryRepository = new PasswordRecoveryRepository(db)
 const communicationEventRepository = new CommunicationEventRepository(db)
 const configRepository = new ConfigRepository(db)
 const fileRepository = new FileRepository(db)
@@ -107,8 +105,6 @@ const server = createServer(async (req, res) => {
       req,
       res,
       profileRepository,
-      passwordRecoveryRepository,
-      communicationOutboxRepository,
       config.clerkSecretKey,
       config.corsOrigin,
     )

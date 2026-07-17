@@ -281,6 +281,19 @@ export default function Login() {
     setForgotLoading(false)
   }
 
+  async function handleForgotResend() {
+    setForgotResetError(null)
+    setForgotError(null)
+    setForgotLoading(true)
+    const { error } = await resetPassword(forgotEmail)
+    if (error) {
+      setForgotError(translateError(error))
+    } else {
+      setForgotOk(true)
+    }
+    setForgotLoading(false)
+  }
+
   async function handleForgotReset(e: React.FormEvent) {
     e.preventDefault()
     setForgotResetError(null)
@@ -511,7 +524,7 @@ export default function Login() {
               </button>
 
               <h2 className="text-xl font-bold text-white mb-1">Recuperar senha</h2>
-              <p className="text-sm text-white/80 mb-6">Informe seu email e enviaremos um código interno para redefinir sua senha.</p>
+              <p className="text-sm text-white/80 mb-6">Informe seu email e enviaremos um código oficial do Clerk para redefinir sua senha.</p>
 
               {forgotDone ? (
                 <div className="text-center py-6 space-y-4">
@@ -520,7 +533,7 @@ export default function Login() {
                   </div>
                   <div>
                     <p className="font-semibold text-white text-lg">Senha redefinida!</p>
-                    <p className="text-sm text-white/80 mt-2">Sua senha foi atualizada. Você já está conectado.</p>
+                    <p className="text-sm text-white/80 mt-2">Sua senha foi atualizada com sucesso. Agora volte ao login para entrar com a nova senha.</p>
                   </div>
                   <button type="button" onClick={goLogin} className="text-sm text-white hover:underline font-medium">
                     Ir para o sistema
@@ -543,7 +556,7 @@ export default function Login() {
 
                   <SubmitButton loading={forgotResetLoading} label="Redefinir senha" loadingLabel="Verificando..." primaryColor={agencyConfig.cor_primaria} />
 
-                  <button type="button" onClick={() => { setForgotOk(false); setForgotError(null) }} className="w-full text-xs text-white/60 hover:text-white/90 text-center mt-1">
+                  <button type="button" onClick={() => void handleForgotResend()} disabled={forgotLoading} className="w-full text-xs text-white/60 hover:text-white/90 text-center mt-1 disabled:opacity-50">
                     Não recebeu o código? Reenviar
                   </button>
                 </form>

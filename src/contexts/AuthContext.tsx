@@ -47,6 +47,14 @@ type ClerkErrorLike = {
   status?: number
 }
 
+type ClerkResetPasswordFlow = {
+  resetPasswordEmailCode: {
+    sendCode: () => Promise<{ error: unknown }>
+    verifyCode: (params: { code: string }) => Promise<{ error: unknown }>
+    submitPassword: (params: { password: string; signOutOfOtherSessions?: boolean }) => Promise<{ error: unknown }>
+  }
+}
+
 function getClerkErrorMessage(error: unknown, fallback: string) {
   const payload = error as ClerkErrorLike | undefined
   const first = payload?.errors?.[0]
@@ -371,33 +379,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function resetPassword(email: string) {
+    const normalizedEmail = email.trim().toLowerCase()
+
     try {
+      const recoverySignIn = signIn as typeof signIn & ClerkResetPasswordFlow
       const response = await fetch(getApiUrl('/auth/password-recovery/request'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizedEmail }),
       })
       const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; email?: string } | null
       if (!response.ok || !data?.ok) {
-        return { error: data?.error ?? 'Falha ao enviar o código de recuperação.' }
+        return { error: data?.error ?? 'Falha ao preparar a recuperação no Clerk.' }
       }
-      return { error: `Código enviado para ${data.email ?? email}.` }
+
+      if (!signInLoaded || !signIn) {
+        const clerkReady = await waitForClerkBootstrap()
+        if (clerkReady && signIn) {
+          return resetPassword(normalizedEmail)
+        }
+        return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
+      }
+
+      await signIn.create({ identifier: normalizedEmail })
+      const sendCodeResult = await withTimeout(
+        recoverySignIn.resetPasswordEmailCode.sendCode(),
+        15000,
+        'O Clerk não respondeu ao enviar o código de recuperação.',
+      )
+
+      if (sendCodeResult.error) {
+        return { error: getClerkErrorMessage(sendCodeResult.error, 'Falha ao enviar o código de recuperação.') }
+      }
+
+      return { error: `Código enviado para ${data.email ?? normalizedEmail}.` }
     } catch (error) {
-      return { error: getClerkErrorMessage(error, 'Falha ao enviar o email de recuperação. Tente novamente.') }
+      return { error: getClerkErrorMessage(error, 'Falha ao enviar o código de recuperação. Tente novamente.') }
     }
   }
 
   async function confirmPasswordReset(code: string, newPassword: string) {
     try {
-      const response = await fetch(getApiUrl('/auth/password-recovery/verify'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: code, password: newPassword }),
-      })
-      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
-      if (!response.ok || !data?.ok) {
-        return { error: data?.error ?? 'Código inválido ou expirado. Solicite um novo código.' }
+      const recoverySignIn = signIn as typeof signIn & ClerkResetPasswordFlow
+      if (!signInLoaded || !signIn) {
+        const clerkReady = await waitForClerkBootstrap()
+        if (clerkReady && signIn) {
+          return confirmPasswordReset(code, newPassword)
+        }
+        return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
       }
+
+      const normalizedCode = code.replace(/\D/g, '').slice(0, 6)
+      if (normalizedCode.length !== 6) {
+        return { error: 'Informe o código de 6 dígitos enviado ao seu e-mail.' }
+      }
+
+      const verifyResult = await withTimeout(
+        recoverySignIn.resetPasswordEmailCode.verifyCode({ code: normalizedCode }),
+        15000,
+        'O Clerk não respondeu ao validar o código de recuperação.',
+      )
+
+      if (verifyResult.error) {
+        return { error: getClerkErrorMessage(verifyResult.error, 'Código inválido ou expirado. Solicite um novo código.') }
+      }
+
+      const submitResult = await withTimeout(
+        recoverySignIn.resetPasswordEmailCode.submitPassword({
+          password: newPassword,
+          signOutOfOtherSessions: true,
+        }),
+        15000,
+        'O Clerk não respondeu ao atualizar a senha.',
+      )
+
+      if (submitResult.error) {
+        return { error: getClerkErrorMessage(submitResult.error, 'Falha ao atualizar a senha. Tente novamente.') }
+      }
+
       return { error: null }
     } catch (error) {
       return { error: getClerkErrorMessage(error, 'Falha ao verificar o código. Tente novamente.') }
