@@ -44,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false)
+  const [authTransitioning, setAuthTransitioning] = useState(false)
 
   const currentUser = useMemo<AuthUser | null>(() => {
     if (!user || !userLoaded || !isSignedIn) return null
@@ -51,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { id: user.id, email }
   }, [user, userLoaded, isSignedIn])
 
-  const loading = !signInLoaded || !userLoaded || !sessionLoaded || (currentUser !== null && profileLoading)
+  const loading = !signInLoaded || !userLoaded || !sessionLoaded || authTransitioning || (currentUser !== null && profileLoading)
 
   function hasRecoveryUrl() {
     const params = new URLSearchParams(window.location.search)
@@ -111,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
     }
 
+    setAuthTransitioning(true)
     try {
       const result = await signIn.create({
         strategy: 'password',
@@ -119,14 +121,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
 
       if (result.status === 'complete' && result.createdSessionId && setActive) {
-        await setActive({ session: result.createdSessionId })
+        try {
+          await setActive({ session: result.createdSessionId })
+        } catch {
+          await clerk.setActive?.({ session: result.createdSessionId })
+        }
+        await new Promise(resolve => setTimeout(resolve, 350))
         return { error: null }
       }
 
-      return { error: 'Email ou senha inválidos. Tente novamente.' }
+      if (result.status === 'complete' && result.createdSessionId && clerk.setActive) {
+        await clerk.setActive({ session: result.createdSessionId })
+        await new Promise(resolve => setTimeout(resolve, 350))
+        return { error: null }
+      }
+
+      return { error: `Fluxo de autenticação incompleto (${result.status}). Tente novamente.` }
     } catch (error) {
       if (error instanceof Error) return { error: error.message }
       return { error: 'Falha ao efetuar login. Tente novamente.' }
+    } finally {
+      setAuthTransitioning(false)
     }
   }
 
@@ -185,14 +200,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (firstFactor.status === 'needs_new_password') {
         const result = await signIn.resetPassword({ password: newPassword, signOutOfOtherSessions: false })
         if (result.status === 'complete' && result.createdSessionId && setActive) {
-          await setActive({ session: result.createdSessionId })
+          try {
+            await setActive({ session: result.createdSessionId })
+          } catch {
+            await clerk.setActive?.({ session: result.createdSessionId })
+          }
+          await new Promise(resolve => setTimeout(resolve, 350))
+          return { error: null }
+        }
+        if (result.status === 'complete' && result.createdSessionId && clerk.setActive) {
+          await clerk.setActive({ session: result.createdSessionId })
+          await new Promise(resolve => setTimeout(resolve, 350))
           return { error: null }
         }
         return { error: 'Não foi possível redefinir a senha. Tente novamente.' }
       }
 
       if (firstFactor.status === 'complete' && firstFactor.createdSessionId && setActive) {
-        await setActive({ session: firstFactor.createdSessionId })
+        try {
+          await setActive({ session: firstFactor.createdSessionId })
+        } catch {
+          await clerk.setActive?.({ session: firstFactor.createdSessionId })
+        }
+        await new Promise(resolve => setTimeout(resolve, 350))
+        return { error: null }
+      }
+
+      if (firstFactor.status === 'complete' && firstFactor.createdSessionId && clerk.setActive) {
+        await clerk.setActive({ session: firstFactor.createdSessionId })
+        await new Promise(resolve => setTimeout(resolve, 350))
         return { error: null }
       }
 
