@@ -100,6 +100,7 @@ type UserEditForm = {
 type ModalSenha = { userId: string; nome: string } | null
 type ModalVincularConta = { profileId: string; nome: string; email: string } | null
 type ModalNovoUsuario = { aberto: boolean }
+type PasswordCheckState = 'pendente' | 'verificado' | 'sem_vinculo' | 'nao_encontrado'
 const ADMIN_INITIAL_PASSWORD = '1234qwer'
 
 function validateStrongPassword(value: string) {
@@ -620,6 +621,7 @@ function AbaUsuarios() {
   const [salvandoSenha, setSalvandoSenha] = useState(false)
   const [vinculandoConta, setVinculandoConta] = useState(false)
   const [senhaVinculo, setSenhaVinculo] = useState('')
+  const [senhaCheck, setSenhaCheck]   = useState<PasswordCheckState>('pendente')
 
   const [toastU, setToastU] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
 
@@ -787,6 +789,7 @@ function AbaUsuarios() {
       setModalVincularConta({ profileId: u.id, nome: u.nome, email: u.email })
       setSenhaVinculo('')
       setSenhaErro(null)
+      setSenhaCheck('sem_vinculo')
       return
     }
     setModalSenha({ userId: getAuthUserId(u), nome: u.nome })
@@ -794,12 +797,14 @@ function AbaUsuarios() {
     setConfirmSenha('')
     setSenhaErro(null)
     setSenhaOk(false)
+    setSenhaCheck('verificado')
   }
 
   function fecharModalSenha() {
     setModalSenha(null)
     setSenhaErro(null)
     setSenhaOk(false)
+    setSenhaCheck('pendente')
   }
 
   async function salvarSenha() {
@@ -807,9 +812,14 @@ function AbaUsuarios() {
     setSenhaErro(null)
     if (novaSenha.length < 8) { setSenhaErro('A senha deve ter pelo menos 8 caracteres.'); return }
     if (novaSenha !== confirmSenha) { setSenhaErro('As senhas não coincidem.'); return }
+    if (senhaCheck !== 'verificado') { setSenhaErro('Não foi possível confirmar o vínculo do Clerk. Reabra a tela e tente novamente.'); return }
     setSalvandoSenha(true)
     try {
-      await updateAdminManagedPassword({ userId: modalSenha.userId, password: novaSenha })
+      const result = await updateAdminManagedPassword({ userId: modalSenha.userId, password: novaSenha })
+      if (!result.verified) {
+        setSenhaErro('A alteração foi aceita, mas a conta não foi verificada no Clerk. Não prossiga até validar o vínculo.')
+        return
+      }
       setSenhaOk(true)
     } catch (error) {
       setSenhaErro(error instanceof Error ? error.message : 'Erro ao atualizar senha.')
@@ -953,13 +963,19 @@ function AbaUsuarios() {
               <button type="button" onClick={fecharModalSenha}
                 className="text-sm text-blue-600 dark:text-blue-400 hover:underline">Fechar</button>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <CampoSenha label="Nova senha" value={novaSenha} onChange={setNovaSenha} autoFocus />
-              <CampoSenha label="Confirmar senha" value={confirmSenha} onChange={setConfirmSenha} />
-              {senhaErro && (
-                <p className="text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
-                  ⚠ {senhaErro}
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-blue-200 dark:border-blue-800/40 bg-blue-50 dark:bg-blue-950/20 p-3 text-xs text-blue-700 dark:text-blue-300">
+                  {senhaCheck === 'verificado' && 'Conta de login verificada no Clerk. A alteração será aplicada nesse vínculo.'}
+                  {senhaCheck === 'sem_vinculo' && 'Este perfil ainda não tem conta vinculada ao Clerk. Vincule a conta antes de alterar a senha.'}
+                  {senhaCheck === 'pendente' && 'Aguardando confirmação do vínculo do Clerk.'}
+                  {senhaCheck === 'nao_encontrado' && 'A conta vinculada não foi encontrada no Clerk. Refaça o vínculo antes de alterar a senha.'}
+                </div>
+                <CampoSenha label="Nova senha" value={novaSenha} onChange={setNovaSenha} autoFocus />
+                <CampoSenha label="Confirmar senha" value={confirmSenha} onChange={setConfirmSenha} />
+                {senhaErro && (
+                  <p className="text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+                    ⚠ {senhaErro}
                 </p>
               )}
               <div className="flex gap-2 pt-1">

@@ -48,9 +48,14 @@ async function callAdminUsers(body: unknown) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  const data = await res.json().catch(() => null) as { ok?: boolean; userId?: string; error?: string } | null
+  const data = await res.json().catch(() => null) as { ok?: boolean; userId?: string; verified?: boolean; error?: string } | null
   if (!res.ok) throw new Error(normalizeAdminUserError(data?.error ?? `Erro ${res.status}`))
-  return { ok: Boolean(data?.ok), userId: data?.userId, error: normalizeAdminUserError(data?.error) }
+  return {
+    ok: Boolean(data?.ok),
+    userId: data?.userId,
+    verified: Boolean(data?.verified),
+    error: normalizeAdminUserError(data?.error),
+  }
 }
 
 export async function createAdminManagedUser(payload: CreateUserPayload) {

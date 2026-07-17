@@ -20,7 +20,6 @@
         "toEmail": "={{ $json.to }}",
         "subject": "={{ $json.subject }}",
         "text": "={{ $json.body }}",
-        "html": "={{ $json.html || $json.body }}",
         "options": {}
       },
       "id": "smtp-send",

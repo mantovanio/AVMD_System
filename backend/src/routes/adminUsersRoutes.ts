@@ -109,12 +109,17 @@ export async function handleAdminUsersRoutes(
       return true
     }
     try {
+      const clerkUser = await clerkClient.users.getUser(profile.clerk_user_id)
+      if (!clerkUser?.id) {
+        writeJson(res, 400, { ok: false, error: 'Conta vinculada não encontrada no Clerk. Refaça o vínculo antes de alterar a senha.' }, corsOrigin)
+        return true
+      }
       await clerkClient.users.updateUser(profile.clerk_user_id, {
         password,
         skipPasswordChecks: true,
         signOutOfOtherSessions: true,
       })
-      writeJson(res, 200, { ok: true }, corsOrigin)
+      writeJson(res, 200, { ok: true, userId: profile.clerk_user_id, verified: true }, corsOrigin)
     } catch (error) {
       writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
     }
