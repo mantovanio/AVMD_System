@@ -53,7 +53,7 @@ export async function handleCancelamentoRoutes(
       ? Math.max(0, valorVenda - custoOperacional)
       : 0
 
-    const cancelamento = await cancelamentoRepo.create({
+    const cancelamentoAtomico = await cancelamentoRepo.createAndCancelSale({
       venda_id: body.venda_id,
       motivo: body.motivo,
       dentro_prazo_30d: body.dentro_prazo_30d,
@@ -67,9 +67,7 @@ export async function handleCancelamentoRoutes(
       cancelado_por: body.cancelado_por,
     })
 
-    await commercialRepo.updateSaleStatus({ id: body.venda_id, status: 'cancelado' })
-
-    writeJson(res, 200, { ok: true, cancelamento }, corsOrigin)
+    writeJson(res, 200, { ok: true, cancelamento: cancelamentoAtomico }, corsOrigin)
     return true
   }
 

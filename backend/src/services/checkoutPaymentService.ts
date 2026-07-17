@@ -52,6 +52,20 @@ export class CheckoutPaymentService {
     private readonly fetchImpl: FetchLike = fetch,
   ) {}
 
+  private async fetchWithTimeout(input: Parameters<FetchLike>[0], init: Parameters<FetchLike>[1] = {}) {
+    const timeoutSignal = AbortSignal.timeout(15000)
+    const existingSignal = init?.signal as AbortSignal | undefined
+    const signal = existingSignal ? AbortSignal.any([existingSignal, timeoutSignal]) : timeoutSignal
+    try {
+      return await this.fetchImpl(input, { ...init, signal })
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error('Timeout ao comunicar com o gateway de pagamento.')
+      }
+      throw error
+    }
+  }
+
   async createCommercialPaymentLink(input: { vendaId: string; profileId: string }): Promise<ChargeResult> {
     const sale = await this.repository.findCommercialSalePaymentData?.(input.vendaId, input.profileId)
     if (!sale) return { ok: false, status: 'error', error: 'Venda não encontrada ou acesso não autorizado.' }
@@ -190,7 +204,7 @@ export class CheckoutPaymentService {
       metadata: { venda_id: input.vendaId, gateway: 'mercado_pago' },
     }
 
-    const response = await this.fetchImpl(endpoint, {
+    const response = await this.fetchWithTimeout(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -270,7 +284,7 @@ export class CheckoutPaymentService {
       transactions: { payments: [payment] },
     }
     const idempotencyKey = `avmd-${input.vendaId}-${isPix ? 'pix' : isBoleto ? 'boleto' : 'card'}`
-    const response = await this.fetchImpl(endpoint, {
+    const response = await this.fetchWithTimeout(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -316,7 +330,7 @@ export class CheckoutPaymentService {
 
   private async fetchMercadoPagoPayment(config: CheckoutPaymentMethodConfig, paymentId: string) {
     const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/v1/payments/${encodeURIComponent(paymentId)}`
-    const response = await this.fetchImpl(endpoint, {
+    const response = await this.fetchWithTimeout(endpoint, {
       headers: { 'Authorization': `Bearer ${config.provider_api_token}` },
     })
     const payload = await response.json().catch(() => ({})) as Record<string, unknown>
@@ -397,7 +411,7 @@ export class CheckoutPaymentService {
       },
     }
 
-    const response = await this.fetchImpl(endpoint, {
+    const response = await this.fetchWithTimeout(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -479,7 +493,7 @@ export class CheckoutPaymentService {
       throw error
     }
     const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/v1/orders/${encodeURIComponent(orderId)}`
-    const response = await this.fetchImpl(endpoint, { headers: { 'Authorization': `Bearer ${config.provider_api_token}` } })
+    const response = await this.fetchWithTimeout(endpoint, { headers: { 'Authorization': `Bearer ${config.provider_api_token}` } })
     const order = await response.json().catch(() => ({})) as Record<string, unknown>
     if (!response.ok) throw new Error(String(order.message || order.error || `Mercado Pago respondeu ${response.status}`))
     const payment = this.firstPayment(order)

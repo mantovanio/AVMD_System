@@ -364,15 +364,23 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   const vendaTitularMatch = url.match(/^\/api\/comercial\/vendas\/([^/]+)\/titular$/)
   if (method === 'PATCH' && vendaTitularMatch) {
     const body = await readJson<{ titular_id: string; protocolo_numero: string }>(req)
-    await repo.updateVendaTitular(vendaTitularMatch[1], body.titular_id, body.protocolo_numero)
-    writeJson(res, 200, { ok: true }, corsOrigin)
+    try {
+      await repo.updateVendaTitular(vendaTitularMatch[1], body.titular_id, body.protocolo_numero)
+      writeJson(res, 200, { ok: true }, corsOrigin)
+    } catch (error) {
+      writeJson(res, 400, { ok: false, error: error instanceof Error ? error.message : 'Falha ao atualizar protocolo.' }, corsOrigin)
+    }
     return true
   }
 
   const vendaDeleteMatch = url.match(/^\/api\/comercial\/vendas\/([^/]+)$/)
   if (method === 'DELETE' && vendaDeleteMatch) {
-    await repo.deleteVenda(vendaDeleteMatch[1])
-    writeJson(res, 200, { ok: true }, corsOrigin)
+    try {
+      await repo.deleteVenda(vendaDeleteMatch[1])
+      writeJson(res, 200, { ok: true }, corsOrigin)
+    } catch (error) {
+      writeJson(res, 400, { ok: false, error: error instanceof Error ? error.message : 'Falha ao excluir venda.' }, corsOrigin)
+    }
     return true
   }
 

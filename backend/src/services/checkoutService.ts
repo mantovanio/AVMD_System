@@ -17,6 +17,8 @@ type PortalAccessResult = {
   message: string
 }
 
+type CheckoutChargeResult = Awaited<ReturnType<CheckoutPaymentService['createChargeForSale']>>
+
 export class CheckoutService {
   constructor(
     private readonly repository: CheckoutRepository,
@@ -119,7 +121,15 @@ export class CheckoutService {
     const cadastro = await this.runSubmitStage('cadastro_comprador', () => this.repository.upsertCheckoutCustomer(body))
     const titular = await this.runSubmitStage('cadastro_titular', () => this.repository.upsertCheckoutHolder(body))
     const access = await this.runSubmitStage('acesso_portal', () => this.ensurePortalAccess(body))
-    const venda = await this.runSubmitStage('criacao_venda', () => this.repository.createCheckoutSale({
+    const valorVenda = Number(item.valor ?? 0) - descontoAplicado
+    const vendaExistente = await this.repository.findRecentCheckoutSaleByFingerprint({
+      itemId: item.id,
+      compradorDocumento: body.comprador.cpf_cnpj,
+      compradorEmail: body.comprador.email,
+      valor: valorVenda,
+      minutos: 5,
+    })
+    const venda = vendaExistente ?? await this.runSubmitStage('criacao_venda', () => this.repository.createCheckoutSale({
       payload: body,
       loja,
       item,
@@ -131,6 +141,11 @@ export class CheckoutService {
       voucherPercentual,
       voucherValor,
     }))
+    await this.runSubmitStage('auditoria_fluxo_venda', () => this.repository.markCheckoutFlowState({
+      vendaId: venda.id,
+      stage: 'criacao_venda',
+      status: 'success',
+    }))
 
     if (body.agendamento) {
       await this.runSubmitStage('agendamento', () => this.repository.createCheckoutSchedule({
@@ -139,31 +154,49 @@ export class CheckoutService {
         cadastroBaseId: cadastro.id,
         titularId: titular.id,
       }))
+      await this.runSubmitStage('auditoria_fluxo_agendamento', () => this.repository.markCheckoutFlowState({
+        vendaId: venda.id,
+        stage: 'agendamento',
+        status: 'success',
+      }))
     }
 
-    const charge = await this.runSubmitStage('geracao_cobranca', () => this.paymentService.createChargeForSale({
+    await this.runSubmitStage('auditoria_fluxo_pagamento', () => this.repository.markCheckoutFlowState({
       vendaId: venda.id,
-      formaPagamentoId: body.pagamento.forma_pagamento_id,
-      valor: Number(item.valor ?? 0) - descontoAplicado,
-      descricao: `${item.certificados?.tipo ?? 'Certificado digital'} - ${body.comprador.nome}`,
-      comprador: {
-        nome: body.comprador.nome,
-        email: body.comprador.email,
-        telefone: body.comprador.telefone,
-        documento: body.comprador.cpf_cnpj,
-      },
-      fiscal: body.fiscal,
-      card: body.pagamento.card ?? null,
+      stage: 'geracao_cobranca',
+      status: 'started',
     }))
+    let charge: CheckoutChargeResult | null = null
+    try {
+      charge = await this.runSubmitStage('geracao_cobranca', () => this.paymentService.createChargeForSale({
+        vendaId: venda.id,
+        formaPagamentoId: body.pagamento.forma_pagamento_id,
+        valor: valorVenda,
+        descricao: `${item.certificados?.tipo ?? 'Certificado digital'} - ${body.comprador.nome}`,
+        comprador: {
+          nome: body.comprador.nome,
+          email: body.comprador.email,
+          telefone: body.comprador.telefone,
+          documento: body.comprador.cpf_cnpj,
+        },
+        fiscal: body.fiscal,
+        card: body.pagamento.card ?? null,
+      }))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      await this.compensateCheckoutFailure(venda.id, body.agendamento?.data_agendada ? true : false, message)
+      throw error
+    }
 
-    if (!charge.ok) {
+    if (!charge?.ok) {
+      await this.compensateCheckoutFailure(venda.id, Boolean(body.agendamento), charge?.error || 'Falha ao gerar pagamento.')
       return {
         ok: false,
-        error: charge.error || 'O pagamento não foi gerado pelo gateway.',
+        error: charge?.error || 'O pagamento não foi gerado pelo gateway.',
         venda_id: venda.id,
         protocolo_numero: venda.protocolo_numero,
-        payment_status: charge.status,
-        payment_details: charge.details as CheckoutSubmitResponse['payment_details'],
+        payment_status: charge?.status ?? 'error',
+        payment_details: charge?.details as CheckoutSubmitResponse['payment_details'],
         access_status: access.status,
         access_message: access.message,
       }
@@ -176,10 +209,15 @@ export class CheckoutService {
       email: body.comprador.email,
       telefone: body.comprador.telefone,
       linkPagamento: chargeLink ?? this.pickPaymentLink(charge.details),
-      valor: Number(item.valor ?? 0) - descontoAplicado,
+      valor: valorVenda,
       descricao: `${item.certificados?.tipo ?? 'Certificado digital'} - ${body.comprador.nome}`,
       paymentStatus: charge.status,
       mocked: Boolean(charge.mocked),
+    }))
+    await this.runSubmitStage('auditoria_fluxo_pagamento_final', () => this.repository.markCheckoutFlowState({
+      vendaId: venda.id,
+      stage: 'geracao_cobranca',
+      status: 'success',
     }))
     const message = charge.ok
       ? (charge.mocked
@@ -200,6 +238,41 @@ export class CheckoutService {
       access_status: access.status,
       access_message: access.message,
     }
+  }
+
+  private async compensateCheckoutFailure(vendaId: string, hasSchedule: boolean, reason: string) {
+    const compensation: Record<string, unknown> = { reason, schedule_cancelled: false, sale_cancelled: false }
+
+    if (hasSchedule) {
+      try {
+        const cancelled = await this.repository.cancelCheckoutScheduleBySaleId({
+          vendaId,
+          reason,
+        })
+        compensation.schedule_cancelled = cancelled > 0
+        compensation.schedule_rows = cancelled
+      } catch (error) {
+        compensation.schedule_error = error instanceof Error ? error.message : String(error)
+      }
+    }
+
+    try {
+      await this.repository.cancelCheckoutSaleById({
+        vendaId,
+        reason,
+      })
+      compensation.sale_cancelled = true
+    } catch (error) {
+      compensation.sale_error = error instanceof Error ? error.message : String(error)
+    }
+
+    await this.repository.markCheckoutFlowState({
+      vendaId,
+      stage: 'compensacao',
+      status: 'compensated',
+      error: reason,
+      compensation,
+    })
   }
 
   private async runSubmitStage<T>(stage: string, action: () => Promise<T>): Promise<T> {

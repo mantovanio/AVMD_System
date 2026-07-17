@@ -463,6 +463,36 @@ export class AivenCheckoutRepository implements CheckoutRepository {
     })
   }
 
+  async findRecentCheckoutSaleByFingerprint(input: {
+    itemId: string
+    compradorDocumento: string
+    compradorEmail: string
+    valor: number
+    minutos?: number
+  }): Promise<{ id: string; protocolo_numero: string | null; status_venda: string | null } | null> {
+    const minutes = Math.max(1, Number(input.minutos ?? 5))
+    const sql = `
+      select id, protocolo_numero, status_venda
+      from vendas_certificados
+      where tabela_preco_item_id = $1::uuid
+        and documento_faturamento = $2::text
+        and lower(coalesce(email_faturamento, '')) = lower($3::text)
+        and valor_venda = $4::float8
+        and created_at >= now() - make_interval(mins => $5::int)
+        and coalesce(status_venda, '') <> 'cancelado'
+      order by created_at desc
+      limit 1
+    `
+    const result = await this.db.query<{ id: string; protocolo_numero: string | null; status_venda: string | null }>(sql, [
+      String(input.itemId),
+      onlyDigits(String(input.compradorDocumento)),
+      String(input.compradorEmail).trim(),
+      Number(input.valor),
+      minutes,
+    ])
+    return result.rows[0] ?? null
+  }
+
   async createCheckoutSale(input: CreateCheckoutSaleInput): Promise<{ id: string; protocolo_numero: string | null }> {
     return this.db.transaction(async trx => {
       const saleId = randomUUID()
@@ -534,6 +564,81 @@ export class AivenCheckoutRepository implements CheckoutRepository {
     })
   }
 
+  async markCheckoutFlowState(input: {
+    vendaId: string
+    stage: string
+    status: 'started' | 'success' | 'failed' | 'compensated'
+    error?: string | null
+    compensation?: Record<string, unknown> | null
+  }): Promise<void> {
+    await this.db.query(
+      `update vendas_certificados
+       set metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+         'checkout_flow', coalesce(metadata->'checkout_flow', '{}'::jsonb) || jsonb_build_object(
+           'stage', $2::text,
+           'status', $3::text,
+           'error', $4::text,
+           'compensation', $5::jsonb,
+           'updated_at', now()
+         )
+       ),
+           updated_at = now()
+       where id = $1::uuid`,
+      [
+        String(input.vendaId),
+        String(input.stage),
+        String(input.status),
+        input.error ? String(input.error) : null,
+        JSON.stringify(input.compensation ?? {}),
+      ],
+    )
+  }
+
+  async cancelCheckoutScheduleBySaleId(input: {
+    vendaId: string
+    reason: string
+  }): Promise<number> {
+    const result = await this.db.query<{ id: string }>(
+      `update agendamentos_validacao
+          set status_agendamento = 'cancelado',
+              metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+                'checkout_flow', jsonb_build_object(
+                  'status', 'compensated',
+                  'reason', $2::text,
+                  'updated_at', now()
+                )
+              ),
+              updated_at = now()
+        where venda_certificado_id = $1::uuid
+          and status_agendamento <> 'cancelado'
+        returning id`,
+      [String(input.vendaId), String(input.reason)],
+    )
+    return result.rows.length
+  }
+
+  async cancelCheckoutSaleById(input: {
+    vendaId: string
+    reason: string
+  }): Promise<void> {
+    await this.db.query(
+      `update vendas_certificados
+       set status_venda = 'cancelado',
+           pedido_status = 'cancelado',
+           protocolo_status = case when protocolo_status = 'nao_gerado' then protocolo_status else protocolo_status end,
+           metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+             'checkout_flow', coalesce(metadata->'checkout_flow', '{}'::jsonb) || jsonb_build_object(
+               'status', 'compensated',
+               'reason', $2::text,
+               'updated_at', now()
+             )
+           ),
+           updated_at = now()
+       where id = $1::uuid`,
+      [String(input.vendaId), String(input.reason)],
+    )
+  }
+
 
   async attachPaymentChargeToSale(input: {
     vendaId: string
@@ -587,14 +692,19 @@ export class AivenCheckoutRepository implements CheckoutRepository {
        set pago = case when $2::boolean then true else pago end,
            data_pagamento = case when $2::boolean then now() else data_pagamento end,
            status_pagamento = case
+             when status_venda = 'cancelado' then 'cancelado'
              when $2::boolean then 'pago'
              when $5::text = 'failed' and status_pagamento is distinct from 'pago' then 'recusado'
              else status_pagamento
            end,
-           status_venda = case when $2::boolean then 'vendido' else status_venda end,
-           metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
-             'payment_charge', coalesce(metadata->'payment_charge', '{}'::jsonb) || jsonb_build_object(
-               'gateway', $3::text,
+           status_venda = case
+             when status_venda = 'cancelado' then status_venda
+             when $2::boolean then 'vendido'
+             else status_venda
+           end,
+            metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+              'payment_charge', coalesce(metadata->'payment_charge', '{}'::jsonb) || jsonb_build_object(
+                'gateway', $3::text,
                'external_id', $4::text,
                'status', $5::text,
                'webhook_payload', $6::jsonb,

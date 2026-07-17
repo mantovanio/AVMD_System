@@ -1,5 +1,7 @@
 # React + TypeScript + Vite
 
+Documentacao tecnica do checkout e da governanca de compensacao: [docs/checkout-governanca.md](./docs/checkout-governanca.md)
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

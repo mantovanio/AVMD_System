@@ -502,13 +502,58 @@ export class CatalogRepository {
 
   // ── Vendas extra ──────────────────────────────────────────────────────
   async updateVendaTitular(id: string, titular_id: string, protocolo_numero: string) {
+    const existing = await this.db.query<{ id: string; protocolo_numero: string | null; pago: boolean; status_venda: string | null }>(
+      `select id, protocolo_numero, pago, status_venda
+       from vendas_certificados
+       where id = $1::uuid
+       limit 1`,
+      [id],
+    )
+    const venda = existing.rows[0]
+    if (!venda) throw new Error('Venda nao encontrada.')
+
+    const novoProtocolo = String(protocolo_numero ?? '').trim()
+    if (!novoProtocolo) throw new Error('Protocolo obrigatorio.')
+
+    const conflito = await this.db.query<{ id: string }>(
+      `select id
+       from vendas_certificados
+       where protocolo_numero = $1
+         and id <> $2::uuid
+       limit 1`,
+      [novoProtocolo, id],
+    )
+    if (conflito.rows[0]) {
+      throw new Error(`Já existe uma venda com o protocolo ${novoProtocolo}.`)
+    }
+
     await this.db.query(
-      `update vendas_certificados set titular_id = $2::uuid, protocolo_numero = $3, protocolo_status = 'gerado', updated_at = now() where id = $1::uuid`,
-      [id, titular_id, protocolo_numero]
+      `update vendas_certificados
+       set titular_id = $2::uuid,
+           protocolo_numero = $3,
+           protocolo_status = case
+             when status_venda = 'cancelado' then protocolo_status
+             else 'gerado'
+           end,
+           updated_at = now()
+       where id = $1::uuid`,
+      [id, titular_id, novoProtocolo],
     )
   }
 
   async deleteVenda(id: string) {
+    const venda = await this.db.query<{ id: string; pago: boolean; status_venda: string | null }>(
+      `select id, pago, status_venda
+       from vendas_certificados
+       where id = $1::uuid
+       limit 1`,
+      [id],
+    )
+    const row = venda.rows[0]
+    if (!row) throw new Error('Venda nao encontrada.')
+    if (row.pago || row.status_venda === 'vendido' || row.status_venda === 'emitido') {
+      throw new Error('Venda paga ou emitida nao pode ser excluida. Use cancelamento ou ajuste de protocolo.')
+    }
     await this.db.query(`delete from vendas_certificados where id = $1::uuid`, [id])
   }
 

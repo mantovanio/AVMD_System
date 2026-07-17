@@ -97,6 +97,13 @@ export interface CheckoutRepository {
   findLatestActiveCustomerByDocument(documento: string): Promise<CheckoutExistingCustomerLookup | null>
   upsertCheckoutCustomer(payload: CheckoutSubmitRequest): Promise<{ id: string }>
   upsertCheckoutHolder(payload: CheckoutSubmitRequest): Promise<{ id: string | null }>
+  findRecentCheckoutSaleByFingerprint(input: {
+    itemId: string
+    compradorDocumento: string
+    compradorEmail: string
+    valor: number
+    minutos?: number
+  }): Promise<{ id: string; protocolo_numero: string | null; status_venda: string | null } | null>
   createCheckoutSale(input: CreateCheckoutSaleInput): Promise<{ id: string; protocolo_numero: string | null }>
   attachPaymentChargeToSale(input: {
     vendaId: string
@@ -106,6 +113,21 @@ export interface CheckoutRepository {
     status: string
     payload?: Record<string, unknown> | null
     details?: Record<string, unknown> | null
+  }): Promise<void>
+  markCheckoutFlowState(input: {
+    vendaId: string
+    stage: string
+    status: 'started' | 'success' | 'failed' | 'compensated'
+    error?: string | null
+    compensation?: Record<string, unknown> | null
+  }): Promise<void>
+  cancelCheckoutScheduleBySaleId(input: {
+    vendaId: string
+    reason: string
+  }): Promise<number>
+  cancelCheckoutSaleById(input: {
+    vendaId: string
+    reason: string
   }): Promise<void>
   applyPaymentWebhook(input: {
     vendaId?: string | null
