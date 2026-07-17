@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useClerk, useSession, useSignIn, useUser } from '@clerk/clerk-react'
 import { supabase } from '@/lib/supabase'
 import { getApiUrl, useLegacySupabase } from '@/lib/api'
@@ -46,6 +46,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false)
   const [authTransitioning, setAuthTransitioning] = useState(false)
   const [authBootstrapReady, setAuthBootstrapReady] = useState(false)
+  const signInLoadedRef = useRef(false)
+  const userLoadedRef = useRef(false)
+  const sessionLoadedRef = useRef(false)
 
   const currentUser = useMemo<AuthUser | null>(() => {
     if (!user || !userLoaded || !isSignedIn) return null
@@ -121,6 +124,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    signInLoadedRef.current = signInLoaded
+    userLoadedRef.current = userLoaded
+    sessionLoadedRef.current = sessionLoaded
+  }, [signInLoaded, userLoaded, sessionLoaded])
+
+  useEffect(() => {
     if (signInLoaded && userLoaded && sessionLoaded) {
       setAuthBootstrapReady(true)
       return
@@ -133,8 +142,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timeout)
   }, [signInLoaded, userLoaded, sessionLoaded])
 
+  async function waitForClerkBootstrap(timeoutMs = 12000) {
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < timeoutMs) {
+      if (signInLoadedRef.current && userLoadedRef.current && sessionLoadedRef.current) {
+        return true
+      }
+      await new Promise(resolve => setTimeout(resolve, 150))
+    }
+    return signInLoadedRef.current && userLoadedRef.current && sessionLoadedRef.current
+  }
+
   async function signInWithPassword(email: string, password: string) {
     if (!signInLoaded || !signIn) {
+      const clerkReady = await waitForClerkBootstrap()
+      if (clerkReady && signIn) {
+        return signInWithPassword(email, password)
+      }
       return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
     }
 
@@ -243,6 +267,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function updatePassword(password: string) {
     if (!signInLoaded || !signIn) {
+      const clerkReady = await waitForClerkBootstrap()
+      if (clerkReady && signIn) {
+        return updatePassword(password)
+      }
       return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
     }
 
