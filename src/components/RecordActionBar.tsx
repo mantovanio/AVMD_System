@@ -37,19 +37,19 @@ export function RecordActionBar({ recordName, recordBadge, actions, onClose, cla
   return (
     <div className={cn(
       'sticky top-0 z-20 border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm',
-      'px-4 py-2.5 flex items-center gap-3 flex-wrap',
+      'px-3 py-2.5 flex items-center gap-2 flex-wrap sm:px-4 sm:gap-3',
       className,
     )}>
       <div className="flex items-center gap-2 min-w-0 shrink-0">
-        <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate max-w-[200px]">
+        <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate max-w-[140px] sm:max-w-[200px]">
           {recordName}
         </span>
         {recordBadge}
       </div>
 
-      <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 shrink-0" />
+      <div className="hidden w-px h-5 bg-gray-200 dark:bg-gray-700 shrink-0 sm:block" />
 
-      <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+      <div className="flex items-center gap-1 flex-wrap flex-1 min-w-0">
         {visibleActions.map(action => (
           <button
             key={action.key}
@@ -64,7 +64,7 @@ export function RecordActionBar({ recordName, recordBadge, actions, onClose, cla
             )}
           >
             {action.icon}
-            <span className="hidden sm:inline">{action.label}</span>
+            <span className="hidden md:inline">{action.label}</span>
           </button>
         ))}
         {children}

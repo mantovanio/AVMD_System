@@ -45,7 +45,7 @@ export default function ModulePageShell<T extends string>({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="shrink-0 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95 sm:px-6">
+      <div className="shrink-0 border-b border-slate-200 bg-white/95 px-3 py-3 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95 sm:px-6">
         <div className="space-y-3">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-gray-500">
@@ -54,14 +54,14 @@ export default function ModulePageShell<T extends string>({
             <h1 className="truncate text-sm font-semibold text-slate-900 dark:text-white">{activeTabLabel}</h1>
           </div>
 
-          <div className="-mx-1 flex flex-wrap gap-2">
+          <div className="-mx-1 flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
             {tabs.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => handleTabClick(id)}
                 className={cn(
-                  'inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium transition-all',
+                  'inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium transition-all',
                   activeTab === id
                     ? 'border-blue-600 bg-blue-600 text-white'
                     : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white',
@@ -75,7 +75,7 @@ export default function ModulePageShell<T extends string>({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-auto p-4 sm:p-6">
+      <div className="flex-1 min-h-0 overflow-auto p-3 sm:p-6">
         {children}
       </div>
     </div>

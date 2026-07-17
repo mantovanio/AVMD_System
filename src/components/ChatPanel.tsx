@@ -282,6 +282,7 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
   const [composerMode, setComposerMode] = useState<'mensagem' | 'nota_interna'>('mensagem')
   const [sidebarWidth, setSidebarWidth] = useState(320)
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
+  const [mobileInfoOpen, setMobileInfoOpen] = useState(false)
 
   // file attachment
   const [pendingFile, setPendingFile]       = useState<File | null>(null)
@@ -1187,7 +1188,10 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
   ]
 
   return (
-    <div ref={panelRef} className="fixed bottom-4 right-4 w-[min(96vw,1040px)] h-[min(88vh,720px)] bg-white dark:bg-gray-950 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 flex flex-col z-50 overflow-hidden">
+    <div
+      ref={panelRef}
+      className="fixed inset-0 z-50 flex h-[100dvh] w-[100vw] flex-col overflow-hidden bg-white shadow-2xl sm:inset-4 sm:h-[min(92vh,760px)] sm:w-[min(96vw,1040px)] sm:rounded-2xl sm:border sm:border-gray-200 sm:dark:border-gray-800 dark:bg-gray-950"
+    >
 
       {/* Hidden inputs */}
       <input ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xls,.xlsx" className="hidden" onChange={handleFileSelect} />
@@ -1203,7 +1207,7 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
       />
 
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-[#f7f1e3] via-[#fffdf8] to-[#ecf7f0] dark:from-gray-950 dark:via-gray-950 dark:to-gray-900 border-b border-[#e7dcc3] dark:border-gray-800 shrink-0 shadow-[inset_0_-1px_0_rgba(255,255,255,0.45)]">
+      <div className="flex items-center gap-2 px-3 py-3 sm:px-4 bg-gradient-to-r from-[#f7f1e3] via-[#fffdf8] to-[#ecf7f0] dark:from-gray-950 dark:via-gray-950 dark:to-gray-900 border-b border-[#e7dcc3] dark:border-gray-800 shrink-0 shadow-[inset_0_-1px_0_rgba(255,255,255,0.45)]">
         <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-100 via-white to-emerald-50 border border-emerald-200/80 flex items-center justify-center shrink-0 shadow-sm">
           <MessageCircle size={18} className="text-emerald-700" />
         </div>
@@ -1219,6 +1223,13 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
             </span>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setMobileInfoOpen(true)}
+          className="inline-flex items-center rounded-xl border border-white/70 bg-white/65 px-3 py-2 text-xs font-medium text-gray-600 shadow-sm backdrop-blur sm:hidden"
+        >
+          Info
+        </button>
         <button
           type="button"
           onClick={() => void refreshMessages()}
@@ -1241,8 +1252,8 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
 
       <div className="flex-1 min-h-0 flex flex-col xl:flex-row">
         <div
-          className="relative min-h-0 flex flex-col"
-          style={{ width: `calc(100% - ${sidebarWidth}px - 12px)` }}
+          className="relative min-h-0 flex flex-1 flex-col xl:flex-none xl:w-[calc(100%-var(--sidebar-width)-12px)]"
+          style={{ ['--sidebar-width' as string]: `${sidebarWidth}px` }}
         >
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-2 py-3 space-y-1 bg-[#ece5dd] dark:bg-gray-950">
@@ -1495,7 +1506,7 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
         </div>
 
         <aside
-          className="min-h-0 overflow-y-auto bg-white dark:bg-gray-950 border-t xl:border-t-0 border-gray-200 dark:border-gray-800 shrink-0"
+          className="hidden min-h-0 overflow-y-auto bg-white dark:bg-gray-950 border-t xl:block xl:border-t-0 border-gray-200 dark:border-gray-800 shrink-0"
           style={{ width: `${sidebarWidth}px` }}
         >
           <div className="p-4 space-y-4">
@@ -1783,6 +1794,75 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
           </div>
         </aside>
       </div>
+
+      {mobileInfoOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/45 backdrop-blur-sm xl:hidden">
+          <div className="absolute inset-x-0 bottom-0 top-16 overflow-hidden rounded-t-3xl bg-white dark:bg-gray-950 shadow-2xl border-t border-gray-200 dark:border-gray-800 flex flex-col">
+            <div className="flex items-center justify-between gap-3 border-b border-gray-200 dark:border-gray-800 px-4 py-3 shrink-0">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-gray-400">Painel do contato</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{sidebarName}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileInfoOpen(false)}
+                className="rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300"
+              >
+                Fechar
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-2">
+                  {sidebarHighlights.map(item => (
+                    <div key={item.label} className={cn('rounded-2xl border px-3 py-3', item.tone)}>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide opacity-75">{item.label}</p>
+                      <p className="mt-1 text-sm font-medium leading-snug">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Editar contato</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileInfoOpen(false)
+                      setEditingLead(true)
+                    }}
+                    className="w-full rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-medium text-white"
+                  >
+                    Abrir edição completa
+                  </button>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Transferir conversa</p>
+                  <SidebarSelect
+                    label="Atendente / agente responsavel"
+                    value={selectedTransferId}
+                    onChange={setSelectedTransferId}
+                    options={[
+                      { value: '', label: loadingTargets ? 'Carregando...' : 'Selecione o destino' },
+                      ...transferTargets.map(target => ({
+                        value: target.id,
+                        label: `${target.nome} · ${target.perfil === 'agente_registro' ? 'Agente' : target.perfil === 'usuario' ? 'Operador' : 'Admin'}`,
+                      })),
+                    ]}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void transferConversation()}
+                    disabled={transferringLead || !selectedTransferId || loadingTargets}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-3 py-2.5 text-sm font-medium disabled:opacity-50"
+                  >
+                    {transferringLead ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    Transferir atendimento
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

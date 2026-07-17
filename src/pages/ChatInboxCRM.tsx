@@ -1432,8 +1432,8 @@ export default function ChatInboxCRM() {
   }
 
   async function createManualConversation() {
-    const normalizedPhone = normalizePhone(manualConversation.phone)
-    const normalizedDigits = normalizedPhone.replace(/\D/g, '')
+    const normalizedPhone = normalizePhoneBR(manualConversation.phone)
+    const normalizedDigits = (normalizedPhone ?? '').replace(/\D/g, '')
     const firstMessage = manualConversation.firstMessage.trim()
     const contactName = manualConversation.contactName.trim()
     const selectedChannel = manualChannelOptions.find(item => item.integration.id === manualConversation.integrationId)
@@ -1448,12 +1448,7 @@ export default function ChatInboxCRM() {
       return
     }
 
-    if (normalizedDigits.startsWith('55') && normalizedDigits.length === 12) {
-      setManualConversationError('Esse numero parece incompleto para WhatsApp. Para celular no Brasil, use 55 + DDD + 9 dígitos. Exemplo: 5511999999999.')
-      return
-    }
-
-    if (normalizedDigits.length < 12) {
+    if (normalizedDigits.length < 10) {
       setManualConversationError('Esse numero esta curto demais para WhatsApp. Confira o DDD e o 9 do celular antes de enviar.')
       return
     }
@@ -1480,9 +1475,14 @@ export default function ChatInboxCRM() {
         }),
       })
 
-      const payload = await response.json() as { ok?: boolean; error?: string }
+      const payload = await response.json() as { ok?: boolean; error?: string; detail?: unknown }
       if (!response.ok || !payload.ok) {
-        const rawError = payload.error ?? ''
+        const detailText = typeof payload.detail === 'string'
+          ? payload.detail
+          : payload.detail && typeof payload.detail === 'object'
+            ? JSON.stringify(payload.detail)
+            : ''
+        const rawError = [payload.error, detailText].filter(Boolean).join(' | ')
         const msg = rawError.includes('404') || rawError.includes('not found') || rawError.includes('invalid')
           ? 'Numero nao encontrado no WhatsApp. Verifique se o numero esta correto e ativo.'
           : rawError.includes('401') || rawError.includes('403')

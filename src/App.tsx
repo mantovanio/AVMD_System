@@ -1,5 +1,6 @@
 import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { ClerkProvider } from '@clerk/clerk-react'
+import { ptBR } from '@clerk/localizations'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import Sidebar, { type Page } from '@/components/Sidebar'
 import NotificationBell from '@/components/NotificationBell'
@@ -426,7 +427,7 @@ export default function App() {
   }
 
   return (
-    <ClerkProvider publishableKey={clerkPublishableKey}>
+    <ClerkProvider publishableKey={clerkPublishableKey} localization={ptBR}>
       <AuthProvider>
         <PermissionsProvider>
           <AppErrorBoundary>

@@ -310,7 +310,16 @@ async function sendEvolutionTextMessage(
 
   const payload = await response.json().catch(() => ({ status: response.status })) as JsonRecord
   if (!response.ok) {
-    return { ok: false, error: `Evolution retornou HTTP ${response.status}`, status: 502, payload, instanceName: integration.instance_name }
+    const detail = payload && typeof payload === 'object'
+      ? (payload.error || payload.message || payload.response || payload.detail || payload)
+      : payload
+    return {
+      ok: false,
+      error: `Evolution retornou HTTP ${response.status}${detail ? ` - ${typeof detail === 'string' ? detail : JSON.stringify(detail)}` : ''}`,
+      status: 502,
+      payload,
+      instanceName: integration.instance_name,
+    }
   }
 
   return { ok: true, error: null, status: 200, payload, instanceName: integration.instance_name }

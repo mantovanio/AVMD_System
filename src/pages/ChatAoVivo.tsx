@@ -361,6 +361,9 @@ export default function ChatAoVivo() {
   }
 
   function openWhatsApp(lead: Lead) {
+    if (!evolution) {
+      void loadEvolution()
+    }
     setChatLead(lead)
   }
 
@@ -563,8 +566,8 @@ export default function ChatAoVivo() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0 md:flex-row md:items-center md:justify-between md:px-6">
+        <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm text-gray-500 dark:text-gray-400">{loading ? '…' : `${totalContatos} contatos`}</span>
           <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
             <button type="button" onClick={() => setView('kanban')} className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors', view === 'kanban' ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300')}>
@@ -576,7 +579,7 @@ export default function ChatAoVivo() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 md:justify-end">
           <button type="button" onClick={openNewLead} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium">
             <UserPlus size={14} /> Novo contato
           </button>
@@ -594,7 +597,7 @@ export default function ChatAoVivo() {
 
       {!loading && !error && view === 'kanban' && (
         <DndContext sensors={sensors} onDragStart={event => setActiveId(event.active.id as string)} onDragEnd={handleDragEnd}>
-          <div className="flex-1 overflow-x-auto p-6">
+          <div className="hidden flex-1 overflow-x-auto p-6 md:block">
             <div className="flex gap-4 h-full" style={{ minWidth: `${columns.length * 296}px` }}>
               {columns.map(column => {
                 const colLeads = leads.filter(lead => lead.status === column.status_key)
@@ -613,6 +616,38 @@ export default function ChatAoVivo() {
                     onMoveColumn={moveColumn}
                     isAdmin={isAdmin}
                   />
+                )
+              })}
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-4 md:hidden">
+            <div className="grid gap-3">
+              {columns.map(column => {
+                const colLeads = leads.filter(lead => lead.status === column.status_key)
+                return (
+                  <div key={column.id} className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{column.label}</p>
+                        <p className="text-sm text-gray-500">{colLeads.length} contato(s)</p>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {colLeads.length === 0 ? (
+                        <p className="text-xs text-gray-400">Sem contatos</p>
+                      ) : colLeads.map(lead => (
+                        <MobileLeadCard
+                          key={lead.id}
+                          lead={lead}
+                          onOpenChat={() => openWhatsApp(lead)}
+                          onEdit={() => openEditLead(lead)}
+                          onMove={() => openQuickModal(lead, nextSuggestedStatus(lead.status))}
+                          onDelete={() => deleteLead(lead)}
+                          isAdmin={isAdmin}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 )
               })}
             </div>
@@ -719,7 +754,7 @@ export default function ChatAoVivo() {
           </div>
 
           {/* Tabela */}
-          <div className="flex-1 overflow-auto p-6 pt-4">
+          <div className="hidden flex-1 overflow-auto p-6 pt-4 md:block">
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
@@ -895,6 +930,46 @@ export default function ChatAoVivo() {
                   Próxima
                 </button>
               </div>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-4 md:hidden">
+            <div className="space-y-3">
+              {paginatedLeads.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-6 text-center text-sm text-gray-400">
+                  Nenhum contato encontrado.
+                </div>
+              ) : paginatedLeads.map(lead => (
+                <MobileLeadCard
+                  key={lead.id}
+                  lead={lead}
+                  onOpenChat={() => openWhatsApp(lead)}
+                  onEdit={() => openEditLead(lead)}
+                  onMove={() => openQuickModal(lead, nextSuggestedStatus(lead.status))}
+                  onDelete={() => deleteLead(lead)}
+                  isAdmin={isAdmin}
+                />
+              ))}
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-2">
+              <button
+                type="button"
+                onClick={() => setListPage(prev => Math.max(1, prev - 1))}
+                disabled={listPage === 1}
+                className="rounded-lg border border-gray-200 px-3 py-2 text-xs disabled:opacity-40"
+              >
+                Anterior
+              </button>
+              <span className="text-xs text-gray-500">
+                {listPage} / {totalListPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setListPage(prev => Math.min(totalListPages, prev + 1))}
+                disabled={listPage >= totalListPages}
+                className="rounded-lg border border-gray-200 px-3 py-2 text-xs disabled:opacity-40"
+              >
+                Próxima
+              </button>
             </div>
           </div>
         </div>
@@ -1425,6 +1500,55 @@ function QuickButton({ icon, label, onClick }: { icon: ReactNode; label: string;
       {icon}
       {label}
     </button>
+  )
+}
+
+function MobileLeadCard({
+  lead,
+  onOpenChat,
+  onEdit,
+  onMove,
+  onDelete,
+  isAdmin,
+}: {
+  lead: Lead
+  onOpenChat: () => void
+  onEdit: () => void
+  onMove: () => void
+  onDelete: () => void
+  isAdmin: boolean
+}) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{lead.nome_lead || 'Sem nome'}</p>
+          <p className="truncate text-xs text-gray-500 dark:text-gray-400">{lead.whatsapp_lead || 'Sem WhatsApp'}</p>
+        </div>
+        <StatusPill status={lead.status} />
+      </div>
+      <p className="mt-2 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">
+        {lead.ultima_mensagem || lead.resumo_conversa || 'Sem histórico'}
+      </p>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <button type="button" onClick={onOpenChat} className="rounded-xl bg-green-600 px-3 py-2 text-xs font-medium text-white">
+          Chat
+        </button>
+        <button type="button" onClick={onEdit} className="rounded-xl border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 dark:border-gray-700 dark:text-gray-200">
+          Editar
+        </button>
+        <button type="button" onClick={onMove} className="rounded-xl border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 dark:border-gray-700 dark:text-gray-200">
+          Etapa
+        </button>
+        {isAdmin ? (
+          <button type="button" onClick={onDelete} className="rounded-xl border border-red-200 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-800 dark:text-red-400">
+            Excluir
+          </button>
+        ) : (
+          <span />
+        )}
+      </div>
+    </div>
   )
 }
 
