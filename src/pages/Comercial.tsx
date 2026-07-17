@@ -58,7 +58,7 @@ import { getApiUrl } from '@/lib/api'
 import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenTitularByCpf, updateAivenCommercialSaleStatus, updateAivenCommercialSalePaymentStatus, updateVenda, updateVendaPaymentMethod, type CancelamentoVendaInput, type UpdateVendaInput } from '@/lib/commercialAiven'
 import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
 import { useAuth } from '@/contexts/AuthContext'
-import { hasPerfil, isAdminProfile } from '@/lib/security'
+import { canChangePayment, canChangeProtocol, canDeleteSale, canReleaseEmission, hasPerfil, isAdminProfile } from '@/lib/security'
 import { buscarCep } from '@/lib/cep'
 import type {
   Agendamento,
@@ -5177,8 +5177,8 @@ export default function Comercial() {
               const clienteNome = v.cadastros_base?.nome ?? (v as unknown as { nome_faturamento?: string }).nome_faturamento ?? '—'
               const statusLabel = STATUS_VENDA_LABEL[v.status_venda] ?? v.status_venda
               const vendaBloqueada = Boolean(v.pago || v.status_venda === 'vendido' || v.status_venda === 'emitido')
-              const podeExcluir = isAdmin ? !vendaBloqueada : !vendaBloqueada
-              const podeTrocarProtocolo = isAdmin || !vendaBloqueada
+              const podeExcluir = canDeleteSale(profile, v)
+              const podeTrocarProtocolo = canChangeProtocol(profile, v)
               const protocoloLabel = isAdmin && vendaBloqueada ? 'Trocar protocolo' : 'Protocolo'
               const protocoloTooltip = isAdmin && vendaBloqueada
                 ? 'Trocar o protocolo desta venda paga/emitida com validação de unicidade.'
@@ -5194,7 +5194,7 @@ export default function Comercial() {
                 ...(podeExcluir ? [{ key: 'excluir', icon: <Trash2 size={13} />, label: 'Excluir', tooltip: 'Excluir permanentemente esta venda', onClick: () => void excluirVenda(v.id), variant: 'red' as const }] : []),
                 { key: 'nfse', icon: <FileText size={13} />, label: 'NFS-e', tooltip: 'Emitir a nota fiscal de serviço (NFS-e)', onClick: () => void emitirNfseParaVenda(v), hidden: !nfseAutomationSettings.permitir_emissao_manual_rapida },
                 { key: 'verNfse', icon: <Eye size={13} />, label: 'Ver NF-e', tooltip: 'Visualizar a nota fiscal já emitida', onClick: () => void abrirNfseVenda(v) },
-                ...(vendaBloqueada && !isAdmin ? [] : [{ key: 'liberar', icon: <Unlock size={13} />, label: 'Liberar', tooltip: 'Liberar emissão quando há pendência fiscal', onClick: () => void liberarEmissao(v), variant: 'green' as const }]),
+                ...(canReleaseEmission(profile, v) ? [{ key: 'liberar', icon: <Unlock size={13} />, label: 'Liberar', tooltip: 'Liberar emissão quando há pendência fiscal', onClick: () => void liberarEmissao(v), variant: 'green' as const }] : []),
               ]
               return (
                 <RecordActionBar
@@ -5288,9 +5288,9 @@ export default function Comercial() {
                           {new Date(v.updated_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}
                         </td>
                         <td className="px-3 py-2 text-gray-500 whitespace-nowrap hidden lg:table-cell">
-                          {isAdmin ? (
+                          {canChangePayment(profile, v) ? (
                             <select
-                              title="Alterar forma de pagamento (somente administrador)"
+                              title={isAdmin ? 'Alterar forma de pagamento (somente administrador)' : 'Alterar forma de pagamento'}
                               value={v.forma_pagamento_id ?? ''}
                               disabled={updatingPaymentVendaId === v.id}
                               onChange={e => void alterarFormaPagamentoVenda(v, e.target.value)}

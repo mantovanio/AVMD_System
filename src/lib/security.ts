@@ -99,6 +99,81 @@ export function resolveDefaultPage(profile: Profile | null | undefined): Page {
   return allowedPages[0] ?? 'dashboard'
 }
 
+export type CommercialAction =
+  | 'view'
+  | 'edit_sale'
+  | 'delete_sale'
+  | 'change_protocol'
+  | 'change_payment'
+  | 'change_status'
+  | 'cancel_sale'
+  | 'manage_agenda'
+  | 'issue_nfse'
+  | 'release_emission'
+
+export interface CommercialSaleLike {
+  pago?: boolean | null
+  status_venda?: string | null
+  protocolo_numero?: string | null
+}
+
+export function isSaleLockedForOperations(sale: CommercialSaleLike | null | undefined) {
+  if (!sale) return false
+  return Boolean(sale.pago || sale.status_venda === 'vendido' || sale.status_venda === 'emitido')
+}
+
+export function canPerformCommercialAction(
+  profile: Profile | null | undefined,
+  action: CommercialAction,
+  sale?: CommercialSaleLike | null,
+) {
+  if (!profile || !isProfileActive(profile)) return false
+  if (profile.perfil === 'admin') return true
+
+  const locked = isSaleLockedForOperations(sale)
+
+  switch (profile.perfil) {
+    case 'vendedor':
+      return action === 'view'
+        || action === 'manage_agenda'
+        || action === 'issue_nfse'
+        || (action === 'change_status' && !locked)
+    case 'agente_registro':
+      return action === 'view'
+        || action === 'manage_agenda'
+        || action === 'issue_nfse'
+        || (action === 'change_status' && !locked)
+    case 'usuario':
+      return action === 'view'
+    default:
+      return false
+  }
+}
+
+export function canEditSale(profile: Profile | null | undefined, sale?: CommercialSaleLike | null) {
+  return canPerformCommercialAction(profile, 'edit_sale', sale)
+}
+
+export function canDeleteSale(profile: Profile | null | undefined, sale?: CommercialSaleLike | null) {
+  return canPerformCommercialAction(profile, 'delete_sale', sale)
+}
+
+export function canChangeProtocol(profile: Profile | null | undefined, sale?: CommercialSaleLike | null) {
+  if (!profile || !isProfileActive(profile)) return false
+  if (profile.perfil === 'admin') return true
+  return false
+}
+
+export function canChangePayment(profile: Profile | null | undefined, sale?: CommercialSaleLike | null) {
+  return canPerformCommercialAction(profile, 'change_payment', sale)
+}
+
+export function canReleaseEmission(profile: Profile | null | undefined, sale?: CommercialSaleLike | null) {
+  if (!profile || !isProfileActive(profile)) return false
+  if (profile.perfil === 'admin') return true
+  return false
+}
+
 export function sanitizePostgrestSearchTerm(value: string) {
   return value
     .normalize('NFKC')

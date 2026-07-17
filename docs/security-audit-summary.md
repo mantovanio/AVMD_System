@@ -17,6 +17,23 @@ Registrar, de forma curta e operacional, o que foi endurecido no CRM e quais pon
 - Timeout nas integrações de pagamento para evitar travamento silencioso.
 - UI do Comercial ocultando ações destrutivas quando não fazem sentido.
 
+## Política prática por perfil
+
+| Perfil | Pode operar | Não pode operar |
+| --- | --- | --- |
+| `admin` | Tudo, inclusive correções manuais, troca de protocolo e exclusão assistida com validação | Nada além das regras de integridade do banco |
+| `vendedor` | Consulta, criação e acompanhamento de vendas e agenda dentro do fluxo permitido | Troca de protocolo, exclusão de venda paga/emitida, ajustes sensíveis de pagamento e ações administrativas |
+| `agente_registro` | Operação de agenda, acompanhamento e suporte ao fluxo comercial | Exclusão, troca de protocolo e qualquer ação financeira crítica |
+| `financeiro` | Ajustes financeiros, conciliação e verificação de pagamento | Edição estrutural de venda, exclusão e alteração de protocolo |
+
+Regras-chave:
+
+- Cliente pode ter múltiplos pedidos.
+- Não pode existir mais de um pedido com o mesmo número.
+- Venda paga não pode ser excluída.
+- Troca de protocolo só segue pelo fluxo assistido e com validação de unicidade.
+- A interface deve bloquear o óbvio, mas a regra final continua sendo do backend.
+
 ## Rotas que ainda alteram venda/protocolo
 
 ### Comercial
