@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { ClerkProvider } from '@clerk/clerk-react'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import Sidebar, { type Page } from '@/components/Sidebar'
@@ -339,6 +339,47 @@ function ConfigErrorScreen({ message }: { message: string }) {
   )
 }
 
+class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; message: string }> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { hasError: false, message: 'Falha inesperada ao carregar o sistema.' }
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return {
+      hasError: true,
+      message: error.message || 'Falha inesperada ao carregar o sistema.',
+    }
+  }
+
+  override componentDidCatch(error: Error) {
+    // Mantemos a tela de erro visível em vez de deixar a interface em branco.
+    console.error('AppErrorBoundary', error)
+  }
+
+  override render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-950 via-gray-900 to-blue-900 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl shadow-black/40 p-8 text-center">
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Sistema indisponível no momento</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{this.state.message}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-6 w-full px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
+            >
+              Recarregar sistema
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
+}
+
 export default function App() {
   const pathname = window.location.pathname
   const isShopRoute = /^\/shop\/?$/.test(pathname)
@@ -380,7 +421,9 @@ export default function App() {
     <ClerkProvider publishableKey={runtime.clerkPublishableKey}>
       <AuthProvider>
         <PermissionsProvider>
-          <AppContent />
+          <AppErrorBoundary>
+            <AppContent />
+          </AppErrorBoundary>
         </PermissionsProvider>
       </AuthProvider>
     </ClerkProvider>
