@@ -200,7 +200,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const result = await withTimeout(
         signIn.create({
-          strategy: 'password',
           identifier: normalizedEmail,
           password,
         }),
