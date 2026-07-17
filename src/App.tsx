@@ -9,7 +9,7 @@ import { APP_VERSION } from '@/lib/version'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig } from '@/lib/agencyConfig'
 import { PAGE_LABELS, PERFIL_LABEL, isAdminProfile, resolveAllowedPages as resolveLegacyPages, resolveDefaultPage } from '@/lib/security'
 import { PermissionsProvider, usePermissions } from '@/contexts/PermissionsContext'
-import { getRuntimeConfig } from '@/lib/runtimeConfig'
+import { assertRuntimeConfig } from '@/lib/runtimeConfig'
 import { buildPublishableKey } from '@clerk/shared/keys'
 
 const Login = lazy(() => import('@/pages/Login'))
@@ -395,7 +395,7 @@ export default function App() {
   const lojaSlug = lojaMatch?.[1] ? decodeURIComponent(lojaMatch[1]) : null
   const contestacaoMatch = pathname.match(/^\/contestacao\/([^/]+)\/?$/)
   const contestacaoToken = contestacaoMatch?.[1] ? decodeURIComponent(contestacaoMatch[1]) : null
-  const runtime = getRuntimeConfig()
+  const runtime = assertRuntimeConfig()
   const clerkPublishableKey = runtime.clerkFrontendApi
     ? buildPublishableKey(runtime.clerkFrontendApi)
     : runtime.clerkPublishableKey

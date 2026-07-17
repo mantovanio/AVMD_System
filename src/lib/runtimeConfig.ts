@@ -36,6 +36,7 @@ export function getRuntimeConfig(): RuntimeConfig {
 export function assertRuntimeConfig() {
   const config = getRuntimeConfig()
   const missing: string[] = []
+  const isProductionBuild = Boolean(import.meta.env.PROD)
 
   if (!config.clerkPublishableKey) {
     missing.push('VITE_CLERK_PUBLISHABLE_KEY')
@@ -46,6 +47,16 @@ export function assertRuntimeConfig() {
     if (!config.supabaseAnonKey) missing.push('VITE_SUPABASE_PUBLISHABLE_KEY ou VITE_SUPABASE_ANON_KEY')
   } else if (!config.apiBaseUrl) {
     missing.push('VITE_API_BASE_URL')
+  }
+
+  if (isProductionBuild) {
+    if (config.clerkFrontendApi.includes('.clerk.accounts.dev')) {
+      missing.push('VITE_CLERK_FRONTEND_API apontando para ambiente de desenvolvimento')
+    }
+
+    if (config.clerkPublishableKey.startsWith('pk_test_')) {
+      missing.push('VITE_CLERK_PUBLISHABLE_KEY de teste em produção')
+    }
   }
 
   if (missing.length > 0) {
