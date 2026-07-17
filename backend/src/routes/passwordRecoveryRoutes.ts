@@ -21,6 +21,11 @@ type ClerkErrorLike = {
   status?: number
 }
 
+type ClerkUserLike = {
+  id: string
+  emailAddresses?: Array<{ emailAddress?: string }>
+}
+
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase()
 }
@@ -51,6 +56,16 @@ function isClerkNotFoundError(error: unknown) {
   const status = payload?.status
   const message = `${payload?.message ?? ''} ${payload?.errors?.map(err => `${err.longMessage ?? err.long_message ?? err.message ?? ''}`).join(' ') ?? ''}`.toLowerCase()
   return status === 404 || message.includes('no user was found with id') || message.includes('not found')
+}
+
+function clerkUserHasEmail(user: ClerkUserLike, email: string) {
+  const normalizedEmail = normalizeEmail(email)
+  return user.emailAddresses?.some(item => normalizeEmail(item.emailAddress ?? '') === normalizedEmail) ?? false
+}
+
+function buildClerkUsername(email: string) {
+  const base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'usuario'
+  return `${base}${randomInt(100000, 1000000)}`.slice(0, 24)
 }
 
 function buildRecoveryEmailHtml(options: { nome: string; code: string; expiresMinutes: number }) {
@@ -108,8 +123,8 @@ export async function handlePasswordRecoveryRoutes(
     }
 
     const profile = await profileRepository.findByEmail(email)
-    if (!profile?.clerk_user_id) {
-      writeJson(res, 404, { ok: false, error: 'Conta não encontrada ou ainda não vinculada ao login.' }, corsOrigin)
+    if (!profile) {
+      writeJson(res, 404, { ok: false, error: 'Conta não encontrada.' }, corsOrigin)
       return true
     }
 
@@ -188,30 +203,65 @@ export async function handlePasswordRecoveryRoutes(
     }
 
     const profile = await profileRepository.findById(recovery.profile_id)
-    if (!profile?.clerk_user_id) {
-      writeJson(res, 400, { ok: false, error: 'Conta sem vínculo com o login.' }, corsOrigin)
+    if (!profile) {
+      writeJson(res, 400, { ok: false, error: 'Perfil da conta não encontrado.' }, corsOrigin)
       return true
     }
 
     const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
-    let clerkUserId = profile.clerk_user_id
+    const recoveryEmail = normalizeEmail(profile.email ?? recovery.email)
+    let clerkUserId: string | null = null
 
-    try {
-      await clerkClient.users.getUser(clerkUserId)
-    } catch (error) {
-      if (!isClerkNotFoundError(error)) {
+    if (profile.clerk_user_id) {
+      try {
+        const linkedUser = await clerkClient.users.getUser(profile.clerk_user_id)
+        if (clerkUserHasEmail(linkedUser, recoveryEmail)) {
+          clerkUserId = linkedUser.id
+        }
+      } catch (error) {
+        if (!isClerkNotFoundError(error)) {
+          writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
+          return true
+        }
+      }
+    }
+
+    if (!clerkUserId) {
+      try {
+        const clerkUsers = await clerkClient.users.getUserList({ emailAddress: [recoveryEmail], limit: 1 })
+        const clerkUser = clerkUsers.data.find(user => clerkUserHasEmail(user, recoveryEmail))
+        clerkUserId = clerkUser?.id ?? null
+      } catch (error) {
         writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
         return true
       }
+    }
 
-      const clerkUsers = await clerkClient.users.getUserList({ emailAddress: [profile.email ?? recovery.email], limit: 1 })
-      const clerkUser = clerkUsers.data[0]
-      if (!clerkUser?.id) {
-        writeJson(res, 404, { ok: false, error: 'Conta não encontrada no Clerk. Refaça o vínculo do usuário.' }, corsOrigin)
-        return true
+    if (!clerkUserId) {
+      const [firstNameRaw, ...lastNameParts] = profile.nome.trim().split(/\s+/)
+      try {
+        const createdUser = await clerkClient.users.createUser({
+          emailAddress: [recoveryEmail],
+          username: buildClerkUsername(recoveryEmail),
+          password,
+          firstName: firstNameRaw || 'Usuario',
+          lastName: lastNameParts.join(' ').trim() || undefined,
+          skipPasswordChecks: true,
+        })
+        clerkUserId = createdUser.id
+      } catch (error) {
+        // Se outra tentativa criou o usuário em paralelo, reutilizamos o vínculo vencedor.
+        const clerkUsers = await clerkClient.users.getUserList({ emailAddress: [recoveryEmail], limit: 1 })
+        const clerkUser = clerkUsers.data.find(user => clerkUserHasEmail(user, recoveryEmail))
+        if (!clerkUser?.id) {
+          writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
+          return true
+        }
+        clerkUserId = clerkUser.id
       }
+    }
 
-      clerkUserId = clerkUser.id
+    if (profile.clerk_user_id !== clerkUserId) {
       await profileRepository.update(profile.id, { clerk_user_id: clerkUserId })
     }
 
