@@ -107,7 +107,7 @@ function AppContent() {
   const [modulesLoaded, setModulesLoaded]   = useState(false)
 
   const isAdmin = isAdminProfile(profile)
-  const { notifications } = useNotifications(isAdmin)
+  const { notifications } = useNotifications(isAdmin, profile?.id ?? null)
 
   // Tema escuro
   useEffect(() => {

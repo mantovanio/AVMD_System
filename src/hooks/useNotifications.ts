@@ -11,10 +11,15 @@ export interface SystemNotification {
   createdAt: string
 }
 
-export function useNotifications(isAdmin: boolean) {
+export function useNotifications(isAdmin: boolean, profileId: string | null) {
   const [notifications, setNotifications] = useState<SystemNotification[]>([])
 
   const fetchAll = useCallback(async () => {
+    if (!profileId) {
+      setNotifications([])
+      return
+    }
+
     if (useLegacySupabase()) {
       const { supabase } = await import('@/lib/supabase')
       return fetchLegacyNotifications(supabase, isAdmin, setNotifications)
@@ -41,7 +46,12 @@ export function useNotifications(isAdmin: boolean) {
     }
 
     try {
-      const r = await fetch(getApiUrl('/chat/crm/conversations?status=pending&limit=20'))
+      const params = new URLSearchParams({
+        status: 'pending',
+        limit: '20',
+        profile_id: profileId,
+      })
+      const r = await fetch(getApiUrl(`/chat/crm/conversations?${params.toString()}`))
       const data = await r.json().catch(() => null)
       const convs = (data?.conversations ?? []) as Array<{ id: string; cliente_nome?: string; nome_crm?: string; telefone?: string; document_key?: string; fila?: string; atendimento_humano?: boolean; ultima_interacao_em?: string; ultima_mensagem_direcao?: string }>
       for (const conv of convs.filter(c => c.ultima_mensagem_direcao === 'incoming')) {
@@ -59,13 +69,15 @@ export function useNotifications(isAdmin: boolean) {
 
     items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     setNotifications(items)
-  }, [isAdmin])
+  }, [isAdmin, profileId])
 
   useEffect(() => {
+    if (!profileId) return
+
     void fetchAll()
     const interval = setInterval(() => void fetchAll(), 60_000)
     return () => clearInterval(interval)
-  }, [fetchAll])
+  }, [fetchAll, profileId])
 
   return { notifications, refetch: fetchAll }
 }

@@ -6,7 +6,8 @@ import { DEFAULT_AGENCY_CONFIG, buildAuthBackground, fetchAgencyConfig } from '@
 type View = 'login' | 'register' | 'forgot'
 
 function translateError(msg: string): string {
-  if (msg.includes('Invalid login credentials'))      return 'Email ou senha incorretos.'
+  const normalized = msg.toLowerCase()
+  if (normalized.includes('invalid login credentials')) return 'Email ou senha incorretos.'
   if (msg.includes('Email not confirmed'))            return 'Sua conta ainda não está pronta para acesso. Tente entrar novamente em alguns instantes.'
   if (msg.includes('User already registered'))        return 'Este email já está cadastrado.'
   if (msg.includes('Password should be at least') || msg.includes('Passwords must be 8 characters or more'))
@@ -19,15 +20,15 @@ function translateError(msg: string): string {
   if (msg.includes('Não foi possível concluir a autenticação')) return 'Não foi possível concluir o login. Tente novamente.'
   if (msg.includes('Código enviado para')) return msg
   if (msg.includes('Código inválido ou expirado')) return 'Código inválido ou expirado. Solicite um novo código.'
-  if (msg.includes("Couldn't find your account"))    return 'Conta não encontrada. Verifique o email ou crie uma conta.'
+  if (normalized.includes("couldn't find your account")) return 'Conta não encontrada. Verifique o email ou crie uma conta.'
   if (msg.includes('already exists') || msg.includes('já está cadastrado')) return 'Este email já está cadastrado.'
   if (msg.includes('data breach') || msg.includes('pwned') || msg.includes('online data breach'))
                                                       return 'Esta senha foi encontrada em vazamentos de dados. Por segurança, escolha uma senha diferente.'
   if (msg.includes('password_found_in_breach') || msg.includes('found in a list')) return 'Esta senha foi encontrada em vazamentos de dados. Por segurança, escolha uma senha diferente.'
-  if (msg.includes('is incorrect') || msg.includes('password is incorrect')) return 'Email ou senha incorretos.'
-  if (msg.includes('account does not exist') || msg.includes('No account'))  return 'Conta não encontrada. Verifique o email ou crie uma conta.'
-  if (msg.includes('too many requests') || msg.includes('Too many'))         return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
-  if (msg.includes('network') || msg.includes('Network'))                    return 'Erro de conexão. Verifique sua internet e tente novamente.'
+  if (normalized.includes('is incorrect') || normalized.includes('password is incorrect')) return 'Email ou senha incorretos.'
+  if (normalized.includes('account does not exist') || normalized.includes('no account')) return 'Conta não encontrada. Verifique o email ou crie uma conta.'
+  if (normalized.includes('too many requests') || normalized.includes('too many')) return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
+  if (normalized.includes('network')) return 'Erro de conexão. Verifique sua internet e tente novamente.'
   return msg
 }
 
@@ -178,9 +179,14 @@ export default function Login() {
     e.preventDefault()
     setLoginError(null)
     setLoginLoading(true)
-    const { error } = await signIn(loginEmail, loginPassword)
-    if (error) setLoginError(translateError(error))
-    setLoginLoading(false)
+    try {
+      const { error } = await signIn(loginEmail, loginPassword)
+      if (error) setLoginError(translateError(error))
+    } catch (error) {
+      setLoginError(translateError(error instanceof Error ? error.message : 'Falha ao efetuar login. Tente novamente.'))
+    } finally {
+      setLoginLoading(false)
+    }
   }
 
   async function handleRegister(e: React.FormEvent) {

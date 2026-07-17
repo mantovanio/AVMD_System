@@ -36,7 +36,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 type ClerkErrorLike = {
-  errors?: Array<{ message?: string; longMessage?: string; long_message?: string }>
+  errors?: Array<{ code?: string; message?: string; longMessage?: string; long_message?: string }>
   message?: string
   status?: number
 }
@@ -44,12 +44,21 @@ type ClerkErrorLike = {
 function getClerkErrorMessage(error: unknown, fallback: string) {
   const payload = error as ClerkErrorLike | undefined
   const first = payload?.errors?.[0]
-  return first?.longMessage
+  const message = first?.longMessage
     ?? first?.long_message
     ?? first?.message
     ?? payload?.message
     ?? (error instanceof Error ? error.message : '')
-    ?? fallback
+
+  if (first?.code === 'form_password_incorrect' || first?.code === 'form_identifier_not_found') {
+    return 'Email ou senha incorretos.'
+  }
+
+  if (first?.code === 'too_many_requests') {
+    return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
+  }
+
+  return message || fallback
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -61,7 +70,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false)
-  const [authTransitioning, setAuthTransitioning] = useState(false)
   const [authBootstrapReady, setAuthBootstrapReady] = useState(false)
   const signInLoadedRef = useRef(false)
   const userLoadedRef = useRef(false)
@@ -74,7 +82,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, userLoaded, isSignedIn])
 
   const loading = (!authBootstrapReady && (!signInLoaded || !userLoaded || !sessionLoaded))
-    || authTransitioning
     || (currentUser !== null && profileLoading)
 
   function hasRecoveryUrl() {
@@ -196,7 +203,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
     }
 
-    setAuthTransitioning(true)
     try {
       const result = await withTimeout(
         signIn.create({
@@ -241,8 +247,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: 'Autenticação concluída, mas sem sessão ativa no navegador.' }
     } catch (error) {
       return { error: getClerkErrorMessage(error, 'Falha ao efetuar login. Tente novamente.') }
-    } finally {
-      setAuthTransitioning(false)
     }
   }
 
