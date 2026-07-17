@@ -137,7 +137,9 @@ function AppContent() {
   useEffect(() => {
     if (!user) return
     const origin = window.location.origin
-    fetch(`${origin}/api/permissoes/modules-config`)
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 5000)
+    fetch(`${origin}/api/permissoes/modules-config`, { signal: controller.signal })
       .then(res => res.json())
       .then(data => {
         if (data.ok) {
@@ -146,10 +148,15 @@ function AppContent() {
         setModulesLoaded(true)
       })
       .catch(() => setModulesLoaded(true))
+      .finally(() => window.clearTimeout(timeout))
+    return () => {
+      controller.abort()
+      window.clearTimeout(timeout)
+    }
   }, [user])
 
   // Splash de carregamento
-  if (loading || (user && !modulesLoaded && !permLoading)) {
+  if (loading) {
     return <FullScreenLoader />
   }
 
