@@ -15,6 +15,12 @@ type VerifyBody = {
   password?: string
 }
 
+type ClerkErrorLike = {
+  errors?: Array<{ message?: string; longMessage?: string; long_message?: string }>
+  message?: string
+  status?: number
+}
+
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase()
 }
@@ -27,6 +33,24 @@ function maskEmail(email: string) {
   const [user, domain] = email.split('@')
   if (!user || !domain) return email
   return `${user.slice(0, 2)}***@${domain}`
+}
+
+function getClerkErrorMessage(error: unknown, fallback = 'Falha ao processar ação no Clerk.') {
+  const payload = error as ClerkErrorLike | undefined
+  const first = payload?.errors?.[0]
+  return first?.longMessage
+    ?? first?.long_message
+    ?? first?.message
+    ?? payload?.message
+    ?? (error instanceof Error ? error.message : '')
+    ?? fallback
+}
+
+function isClerkNotFoundError(error: unknown) {
+  const payload = error as ClerkErrorLike | undefined
+  const status = payload?.status
+  const message = `${payload?.message ?? ''} ${payload?.errors?.map(err => `${err.longMessage ?? err.long_message ?? err.message ?? ''}`).join(' ') ?? ''}`.toLowerCase()
+  return status === 404 || message.includes('no user was found with id') || message.includes('not found')
 }
 
 function buildRecoveryEmailHtml(options: { nome: string; code: string; expiresMinutes: number }) {
@@ -170,11 +194,37 @@ export async function handlePasswordRecoveryRoutes(
     }
 
     const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
-    await clerkClient.users.updateUser(profile.clerk_user_id, {
-      password,
-      skipPasswordChecks: true,
-      signOutOfOtherSessions: true,
-    })
+    let clerkUserId = profile.clerk_user_id
+
+    try {
+      await clerkClient.users.getUser(clerkUserId)
+    } catch (error) {
+      if (!isClerkNotFoundError(error)) {
+        writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
+        return true
+      }
+
+      const clerkUsers = await clerkClient.users.getUserList({ emailAddress: [profile.email ?? recovery.email], limit: 1 })
+      const clerkUser = clerkUsers.data[0]
+      if (!clerkUser?.id) {
+        writeJson(res, 404, { ok: false, error: 'Conta não encontrada no Clerk. Refaça o vínculo do usuário.' }, corsOrigin)
+        return true
+      }
+
+      clerkUserId = clerkUser.id
+      await profileRepository.update(profile.id, { clerk_user_id: clerkUserId })
+    }
+
+    try {
+      await clerkClient.users.updateUser(clerkUserId, {
+        password,
+        skipPasswordChecks: true,
+        signOutOfOtherSessions: true,
+      })
+    } catch (error) {
+      writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
+      return true
+    }
 
     await recoveryRepository.consume(recovery.id)
     writeJson(res, 200, { ok: true }, corsOrigin)

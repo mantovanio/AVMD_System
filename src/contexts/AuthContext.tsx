@@ -35,6 +35,23 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+type ClerkErrorLike = {
+  errors?: Array<{ message?: string; longMessage?: string; long_message?: string }>
+  message?: string
+  status?: number
+}
+
+function getClerkErrorMessage(error: unknown, fallback: string) {
+  const payload = error as ClerkErrorLike | undefined
+  const first = payload?.errors?.[0]
+  return first?.longMessage
+    ?? first?.long_message
+    ?? first?.message
+    ?? payload?.message
+    ?? (error instanceof Error ? error.message : '')
+    ?? fallback
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const clerk = useClerk()
   const { isLoaded: signInLoaded, signIn, setActive } = useSignIn()
@@ -78,6 +95,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await new Promise(resolve => setTimeout(resolve, 150))
     }
     return null
+  }
+
+  async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+    let timeoutId: number | undefined
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = window.setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs)
+    })
+
+    try {
+      return await Promise.race([promise, timeoutPromise])
+    } finally {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId)
+      }
+    }
   }
 
   async function loadProfile(userId: string, email?: string) {
@@ -154,21 +186,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signInWithPassword(email: string, password: string) {
+    const normalizedEmail = email.trim().toLowerCase()
+
     if (!signInLoaded || !signIn) {
       const clerkReady = await waitForClerkBootstrap()
       if (clerkReady && signIn) {
-        return signInWithPassword(email, password)
+        return signInWithPassword(normalizedEmail, password)
       }
       return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
     }
 
     setAuthTransitioning(true)
     try {
-      const result = await signIn.create({
-        strategy: 'password',
-        identifier: email,
-        password,
-      })
+      const result = await withTimeout(
+        signIn.create({
+          strategy: 'password',
+          identifier: normalizedEmail,
+          password,
+        }),
+        15000,
+        'O Clerk não respondeu ao iniciar a autenticação. Verifique a conexão e tente novamente.',
+      )
 
       if (result.status === 'complete' && result.createdSessionId && setActive) {
         try {
@@ -193,13 +231,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (result.status !== 'complete') {
-        return { error: `Não foi possível concluir a autenticação (${result.status}).` }
+        const nextStep = (result as { supportedFirstFactors?: Array<{ strategy?: string }> }).supportedFirstFactors?.[0]?.strategy
+        return {
+          error: nextStep
+            ? `Não foi possível concluir a autenticação (${result.status}). Método esperado: ${nextStep}.`
+            : `Não foi possível concluir a autenticação (${result.status}).`,
+        }
       }
 
       return { error: 'Autenticação concluída, mas sem sessão ativa no navegador.' }
     } catch (error) {
-      if (error instanceof Error) return { error: error.message }
-      return { error: 'Falha ao efetuar login. Tente novamente.' }
+      return { error: getClerkErrorMessage(error, 'Falha ao efetuar login. Tente novamente.') }
     } finally {
       setAuthTransitioning(false)
     }
@@ -242,8 +284,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return { error: `Código enviado para ${data.email ?? email}.` }
     } catch (error) {
-      if (error instanceof Error) return { error: error.message }
-      return { error: 'Falha ao enviar o email de recuperação. Tente novamente.' }
+      return { error: getClerkErrorMessage(error, 'Falha ao enviar o email de recuperação. Tente novamente.') }
     }
   }
 
@@ -260,8 +301,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return { error: null }
     } catch (error) {
-      if (error instanceof Error) return { error: error.message }
-      return { error: 'Falha ao verificar o código. Tente novamente.' }
+      return { error: getClerkErrorMessage(error, 'Falha ao verificar o código. Tente novamente.') }
     }
   }
 
@@ -287,8 +327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return { error: 'Não foi possível atualizar a senha. Tente novamente.' }
     } catch (error) {
-      if (error instanceof Error) return { error: error.message }
-      return { error: String(error) }
+      return { error: getClerkErrorMessage(error, 'Falha ao atualizar a senha. Tente novamente.') }
     }
   }
 

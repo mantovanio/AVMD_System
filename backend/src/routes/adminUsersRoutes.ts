@@ -38,6 +38,8 @@ type AdminUsersBody = CreateUserBody | UpdatePasswordBody | LinkExistingUserBody
 type ClerkErrorLike = {
   errors?: Array<{ message?: string; longMessage?: string; long_message?: string }>
   message?: string
+  status?: number
+  clerkError?: boolean
 }
 
 function getClerkErrorMessage(error: unknown) {
@@ -48,6 +50,13 @@ function getClerkErrorMessage(error: unknown) {
     ?? first?.message
     ?? payload?.message
     ?? (error instanceof Error ? error.message : 'Falha ao processar ação no Clerk.')
+}
+
+function isClerkNotFoundError(error: unknown) {
+  const payload = error as ClerkErrorLike | undefined
+  const status = payload?.status
+  const message = `${payload?.message ?? ''} ${payload?.errors?.map(err => `${err.longMessage ?? err.long_message ?? err.message ?? ''}`).join(' ') ?? ''}`.toLowerCase()
+  return status === 404 || message.includes('no user was found with id') || message.includes('not found')
 }
 
 export async function handleAdminUsersRoutes(
@@ -168,8 +177,24 @@ export async function handleAdminUsersRoutes(
   if (body.action === 'delete_user') {
     const { userId } = body.payload
     try {
-      await clerkClient.users.deleteUser(userId)
-      await profileRepository.deleteByClerkId(userId)
+      const profile = await profileRepository.findById(userId)
+      const clerkUserId = profile?.clerk_user_id ?? userId
+
+      if (clerkUserId) {
+        try {
+          await clerkClient.users.deleteUser(clerkUserId)
+        } catch (error) {
+          if (!isClerkNotFoundError(error)) {
+            throw error
+          }
+        }
+      }
+
+      if (profile?.clerk_user_id) {
+        await profileRepository.deleteByClerkId(profile.clerk_user_id)
+      } else {
+        await profileRepository.deleteByClerkId(clerkUserId)
+      }
       writeJson(res, 200, { ok: true }, corsOrigin)
     } catch (error) {
       writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
