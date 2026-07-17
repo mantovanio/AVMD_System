@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { supabase, getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { getEvolutionConnectionTestUrl, getEvolutionWebhookConfigureUrl, getEvolutionWebhookUrl } from '@/lib/evolutionApi'
 import { getApiUrl } from '@/lib/api'
-import { createAdminManagedUser, deleteAdminManagedUser, updateAdminManagedPassword } from '@/lib/adminUsers'
+import { createAdminManagedUser, deleteAdminManagedUser, linkExistingAdminManagedUser, updateAdminManagedPassword } from '@/lib/adminUsers'
 import { DEFAULT_AGENCY_CONFIG, type AgencyConfig, fetchAgencyConfig } from '@/lib/agencyConfig'
 import { DEFAULT_CONTACT_DOCUMENT_STORAGE, loadContactDocumentStorageConfig, type ContactDocumentStorageConfig } from '@/lib/contactDocumentStorage'
 import { DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings } from '@/lib/crmChatSettings'
@@ -98,6 +98,7 @@ type UserEditForm = {
 }
 
 type ModalSenha = { userId: string; nome: string } | null
+type ModalVincularConta = { profileId: string; nome: string; email: string } | null
 type ModalNovoUsuario = { aberto: boolean }
 const ADMIN_INITIAL_PASSWORD = '1234qwer'
 
@@ -611,11 +612,14 @@ function AbaUsuarios() {
 
   // Modal alterar senha
   const [modalSenha, setModalSenha]   = useState<ModalSenha>(null)
+  const [modalVincularConta, setModalVincularConta] = useState<ModalVincularConta>(null)
   const [novaSenha, setNovaSenha]     = useState('')
   const [confirmSenha, setConfirmSenha] = useState('')
   const [senhaErro, setSenhaErro]     = useState<string | null>(null)
   const [senhaOk, setSenhaOk]         = useState(false)
   const [salvandoSenha, setSalvandoSenha] = useState(false)
+  const [vinculandoConta, setVinculandoConta] = useState(false)
+  const [senhaVinculo, setSenhaVinculo] = useState('')
 
   const [toastU, setToastU] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
 
@@ -779,6 +783,12 @@ function AbaUsuarios() {
   }
 
   function abrirModalSenha(u: Profile) {
+    if (!u.clerk_user_id) {
+      setModalVincularConta({ profileId: u.id, nome: u.nome, email: u.email })
+      setSenhaVinculo('')
+      setSenhaErro(null)
+      return
+    }
     setModalSenha({ userId: getAuthUserId(u), nome: u.nome })
     setNovaSenha('')
     setConfirmSenha('')
@@ -793,18 +803,45 @@ function AbaUsuarios() {
   }
 
   async function salvarSenha() {
+    if (!modalSenha) return
     setSenhaErro(null)
     if (novaSenha.length < 8) { setSenhaErro('A senha deve ter pelo menos 8 caracteres.'); return }
     if (novaSenha !== confirmSenha) { setSenhaErro('As senhas não coincidem.'); return }
     setSalvandoSenha(true)
     try {
-      await updateAdminManagedPassword({ userId: modalSenha!.userId, password: novaSenha })
+      await updateAdminManagedPassword({ userId: modalSenha.userId, password: novaSenha })
       setSenhaOk(true)
     } catch (error) {
       setSenhaErro(error instanceof Error ? error.message : 'Erro ao atualizar senha.')
     } finally {
       setSalvandoSenha(false)
     }
+  }
+
+  async function vincularContaLogin() {
+    if (!modalVincularConta) return
+    setSenhaErro(null)
+    if (senhaVinculo.length < 8) {
+      setSenhaErro('A senha precisa ter pelo menos 8 caracteres para criar a conta de login.')
+      return
+    }
+    setVinculandoConta(true)
+    try {
+      await linkExistingAdminManagedUser({ profileId: modalVincularConta.profileId, password: senhaVinculo })
+      setModalVincularConta(null)
+      showMsgU(`Conta de login vinculada para ${modalVincularConta.email}.`, 'ok')
+      void load()
+    } catch (error) {
+      setSenhaErro(error instanceof Error ? error.message : 'Erro ao vincular conta.')
+    } finally {
+      setVinculandoConta(false)
+    }
+  }
+
+  function fecharModalVinculo() {
+    setModalVincularConta(null)
+    setSenhaErro(null)
+    setSenhaVinculo('')
   }
 
   function slugifyNomeLoja(value: string) {
@@ -937,6 +974,41 @@ function AbaUsuarios() {
               </div>
             </div>
           )}
+        </ModalOverlay>
+      )}
+
+      {modalVincularConta && (
+        <ModalOverlay titulo={`Vincular conta de login — ${modalVincularConta.nome}`} onClose={fecharModalVinculo}>
+          <div className="space-y-4">
+            <div className="rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm text-amber-700 dark:text-amber-300">
+              Este perfil existe no sistema interno, mas ainda não tem conta de login no Clerk. Vincule agora para permitir acesso e troca de senha.
+            </div>
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 p-3 text-sm text-gray-700 dark:text-gray-300">
+              <p><strong>Nome:</strong> {modalVincularConta.nome}</p>
+              <p><strong>Email:</strong> {modalVincularConta.email}</p>
+            </div>
+            <CampoSenha
+              label="Senha inicial"
+              value={senhaVinculo}
+              onChange={setSenhaVinculo}
+              autoFocus
+            />
+            {senhaErro && (
+              <p className="text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+                ⚠ {senhaErro}
+              </p>
+            )}
+            <div className="flex gap-2 pt-1">
+              <button type="button" onClick={fecharModalVinculo} disabled={vinculandoConta}
+                className="flex-1 px-4 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50">
+                Cancelar
+              </button>
+              <button type="button" onClick={vincularContaLogin} disabled={vinculandoConta}
+                className="flex-1 px-4 py-2.5 text-sm rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium transition-colors flex items-center justify-center gap-2">
+                {vinculandoConta ? <><Loader2 size={14} className="animate-spin" /> Vinculando...</> : 'Vincular conta'}
+              </button>
+            </div>
+          </div>
         </ModalOverlay>
       )}
 
@@ -1151,7 +1223,7 @@ function AbaUsuarios() {
           {users.map(u => (
             <div key={u.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
               <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
                   <div className={cn(
                     'w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0',
                     u.perfil === 'admin' ? 'bg-purple-600' :
@@ -1163,6 +1235,13 @@ function AbaUsuarios() {
                   <div className="min-w-0">
                     <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{u.nome}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{u.email}</p>
+                    <p className="text-[11px] mt-0.5">
+                      {u.clerk_user_id ? (
+                        <span className="text-green-600 dark:text-green-400">Conta de login vinculada</span>
+                      ) : (
+                        <span className="text-amber-600 dark:text-amber-400">Sem conta de login vinculada</span>
+                      )}
+                    </p>
                   </div>
                 </div>
 
@@ -1196,7 +1275,7 @@ function AbaUsuarios() {
                             className="w-7 h-7 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-200 flex items-center justify-center transition-colors">
                             <Pencil size={13} />
                           </button>
-                          <button type="button" onClick={() => abrirModalSenha(u)} title="Alterar senha"
+                          <button type="button" onClick={() => abrirModalSenha(u)} title={u.clerk_user_id ? 'Alterar senha' : 'Vincular conta de login'}
                             className="w-7 h-7 rounded-lg text-gray-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 flex items-center justify-center transition-colors">
                             <KeyRound size={13} />
                           </button>

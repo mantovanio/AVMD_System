@@ -14,6 +14,11 @@ type UpdatePasswordPayload = {
   password: string
 }
 
+type LinkExistingUserPayload = {
+  profileId: string
+  password: string
+}
+
 type DeleteUserPayload = {
   userId: string
 }
@@ -63,6 +68,12 @@ export async function createAdminManagedUser(payload: CreateUserPayload) {
 export async function updateAdminManagedPassword(payload: UpdatePasswordPayload) {
   const response = await callAdminUsers({ action: 'update_password', payload })
   if (!response.ok) throw new Error(response.error ?? 'Falha ao atualizar senha')
+  return response
+}
+
+export async function linkExistingAdminManagedUser(payload: LinkExistingUserPayload) {
+  const response = await callAdminUsers({ action: 'link_existing_user', payload })
+  if (!response.ok) throw new Error(response.error ?? 'Falha ao vincular usuário')
   return response
 }
 
