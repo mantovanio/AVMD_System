@@ -40,6 +40,9 @@ function InputField({
   placeholder,
   autoFocus,
   required = true,
+  inputMode,
+  autoComplete,
+  maxLength,
 }: {
   label: string
   type?: string
@@ -48,6 +51,9 @@ function InputField({
   placeholder?: string
   autoFocus?: boolean
   required?: boolean
+  inputMode?: 'text' | 'numeric' | 'email' | 'tel'
+  autoComplete?: string
+  maxLength?: number
 }) {
   return (
     <div>
@@ -59,6 +65,9 @@ function InputField({
         placeholder={placeholder}
         autoFocus={autoFocus}
         required={required}
+        inputMode={inputMode}
+        autoComplete={autoComplete}
+        maxLength={maxLength}
         className="w-full border border-white/30 rounded-xl px-4 py-3 text-sm
           bg-white/10 text-white placeholder:text-white/60
           focus:outline-none focus:ring-2 focus:ring-white/70 transition-shadow"
@@ -146,7 +155,7 @@ function SubmitButton({
 }
 
 export default function Login() {
-  const { signIn, signUp, resetPassword, confirmPasswordReset } = useAuth()
+  const { signIn, verifySecondFactor, resendSecondFactor, signUp, resetPassword, confirmPasswordReset } = useAuth()
   const [view, setView] = useState<View>('login')
   const [agencyConfig, setAgencyConfig] = useState(DEFAULT_AGENCY_CONFIG)
 
@@ -154,6 +163,10 @@ export default function Login() {
   const [loginPassword, setLoginPassword] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
   const [loginError, setLoginError] = useState<string | null>(null)
+  const [loginStep, setLoginStep] = useState<'credentials' | 'second_factor'>('credentials')
+  const [secondFactorCode, setSecondFactorCode] = useState('')
+  const [secondFactorTarget, setSecondFactorTarget] = useState('')
+  const [secondFactorInfo, setSecondFactorInfo] = useState<string | null>(null)
 
   const [regNome, setRegNome] = useState('')
   const [regEmail, setRegEmail] = useState('')
@@ -180,13 +193,61 @@ export default function Login() {
     setLoginError(null)
     setLoginLoading(true)
     try {
-      const { error } = await signIn(loginEmail, loginPassword)
-      if (error) setLoginError(translateError(error))
+      const result = await signIn(loginEmail, loginPassword)
+      if (result.error) {
+        setLoginError(translateError(result.error))
+      } else if (result.nextStep === 'second_factor') {
+        setSecondFactorTarget(result.safeIdentifier ?? loginEmail)
+        setSecondFactorCode('')
+        setSecondFactorInfo('Código de segurança enviado. Verifique sua caixa de entrada e o spam.')
+        setLoginStep('second_factor')
+      }
     } catch (error) {
       setLoginError(translateError(error instanceof Error ? error.message : 'Falha ao efetuar login. Tente novamente.'))
     } finally {
       setLoginLoading(false)
     }
+  }
+
+  async function handleSecondFactor(e: React.FormEvent) {
+    e.preventDefault()
+    setLoginError(null)
+    setSecondFactorInfo(null)
+    setLoginLoading(true)
+    try {
+      const { error } = await verifySecondFactor(secondFactorCode)
+      if (error) setLoginError(translateError(error))
+    } catch (error) {
+      setLoginError(translateError(error instanceof Error ? error.message : 'Falha ao validar o código. Tente novamente.'))
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  async function handleResendSecondFactor() {
+    setLoginError(null)
+    setSecondFactorInfo(null)
+    setLoginLoading(true)
+    try {
+      const result = await resendSecondFactor()
+      if (result.error) {
+        setLoginError(translateError(result.error))
+      } else {
+        setSecondFactorTarget(result.safeIdentifier ?? secondFactorTarget)
+        setSecondFactorInfo('Novo código enviado. Utilize apenas o código mais recente.')
+      }
+    } catch (error) {
+      setLoginError(translateError(error instanceof Error ? error.message : 'Falha ao reenviar o código. Tente novamente.'))
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  function returnToCredentials() {
+    setLoginStep('credentials')
+    setSecondFactorCode('')
+    setSecondFactorInfo(null)
+    setLoginError(null)
   }
 
   async function handleRegister(e: React.FormEvent) {
@@ -234,6 +295,10 @@ export default function Login() {
 
   function goLogin() {
     setLoginError(null)
+    setLoginStep('credentials')
+    setSecondFactorCode('')
+    setSecondFactorTarget('')
+    setSecondFactorInfo(null)
     setRegError(null)
     setRegOk(false)
     setForgotError(null)
@@ -292,35 +357,86 @@ export default function Login() {
         <div className="bg-black/30 border border-white/20 rounded-2xl shadow-2xl shadow-black/40 backdrop-blur-md overflow-hidden text-white">
           {view === 'login' && (
             <div className="p-8">
-              <h2 className="text-xl font-bold text-white mb-1">Bem-vindo!</h2>
-              <p className="text-sm text-white/80 mb-6">Entre com sua conta para acessar o sistema</p>
+              {loginStep === 'credentials' ? (
+                <>
+                  <h2 className="text-xl font-bold text-white mb-1">Bem-vindo!</h2>
+                  <p className="text-sm text-white/80 mb-6">Entre com sua conta para acessar o sistema</p>
 
-              <form onSubmit={handleLogin} className="space-y-4">
-                <InputField label="Email" type="email" value={loginEmail} onChange={setLoginEmail} placeholder="seu@email.com" autoFocus />
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <InputField label="Email" type="email" value={loginEmail} onChange={setLoginEmail} placeholder="seu@email.com" autoFocus autoComplete="username" />
 
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-white/90">Senha</span>
-                    <button type="button" onClick={() => { setLoginError(null); setView('forgot') }} className="text-xs text-white/90 hover:underline">
-                      Esqueci minha senha
-                    </button>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-white/90">Senha</span>
+                        <button type="button" onClick={() => { setLoginError(null); setView('forgot') }} className="text-xs text-white/90 hover:underline">
+                          Esqueci minha senha
+                        </button>
+                      </div>
+                      <PasswordInput label="" value={loginPassword} onChange={setLoginPassword} />
+                    </div>
+
+                    {loginError && <ErrorBox msg={loginError} />}
+
+                    <SubmitButton loading={loginLoading} label="Entrar" loadingLabel="Validando..." primaryColor={agencyConfig.cor_primaria} />
+                  </form>
+
+                  <div className="mt-6 pt-6 border-t border-white/15 text-center">
+                    <p className="text-sm text-white/80">
+                      Não tem conta?{' '}
+                      <button type="button" onClick={() => { setLoginError(null); setView('register') }} className="text-white font-semibold hover:underline">
+                        Criar conta
+                      </button>
+                    </p>
                   </div>
-                  <PasswordInput label="" value={loginPassword} onChange={setLoginPassword} />
-                </div>
-
-                {loginError && <ErrorBox msg={loginError} />}
-
-                <SubmitButton loading={loginLoading} label="Entrar" loadingLabel="Entrando..." primaryColor={agencyConfig.cor_primaria} />
-              </form>
-
-              <div className="mt-6 pt-6 border-t border-white/15 text-center">
-                <p className="text-sm text-white/80">
-                  Não tem conta?{' '}
-                  <button type="button" onClick={() => { setLoginError(null); setView('register') }} className="text-white font-semibold hover:underline">
-                    Criar conta
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={returnToCredentials}
+                    className="flex items-center gap-1.5 text-sm text-white/85 hover:text-white mb-5 -ml-1 transition-colors mx-auto"
+                  >
+                    <ArrowLeft size={15} /> Voltar ao login
                   </button>
-                </p>
-              </div>
+
+                  <h2 className="text-xl font-bold text-white mb-1">Confirme que é você</h2>
+                  <p className="text-sm text-white/80 mb-6">
+                    Enviamos um código de segurança para <strong>{secondFactorTarget || loginEmail}</strong>.
+                  </p>
+
+                  <form onSubmit={handleSecondFactor} className="space-y-4">
+                    <InputField
+                      label="Código de 6 dígitos"
+                      type="text"
+                      value={secondFactorCode}
+                      onChange={value => setSecondFactorCode(value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="000000"
+                      autoFocus
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                    />
+
+                    {secondFactorInfo && (
+                      <div className="p-3 bg-blue-500/20 border border-blue-300/50 rounded-xl text-sm text-white">
+                        {secondFactorInfo}
+                      </div>
+                    )}
+                    {loginError && <ErrorBox msg={loginError} />}
+
+                    <SubmitButton loading={loginLoading} label="Validar e entrar" loadingLabel="Validando código..." primaryColor={agencyConfig.cor_primaria} />
+
+                    <button
+                      type="button"
+                      onClick={() => void handleResendSecondFactor()}
+                      disabled={loginLoading}
+                      className="w-full text-xs text-white/70 hover:text-white disabled:opacity-50 transition-colors"
+                    >
+                      Não recebeu? Reenviar código
+                    </button>
+                  </form>
+                </>
+              )}
             </div>
           )}
 

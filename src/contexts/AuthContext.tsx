@@ -15,7 +15,11 @@ interface AuthUser {
   email: string | null
 }
 
-type AuthActionResult = { error: string | null }
+type AuthActionResult = {
+  error: string | null
+  nextStep?: 'second_factor'
+  safeIdentifier?: string
+}
 
 interface AuthContextValue {
   user: AuthUser | null
@@ -23,6 +27,8 @@ interface AuthContextValue {
   session: unknown | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<AuthActionResult>
+  verifySecondFactor: (code: string) => Promise<AuthActionResult>
+  resendSecondFactor: () => Promise<AuthActionResult>
   signUp: (data: SignUpData) => Promise<AuthActionResult>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<AuthActionResult>
@@ -56,6 +62,14 @@ function getClerkErrorMessage(error: unknown, fallback: string) {
 
   if (first?.code === 'too_many_requests') {
     return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
+  }
+
+  if (first?.code === 'form_code_incorrect' || first?.code === 'verification_failed') {
+    return 'Código de verificação incorreto.'
+  }
+
+  if (first?.code === 'verification_expired') {
+    return 'Código de verificação expirado. Solicite um novo código.'
   }
 
   return message || fallback
@@ -117,6 +131,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.clearTimeout(timeoutId)
       }
     }
+  }
+
+  async function activateCreatedSession(createdSessionId: string | null) {
+    if (!createdSessionId) {
+      return 'Autenticação concluída, mas sem sessão ativa no navegador.'
+    }
+
+    try {
+      if (setActive) {
+        await setActive({ session: createdSessionId })
+      } else if (clerk.setActive) {
+        await clerk.setActive({ session: createdSessionId })
+      } else {
+        return 'O navegador não conseguiu ativar a sessão autenticada.'
+      }
+    } catch {
+      if (!clerk.setActive) {
+        return 'O navegador não conseguiu ativar a sessão autenticada.'
+      }
+      await clerk.setActive({ session: createdSessionId })
+    }
+
+    const sessionToken = await waitForSessionToken()
+    return sessionToken
+      ? null
+      : 'A sessão não foi confirmada no navegador. Verifique se os cookies estão liberados e tente novamente.'
   }
 
   async function loadProfile(userId: string, email?: string) {
@@ -192,7 +232,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return signInLoadedRef.current && userLoadedRef.current && sessionLoadedRef.current
   }
 
-  async function signInWithPassword(email: string, password: string) {
+  async function signInWithPassword(email: string, password: string): Promise<AuthActionResult> {
     const normalizedEmail = email.trim().toLowerCase()
 
     if (!signInLoaded || !signIn) {
@@ -213,40 +253,96 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         'O Clerk não respondeu ao iniciar a autenticação. Verifique a conexão e tente novamente.',
       )
 
-      if (result.status === 'complete' && result.createdSessionId && setActive) {
-        try {
-          await setActive({ session: result.createdSessionId })
-        } catch {
-          await clerk.setActive?.({ session: result.createdSessionId })
-        }
-        const sessionToken = await waitForSessionToken()
-        if (!sessionToken) {
-          return { error: 'A sessão não foi confirmada no navegador. Verifique se os cookies estão liberados e tente novamente.' }
-        }
-        return { error: null }
+      if (result.status === 'complete') {
+        return { error: await activateCreatedSession(result.createdSessionId) }
       }
 
-      if (result.status === 'complete' && result.createdSessionId && clerk.setActive) {
-        await clerk.setActive({ session: result.createdSessionId })
-        const sessionToken = await waitForSessionToken()
-        if (!sessionToken) {
-          return { error: 'A sessão não foi confirmada no navegador. Verifique se os cookies estão liberados e tente novamente.' }
+      if (result.status === 'needs_second_factor') {
+        const emailFactor = result.supportedSecondFactors?.find(factor => factor.strategy === 'email_code')
+        if (!emailFactor) {
+          return { error: 'Sua conta exige uma verificação adicional que este dispositivo não suporta.' }
         }
-        return { error: null }
-      }
 
-      if (result.status !== 'complete') {
-        const nextStep = (result as { supportedFirstFactors?: Array<{ strategy?: string }> }).supportedFirstFactors?.[0]?.strategy
+        await withTimeout(
+          result.prepareSecondFactor({
+            strategy: 'email_code',
+            emailAddressId: emailFactor.emailAddressId,
+          }),
+          15000,
+          'O Clerk não respondeu ao enviar o código de verificação.',
+        )
+
         return {
-          error: nextStep
-            ? `Não foi possível concluir a autenticação (${result.status}). Método esperado: ${nextStep}.`
-            : `Não foi possível concluir a autenticação (${result.status}).`,
+          error: null,
+          nextStep: 'second_factor',
+          safeIdentifier: emailFactor.safeIdentifier,
         }
       }
 
-      return { error: 'Autenticação concluída, mas sem sessão ativa no navegador.' }
+      const nextStep = (result as { supportedFirstFactors?: Array<{ strategy?: string }> }).supportedFirstFactors?.[0]?.strategy
+      return {
+        error: nextStep
+          ? `Não foi possível concluir a autenticação (${result.status}). Método esperado: ${nextStep}.`
+          : `Não foi possível concluir a autenticação (${result.status}).`,
+      }
     } catch (error) {
       return { error: getClerkErrorMessage(error, 'Falha ao efetuar login. Tente novamente.') }
+    }
+  }
+
+  async function verifySecondFactor(code: string): Promise<AuthActionResult> {
+    if (!signInLoaded || !signIn) {
+      return { error: 'A autenticação ainda está carregando. Atualize a página e tente novamente.' }
+    }
+
+    const normalizedCode = code.replace(/\D/g, '').slice(0, 6)
+    if (normalizedCode.length !== 6) {
+      return { error: 'Informe o código de 6 dígitos enviado ao seu e-mail.' }
+    }
+
+    try {
+      const result = await withTimeout(
+        signIn.attemptSecondFactor({ strategy: 'email_code', code: normalizedCode }),
+        15000,
+        'O Clerk não respondeu ao validar o código de verificação.',
+      )
+
+      if (result.status !== 'complete') {
+        return { error: `Não foi possível concluir a verificação (${result.status}).` }
+      }
+
+      return { error: await activateCreatedSession(result.createdSessionId) }
+    } catch (error) {
+      return { error: getClerkErrorMessage(error, 'Não foi possível validar o código de verificação.') }
+    }
+  }
+
+  async function resendSecondFactor(): Promise<AuthActionResult> {
+    if (!signInLoaded || !signIn) {
+      return { error: 'A autenticação ainda está carregando. Atualize a página e tente novamente.' }
+    }
+
+    const emailFactor = signIn.supportedSecondFactors?.find(factor => factor.strategy === 'email_code')
+    if (!emailFactor) {
+      return { error: 'Não encontramos um e-mail válido para reenviar o código.' }
+    }
+
+    try {
+      await withTimeout(
+        signIn.prepareSecondFactor({
+          strategy: 'email_code',
+          emailAddressId: emailFactor.emailAddressId,
+        }),
+        15000,
+        'O Clerk não respondeu ao reenviar o código de verificação.',
+      )
+      return {
+        error: null,
+        nextStep: 'second_factor',
+        safeIdentifier: emailFactor.safeIdentifier,
+      }
+    } catch (error) {
+      return { error: getClerkErrorMessage(error, 'Não foi possível reenviar o código de verificação.') }
     }
   }
 
@@ -347,6 +443,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session: session ?? null,
         loading,
         signIn: signInWithPassword,
+        verifySecondFactor,
+        resendSecondFactor,
         signUp: signUpWithPassword,
         signOut,
         resetPassword,
