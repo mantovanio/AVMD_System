@@ -211,6 +211,7 @@ export class OutboxProcessor {
         to: item.to_address,
         subject: item.subject ?? 'Sem assunto',
         body: item.body,
+        html: typeof item.payload.html === 'string' ? item.payload.html : null,
         payload: item.payload,
       }),
     })

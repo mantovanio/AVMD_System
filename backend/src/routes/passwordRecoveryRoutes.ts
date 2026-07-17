@@ -1,5 +1,5 @@
 import { createClerkClient } from '@clerk/backend'
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash, randomInt } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
 import type { PasswordRecoveryRepository } from '../repositories/passwordRecoveryRepository.js'
@@ -29,6 +29,43 @@ function maskEmail(email: string) {
   return `${user.slice(0, 2)}***@${domain}`
 }
 
+function buildRecoveryEmailHtml(options: { nome: string; code: string; expiresMinutes: number }) {
+  const firstName = options.nome.split(/\s+/)[0] || 'cliente'
+  const code = options.code
+  const expiresMinutes = options.expiresMinutes
+
+  return `<!doctype html>
+<html lang="pt-BR">
+  <body style="margin:0;padding:0;background:#0f172a;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+    <div style="max-width:640px;margin:0 auto;padding:32px 16px;">
+      <div style="background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);border-radius:20px;overflow:hidden;border:1px solid #dbe4f0;box-shadow:0 18px 48px rgba(15,23,42,.18);">
+        <div style="padding:28px 28px 20px;text-align:center;background:linear-gradient(135deg,#0f172a 0%,#1d4ed8 100%);color:#fff;">
+          <div style="font-size:28px;font-weight:700;letter-spacing:.5px;">CertiID</div>
+          <div style="margin-top:6px;font-size:14px;opacity:.9;">Agência de Certificação Digital</div>
+        </div>
+        <div style="padding:32px 28px;">
+          <div style="font-size:22px;line-height:1.3;font-weight:700;color:#0f172a;margin-bottom:12px;">Recuperação de senha</div>
+          <p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#334155;">Olá, ${firstName}. Recebemos uma solicitação para redefinir sua senha no CRM da CertiID.</p>
+          <div style="margin:24px 0;padding:20px;border-radius:16px;background:#eff6ff;border:1px solid #bfdbfe;text-align:center;">
+            <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#2563eb;font-weight:700;margin-bottom:8px;">Seu código de verificação</div>
+            <div style="font-size:34px;line-height:1;font-weight:800;letter-spacing:10px;color:#0f172a;font-family:'Courier New',monospace;">${code}</div>
+          </div>
+          <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#334155;">Digite esse código na tela de recuperação para criar uma nova senha.</p>
+          <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#334155;">Por segurança, ele expira em ${expiresMinutes} minutos.</p>
+          <div style="padding:16px 18px;border-left:4px solid #2563eb;background:#f8fafc;border-radius:12px;color:#475569;font-size:13px;line-height:1.7;">
+            Se você não solicitou essa alteração, pode ignorar este e-mail com segurança.
+          </div>
+        </div>
+        <div style="padding:18px 28px 28px;border-top:1px solid #e2e8f0;text-align:center;color:#64748b;font-size:12px;line-height:1.6;">
+          <strong style="color:#0f172a;">@CertiID</strong><br />
+          Mensagem automática de recuperação de acesso
+        </div>
+      </div>
+    </div>
+  </body>
+</html>`
+}
+
 export async function handlePasswordRecoveryRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -52,7 +89,7 @@ export async function handlePasswordRecoveryRoutes(
       return true
     }
 
-    const token = randomBytes(24).toString('hex')
+    const token = String(randomInt(100000, 1000000))
     const tokenHash = hashToken(token)
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
     await recoveryRepository.create({
@@ -66,12 +103,14 @@ export async function handlePasswordRecoveryRoutes(
     const bodyText = [
       `Olá, ${profile.nome.split(/\s+/)[0] || 'cliente'}.`,
       '',
-      'Recebemos uma solicitação de troca de senha no CRM.',
+      'Recebemos uma solicitação para redefinir sua senha no CRM da CertiID.',
       '',
-      `Seu código de recuperação é: ${token}`,
+      `Seu código de verificação é: ${token}`,
       '',
       'Esse código expira em 15 minutos.',
       'Se você não solicitou isso, ignore este e-mail.',
+      '',
+      '@CertiID',
     ].join('\n')
 
     await outboxRepository.create({
@@ -85,6 +124,12 @@ export async function handlePasswordRecoveryRoutes(
         profile_id: profile.id,
         clerk_user_id: profile.clerk_user_id,
         email,
+        html: buildRecoveryEmailHtml({
+          nome: profile.nome,
+          code: token,
+          expiresMinutes: 15,
+        }),
+        text: bodyText,
       },
     })
 
