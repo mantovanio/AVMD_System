@@ -402,7 +402,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
       }
 
-      await signIn.create({ identifier: normalizedEmail })
+      const createResult = await signIn.create({ identifier: normalizedEmail })
+      const createResultError = (createResult as { error?: unknown }).error
+      const createErrorMessage = createResultError
+        ? translatePasswordPolicyError(getClerkErrorMessage(createResultError, ''))
+        : null
       const sendCodeResult = await withTimeout(
         recoverySignIn.resetPasswordEmailCode.sendCode(),
         15000,
@@ -411,6 +415,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (sendCodeResult.error) {
         return { error: getClerkErrorMessage(sendCodeResult.error, 'Falha ao enviar o código de recuperação.') }
+      }
+
+      if (createErrorMessage && !createErrorMessage.toLowerCase().includes('requirements set for this instance')) {
+        // O fluxo foi iniciado com sucesso; o erro do create não deve interromper a recuperação.
+        console.warn('[AuthContext] createResult retornou aviso no fluxo de recuperação:', createErrorMessage)
       }
 
       return { error: `Código enviado para ${data.email ?? normalizedEmail}.` }
