@@ -141,8 +141,10 @@ export class RenewalReminderService {
       }
 
       await this.db.query(
-        `UPDATE renovacoes SET ultimo_lembrete = NOW(), status = 'contatado', updated_at = NOW() WHERE id = $1`,
-        [row.id],
+        `UPDATE renovacoes SET ultimo_lembrete = NOW(), status = 'contatado',
+         enviou_whatsapp = enviou_whatsapp OR $2, enviou_email = enviou_email OR $3,
+         updated_at = NOW() WHERE id = $1`,
+        [row.id, !!phone, !!email],
       )
 
       queued++

@@ -334,6 +334,8 @@ export interface Renovacao {
   contador: string | null
   renovado: boolean
   ultimo_lembrete: string | null
+  enviou_email: boolean
+  enviou_whatsapp: boolean
 }
 
 // ── links de produtos ─────────────────────────────────────────

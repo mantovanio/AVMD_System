@@ -893,8 +893,8 @@ export default function Renovacoes() {
     const result = await apiSendWhatsApp(r.telefone, body, { canal: 'atendimento', buttons })
     if (!result.ok) { setSendingId(null); showMsg('Erro WhatsApp: ' + result.error, 'err'); return }
     const agora = new Date().toISOString()
-    await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
-    setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
+    await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora, enviou_whatsapp: true })
+    setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora, enviou_whatsapp: true } : x))
     await criarLeadKanban(r)
     void queueWhatsAppFollowUp({
       to: r.telefone,
@@ -923,8 +923,9 @@ export default function Renovacoes() {
     ])
     if (emailResult.error) { setSendingId(null); showMsg('Erro e-mail: ' + emailResult.error, 'err'); return }
     const agora = new Date().toISOString()
-    await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
-    setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
+    const waOk = !waResult.error
+    await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora, enviou_email: true, enviou_whatsapp: waOk })
+    setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora, enviou_email: true, enviou_whatsapp: waOk } : x))
     await criarLeadKanban(r)
     if (r.telefone) {
       void queueWhatsAppFollowUp({
@@ -985,8 +986,8 @@ export default function Renovacoes() {
       if (result.ok) {
         enviados++
         const agora = new Date().toISOString()
-        await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
-        setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
+        await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora, enviou_whatsapp: true })
+        setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora, enviou_whatsapp: true } : x))
         void criarLeadKanban(r).catch(() => {})
         void queueWhatsAppFollowUp({
           to: r.telefone!,
@@ -1033,11 +1034,11 @@ export default function Renovacoes() {
     const agora = new Date().toISOString()
     await Promise.all(alvos.map(r =>
       Promise.all([
-        apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora }),
+        apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora, enviou_email: true }),
         criarLeadKanban(r).catch(() => {}),
       ])
     ))
-    setLista(prev => prev.map(x => alvos.some(a => a.id === x.id) ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
+    setLista(prev => prev.map(x => alvos.some(a => a.id === x.id) ? { ...x, status: 'contatado', ultimo_lembrete: agora, enviou_email: true } : x))
     setBulkSending(false)
     showMsg(`${alvos.length} e-mails enfileirados.`)
   }
@@ -1099,8 +1100,8 @@ export default function Renovacoes() {
       if (result.ok) {
         enviados++
         const agora = new Date().toISOString()
-        await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
-        setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
+        await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora, enviou_whatsapp: true })
+        setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora, enviou_whatsapp: true } : x))
         void queueWhatsAppFollowUp({
           to: r.telefone!,
           canal: 'atendimento',
@@ -1755,62 +1756,82 @@ export default function Renovacoes() {
 
       <div ref={pageScrollRef} className="flex-1 overflow-auto p-4 space-y-3">
 
-        {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* KPIs – linha 1 */}
+        <div className="flex flex-wrap gap-2">
           {[
-            { label: visao === 'operacional' ? 'Renovações Operacionais' : 'Histórico de renovações', value: loading ? '…' : String(kpis.total), color: 'bg-red-500', sub: visao === 'operacional' ? 'janela atual' : 'registros antigos' },
-            { label: 'Valor Potencial',       value: loading ? '…' : fmtCurrency(kpis.potencial), color: 'bg-green-500',  sub: 'receita estimada'    },
-            { label: 'Urgentes (≤ 7 dias)',   value: loading ? '…' : String(kpis.urgentes),       color: 'bg-orange-500', sub: 'ação imediata'       },
-            { label: 'Já Contatados',         value: loading ? '…' : String(kpis.contatados),     color: 'bg-blue-500',   sub: 'aguardando resposta' },
-            { label: 'Já Disparados',         value: loading ? '…' : String(kpis.disparados),     color: 'bg-purple-500', sub: 'mensagens enviadas' },
+            { label: visao === 'operacional' ? 'Renovações Operacionais' : 'Histórico', value: loading ? '…' : String(kpis.total), color: 'bg-red-500' },
+            { label: 'Valor Potencial', value: loading ? '…' : fmtCurrency(kpis.potencial), color: 'bg-green-500' },
+            { label: 'Urgentes (≤ 7d)', value: loading ? '…' : String(kpis.urgentes), color: 'bg-orange-500' },
+            { label: 'Contatados', value: loading ? '…' : String(kpis.contatados), color: 'bg-blue-500' },
+            { label: 'Disparados', value: loading ? '…' : String(kpis.disparados), color: 'bg-purple-500' },
           ].map(k => (
-            <div key={k.label} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3">
-              <div className={cn('w-2 h-2 rounded-full mb-2', k.color)} />
-              <p className="text-lg font-bold leading-tight">{k.value}</p>
-              <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mt-0.5">{k.label}</p>
-              <p className="text-xs text-gray-400">{k.sub}</p>
+            <div key={k.label} className="flex-1 min-w-[120px] max-w-[200px] bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 px-3 py-2 flex items-center gap-2">
+              <div className={cn('w-2 h-2 rounded-full shrink-0', k.color)} />
+              <div className="min-w-0">
+                <p className="text-sm font-bold leading-tight truncate">{k.value}</p>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight truncate">{k.label}</p>
+              </div>
             </div>
           ))}
         </div>
 
-        {/* Priority Segments */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {(['urgente','media','normal'] as PrioridadeRenovacao[]).map(p => {
-            const cfg = PRIORIDADE_CONFIG[p]; const Icon = cfg.icon
+        {/* KPIs – linha 2 */}
+        <div className="flex flex-wrap gap-2">
+          {([
+            { p: 'urgente' as const, icon: AlertTriangle },
+            { p: 'media'   as const, icon: Clock },
+            { p: 'normal'  as const, icon: CheckCircle },
+          ]).map(({ p, icon: Icon }) => {
+            const cfg = PRIORIDADE_CONFIG[p]
             const count = lista.filter(r => r.prioridade === p).length
             return (
               <button key={p} type="button" onClick={() => setFiltro(filtro === p ? 'todos' : p)}
-                className={cn('text-left rounded-xl border p-3 transition-all', cfg.bg,
+                className={cn('flex-1 min-w-[100px] max-w-[160px] text-left rounded-lg border px-3 py-2 transition-all', cfg.bg,
                   filtro === p ? 'ring-2 ring-offset-1 ring-blue-500' : 'border-gray-200 dark:border-gray-800 hover:border-blue-300')}>
-                <div className="flex items-center gap-2 mb-1">
-                  <Icon size={16} className={cfg.color} />
-                  <span className={cn('text-sm font-semibold', cfg.color)}>{cfg.label}</span>
+                <div className="flex items-center gap-1.5">
+                  <Icon size={13} className={cfg.color} />
+                  <span className={cn('text-[11px] font-semibold', cfg.color)}>{cfg.label.split(' (')[0]}</span>
                 </div>
-                <p className="text-xl font-bold leading-tight">{loading ? '…' : count}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">certificados neste segmento</p>
+                <p className="text-lg font-bold leading-tight mt-0.5">{loading ? '…' : count}</p>
               </button>
             )
           })}
-        </div>
 
-        {/* Disparo Segments */}
-        <div className="grid grid-cols-2 gap-3">
+          <div className="w-px bg-gray-200 dark:bg-gray-700 self-stretch mx-1 hidden sm:block" />
+
           {([
-            { key: 'nao_enviado' as const, label: 'Não Disparados', icon: Send, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800/30', count: lista.filter(r => !r.ultimo_lembrete).length },
-            { key: 'enviado' as const, label: 'Já Disparados', icon: Send, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/10', count: lista.filter(r => !!r.ultimo_lembrete).length },
+            { key: 'nao_enviado' as const, label: 'Não Disp.', icon: Send, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800/30', count: lista.filter(r => !r.ultimo_lembrete).length },
+            { key: 'enviado' as const, label: 'Já Disp.', icon: Send, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/10', count: lista.filter(r => !!r.ultimo_lembrete).length },
           ]).map(item => {
             const Icon = item.icon
             return (
               <button key={item.key} type="button" onClick={() => setFiltroEnvio(filtroEnvio === item.key ? 'todos' : item.key)}
-                className={cn('text-left rounded-xl border p-3 transition-all', item.bg,
+                className={cn('flex-1 min-w-[90px] max-w-[130px] text-left rounded-lg border px-3 py-2 transition-all', item.bg,
                   filtroEnvio === item.key ? 'ring-2 ring-offset-1 ring-purple-500' : 'border-gray-200 dark:border-gray-800 hover:border-purple-300')}>
-                <div className="flex items-center gap-2 mb-1">
-                  <Icon size={16} className={item.color} />
-                  <span className={cn('text-sm font-semibold', item.color)}>{item.label}</span>
+                <div className="flex items-center gap-1.5">
+                  <Icon size={13} className={item.color} />
+                  <span className={cn('text-[11px] font-semibold', item.color)}>{item.label}</span>
                 </div>
-                <p className="text-xl font-bold leading-tight">{loading ? '…' : item.count}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{item.key === 'enviado' ? 'com mensagem enviada' : 'aguardando disparo'}</p>
+                <p className="text-lg font-bold leading-tight mt-0.5">{loading ? '…' : item.count}</p>
               </button>
+            )
+          })}
+
+          <div className="w-px bg-gray-200 dark:bg-gray-700 self-stretch mx-1 hidden sm:block" />
+
+          {[
+            { label: 'E-mails', count: lista.filter(r => r.enviou_email).length, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/10', icon: Mail },
+            { label: 'WhatsApp', count: lista.filter(r => r.enviou_whatsapp).length, color: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-50 dark:bg-teal-900/10', icon: MessageSquare },
+          ].map(item => {
+            const Icon = item.icon
+            return (
+              <div key={item.label} className={cn('flex-1 min-w-[90px] max-w-[130px] rounded-lg border px-3 py-2', item.bg, 'border-gray-200 dark:border-gray-800')}>
+                <div className="flex items-center gap-1.5">
+                  <Icon size={13} className={item.color} />
+                  <span className={cn('text-[11px] font-semibold', item.color)}>{item.label}</span>
+                </div>
+                <p className="text-lg font-bold leading-tight mt-0.5">{loading ? '…' : item.count}</p>
+              </div>
             )
           })}
         </div>

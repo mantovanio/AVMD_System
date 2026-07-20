@@ -21,6 +21,8 @@ export interface RenovacaoRow {
   vendedor: string | null
   contador: string | null
   ultimo_lembrete: string | null
+  enviou_email: boolean
+  enviou_whatsapp: boolean
   venda_certificado_id: string | null
   produto_emitido_id: string | null
   cadastro_base_id: string | null
@@ -66,6 +68,8 @@ export class RenovacaoRepository {
     'vendedor',
     'contador',
     'ultimo_lembrete',
+    'enviou_email',
+    'enviou_whatsapp',
     'created_at',
     'updated_at',
   ].join(', ')
@@ -251,6 +255,8 @@ export class RenovacaoRepository {
     if (input.telefone !== undefined)      field('telefone', input.telefone)
     if (input.observacoes !== undefined)   field('observacoes', input.observacoes)
     if (input.ultimo_lembrete !== undefined) field('ultimo_lembrete', input.ultimo_lembrete)
+    if (input.enviou_email !== undefined)    field('enviou_email', input.enviou_email)
+    if (input.enviou_whatsapp !== undefined) field('enviou_whatsapp', input.enviou_whatsapp)
     if (input.deleted_at !== undefined)    field('deleted_at', input.deleted_at)
     if (input.deleted_by !== undefined)    field('deleted_by', input.deleted_by)
     if (input.motivo_exclusao !== undefined) field('motivo_exclusao', input.motivo_exclusao)
