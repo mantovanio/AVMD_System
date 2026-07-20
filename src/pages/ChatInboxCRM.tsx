@@ -1584,7 +1584,9 @@ export default function ChatInboxCRM() {
           ? 'Numero nao encontrado no WhatsApp. Verifique se o numero esta correto e ativo.'
           : rawError.includes('401') || rawError.includes('403')
             ? 'Credenciais do canal invalidas. Verifique a integracao em Configuracoes.'
-            : rawError || 'Nao foi possivel iniciar a conversa manual.'
+            : /connection closed|socket hang up|econnreset|timeout/i.test(rawError)
+              ? 'A Evolution fechou a conexao ao enviar. Tente novamente em alguns segundos; se repetir, reconecte essa instancia do WhatsApp.'
+              : rawError || 'Nao foi possivel iniciar a conversa manual.'
         throw new Error(msg)
       }
 

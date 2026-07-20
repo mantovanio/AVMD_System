@@ -124,6 +124,15 @@ function normalizeBase64Payload(value: string) {
   return { mimeType: '', base64: trimmed }
 }
 
+function wait(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function isEvolutionConnectionClosed(payload: unknown) {
+  const text = typeof payload === 'string' ? payload : JSON.stringify(payload ?? '')
+  return /connection closed|socket hang up|econnreset|timeout/i.test(text)
+}
+
 function pickEvolutionMessagePayload(payload: JsonRecord) {
   const data = payload.data
   if (data && typeof data === 'object' && !Array.isArray(data)) {
@@ -361,33 +370,47 @@ async function sendEvolutionTextMessage(
   }
 
   const evolutionUrl = `${cleanBaseUrl(integration.base_url)}/message/sendText/${integration.instance_name}`
-  const response = await fetch(evolutionUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: integration.api_token,
-    },
-    body: JSON.stringify({
-      number: destinationNumber,
-      text: input.content,
-    }),
-  })
+  let lastPayload: JsonRecord | null = null
+  let lastStatus = 502
 
-  const payload = await response.json().catch(() => ({ status: response.status })) as JsonRecord
-  if (!response.ok) {
-    const detail = payload && typeof payload === 'object'
-      ? (payload.error || payload.message || payload.response || payload.detail || payload)
-      : payload
-    return {
-      ok: false,
-      error: `Evolution retornou HTTP ${response.status}${detail ? ` - ${typeof detail === 'string' ? detail : JSON.stringify(detail)}` : ''}`,
-      status: 502,
-      payload,
-      instanceName: integration.instance_name,
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const response = await fetch(evolutionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: integration.api_token,
+      },
+      body: JSON.stringify({
+        number: destinationNumber,
+        text: input.content,
+      }),
+    })
+
+    const payload = await response.json().catch(() => ({ status: response.status })) as JsonRecord
+    lastPayload = payload
+    lastStatus = response.status
+
+    if (response.ok) {
+      return { ok: true, error: null, status: 200, payload, instanceName: integration.instance_name }
     }
+
+    if (!isEvolutionConnectionClosed(payload) || attempt === 3) break
+    await wait(900 * attempt)
   }
 
-  return { ok: true, error: null, status: 200, payload, instanceName: integration.instance_name }
+  const detail = lastPayload && typeof lastPayload === 'object'
+    ? (lastPayload.error || lastPayload.message || lastPayload.response || lastPayload.detail || lastPayload)
+    : lastPayload
+  const connectionClosed = isEvolutionConnectionClosed(detail)
+  return {
+    ok: false,
+    error: connectionClosed
+      ? 'A Evolution fechou a conexao ao enviar. Tente novamente em alguns segundos; se repetir, reconecte a instancia do WhatsApp.'
+      : `Evolution retornou HTTP ${lastStatus}${detail ? ` - ${typeof detail === 'string' ? detail : JSON.stringify(detail)}` : ''}`,
+    status: 502,
+    payload: lastPayload,
+    instanceName: integration.instance_name,
+  }
 }
 
 type MediaCategory = 'audio' | 'image' | 'video' | 'document'
