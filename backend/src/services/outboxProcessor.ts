@@ -141,6 +141,16 @@ export class OutboxProcessor {
 
       if (!convId) return
 
+      if (canal === 'renovacao') {
+        await this.db.query(
+          `UPDATE crm_chat_conversations
+              SET fila = 'renovacao',
+                  whatsapp_instance = coalesce(whatsapp_instance, 'CertiID')
+            WHERE id = $1`,
+          [convId],
+        )
+      }
+
       await this.db.query(
         `INSERT INTO crm_chat_messages (conversation_id, document_key, external_message_id, direction, sender_type, sender_name, mensagem)
          VALUES ($1, $2, $3, 'outgoing', 'automation', $4, $5)`,
