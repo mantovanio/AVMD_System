@@ -59,6 +59,23 @@ function findFirstString(value: unknown, keys: string[]) {
   return ''
 }
 
+function deepFindString(value: unknown, keys: string[], depth = 0, maxDepth = 4): string {
+  const record = asRecord(value)
+  if (!record || depth > maxDepth) return ''
+
+  for (const key of keys) {
+    const candidate = record[key]
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+  }
+
+  for (const candidate of Object.values(record)) {
+    const nested = deepFindString(candidate, keys, depth + 1, maxDepth)
+    if (nested) return nested
+  }
+
+  return ''
+}
+
 function cleanBaseUrl(value: string) {
   return value.replace(/\/$/, '')
 }
@@ -114,11 +131,11 @@ function extractMessageContent(message: JsonRecord | null): { content: string | 
       : messageType.startsWith('document') ? 'application/pdf'
       : '')
   const mimeType = inferredMimeType || null
-  const fileName = pickString(payload, 'fileName', 'title') || null
-  const base64 = pickString(payload, 'base64', 'data') || findFirstString(entry?.[1], ['base64', 'data'])
+  const fileName = pickString(payload, 'fileName', 'title') || deepFindString(entry?.[1], ['fileName', 'title']) || null
+  const base64 = pickString(payload, 'base64', 'data') || deepFindString(entry?.[1], ['base64', 'data'])
   const mediaUrl =
     pickString(payload, 'url', 'mediaUrl')
-    || findFirstString(entry?.[1], ['url', 'mediaUrl'])
+    || deepFindString(entry?.[1], ['url', 'mediaUrl'])
     || (base64 ? `data:${mimeType || 'application/octet-stream'};base64,${base64}` : '')
   const quotedId = pickString(context, 'stanzaId') || null
   const mediaFallback = (() => {
