@@ -293,6 +293,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [tabela, setTabela] = useState<TabelaPreco | null>(null)
   const [itens, setItens] = useState<LojaItemRow[]>([])
   const [selectedItemId, setSelectedItemId] = useState('')
+  const [productClassFilter, setProductClassFilter] = useState('')
   const [productKindFilter, setProductKindFilter] = useState('')
   const [productEmissionFilter, setProductEmissionFilter] = useState('')
   const [productValidityFilter, setProductValidityFilter] = useState('')
@@ -403,8 +404,10 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     [itens]
   )
 
-  const productKindOptions = useMemo(() => ['e-CPF', 'e-CNPJ'], [])
-  const productsByKind = useMemo(() => produtosAtivos.filter(item => !productKindFilter || productKind(item) === productKindFilter), [productKindFilter, produtosAtivos])
+  const productClassOptions = useMemo(() => Array.from(new Set(produtosAtivos.map(productCertificateClass).filter(value => value === 'A1' || value === 'A3'))).sort(), [produtosAtivos])
+  const productsByClass = useMemo(() => produtosAtivos.filter(item => !productClassFilter || productCertificateClass(item) === productClassFilter), [productClassFilter, produtosAtivos])
+  const productKindOptions = useMemo(() => Array.from(new Set(productsByClass.map(productKind).filter(Boolean))).sort(), [productsByClass])
+  const productsByKind = useMemo(() => productsByClass.filter(item => !productKindFilter || productKind(item) === productKindFilter), [productKindFilter, productsByClass])
   const productEmissionOptions = useMemo(() => Array.from(new Set(productsByKind.map(item => item.certificados?.tipo_emissao_padrao?.trim()).filter(Boolean))).sort(), [productsByKind])
   const productsByEmission = useMemo(() => productsByKind.filter(item => !productEmissionFilter || (item.certificados?.tipo_emissao_padrao?.trim() ?? '') === productEmissionFilter), [productEmissionFilter, productsByKind])
   const productValidityOptions = useMemo(() => Array.from(new Set(productsByEmission.map(productValidity))).sort(), [productsByEmission])
@@ -597,14 +600,12 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     if (!faturamentoDone) return 3
     if (!titularDone) return 4
     if (!pagamentoDone) return 5
-    if (!agendamentoDone) return 6
-    return 7
-  }, [agendamentoDone, cartConfirmed, faturamentoDone, itemSelecionado, pagamentoDone, productConfirmed, titularDone])
+    return 6
+  }, [cartConfirmed, faturamentoDone, itemSelecionado, pagamentoDone, productConfirmed, titularDone])
 
   const canShowFaturamento = !!itemSelecionado && productConfirmed && cartConfirmed
   const canShowTitular = canShowFaturamento && faturamentoDone
   const canShowPagamento = canShowTitular && titularDone
-  const canShowAgendamento = canShowPagamento && pagamentoDone
   const canShowAvisos = canShowPagamento
 
   function updateComprador<K extends keyof FormState['comprador']>(key: K, value: FormState['comprador'][K]) {
@@ -1029,16 +1030,23 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                 <ProductHero item={itemSelecionado} />
               ) : (
                 <div className="space-y-6">
-                      <p className="text-base font-semibold text-[#17346b]">Selecione o produto, a emissão e a validade para encontrar seu certificado.</p>
-                      <div className="grid overflow-hidden rounded-2xl border border-slate-300 sm:grid-cols-3">
-                        <label className="border-b border-slate-300 p-4 sm:border-b-0 sm:border-r">
+                  <p className="text-base font-semibold text-[#17346b]">Selecione o tipo, o produto, a emissão e a validade para encontrar seu certificado.</p>
+                  <div className="grid overflow-hidden rounded-2xl border border-slate-300 md:grid-cols-4">
+                    <label className="border-b border-slate-300 p-4 md:border-b-0 md:border-r">
+                      <span className="block text-sm font-bold text-[#17346b]">Tipo</span>
+                      <select value={productClassFilter} onChange={event => { setProductClassFilter(event.target.value); setProductKindFilter(''); setProductEmissionFilter(''); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none">
+                        <option value="">A1 ou A3</option>
+                        {productClassOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </label>
+                    <label className="border-b border-slate-300 p-4 md:border-b-0 md:border-r">
                       <span className="block text-sm font-bold text-[#17346b]">Produto</span>
-                      <select value={productKindFilter} onChange={event => { setProductKindFilter(event.target.value); setProductEmissionFilter(''); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none">
+                      <select disabled={!productClassFilter} value={productKindFilter} onChange={event => { setProductKindFilter(event.target.value); setProductEmissionFilter(''); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
                         <option value="">Selecione</option>
                         {productKindOptions.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
-                    <label className="border-b border-slate-300 p-4 sm:border-b-0 sm:border-r">
+                    <label className="border-b border-slate-300 p-4 md:border-b-0 md:border-r">
                       <span className="block text-sm font-bold text-[#17346b]">Emissão</span>
                       <select disabled={!productKindFilter} value={productEmissionFilter} onChange={event => { setProductEmissionFilter(event.target.value); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
                         <option value="">Selecione</option>
@@ -1054,10 +1062,10 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     </label>
                   </div>
 
-                  {!productKindFilter || !productEmissionFilter || !productValidityFilter ? (
+                  {!productClassFilter || !productKindFilter || !productEmissionFilter || !productValidityFilter ? (
                     <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-slate-300 bg-slate-50/40 px-6 text-center">
                       <Store size={54} strokeWidth={1.25} className="text-slate-300" />
-                      <p className="mt-5 text-lg font-semibold text-slate-600">Preencha os filtros na ordem: produto, emissão e validade.</p>
+                      <p className="mt-5 text-lg font-semibold text-slate-600">Preencha os filtros na ordem: tipo, produto, emissão e validade.</p>
                     </div>
                   ) : filteredProducts.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-slate-500">Nenhum produto disponível para esta combinação.</div>
@@ -1873,88 +1881,14 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
             </SectionCard>
             )}
 
-            {checkoutStep === 6 && canShowAgendamento && (
-            <SectionCard
-              title="Agendamento da validação"
-              description="Reserve um horário para validar seus documentos. A validação só acontece depois do pagamento, mas você já pode deixar agendado."
-              icon={CalendarDays}
-              highlight={!selectedSlot}
-              done={agendamentoDone}
-            >
-              {!selectedSlot ? (
-                <div className="rounded-[24px] border border-amber-200 bg-amber-50/70 p-4 sm:p-5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-200 text-xs font-bold text-amber-800">!</span>
-                        <p className="text-sm font-semibold text-amber-900">Nenhum horário reservado ainda</p>
-                      </div>
-                      <p className="text-sm text-amber-800 leading-relaxed pl-8">
-                        Você pode seguir sem agendar, mas depois terá que voltar para escolher um horário.
-                        Se possível, agende agora para não esquecer.
-                      </p>
-                      <div className="flex flex-wrap gap-2 text-xs pl-8 mt-2">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 border border-amber-200 px-3 py-1.5 text-amber-800">
-                          <AlertTriangle size={12} />
-                          Atendimento liberado somente após compensação
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={openSchedulingModal}
-                      className="shrink-0 inline-flex items-center justify-center rounded-2xl px-5 py-3 bg-[#17346b] text-white text-sm font-semibold hover:bg-[#102654]"
-                    >
-                      Escolher horário
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-[24px] border border-emerald-200 bg-emerald-50/70 p-4 sm:p-5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 size={16} className="text-emerald-600" />
-                        <p className="text-sm font-semibold text-emerald-900">Horário reservado</p>
-                      </div>
-                      <p className="text-sm text-emerald-800 pl-6">
-                        {formatDateTime(selectedSlot.inicio)} com <strong>{selectedSlot.agente_nome}</strong> em <strong>{selectedSlot.ponto_nome}</strong>.
-                      </p>
-                      <p className="text-xs text-emerald-700/80 pl-6 mt-1">
-                        A validação será confirmada após a compensação do pagamento.
-                      </p>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <button
-                        type="button"
-                        onClick={openSchedulingModal}
-                        className="inline-flex items-center justify-center rounded-2xl px-4 py-3 bg-[#17346b] text-white text-sm font-semibold hover:bg-[#102654]"
-                      >
-                        Trocar agendamento
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedSlotKey('')}
-                        className="inline-flex items-center justify-center rounded-2xl px-4 py-3 border border-emerald-300 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
-                      >
-                        Remover agendamento
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </SectionCard>
-            )}
-
             {checkoutStep >= 5 && canShowAvisos && (
             <SectionCard
               title="Avisos importantes"
-              description="Revise estes avisos antes de concluir a compra."
+              description="Revise estes lembretes antes de concluir a compra."
               icon={AlertTriangle}
             >
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <WarningCard text={paymentRuntime.aviso_checkout} />
-                <WarningCard text="Se você não agendar agora, será necessário voltar depois ao portal do cliente para escolher um horário antes do atendimento." />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <WarningCard text="Após finalizar o pedido e confirmar os dados, você receberá as instruções de pagamento e próximos passos." />
                 <WarningCard text="Informe e-mail e telefone com WhatsApp válidos para a equipe entrar em contato no momento da validação." />
               </div>
 
@@ -2032,11 +1966,13 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                       label="Pagamento"
                       value={pagamentos.find(item => item.id === form.forma_pagamento_id)?.nome ?? 'Aguardando escolha'}
                     />
-                    <InfoLine
-                      label="Agendamento"
-                      value={selectedSlot ? formatDateTime(selectedSlot.inicio) : 'Pendente'}
-                      tone={selectedSlot ? 'default' : 'warn'}
-                    />
+                    {checkoutSuccess && (
+                      <InfoLine
+                        label="Agendamento"
+                        value={selectedSlot ? formatDateTime(selectedSlot.inicio) : 'Pendente'}
+                        tone={selectedSlot ? 'default' : 'warn'}
+                      />
+                    )}
                   </div>
                 </>
               ) : (
@@ -2072,7 +2008,13 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
 
             {checkoutSuccess && (
               <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-700 shadow-sm">
-                {checkoutSuccess}
+                <p>{checkoutSuccess}</p>
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-white/70 p-3">
+                  <p className="font-semibold text-emerald-900">Próximo passo: agendamento</p>
+                  <p className="mt-1 text-xs leading-relaxed text-emerald-800">
+                    Após confirmar seus dados finais e concluir o pedido, acompanhe em Meus pedidos para escolher o horário da validação. O atendimento será liberado após a compensação do pagamento.
+                  </p>
+                </div>
               </div>
             )}
 
