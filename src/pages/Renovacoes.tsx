@@ -145,6 +145,8 @@ const TEMPLATE_VARS = [
   { key: '{{contador}}',         label: 'Contador'         },
   { key: '{{link_renovacao}}',   label: 'Link Renovação'   },
   { key: '{{link_nova_emissao}}',label: 'Link Nova Emissão'},
+  { key: '{{#if is_cpf}}...{{/if}}', label: 'Se PF (e-CPF)' },
+  { key: '{{#if is_cnpj}}...{{/if}}', label: 'Se PJ (e-CNPJ)' },
 ]
 
 const RENOVACOES_PAGE_SIZE = 200
@@ -274,7 +276,7 @@ const CSV_FIELDS: { key: keyof RenovacaoV2 | 'produto'; label: string }[] = [
 
 type ImportColumnKey = keyof RenovacaoV2 | 'produto'
 
-type TplForm  = { name: string; channel: 'whatsapp' | 'email'; subject: string; body: string; template_key: string }
+type TplForm  = { name: string; channel: 'whatsapp' | 'email'; subject: string; body: string; template_key: string; html: string | null }
 type LinkForm = { tipo_certificado: string; link_renovacao: string; link_nova_emissao: string; descricao: string; whatsapp_template_id: string; slug: string; vendedor_id: string }
 type ContatoForm = {
   cliente: string
@@ -289,7 +291,7 @@ type ContatoForm = {
   observacoes: string
 }
 
-const EMPTY_TPL:  TplForm  = { name: '', channel: 'whatsapp', subject: '', body: '', template_key: '' }
+const EMPTY_TPL:  TplForm  = { name: '', channel: 'whatsapp', subject: '', body: '', template_key: '', html: null }
 const EMPTY_LINK: LinkForm = { tipo_certificado: '', link_renovacao: '', link_nova_emissao: '', descricao: '', whatsapp_template_id: '', slug: '', vendedor_id: '' }
 const EMPTY_CONTATO: ContatoForm = {
   cliente: '',
@@ -501,6 +503,8 @@ export default function Renovacoes() {
   const [selectedWaTplId, setSelectedWaTplId] = useState<string>('')
   const [selectedEmailTplId, setSelectedEmailTplId] = useState<string>('')
   const tplTextareaRef                      = useRef<HTMLTextAreaElement>(null)
+  const tplSubjectRef                      = useRef<HTMLInputElement>(null)
+  const [tplInsertTarget, setTplInsertTarget] = useState<'body' | 'subject'>('body')
 
   // ── links de produtos ─────────────────────────────────────────
   const [showLinks, setShowLinks]         = useState(false)
@@ -783,6 +787,8 @@ export default function Renovacoes() {
       : linkData?.id
         ? buildShortLink(`/r/nova-emissao/${linkData.id}`, linkData.link_nova_emissao)
         : (linkData?.link_nova_emissao ?? '')
+    const isCpf  = !r.cnpj && !!r.cpf
+    const isCnpj = !!r.cnpj
     return {
       cliente:           nomeCompleto,
       primeiro_nome:     extrairPrimeiroNome(nomeCompleto, r.cnpj),
@@ -800,6 +806,8 @@ export default function Renovacoes() {
       contador:          r.contador ?? '',
       link_renovacao:    shortRenewalLink,
       link_nova_emissao: shortNewIssueLink,
+      is_cpf:            isCpf  ? '1' : '',
+      is_cnpj:           isCnpj ? '1' : '',
     }
   }
 
@@ -913,14 +921,16 @@ export default function Renovacoes() {
     if (r.ultimo_lembrete && !window.confirm(`Este lead já foi disparado em ${new Date(r.ultimo_lembrete).toLocaleString('pt-BR')}. Deseja enviar novamente?`)) { setSendingId(null); return }
     setSendingId(r.id)
     const tpl     = getSelectedTpl('email')
-    const body    = renderTemplate(tpl?.body ?? EMAIL_TPL_DEFAULT, tplValues(r))
+    const rawBody = tpl?.body ?? EMAIL_TPL_DEFAULT
+    const body    = renderTemplate(rawBody, tplValues(r))
     const subject = renderTemplate(tpl?.subject ?? 'Renovação do seu certificado digital', tplValues(r))
+    const isHtml  = /<[a-z][\s\S]*>/i.test(rawBody)
     const waTpl   = getSelectedTpl('whatsapp')
     if (!ensureLinkForTemplate(r, tpl?.body ?? EMAIL_TPL_DEFAULT) || !ensureLinkForTemplate(r, waTpl?.body ?? WHATSAPP_TPL_DEFAULT)) { setSendingId(null); return }
     const waBody  = renderTemplate(waTpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
     const [waResult, emailResult] = await Promise.all([
       r.telefone ? queueWhatsAppMessage({ to: r.telefone, body: waBody, canal: 'atendimento', payload: { renovacao_id: r.id, tipo: 'renovacao' } }) : Promise.resolve({ error: null }),
-      queueEmailMessage({ to: r.email, subject, body, payload: { renovacao_id: r.id, tipo: 'renovacao' } }),
+      queueEmailMessage({ to: r.email, subject, body, payload: { renovacao_id: r.id, tipo: 'renovacao', ...(isHtml ? { html: body } : {}) } }),
     ])
     if (emailResult.error) { setSendingId(null); showMsg('Erro e-mail: ' + emailResult.error, 'err'); return }
     const agora = new Date().toISOString()
@@ -1023,13 +1033,15 @@ export default function Renovacoes() {
     const jaDisparados = alvos.filter(r => !!r.ultimo_lembrete)
     if (jaDisparados.length > 0 && !window.confirm(`${jaDisparados.length} lead(s) já foram disparados anteriormente. Enviar novamente para todos?`)) { return }
     const tpl  = getSelectedTpl('email')
+    const rawBody = tpl?.body ?? EMAIL_TPL_DEFAULT
+    const isHtml  = /<[a-z][\s\S]*>/i.test(rawBody)
     setBulkSending(true)
     const base = Date.now()
     await Promise.all(alvos.map((r, i) => queueEmailMessage({
       to: r.email!,
       subject: renderTemplate(tpl?.subject ?? 'Renovação do seu certificado digital', tplValues(r)),
-      body:    renderTemplate(tpl?.body ?? EMAIL_TPL_DEFAULT, tplValues(r)),
-      payload: { renovacao_id: r.id, tipo: 'renovacao_lote' },
+      body:    renderTemplate(rawBody, tplValues(r)),
+      payload: { renovacao_id: r.id, tipo: 'renovacao_lote', ...(isHtml ? { html: renderTemplate(rawBody, tplValues(r)) } : {}) },
       scheduledFor: new Date(base + i * 1500).toISOString(),
     })))
     const agora = new Date().toISOString()
@@ -1214,7 +1226,7 @@ export default function Renovacoes() {
 
   function abrirEditarTemplate(tpl: CommunicationTemplate) {
     setEditingTpl(tpl)
-    setTplForm({ name: tpl.name, channel: tpl.channel, subject: tpl.subject ?? '', body: tpl.body, template_key: tpl.template_key })
+    setTplForm({ name: tpl.name, channel: tpl.channel, subject: tpl.subject ?? '', body: tpl.body, template_key: tpl.template_key, html: null })
   }
 
   async function salvarTemplate() {
@@ -1281,16 +1293,24 @@ export default function Renovacoes() {
 
   // insere variável na posição do cursor no textarea
   function insertVar(varKey: string) {
+    const target = tplInsertTarget
+    if (target === 'subject') {
+      const el = tplSubjectRef.current
+      if (!el) { setTplForm(prev => ({ ...prev, subject: (prev.subject ?? '') + varKey })); return }
+      const start = el.selectionStart ?? (tplForm.subject ?? '').length
+      const end   = el.selectionEnd ?? start
+      const newSubject = (tplForm.subject ?? '').slice(0, start) + varKey + (tplForm.subject ?? '').slice(end)
+      setTplForm(prev => ({ ...prev, subject: newSubject }))
+      requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + varKey.length; el.focus() })
+      return
+    }
     const el = tplTextareaRef.current
     if (!el) { setTplForm(prev => ({ ...prev, body: prev.body + varKey })); return }
     const start = el.selectionStart
     const end   = el.selectionEnd
     const newBody = tplForm.body.slice(0, start) + varKey + tplForm.body.slice(end)
     setTplForm(prev => ({ ...prev, body: newBody }))
-    requestAnimationFrame(() => {
-      el.selectionStart = el.selectionEnd = start + varKey.length
-      el.focus()
-    })
+    requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + varKey.length; el.focus() })
   }
 
   // ── import CSV ───────────────────────────────────────────────
@@ -2388,7 +2408,9 @@ export default function Renovacoes() {
                   {tplForm.channel === 'email' && (
                     <label className="flex flex-col gap-1">
                       <span className="text-xs text-gray-500">Assunto do e-mail</span>
-                      <input type="text" value={tplForm.subject} onChange={e => setTplForm(p => ({ ...p, subject: e.target.value }))}
+                      <input ref={tplSubjectRef} type="text" value={tplForm.subject ?? ''}
+                        onChange={e => setTplForm(p => ({ ...p, subject: e.target.value }))}
+                        onFocus={() => setTplInsertTarget('subject')}
                         placeholder="Ex: Renovação do seu certificado {{tipo_certificado}}"
                         className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                     </label>
@@ -2409,11 +2431,33 @@ export default function Renovacoes() {
 
                   {/* Body textarea */}
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs text-gray-500">Corpo da mensagem *</span>
-                    <textarea ref={tplTextareaRef} value={tplForm.body}
-                      onChange={e => setTplForm(p => ({ ...p, body: e.target.value }))}
-                      rows={5} placeholder="Digite a mensagem. Clique nas variáveis acima para inserir dados do cliente."
-                      className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y font-mono" />
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-500">Corpo da mensagem *</span>
+                      {tplForm.channel === 'email' && (
+                        <label className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                          <input type="checkbox" checked={!!tplForm.html}
+                            onChange={e => setTplForm(p => ({ ...p, html: e.target.checked ? (p.body || '') : null }))}
+                            className="rounded border-gray-300" />
+                          Modo HTML
+                        </label>
+                      )}
+                    </div>
+                    {tplForm.channel === 'email' && tplForm.html !== null ? (
+                      <textarea ref={tplTextareaRef} value={tplForm.body}
+                        onChange={e => setTplForm(p => ({ ...p, body: e.target.value }))}
+                        onFocus={() => setTplInsertTarget('body')}
+                        rows={10} placeholder="<h1>Olá {{primeiro_nome}}</h1><p>Seu certificado vence...</p>"
+                        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y font-mono text-[11px] leading-relaxed" />
+                    ) : (
+                      <textarea ref={tplTextareaRef} value={tplForm.body}
+                        onChange={e => setTplForm(p => ({ ...p, body: e.target.value }))}
+                        onFocus={() => setTplInsertTarget('body')}
+                        rows={5} placeholder="Digite a mensagem. Clique nas variáveis acima para inserir dados do cliente."
+                        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y font-mono" />
+                    )}
+                    {tplForm.channel === 'email' && tplForm.html !== null && (
+                      <p className="text-[10px] text-gray-400 mt-0.5">Use HTML para formatar. Variáveis {'{{var}}'} são substituídas automaticamente.</p>
+                    )}
                   </label>
 
                   {/* Preview */}

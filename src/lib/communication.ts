@@ -92,7 +92,16 @@ export function queueEmailMessage(input: Omit<QueueMessageInput, 'channel' | 'pr
 }
 
 export function renderTemplate(template: string, values: Record<string, string | number | null | undefined>) {
-  return template.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => String(values[key] ?? ''))
+  let result = template
+  // Process {{#if var}}...{{else}}...{{/if}} blocks
+  result = result.replace(/\{\{#if\s+(\w+)\}\}([\s\S]*?)(?:\{\{else\}\}([\s\S]*?))?\{\{\/if\}\}/g,
+    (_match, key: string, ifBlock: string, elseBlock: string) => {
+      const val = values[key]
+      const isTruthy = val !== undefined && val !== null && val !== '' && val !== 0
+      return isTruthy ? (ifBlock ?? '') : (elseBlock ?? '')
+    })
+  // Process simple {{var}} replacements
+  return result.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => String(values[key] ?? ''))
 }
 
 const FOLLOWUP_DELAY_MS: Record<number, number> = {
