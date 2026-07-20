@@ -1,0 +1,142 @@
+From: pending-queue <queue@avmd.local>
+Date: Mon, 20 Jul 2026 10:33:44 -0300
+Subject: fix: alinha validacao de senha ao Clerk
+Patch-Hash: sha256:2aa1bd5d16f398b72bbebefb158f6b9c631269c36faa53e3ff64615d1f627d8e
+---
+diff --git a/src/contexts/AuthContext.tsx b/src/contexts/AuthContext.tsx
+index a8e841b..2c31e4e 100644
+--- a/src/contexts/AuthContext.tsx
++++ b/src/contexts/AuthContext.tsx
+@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
+ import { useClerk, useSession, useSignIn, useUser } from '@clerk/clerk-react'
+ import { supabase } from '@/lib/supabase'
+ import { getApiUrl, useLegacySupabase } from '@/lib/api'
++import { translatePasswordPolicyError } from '@/lib/passwordPolicy'
+ import type { Profile } from '@/types'
+ 
+ export interface SignUpData {
+@@ -80,7 +81,7 @@ function getClerkErrorMessage(error: unknown, fallback: string) {
+     return 'Código de verificação expirado. Solicite um novo código.'
+   }
+ 
+-  return message || fallback
++  return translatePasswordPolicyError(message || fallback)
+ }
+ 
+ export function AuthProvider({ children }: { children: ReactNode }) {
+diff --git a/src/lib/passwordPolicy.ts b/src/lib/passwordPolicy.ts
+new file mode 100644
+index 0000000..521f971
+--- /dev/null
++++ b/src/lib/passwordPolicy.ts
+@@ -0,0 +1,24 @@
++export function validateStrongPassword(value: string) {
++  const password = value.trim()
++  if (password.length < 8) return 'Use pelo menos 8 caracteres.'
++  if (!/[A-Z]/.test(password)) return 'Inclua pelo menos 1 letra maiúscula.'
++  if (!/[a-z]/.test(password)) return 'Inclua pelo menos 1 letra minúscula.'
++  if (!/\d/.test(password)) return 'Inclua pelo menos 1 número.'
++  return null
++}
++
++export function translatePasswordPolicyError(message: string) {
++  const normalized = message.toLowerCase()
++  if (normalized.includes('password should be at least') || normalized.includes('passwords must be 8 characters or more')) {
++    return 'A senha deve ter pelo menos 8 caracteres.'
++  }
++  if (normalized.includes('password must contain') || normalized.includes('password should contain') || normalized.includes('password needs to contain')) {
++    if (normalized.includes('uppercase')) return 'Inclua pelo menos 1 letra maiúscula.'
++    if (normalized.includes('lowercase')) return 'Inclua pelo menos 1 letra minúscula.'
++    if (normalized.includes('digit') || normalized.includes('number')) return 'Inclua pelo menos 1 número.'
++  }
++  if (normalized.includes('password_found_in_breach') || normalized.includes('found in a list') || normalized.includes('data breach') || normalized.includes('pwned')) {
++    return 'Esta senha foi encontrada em vazamentos de dados. Por segurança, escolha uma senha diferente.'
++  }
++  return message
++}
+diff --git a/src/pages/Login.tsx b/src/pages/Login.tsx
+index fdb6122..4c4b99d 100644
+--- a/src/pages/Login.tsx
++++ b/src/pages/Login.tsx
+@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
+ import { Shield, Eye, EyeOff, ArrowLeft, CheckCircle, Loader2 } from 'lucide-react'
+ import { useAuth } from '@/contexts/AuthContext'
+ import { DEFAULT_AGENCY_CONFIG, buildAuthBackground, fetchAgencyConfig } from '@/lib/agencyConfig'
++import { translatePasswordPolicyError, validateStrongPassword } from '@/lib/passwordPolicy'
+ 
+ type View = 'login' | 'register' | 'forgot'
+ 
+@@ -10,8 +11,9 @@ function translateError(msg: string): string {
+   if (normalized.includes('invalid login credentials')) return 'Email ou senha incorretos.'
+   if (msg.includes('Email not confirmed'))            return 'Sua conta ainda não está pronta para acesso. Tente entrar novamente em alguns instantes.'
+   if (msg.includes('User already registered'))        return 'Este email já está cadastrado.'
+-  if (msg.includes('Password should be at least') || msg.includes('Passwords must be 8 characters or more'))
+-                                                      return 'A senha deve ter pelo menos 8 caracteres.'
++  if (msg.includes('Password should be at least') || msg.includes('Passwords must be 8 characters or more')
++    || msg.includes('password must contain') || msg.includes('password should contain') || msg.includes('password needs to contain'))
++                                                      return translatePasswordPolicyError(msg)
+   if (msg.includes('signup is disabled'))             return 'Novos cadastros estão desabilitados. Contate o administrador.'
+   if (msg.includes('rate limit'))                     return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
+   if (msg.includes('Failed to fetch'))                return 'Falha de conexão com o servidor de autenticação. Atualize a página e tente novamente.'
+@@ -254,7 +256,8 @@ export default function Login() {
+     e.preventDefault()
+     setRegError(null)
+     if (regPass !== regConfirm) { setRegError('As senhas não coincidem.'); return }
+-    if (regPass.length < 8) { setRegError('A senha deve ter pelo menos 8 caracteres.'); return }
++    const passwordError = validateStrongPassword(regPass)
++    if (passwordError) { setRegError(passwordError); return }
+     if (!regConsent) { setRegError('Você precisa aceitar a Política de Privacidade para criar uma conta.'); return }
+     setRegLoading(true)
+     const { error } = await signUp({ nome: regNome, email: regEmail, password: regPass })
+@@ -298,7 +301,8 @@ export default function Login() {
+     e.preventDefault()
+     setForgotResetError(null)
+     if (forgotNewPass !== forgotNewConfirm) { setForgotResetError('As senhas não coincidem.'); return }
+-    if (forgotNewPass.length < 8) { setForgotResetError('A senha deve ter pelo menos 8 caracteres.'); return }
++    const passwordError = validateStrongPassword(forgotNewPass)
++    if (passwordError) { setForgotResetError(passwordError); return }
+     setForgotResetLoading(true)
+     const { error } = await confirmPasswordReset(forgotCode.trim(), forgotNewPass)
+     if (error) setForgotResetError(translateError(error))
+diff --git a/src/pages/UpdatePassword.tsx b/src/pages/UpdatePassword.tsx
+index 9510906..2886750 100644
+--- a/src/pages/UpdatePassword.tsx
++++ b/src/pages/UpdatePassword.tsx
+@@ -2,15 +2,7 @@ import { useEffect, useState } from 'react'
+ import { CheckCircle, Eye, EyeOff, KeyRound, Loader2, Shield } from 'lucide-react'
+ import { useAuth } from '@/contexts/AuthContext'
+ import { DEFAULT_AGENCY_CONFIG, buildAuthBackground, fetchAgencyConfig } from '@/lib/agencyConfig'
+-
+-function translatePasswordError(msg: string) {
+-  if (msg.includes('Password should be at least') || msg.includes('Passwords must be 8 characters or more')) {
+-    return 'A senha deve ter pelo menos 8 caracteres.'
+-  }
+-  if (msg.includes('New password should be different')) return 'A nova senha precisa ser diferente da senha atual.'
+-  if (msg.includes('Auth session missing')) return 'Sessão de recuperação expirada. Solicite um novo link.'
+-  return msg
+-}
++import { translatePasswordPolicyError, validateStrongPassword } from '@/lib/passwordPolicy'
+ 
+ function PasswordInput({
+   label,
+@@ -78,8 +70,9 @@ export default function UpdatePassword() {
+     e.preventDefault()
+     setError(null)
+ 
+-    if (password.length < 8) {
+-      setError('A senha deve ter pelo menos 8 caracteres.')
++    const passwordError = validateStrongPassword(password)
++    if (passwordError) {
++      setError(passwordError)
+       return
+     }
+ 
+@@ -93,7 +86,7 @@ export default function UpdatePassword() {
+     setLoading(false)
+ 
+     if (error) {
+-      setError(translatePasswordError(error))
++      setError(translatePasswordPolicyError(error))
+       return
+     }
+ 

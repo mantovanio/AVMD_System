@@ -444,6 +444,7 @@ export default function Renovacoes() {
   const [hasMore, setHasMore]       = useState(false)
   const [error, setError]           = useState<string | null>(null)
   const [filtro, setFiltro]         = useState<PrioridadeRenovacao | 'todos'>('todos')
+  const [filtroEnvio, setFiltroEnvio] = useState<'todos' | 'enviado' | 'nao_enviado'>('todos')
   const [visao, setVisao]           = useState<'operacional' | 'historico'>('operacional')
   const [busca, setBusca]           = useState('')
   const [filtroDataInicio, setFiltroDataInicio] = useState('')
@@ -879,6 +880,7 @@ export default function Renovacoes() {
 
   async function enviarWhatsApp(r: RenovacaoV2) {
     if (!r.telefone) { showMsg('Cliente sem telefone.', 'err'); return }
+    if (r.ultimo_lembrete && !window.confirm(`Este lead já foi disparado em ${new Date(r.ultimo_lembrete).toLocaleString('pt-BR')}. Deseja enviar novamente?`)) { return }
     setSendingId(r.id)
     const tpl = getTemplateForRenovacao(r)
     if (!ensureLinkForTemplate(r, tpl?.body ?? WHATSAPP_TPL_DEFAULT)) { setSendingId(null); return }
@@ -906,6 +908,7 @@ export default function Renovacoes() {
 
   async function enviarEmail(r: RenovacaoV2) {
     if (!r.email) { showMsg('Cliente sem e-mail.', 'err'); return }
+    if (r.ultimo_lembrete && !window.confirm(`Este lead já foi disparado em ${new Date(r.ultimo_lembrete).toLocaleString('pt-BR')}. Deseja enviar novamente?`)) { setSendingId(null); return }
     setSendingId(r.id)
     const tpl     = getSelectedTpl('email')
     const body    = renderTemplate(tpl?.body ?? EMAIL_TPL_DEFAULT, tplValues(r))
@@ -957,6 +960,8 @@ export default function Renovacoes() {
   async function bulkEnviarWhatsApp() {
     const alvos = listagem.filter(r => selectedIds.has(r.id) && r.telefone)
     if (!alvos.length) { showMsg('Nenhum selecionado com telefone.', 'err'); return }
+    const jaDisparados = alvos.filter(r => !!r.ultimo_lembrete)
+    if (jaDisparados.length > 0 && !window.confirm(`${jaDisparados.length} lead(s) já foram disparados anteriormente. Enviar novamente para todos?`)) { return }
     setBulkSending(true)
     let enviados = 0
     let erros = 0
@@ -1009,6 +1014,8 @@ export default function Renovacoes() {
   async function bulkEnviarEmail() {
     const alvos = listagem.filter(r => selectedIds.has(r.id) && r.email)
     if (!alvos.length) { showMsg('Nenhum selecionado com e-mail.', 'err'); return }
+    const jaDisparados = alvos.filter(r => !!r.ultimo_lembrete)
+    if (jaDisparados.length > 0 && !window.confirm(`${jaDisparados.length} lead(s) já foram disparados anteriormente. Enviar novamente para todos?`)) { return }
     const tpl  = getSelectedTpl('email')
     setBulkSending(true)
     const base = Date.now()
@@ -1456,12 +1463,15 @@ export default function Renovacoes() {
 
   const listagem = lista.filter(r => {
     const matchFiltro = filtro === 'todos' || r.prioridade === filtro
+    const matchEnvio = filtroEnvio === 'todos'
+      || (filtroEnvio === 'enviado' && !!r.ultimo_lembrete)
+      || (filtroEnvio === 'nao_enviado' && !r.ultimo_lembrete)
     const term = busca.toLowerCase()
     const matchBusca  = !term || [r.cliente,r.razao_social,r.tipo_certificado,r.email,r.telefone,r.cpf,r.cnpj,r.pedido,r.protocolo,r.vendedor,r.contador,r.agr].some(v => v?.toLowerCase().includes(term))
     const dataRef = String(r.data_vencimento ?? '').slice(0, 10)
     const matchDataInicio = !filtroDataInicio || dataRef >= filtroDataInicio
     const matchDataFim = !filtroDataFim || dataRef <= filtroDataFim
-    return matchFiltro && matchBusca && matchDataInicio && matchDataFim
+    return matchFiltro && matchEnvio && matchBusca && matchDataInicio && matchDataFim
   })
 
   const allSelected   = listagem.length > 0 && selectedIds.size === listagem.length
@@ -1474,6 +1484,7 @@ export default function Renovacoes() {
     potencial:  lista.reduce((s, r) => s + (r.valor ?? 0), 0),
     urgentes:   lista.filter(r => r.prioridade === 'urgente').length,
     contatados: lista.filter(r => r.status === 'contatado').length,
+    disparados: lista.filter(r => !!r.ultimo_lembrete).length,
   }
   const operacionais = visao === 'operacional'
   const janelaLabel = operacionais ? 'Janela operacional (30 dias)' : 'Arquivo de históricos'
@@ -1738,6 +1749,7 @@ export default function Renovacoes() {
             { label: 'Valor Potencial',       value: loading ? '…' : fmtCurrency(kpis.potencial), color: 'bg-green-500',  sub: 'receita estimada'    },
             { label: 'Urgentes (≤ 7 dias)',   value: loading ? '…' : String(kpis.urgentes),       color: 'bg-orange-500', sub: 'ação imediata'       },
             { label: 'Já Contatados',         value: loading ? '…' : String(kpis.contatados),     color: 'bg-blue-500',   sub: 'aguardando resposta' },
+            { label: 'Já Disparados',         value: loading ? '…' : String(kpis.disparados),     color: 'bg-purple-500', sub: 'mensagens enviadas' },
           ].map(k => (
             <div key={k.label} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3">
               <div className={cn('w-2 h-2 rounded-full mb-2', k.color)} />
@@ -1763,6 +1775,28 @@ export default function Renovacoes() {
                 </div>
                 <p className="text-xl font-bold leading-tight">{loading ? '…' : count}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">certificados neste segmento</p>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Disparo Segments */}
+        <div className="grid grid-cols-2 gap-3">
+          {([
+            { key: 'nao_enviado' as const, label: 'Não Disparados', icon: Send, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800/30', count: lista.filter(r => !r.ultimo_lembrete).length },
+            { key: 'enviado' as const, label: 'Já Disparados', icon: Send, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/10', count: lista.filter(r => !!r.ultimo_lembrete).length },
+          ]).map(item => {
+            const Icon = item.icon
+            return (
+              <button key={item.key} type="button" onClick={() => setFiltroEnvio(filtroEnvio === item.key ? 'todos' : item.key)}
+                className={cn('text-left rounded-xl border p-3 transition-all', item.bg,
+                  filtroEnvio === item.key ? 'ring-2 ring-offset-1 ring-purple-500' : 'border-gray-200 dark:border-gray-800 hover:border-purple-300')}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Icon size={16} className={item.color} />
+                  <span className={cn('text-sm font-semibold', item.color)}>{item.label}</span>
+                </div>
+                <p className="text-xl font-bold leading-tight">{loading ? '…' : item.count}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{item.key === 'enviado' ? 'com mensagem enviada' : 'aguardando disparo'}</p>
               </button>
             )
           })}
@@ -2604,7 +2638,15 @@ export default function Renovacoes() {
                       </td>
                       <td className="px-3 py-3 font-medium overflow-hidden cursor-pointer hover:text-blue-600 dark:hover:text-blue-400" style={{ width: `${columnWidths.cliente}px` }}
                         onClick={() => setSelectedRowId(selectedRowId === r.id ? null : r.id)}>
-                        <span className="truncate block">{r.cliente}</span></td>
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate block">{r.cliente}</span>
+                          {!!r.ultimo_lembrete && (
+                            <span className="shrink-0 text-purple-500 dark:text-purple-400" aria-label="Mensagem já disparada">
+                              <Send size={10} />
+                            </span>
+                          )}
+                        </span>
+                      </td>
                       <td className="px-3 py-3 text-xs text-gray-500 overflow-hidden" style={{ width: `${columnWidths.email}px` }}><span className="truncate block">{r.email ?? '—'}</span></td>
                       <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: `${columnWidths.telefone}px` }}>{r.telefone ?? '—'}</td>
                       <td className="px-3 py-3 text-xs text-gray-500 overflow-hidden" style={{ width: `${columnWidths.produto}px` }}><span className="truncate block">{r.tipo_certificado}</span></td>

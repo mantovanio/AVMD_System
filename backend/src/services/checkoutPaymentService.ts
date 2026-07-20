@@ -254,7 +254,7 @@ export class CheckoutPaymentService {
     const payer: Record<string, unknown> = {
       // O Mercado Pago aceita somente este comprador nos testes de boleto.
       // O e-mail real continua sendo usado para as notificações da CertiID.
-      email: config.ambiente === 'sandbox' && isBoleto
+      email: config.ambiente === 'sandbox' && (isBoleto || isPix)
         ? 'test_user_br@testuser.com'
         : input.comprador.email,
       first_name: firstName,
@@ -263,6 +263,10 @@ export class CheckoutPaymentService {
         type: input.card?.identification_type || (input.comprador.documento.replace(/\D/g, '').length === 14 ? 'CNPJ' : 'CPF'),
         number: input.card?.identification_number || input.comprador.documento.replace(/\D/g, ''),
       },
+    }
+    if (config.ambiente === 'sandbox' && isPix) {
+      payer.first_name = 'APRO'
+      payer.last_name = 'TESTE'
     }
     if (isBoleto) {
       payer.address = {
@@ -295,6 +299,9 @@ export class CheckoutPaymentService {
     })
     const payload = await response.json().catch(() => ({})) as Record<string, unknown>
     if (!response.ok) {
+      if (response.status === 402 && isPix) {
+        throw new Error(this.describeMercadoPagoPixHint(payload))
+      }
       throw new Error(this.describeMercadoPagoError(payload, response.status))
     }
     const transaction = this.firstPayment(payload)
@@ -577,6 +584,15 @@ export class CheckoutPaymentService {
     return detail
       ? `Mercado Pago recusou a cobrança (${status}): ${detail}`
       : `Mercado Pago recusou a cobrança (${status}).`
+  }
+
+  private describeMercadoPagoPixHint(payload: Record<string, unknown>) {
+    const detail = this.describeMercadoPagoError(payload, 402)
+    return [
+      detail,
+      'Se a intenção era teste, use as credenciais de teste do Mercado Pago com payer.first_name = APRO.',
+      'Se a intenção era produção, valide se o Access Token realmente é de produção e se a conta está habilitada para Pix.',
+    ].join(' ')
   }
 
   private async queuePurchaseNotifications(input: {
