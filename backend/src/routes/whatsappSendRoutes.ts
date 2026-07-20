@@ -7,6 +7,8 @@ import type { RenovacaoRepository, RenovacaoRow } from '../repositories/renovaca
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
 import type { ConfigRepository } from '../repositories/configRepository.js'
 import { CommunicationEventRepository } from '../repositories/communicationEventRepository.js'
+import { FileRepository } from '../repositories/fileRepository.js'
+import { buildStoredPath, saveFile } from '../utils/storage.js'
 import { readJson, writeJson } from '../utils/http.js'
 
 interface SendWhatsAppButton {
@@ -64,6 +66,7 @@ type LeadRow = {
 const config = loadConfig()
 const db = createAivenSqlClient()
 const communicationEventRepository = new CommunicationEventRepository(db)
+const fileRepository = new FileRepository(db)
 
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : null
@@ -129,6 +132,85 @@ function normalizePhoneDigits(value: string | null | undefined) {
 
 function buildRemoteJid(phoneDigits: string | null) {
   return phoneDigits ? `${phoneDigits}@s.whatsapp.net` : null
+}
+
+function inferMediaFileName(mimeType: string): string {
+  const mime = mimeType.toLowerCase()
+  if (mime.includes('pdf')) return 'documento.pdf'
+  if (mime.includes('png')) return 'imagem.png'
+  if (mime.includes('webp')) return 'imagem.webp'
+  if (mime.includes('jpeg') || mime.includes('jpg') || mime.startsWith('image/')) return 'imagem.jpg'
+  if (mime.includes('mpeg') || mime.includes('mp3')) return 'audio.mp3'
+  if (mime.includes('ogg') || mime.includes('opus') || mime.startsWith('audio/')) return 'audio.ogg'
+  if (mime.includes('mp4') || mime.startsWith('video/')) return 'video.mp4'
+  return 'arquivo'
+}
+
+async function persistIncomingMedia(
+  rawPayload: JsonRecord,
+  fallbackMimeType: string | null,
+  fallbackFileName: string | null,
+  conversationJid: string,
+  externalMessageId: string | null,
+): Promise<void> {
+  try {
+    const data = asRecord(rawPayload.data)
+    const message = asRecord(data?.message)
+    if (!message) return
+
+    const entry = Object.entries(message).find(([key, value]) =>
+      value !== null && value !== undefined && key !== 'messageContextInfo',
+    )
+    if (!entry) return
+
+    const messagePayload = asRecord(entry[1])
+    if (!messagePayload) return
+
+    let base64 = pickString(messagePayload, 'base64', 'data')
+    if (!base64) base64 = deepFindString(entry[1], ['base64', 'data'])
+    if (!base64) return
+
+    const mimeType = pickString(messagePayload, 'mimetype', 'mimeType') || fallbackMimeType || 'application/octet-stream'
+    const fileName = pickString(messagePayload, 'fileName', 'title') || fallbackFileName || inferMediaFileName(mimeType)
+
+    let buffer: Buffer
+    try {
+      buffer = Buffer.from(base64, 'base64')
+    } catch { return }
+    if (buffer.length > 50 * 1024 * 1024) return
+
+    const storedPath = buildStoredPath(conversationJid || 'unknown', fileName)
+    saveFile(storedPath, buffer)
+
+    const convResult = await db.query<{ id: string }>(
+      `SELECT id FROM crm_chat_conversations WHERE document_key = $1 ORDER BY updated_at DESC LIMIT 1`,
+      [conversationJid],
+    )
+    const convUuid = convResult.rows[0]?.id
+    if (!convUuid) return
+
+    const fileRecord = await fileRepository.create({
+      conversation_id: convUuid,
+      original_name: fileName,
+      stored_path: storedPath,
+      mime_type: mimeType,
+      size_bytes: buffer.length,
+      uploaded_by: null,
+    })
+
+    const permanentUrl = `/api/chat/files/${fileRecord.id}`
+
+    if (externalMessageId) {
+      await db.query(
+        `UPDATE crm_chat_messages
+           SET media_url = $1, mime_type = COALESCE(mime_type, $2), file_name = COALESCE(file_name, $3)
+         WHERE external_message_id = $4`,
+        [permanentUrl, mimeType, fileName, externalMessageId],
+      )
+    }
+  } catch (err) {
+    console.error('[persistIncomingMedia] Erro ao salvar midia:', err)
+  }
 }
 
 function inferCanalFromInstance(instanceName: string | null | undefined) {
@@ -668,6 +750,16 @@ export async function handleWhatsappSendRoutes(
       contact: normalized.contactDigits,
       payload,
     })
+
+    if (!normalized.fromMe && normalized.mediaUrl) {
+      persistIncomingMedia(
+        normalized.raw,
+        normalized.mimeType,
+        normalized.fileName,
+        normalized.conversationId || '',
+        normalized.externalMessageId,
+      ).catch(() => { /* best effort */ })
+    }
 
     const forwarded = await forwardInboundToN8n(normalized, lead?.id ?? null, renovacaoRepo, linksRepo, configRepository)
 

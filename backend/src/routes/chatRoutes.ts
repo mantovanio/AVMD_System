@@ -993,12 +993,16 @@ export async function handleChatRoutes(
         return true
       }
       const mime = fileRecord.mime_type || 'application/octet-stream'
-      const disposition = `attachment; filename="${fileRecord.original_name}"`
+      const isInline = mime.startsWith('image/') || mime.startsWith('audio/') || mime.startsWith('video/')
+      const disposition = isInline
+        ? `inline; filename="${fileRecord.original_name}"`
+        : `attachment; filename="${fileRecord.original_name}"`
       res.writeHead(200, {
         'Content-Type': mime,
         'Content-Disposition': disposition,
         'Content-Length': data.length.toString(),
         'Access-Control-Allow-Origin': corsOrigin,
+        'Cache-Control': 'private, max-age=86400',
       })
       res.end(data)
       return true
