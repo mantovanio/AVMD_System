@@ -282,6 +282,22 @@ function inferMediaKind(
   return 'text'
 }
 
+function inferMediaFileName(mimeType?: string | null, fileName?: string | null, mensagem?: string | null) {
+  const explicitName = String(fileName || '').trim()
+  if (explicitName && /\.[a-z0-9]{2,5}$/i.test(explicitName)) return explicitName
+
+  const label = String(explicitName || mensagem || '').trim()
+  const mime = String(mimeType || '').toLowerCase()
+  if (mime.includes('pdf')) return label && label !== 'Arquivo' ? `${label}.pdf` : 'documento.pdf'
+  if (mime.includes('png')) return label && label !== 'Imagem' ? `${label}.png` : 'imagem.png'
+  if (mime.includes('webp')) return label && label !== 'Imagem' ? `${label}.webp` : 'imagem.webp'
+  if (mime.includes('jpeg') || mime.includes('jpg') || mime.startsWith('image/')) return label && label !== 'Imagem' ? `${label}.jpg` : 'imagem.jpg'
+  if (mime.includes('mpeg') || mime.includes('mp3')) return label && label !== 'Audio' ? `${label}.mp3` : 'audio.mp3'
+  if (mime.includes('ogg') || mime.includes('opus') || mime.startsWith('audio/')) return label && label !== 'Audio' ? `${label}.ogg` : 'audio.ogg'
+  if (mime.includes('mp4') || mime.startsWith('video/')) return label && label !== 'Video' ? `${label}.mp4` : 'video.mp4'
+  return explicitName || label || 'arquivo'
+}
+
 async function blobToBase64(blob: Blob): Promise<string> {
   const buffer = await blob.arrayBuffer()
   const bytes = new Uint8Array(buffer)
@@ -474,7 +490,7 @@ function deepPickMessageRecord(value: unknown, predicate: (record: Record<string
 
 function parseEvolutionEventMessages(events: EvolutionEventRow[], viewerQueryString = ''): CrmMessage[] {
   return events
-    .filter(event => event.source === 'evolution' || event.source === 'chatwoot')
+    .filter(event => event.source === 'evolution')
     .map(event => {
       const payload = event.payload ?? {}
       const data = (payload.data as Record<string, unknown> | undefined) ?? undefined
@@ -3440,14 +3456,15 @@ function MessageRow({
       : isIaMsg
         ? conversation?.whatsapp_instance || 'Automacao'
         : normalizedSenderName || fallbackHumanName || conversation?.agente_atual || 'Humano'
-    const resolvedMediaUrl = resolveChatMediaUrl(message.media_url, conversation?.whatsapp_instance)
+    const downloadFileName = inferMediaFileName(message.mime_type, message.file_name, message.mensagem)
+    const resolvedMediaUrl = resolveChatMediaUrl(message.media_url, conversation?.whatsapp_instance, downloadFileName)
     const mediaKind = inferMediaKind(message.mime_type, resolvedMediaUrl, message.file_name, message.mensagem)
     const isImage = mediaKind === 'image'
     const isAudio = mediaKind === 'audio'
     const isVideo = mediaKind === 'video'
     const isDocument = mediaKind === 'document'
     const hasMedia = isImage || isAudio || isVideo || isDocument
-    const mediaLabel = message.file_name || message.mensagem || (isAudio ? 'Audio' : isImage ? 'Imagem' : isVideo ? 'Video' : isDocument ? 'Arquivo' : '')
+    const mediaLabel = message.file_name || message.mensagem || downloadFileName || (isAudio ? 'Audio' : isImage ? 'Imagem' : isVideo ? 'Video' : isDocument ? 'Arquivo' : '')
     const [imagePreviewOpen, setImagePreviewOpen] = useState(false)
     const receiptStatus = String(message.delivery_status ?? '').trim().toLowerCase()
     const receiptLabel = receiptStatus === 'read'
@@ -3488,13 +3505,13 @@ function MessageRow({
           ) : isVideo && resolvedMediaUrl ? (
             <div className="space-y-2">
               <video src={resolvedMediaUrl} controls className="max-w-full rounded-xl" preload="metadata" />
-              <a href={resolvedMediaUrl} target="_blank" rel="noreferrer" className="text-xs text-sky-600 hover:underline">
+              <a href={resolvedMediaUrl} target="_blank" rel="noreferrer" download={downloadFileName} className="text-xs text-sky-600 hover:underline">
                 Abrir video em nova aba
               </a>
             </div>
           ) : isDocument && resolvedMediaUrl ? (
-            <a href={resolvedMediaUrl} target="_blank" rel="noreferrer" className="block rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-sky-700 hover:underline">
-              📎 {mediaLabel}
+            <a href={resolvedMediaUrl} target="_blank" rel="noreferrer" download={downloadFileName} className="block rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-sky-700 hover:underline">
+              Arquivo: {mediaLabel}
             </a>
           ) : (
             <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{normalizeStructuredMessage(message.mensagem) || mediaLabel || 'Mensagem sem texto'}</p>

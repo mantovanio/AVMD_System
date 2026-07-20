@@ -654,7 +654,7 @@ export async function handleChatRoutes(
       db.query<any>(
         `SELECT id, event_type, payload, created_at, source
          FROM communication_events
-         WHERE source IN ('evolution', 'chatwoot')
+         WHERE source = 'evolution'
            AND conversation_id IN ($1, $2, $3)
          ORDER BY created_at ASC`,
         [searchKey, documentKey, remoteJid],
@@ -1610,7 +1610,7 @@ export async function handleChatRoutes(
       `SELECT id, conversation_id, payload
        FROM communication_events
        WHERE id::text = $1
-         AND source IN ('evolution', 'chatwoot')
+         AND source = 'evolution'
        LIMIT 1`,
       [eventId],
     )
@@ -1703,6 +1703,7 @@ export async function handleChatRoutes(
     const parsed = new URL(url, 'http://localhost')
     const mediaUrl = parsed.searchParams.get('url')
     const instanceName = parsed.searchParams.get('instance')
+    const requestedFileName = parsed.searchParams.get('filename')?.trim() || 'arquivo'
     if (!mediaUrl) {
       writeJson(res, 400, { error: 'url query param required' }, corsOrigin)
       return true
@@ -1721,12 +1722,13 @@ export async function handleChatRoutes(
           continue
         }
 
-        const contentType = mediaRes.headers.get('content-type') || 'application/octet-stream'
+        const contentType = mediaRes.headers.get('content-type') || inferMimeTypeFromFile(requestedFileName)
         const contentLength = mediaRes.headers.get('content-length')
 
         res.writeHead(200, {
           'Content-Type': contentType,
           'Content-Length': contentLength ?? '',
+          'Content-Disposition': `inline; filename="${requestedFileName.replace(/"/g, '')}"`,
           'Access-Control-Allow-Origin': corsOrigin,
           'Cache-Control': 'private, max-age=3600',
         })
