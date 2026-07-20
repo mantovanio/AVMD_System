@@ -240,8 +240,8 @@ BEGIN
   IF v_conv_id IS NULL THEN
     INSERT INTO crm_chat_conversations (
       document_key, whatsapp_instance, telefone, fila,
-      ultima_mensagem, ultima_direcao, ultima_mensagem_em,
-      cliente_nome, status, customer_id
+      ultima_mensagem, ultima_mensagem_direcao, ultima_interacao_em,
+      cliente_nome, kanban_status, crm_customer_id
     )
     VALUES (
       v_phone,
