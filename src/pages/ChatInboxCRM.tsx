@@ -298,6 +298,11 @@ function inferMediaFileName(mimeType?: string | null, fileName?: string | null, 
   return explicitName || label || 'arquivo'
 }
 
+function isEncryptedWhatsappMediaUrl(mediaUrl: string | null | undefined) {
+  return /(^https?:\/\/)?mmg\.whatsapp\.net\//i.test(String(mediaUrl ?? ''))
+    || /\/api\/chat\/media-proxy\?/i.test(String(mediaUrl ?? '')) && /mmg\.whatsapp\.net/i.test(String(mediaUrl ?? ''))
+}
+
 async function blobToBase64(blob: Blob): Promise<string> {
   const buffer = await blob.arrayBuffer()
   const bytes = new Uint8Array(buffer)
@@ -589,8 +594,10 @@ function mergeConversationMessages(messages: CrmMessage[]) {
     if (externalId) {
       const existing = seenExternalIds.get(externalId)
       if (existing) {
-        // Prefere a versao com midia (evolutionMessages tem base64, crmMessages tem campos vazios)
-        if (!existing.mime_type && !existing.media_url && (message.mime_type || message.media_url)) {
+        const existingEncryptedMedia = isEncryptedWhatsappMediaUrl(existing.media_url)
+        const messageHasUsableMedia = Boolean(message.media_url && !isEncryptedWhatsappMediaUrl(message.media_url))
+        // Prefere a versao da Evolution quando ela traz base64/rota por evento.
+        if (((!existing.mime_type && !existing.media_url) || existingEncryptedMedia) && (message.mime_type || messageHasUsableMedia)) {
           seenExternalIds.set(externalId, message)
         }
         continue
@@ -3458,7 +3465,8 @@ function MessageRow({
         ? conversation?.whatsapp_instance || 'Automacao'
         : normalizedSenderName || fallbackHumanName || conversation?.agente_atual || 'Humano'
     const downloadFileName = inferMediaFileName(message.mime_type, message.file_name, message.mensagem)
-    const resolvedMediaUrl = resolveChatMediaUrl(message.media_url, conversation?.whatsapp_instance, downloadFileName)
+    const rawResolvedMediaUrl = resolveChatMediaUrl(message.media_url, conversation?.whatsapp_instance, downloadFileName)
+    const resolvedMediaUrl = isEncryptedWhatsappMediaUrl(rawResolvedMediaUrl) ? null : rawResolvedMediaUrl
     const mediaKind = inferMediaKind(message.mime_type, resolvedMediaUrl, downloadFileName || message.file_name, message.mensagem)
     const isImage = mediaKind === 'image'
     const isAudio = mediaKind === 'audio'
