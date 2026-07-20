@@ -140,6 +140,18 @@ export class CommercialRepository {
     `, [input.admin_profile_id])
     if (!admin.rows[0]) throw new Error('Apenas administradores podem alterar a forma de pagamento.')
 
+    const currentSale = await this.db.query<{ pago: boolean | null; status_pagamento: string | null }>(`
+      select pago, status_pagamento
+      from vendas_certificados
+      where id = $1
+      limit 1
+    `, [input.id])
+    const sale = currentSale.rows[0] ?? null
+    if (!sale) throw new Error('Venda não encontrada.')
+    if (sale.pago || sale.status_pagamento === 'pago') {
+      throw new Error('Não é possível alterar a forma de pagamento de uma venda já paga.')
+    }
+
     const settings = await this.db.query<{ gateway: string | null }>(`
       select coalesce(s.value->>'default_method_id', method->>'id') as gateway
       from app_settings s
