@@ -890,7 +890,7 @@ export default function Renovacoes() {
     const buttons = linkUrl
       ? [{ type: 'linkButton' as const, text: '🔐 Renovar Agora', url: linkUrl as string }]
       : undefined
-    const result = await apiSendWhatsApp(r.telefone, body, { canal: 'renovacao', buttons })
+    const result = await apiSendWhatsApp(r.telefone, body, { canal: 'atendimento', buttons })
     if (!result.ok) { setSendingId(null); showMsg('Erro WhatsApp: ' + result.error, 'err'); return }
     const agora = new Date().toISOString()
     await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
@@ -898,6 +898,7 @@ export default function Renovacoes() {
     await criarLeadKanban(r)
     void queueWhatsAppFollowUp({
       to: r.telefone,
+      canal: 'atendimento',
       body: renderTemplate(`Olá {{primeiro_nome}}! Enviamos uma mensagem sobre a renovação do seu certificado {{tipo_certificado}}. Podemos ajudar?`, tplValues(r)),
       renovacaoId: r.id,
       round: 1,
@@ -917,7 +918,7 @@ export default function Renovacoes() {
     if (!ensureLinkForTemplate(r, tpl?.body ?? EMAIL_TPL_DEFAULT) || !ensureLinkForTemplate(r, waTpl?.body ?? WHATSAPP_TPL_DEFAULT)) { setSendingId(null); return }
     const waBody  = renderTemplate(waTpl?.body ?? WHATSAPP_TPL_DEFAULT, tplValues(r))
     const [waResult, emailResult] = await Promise.all([
-      r.telefone ? queueWhatsAppMessage({ to: r.telefone, body: waBody, canal: 'renovacao', payload: { renovacao_id: r.id, tipo: 'renovacao' } }) : Promise.resolve({ error: null }),
+      r.telefone ? queueWhatsAppMessage({ to: r.telefone, body: waBody, canal: 'atendimento', payload: { renovacao_id: r.id, tipo: 'renovacao' } }) : Promise.resolve({ error: null }),
       queueEmailMessage({ to: r.email, subject, body, payload: { renovacao_id: r.id, tipo: 'renovacao' } }),
     ])
     if (emailResult.error) { setSendingId(null); showMsg('Erro e-mail: ' + emailResult.error, 'err'); return }
@@ -928,6 +929,7 @@ export default function Renovacoes() {
     if (r.telefone) {
       void queueWhatsAppFollowUp({
         to: r.telefone,
+        canal: 'atendimento',
         body: renderTemplate(`Olá {{primeiro_nome}}! Enviamos uma mensagem sobre a renovação do seu certificado {{tipo_certificado}}. Podemos ajudar?`, tplValues(r)),
         renovacaoId: r.id,
         round: 1,
@@ -979,7 +981,7 @@ export default function Renovacoes() {
       const buttons = linkUrl
         ? [{ type: 'linkButton' as const, text: '🔐 Renovar Agora', url: linkUrl as string }]
         : undefined
-      const result = await apiSendWhatsApp(r.telefone!, body, { canal: 'renovacao', buttons })
+      const result = await apiSendWhatsApp(r.telefone!, body, { canal: 'atendimento', buttons })
       if (result.ok) {
         enviados++
         const agora = new Date().toISOString()
@@ -988,6 +990,7 @@ export default function Renovacoes() {
         void criarLeadKanban(r).catch(() => {})
         void queueWhatsAppFollowUp({
           to: r.telefone!,
+          canal: 'atendimento',
           body: renderTemplate(`Olá {{primeiro_nome}}! Enviamos uma mensagem sobre a renovação do seu certificado {{tipo_certificado}}. Podemos ajudar?`, tplValues(r)),
           renovacaoId: r.id,
           round: 1,
@@ -1092,7 +1095,7 @@ export default function Renovacoes() {
       const buttons = linkUrl
         ? [{ type: 'linkButton' as const, text: '🔐 Renovar Agora', url: linkUrl as string }]
         : undefined
-      const result = await apiSendWhatsApp(r.telefone!, body, { canal: 'renovacao', buttons })
+      const result = await apiSendWhatsApp(r.telefone!, body, { canal: 'atendimento', buttons })
       if (result.ok) {
         enviados++
         const agora = new Date().toISOString()
@@ -1100,6 +1103,7 @@ export default function Renovacoes() {
         setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
         void queueWhatsAppFollowUp({
           to: r.telefone!,
+          canal: 'atendimento',
           body: renderTemplate(`Olá {{primeiro_nome}}! Enviamos uma mensagem sobre a renovação do seu certificado {{tipo_certificado}}. Podemos ajudar?`, tplValues(r)),
           renovacaoId: r.id,
           round: 1,

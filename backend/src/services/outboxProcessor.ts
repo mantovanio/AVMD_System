@@ -183,7 +183,7 @@ export class OutboxProcessor {
         body: 'Olá! Ainda aguardamos sua resposta sobre a renovação do seu certificado. Podemos ajudar?',
         payload: {
           renovacao_id: renovacaoId,
-          canal: 'renovacao',
+          canal: typeof item.payload.canal === 'string' ? item.payload.canal : 'renovacao',
           tipo: 'renovacao_followup_auto',
           followup_round: nextRound,
           instance_name: item.payload.instance_name ?? null,
