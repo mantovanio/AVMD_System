@@ -546,6 +546,7 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[], viewerQueryStr
             ?? nestedUrl
             ?? null
       const finalMimeType = mimeType || nestedMime || null
+      const isEncryptedWhatsappMediaUrl = Boolean(mediaUrl && /(^https?:\/\/)?mmg\.whatsapp\.net\//i.test(mediaUrl))
       const eventMediaUrl = viewerQueryString && (mediaUrl || finalMimeType || fileName || /image|video|audio|document|file|sticker/i.test(messageType))
         ? `/api/chat/event-media/${encodeURIComponent(String(event.id))}?${viewerQueryString}`
         : null
@@ -565,7 +566,7 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[], viewerQueryStr
         mensagem: content,
         mime_type: finalMimeType,
         file_name: fileName,
-        media_url: mediaUrl ?? eventMediaUrl,
+        media_url: isEncryptedWhatsappMediaUrl ? eventMediaUrl : (mediaUrl ?? eventMediaUrl),
         delivery_status: null,
         delivered_at: null,
         read_at: null,

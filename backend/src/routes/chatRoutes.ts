@@ -124,6 +124,19 @@ function normalizeBase64Payload(value: string) {
   return { mimeType: '', base64: trimmed }
 }
 
+function pickEvolutionMessagePayload(payload: JsonRecord) {
+  const data = payload.data
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const message = (data as JsonRecord).message
+    const key = (data as JsonRecord).key
+    if (message || key) return data as JsonRecord
+  }
+  const message = payload.message
+  const key = payload.key
+  if (message || key) return payload
+  return data && typeof data === 'object' && !Array.isArray(data) ? data as JsonRecord : payload
+}
+
 function parseMessageId(payload: JsonRecord | null | undefined) {
   if (!payload || typeof payload !== 'object') return null
   const key = payload.key
@@ -1644,6 +1657,7 @@ export async function handleChatRoutes(
     const mimeFromPayload = deepFindString(payload, ['mimeType', 'mimetype'])
     const rawBase64 = deepFindString(payload, ['base64', 'mediaBase64'])
     const mediaUrl = deepFindString(payload, ['mediaUrl', 'url', 'link'])
+    const isEncryptedWhatsappMediaUrl = /(^https?:\/\/)?mmg\.whatsapp\.net\//i.test(mediaUrl)
 
     if (rawBase64) {
       const normalized = normalizeBase64Payload(rawBase64)
@@ -1657,6 +1671,53 @@ export async function handleChatRoutes(
         'Cache-Control': 'private, max-age=3600',
       })
       res.end(buffer)
+      return true
+    }
+
+    if (isEncryptedWhatsappMediaUrl) {
+      const instances = [config.evolutionAtendimento, config.evolutionCertiid].filter(Boolean)
+      const eventInstance = asString(payload.instanceName) || asString(payload.instance) || asString((payload.data as JsonRecord | undefined)?.instance)
+      const matches = eventInstance ? instances.filter(i => i.instanceName === eventInstance) : instances
+      let lastError: unknown
+
+      for (const inst of matches) {
+        if (!inst.apiToken || !inst.baseUrl || !inst.instanceName) continue
+        try {
+          const response = await fetch(`${cleanBaseUrl(inst.baseUrl)}/chat/getBase64FromMediaMessage/${inst.instanceName}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', apikey: inst.apiToken },
+            body: JSON.stringify({ message: pickEvolutionMessagePayload(payload), convertToMp4: false }),
+          })
+          const result = await response.json().catch(() => null) as JsonRecord | null
+          if (!response.ok || !result) {
+            lastError = `HTTP ${response.status}`
+            continue
+          }
+          const resultBase64 = deepFindString(result, ['base64', 'data'])
+          if (!resultBase64) {
+            lastError = 'Evolution nao retornou base64'
+            continue
+          }
+          const normalized = normalizeBase64Payload(resultBase64)
+          const resultMime = deepFindString(result, ['mimeType', 'mimetype'])
+          const resultFileName = deepFindString(result, ['fileName', 'filename', 'title', 'name']) || fileName
+          const mimeType = normalized.mimeType || resultMime || mimeFromPayload || inferMimeTypeFromFile(resultFileName)
+          const buffer = Buffer.from(normalized.base64, 'base64')
+          res.writeHead(200, {
+            'Content-Type': mimeType,
+            'Content-Length': String(buffer.length),
+            'Content-Disposition': `inline; filename="${resultFileName.replace(/"/g, '')}"`,
+            'Access-Control-Allow-Origin': corsOrigin,
+            'Cache-Control': 'private, max-age=3600',
+          })
+          res.end(buffer)
+          return true
+        } catch (err) {
+          lastError = err
+        }
+      }
+
+      writeJson(res, 502, { error: `Falha ao decodificar midia pela Evolution: ${lastError}` }, corsOrigin)
       return true
     }
 
@@ -1715,6 +1776,10 @@ export async function handleChatRoutes(
     const requestedFileName = parsed.searchParams.get('filename')?.trim() || 'arquivo'
     if (!mediaUrl) {
       writeJson(res, 400, { error: 'url query param required' }, corsOrigin)
+      return true
+    }
+    if (/(^https?:\/\/)?mmg\.whatsapp\.net\//i.test(mediaUrl)) {
+      writeJson(res, 422, { error: 'Midia criptografada do WhatsApp precisa ser aberta pelo evento da Evolution.' }, corsOrigin)
       return true
     }
 
