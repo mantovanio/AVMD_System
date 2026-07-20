@@ -6,7 +6,6 @@ import {
   Building2,
   CalendarDays,
   CheckCircle2,
-  CircleHelp,
   CreditCard,
   Loader2,
   Lock,
@@ -87,12 +86,6 @@ type FormState = {
   conectividade_social: string
   documento_identidade: string
   titulo_eleitor_uf: string
-}
-
-type SectionStatus = {
-  label: string
-  done: boolean
-  icon: typeof Building2
 }
 
 const INITIAL_FORM: FormState = {
@@ -598,15 +591,6 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const pagamentoDone = !!form.forma_pagamento_id
   const agendamentoDone = !!selectedSlot
 
-  const sectionStatuses: SectionStatus[] = [
-    { label: 'Produto', done: !!itemSelecionado && productConfirmed, icon: Store },
-    { label: 'Carrinho', done: cartConfirmed, icon: ShoppingCart },
-    { label: 'Faturamento', done: faturamentoDone, icon: Building2 },
-    { label: 'Titular', done: titularDone, icon: UserRound },
-    { label: 'Pagamento', done: pagamentoDone, icon: CreditCard },
-    { label: 'Agendamento', done: agendamentoDone, icon: CalendarDays },
-  ]
-
   const checkoutStep = useMemo(() => {
     if (!itemSelecionado || !productConfirmed) return 1
     if (!cartConfirmed) return 2
@@ -1030,68 +1014,6 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.55fr)_340px] gap-6 items-start">
           <div className="space-y-6">
-            <div className="rounded-[24px] border border-slate-200 bg-white px-5 py-4 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] uppercase tracking-[0.24em] text-[#ea7b18] font-semibold">Solicitação online</p>
-                  <h2 className="text-lg font-semibold mt-1 leading-snug text-slate-900">
-                    Solicitação de certificado digital
-                  </h2>
-                </div>
-              </div>
-              <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                {sectionStatuses.map((section, index) => {
-                  const completedCount = sectionStatuses.filter(item => item.done).length
-                  const active = index === Math.min(completedCount, sectionStatuses.length - 1)
-                  return (
-                    <div
-                      key={section.label}
-                      className={cn(
-                        'rounded-2xl border px-4 py-3 text-center shadow-sm transition-colors',
-                        section.done
-                          ? 'border-emerald-200 bg-emerald-50/80'
-                          : active
-                            ? 'border-[#17346b] bg-[#f6f9ff]'
-                            : 'border-slate-200 bg-slate-50/60'
-                      )}
-                    >
-                      <span className={cn('mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white', section.done ? 'bg-emerald-600' : active ? 'bg-[#17346b]' : 'bg-slate-300')}>
-                        {section.done ? <CheckCircle2 size={15} /> : index + 1}
-                      </span>
-                      <span className={cn('mt-2 block text-xs font-semibold sm:text-sm', section.done || active ? 'text-slate-800' : 'text-slate-400')}>{section.label}</span>
-                    </div>
-                  )
-                })}
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {[
-                  { n: 1, label: 'Produto' },
-                  { n: 2, label: 'Emissão' },
-                  { n: 3, label: 'Validade' },
-                  { n: 4, label: 'Produto final' },
-                ].map(step => (
-                  <div key={step.n} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-center">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Etapa {step.n}</div>
-                    <div className="mt-1 text-sm font-semibold text-slate-800">{step.label}</div>
-                  </div>
-                ))}
-              </div>
-              <details className="mt-5 rounded-2xl border border-sky-200 bg-sky-50/70 px-4 py-3">
-                <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-[#17346b]">
-                  <CircleHelp size={17} /> Como funciona e como acompanhar depois
-                </summary>
-                <div className="mt-3 space-y-2 pl-6 text-sm leading-relaxed text-slate-700">
-                  <p>Escolha o produto, preencha sua identificação, faça o pagamento e selecione o agendamento. Ao concluir, o pedido ficará disponível no Portal do Cliente.</p>
-                  <p>Você poderá entrar novamente com o e-mail e a senha criados nesta compra para consultar o produto, acompanhar a situação do pagamento e reagendar o atendimento.</p>
-                  <p>Nas compras realizadas pela internet, o direito de arrependimento pode ser solicitado em até 7 dias, contados da assinatura ou do recebimento do produto ou serviço, conforme o artigo 49 do Código de Defesa do Consumidor. A solicitação será registrada e analisada conforme a situação do pedido.</p>
-                  <div className="flex flex-wrap gap-3 pt-1">
-                    <a href="/" className="font-semibold text-[#0b8fc1] underline underline-offset-2">Acessar o Portal do Cliente</a>
-                    <a href="https://www.planalto.gov.br/ccivil_03/leis/l8078compilado.htm" target="_blank" rel="noreferrer" className="font-semibold text-[#0b8fc1] underline underline-offset-2">Consultar o Código de Defesa do Consumidor</a>
-                  </div>
-                </div>
-              </details>
-            </div>
-
             <SectionCard
               title={modoLinkDireto ? 'Produto selecionado para este link' : 'Escolha o certificado ideal'}
               description={modoLinkDireto
