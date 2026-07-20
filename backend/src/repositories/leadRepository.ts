@@ -135,7 +135,7 @@ export class LeadRepository {
     fromMe?: boolean
   }) {
     const existing = await this.findByPhone(input.phoneDigits)
-    const summary = input.content ?? null
+    const summary = input.content?.trim() || null
 
     if (existing) {
       const result = await this.db.query<LeadRow>(
@@ -171,7 +171,7 @@ export class LeadRepository {
       whatsapp_lead: input.phoneDigits,
       motivo_contato: 'whatsapp_evolution',
       resumo_conversa: summary,
-      ultima_mensagem: summary,
+      ultima_mensagem: summary ?? (input.conversationId ? 'Contato iniciou conversa no WhatsApp' : null),
       status: 'iniciou_conversa',
       evolution_remote_jid: input.conversationId ?? null,
       evolution_instance: input.instanceName ?? null,

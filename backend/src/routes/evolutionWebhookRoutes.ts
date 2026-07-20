@@ -100,6 +100,13 @@ function extractMessageContent(message: JsonRecord | null): { content: string | 
   const fileName = pickString(payload, 'fileName', 'title') || null
   const mediaUrl = pickString(payload, 'url', 'mediaUrl') || null
   const quotedId = pickString(context, 'stanzaId') || null
+  const mediaFallback = (() => {
+    if (messageType.startsWith('image')) return 'Imagem'
+    if (messageType.startsWith('video')) return 'Vídeo'
+    if (messageType.startsWith('audio')) return 'Áudio'
+    if (messageType.startsWith('document')) return 'Documento'
+    return ''
+  })()
 
   if (!content && message) {
     for (const [, value] of Object.entries(message)) {
@@ -112,7 +119,7 @@ function extractMessageContent(message: JsonRecord | null): { content: string | 
   }
 
   return {
-    content,
+    content: content || mediaFallback || null,
     messageType,
     mimeType,
     fileName,
@@ -146,6 +153,15 @@ function normalizeEvolutionEvent(body: JsonRecord): NormalizedEvolutionEvent {
   const pushName = pickString(body, 'pushName') || pickString(data, 'pushName') || pickString(key, 'pushName') || null
   const externalMessageId = pickString(body, 'messageId', 'externalId') || pickString(data, 'id', 'messageId') || pickString(key, 'id') || null
 
+  const normalizedContent = messageData.content
+    || pickString(body, 'body', 'text')
+    || pickString(data, 'body', 'text')
+    || (messageData.fileName ? `Arquivo: ${messageData.fileName}` : null)
+    || (messageData.mimeType?.startsWith('image/') ? 'Imagem' : null)
+    || (messageData.mimeType?.startsWith('video/') ? 'Vídeo' : null)
+    || (messageData.mimeType?.startsWith('audio/') ? 'Áudio' : null)
+    || (messageData.mimeType?.startsWith('application/') ? 'Documento' : null)
+
   return {
     eventType,
     instanceName,
@@ -156,7 +172,7 @@ function normalizeEvolutionEvent(body: JsonRecord): NormalizedEvolutionEvent {
     pushName,
     fromMe,
     messageType: pickString(body, 'messageType') || pickString(data, 'messageType') || messageData.messageType,
-    content: pickString(body, 'content') || pickString(data, 'content') || messageData.content,
+    content: pickString(body, 'content') || pickString(data, 'content') || normalizedContent,
     mimeType: pickString(body, 'mimeType') || pickString(data, 'mimeType') || messageData.mimeType,
     fileName: pickString(body, 'fileName') || pickString(data, 'fileName') || messageData.fileName,
     mediaUrl: pickString(body, 'mediaUrl') || pickString(data, 'mediaUrl') || messageData.mediaUrl,

@@ -130,6 +130,23 @@ function normalizeMimeType(mime: string | null | undefined) {
   return (mime ?? '').replace(/\s+/g, '')
 }
 
+function buildMessageFallback(messageType?: string | null, content?: string | null, mimeType?: string | null, fileName?: string | null) {
+  const cleanContent = content?.trim() ?? ''
+  if (cleanContent) return cleanContent
+
+  if (fileName?.trim()) return `Arquivo: ${fileName.trim()}`
+  const mime = normalizeMimeType(mimeType)
+  if (mime.startsWith('image/')) return 'Imagem'
+  if (mime.startsWith('video/')) return 'Vídeo'
+  if (mime.startsWith('audio/')) return 'Áudio'
+  if (mime.startsWith('application/')) return 'Documento'
+  if (messageType === 'imageMessage') return 'Imagem'
+  if (messageType === 'videoMessage') return 'Vídeo'
+  if (messageType === 'audioMessage') return 'Áudio'
+  if (messageType === 'documentMessage') return 'Documento'
+  return null
+}
+
 function formatDateTime(value: string | null | undefined) {
   if (!value) return 'Nao informado'
   const date = new Date(value)
@@ -204,16 +221,19 @@ function parseEvolutionEvents(events: Record<string, unknown>[]): Message[] {
     .map(row => {
       const pld = row.payload as Record<string, unknown> | undefined
       if (!pld) return null
+      const messageType = (pld.messageType as string | null) ?? 'conversation'
+      const mimeType = pld.mimeType as string | null
+      const fileName = pld.fileName as string | null
       return {
         id:          (row.id as string),
-        content:     (pld.content as string | null) ?? null,
+        content:     buildMessageFallback(messageType, pld.content as string | null, mimeType, fileName),
         fromMe:      (pld.fromMe as boolean) ?? false,
         created_at:  (row.created_at as string) ?? new Date().toISOString(),
         source:      (row.source as string | null) ?? null,
         eventType:   (row.event_type as string | null) ?? null,
         messageId:   (pld.messageId as string | null) ?? null,
         pushName:    (pld.pushName as string | null) ?? null,
-        messageType: (pld.messageType as string | null) ?? 'conversation',
+        messageType,
         mediaUrl:    (pld.mediaUrl as string | null) ?? null,
         quoted:      (pld.quoted as { messageId: string; content: string } | null) ?? null,
       } as Message
@@ -328,7 +348,12 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
           if (!pld) return
           const msg: Message = {
             id:          row.id as string,
-            content:     (pld.content as string | null) ?? null,
+            content:     buildMessageFallback(
+              (pld.messageType as string | null) ?? 'conversation',
+              pld.content as string | null,
+              pld.mimeType as string | null,
+              pld.fileName as string | null,
+            ),
             fromMe:      (pld.fromMe as boolean) ?? false,
             created_at:  row.created_at as string,
             source:      (row.source as string | null) ?? null,
