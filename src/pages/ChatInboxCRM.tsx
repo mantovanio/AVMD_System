@@ -420,6 +420,15 @@ function asMessageRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
 }
 
+function pickMessageString(source: Record<string, unknown> | null | undefined, ...keys: string[]) {
+  if (!source) return ''
+  for (const key of keys) {
+    const value = source[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return ''
+}
+
 function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] {
   return events
     .filter(event => event.source === 'evolution' || event.source === 'chatwoot')
@@ -455,11 +464,16 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] 
         ?? (rawMessage?.base64 as string | undefined)
         ?? (messagePayload?.base64 as string | undefined)
         ?? null
+      const nestedBase64 = pickMessageString(messagePayload, 'base64', 'data')
+      const nestedUrl = pickMessageString(messagePayload, 'url', 'mediaUrl')
       const mediaUrl = inlineBase64
         ? `data:${mimeType || 'application/octet-stream'};base64,${inlineBase64}`
-        : (payload.mediaUrl as string | undefined)
-          ?? (data?.mediaUrl as string | undefined)
-          ?? null
+        : nestedBase64
+          ? `data:${mimeType || 'application/octet-stream'};base64,${nestedBase64}`
+          : (payload.mediaUrl as string | undefined)
+            ?? (data?.mediaUrl as string | undefined)
+            ?? nestedUrl
+            ?? null
       const externalMessageId = (payload.messageId as string | undefined)
         ?? (payload.externalId as string | undefined)
         ?? (data?.messageId as string | undefined)

@@ -49,6 +49,16 @@ function pickString(source: JsonRecord | null, ...keys: string[]) {
   return ''
 }
 
+function findFirstString(value: unknown, keys: string[]) {
+  const record = asRecord(value)
+  if (!record) return ''
+  for (const key of keys) {
+    const candidate = record[key]
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+  }
+  return ''
+}
+
 function cleanBaseUrl(value: string) {
   return value.replace(/\/$/, '')
 }
@@ -96,9 +106,13 @@ function extractMessageContent(message: JsonRecord | null): { content: string | 
 
   const fallbackContent = typeof entry?.[1] === 'string' ? entry[1] : ''
   let content = pickString(payload, 'text', 'caption', 'conversation') || fallbackContent || null
-  const mimeType = pickString(payload, 'mimetype') || null
+  const mimeType = pickString(payload, 'mimetype', 'mimeType') || null
   const fileName = pickString(payload, 'fileName', 'title') || null
-  const mediaUrl = pickString(payload, 'url', 'mediaUrl') || null
+  const base64 = pickString(payload, 'base64', 'data') || findFirstString(entry?.[1], ['base64', 'data'])
+  const mediaUrl =
+    pickString(payload, 'url', 'mediaUrl')
+    || findFirstString(entry?.[1], ['url', 'mediaUrl'])
+    || (base64 ? `data:${mimeType || 'application/octet-stream'};base64,${base64}` : '')
   const quotedId = pickString(context, 'stanzaId') || null
   const mediaFallback = (() => {
     if (messageType.startsWith('image')) return 'Imagem'
@@ -116,6 +130,13 @@ function extractMessageContent(message: JsonRecord | null): { content: string | 
         if (text) { content = text; break }
       }
     }
+  }
+
+  if (!content && mediaUrl) {
+    if (mimeType?.startsWith('image/')) content = 'Imagem'
+    else if (mimeType?.startsWith('video/')) content = 'Vídeo'
+    else if (mimeType?.startsWith('audio/')) content = 'Áudio'
+    else if (mimeType?.startsWith('application/')) content = 'Documento'
   }
 
   return {

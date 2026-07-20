@@ -88,8 +88,8 @@ export class RenewalReminderService {
       }
 
       const hoje = new Date()
-      const rawDate = row.data_vencimento
-      const dateStr = rawDate instanceof Date
+      const rawDate: unknown = row.data_vencimento
+      const dateStr = rawDate && typeof rawDate === 'object' && rawDate instanceof Date
         ? rawDate.toISOString().slice(0, 10)
         : String(rawDate ?? '').slice(0, 10)
       const vencimento = new Date(`${dateStr}T12:00:00-03:00`)
