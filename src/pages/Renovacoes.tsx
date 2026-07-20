@@ -445,6 +445,7 @@ export default function Renovacoes() {
   const [error, setError]           = useState<string | null>(null)
   const [filtro, setFiltro]         = useState<PrioridadeRenovacao | 'todos'>('todos')
   const [filtroEnvio, setFiltroEnvio] = useState<'todos' | 'enviado' | 'nao_enviado'>('todos')
+  const [filtroCanal, setFiltroCanal] = useState<'todos' | 'email' | 'whatsapp'>('todos')
   const [visao, setVisao]           = useState<'operacional' | 'historico'>('operacional')
   const [busca, setBusca]           = useState('')
   const [filtroDataInicio, setFiltroDataInicio] = useState('')
@@ -1480,12 +1481,15 @@ export default function Renovacoes() {
     const matchEnvio = filtroEnvio === 'todos'
       || (filtroEnvio === 'enviado' && !!r.ultimo_lembrete)
       || (filtroEnvio === 'nao_enviado' && !r.ultimo_lembrete)
+    const matchCanal = filtroCanal === 'todos'
+      || (filtroCanal === 'email' && !!r.enviou_email)
+      || (filtroCanal === 'whatsapp' && !!r.enviou_whatsapp)
     const term = busca.toLowerCase()
     const matchBusca  = !term || [r.cliente,r.razao_social,r.tipo_certificado,r.email,r.telefone,r.cpf,r.cnpj,r.pedido,r.protocolo,r.vendedor,r.contador,r.agr].some(v => v?.toLowerCase().includes(term))
     const dataRef = String(r.data_vencimento ?? '').slice(0, 10)
     const matchDataInicio = !filtroDataInicio || dataRef >= filtroDataInicio
     const matchDataFim = !filtroDataFim || dataRef <= filtroDataFim
-    return matchFiltro && matchEnvio && matchBusca && matchDataInicio && matchDataFim
+    return matchFiltro && matchEnvio && matchCanal && matchBusca && matchDataInicio && matchDataFim
   })
 
   const allSelected   = listagem.length > 0 && selectedIds.size === listagem.length
@@ -1759,19 +1763,22 @@ export default function Renovacoes() {
         {/* KPIs – linha 1 */}
         <div className="flex flex-wrap gap-2">
           {[
-            { label: visao === 'operacional' ? 'Renovações Operacionais' : 'Histórico', value: loading ? '…' : String(kpis.total), color: 'bg-red-500' },
-            { label: 'Valor Potencial', value: loading ? '…' : fmtCurrency(kpis.potencial), color: 'bg-green-500' },
-            { label: 'Urgentes (≤ 7d)', value: loading ? '…' : String(kpis.urgentes), color: 'bg-orange-500' },
-            { label: 'Contatados', value: loading ? '…' : String(kpis.contatados), color: 'bg-blue-500' },
-            { label: 'Disparados', value: loading ? '…' : String(kpis.disparados), color: 'bg-purple-500' },
+            { label: visao === 'operacional' ? 'Renovações Operacionais' : 'Histórico', value: loading ? '…' : String(kpis.total), color: 'bg-red-500', active: false },
+            { label: 'Valor Potencial', value: loading ? '…' : fmtCurrency(kpis.potencial), color: 'bg-green-500', active: false },
+            { label: 'Urgentes (≤ 7d)', value: loading ? '…' : String(kpis.urgentes), color: 'bg-orange-500', active: filtro === 'urgente', onClick: () => setFiltro(filtro === 'urgente' ? 'todos' : 'urgente') },
+            { label: 'Contatados', value: loading ? '…' : String(kpis.contatados), color: 'bg-blue-500', active: filtroEnvio === 'enviado', onClick: () => setFiltroEnvio(filtroEnvio === 'enviado' ? 'todos' : 'enviado') },
+            { label: 'Disparados', value: loading ? '…' : String(kpis.disparados), color: 'bg-purple-500', active: filtroEnvio === 'enviado', onClick: () => setFiltroEnvio(filtroEnvio === 'enviado' ? 'todos' : 'enviado') },
           ].map(k => (
-            <div key={k.label} className="flex-1 min-w-[120px] max-w-[200px] bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 px-3 py-2 flex items-center gap-2">
-              <div className={cn('w-2 h-2 rounded-full shrink-0', k.color)} />
+            <button key={k.label} type="button" onClick={k.onClick}
+              className={cn('flex-1 min-w-[130px] max-w-[220px] text-left bg-white dark:bg-gray-900 rounded-lg border px-3 py-2.5 flex items-center gap-2.5 transition-all',
+                k.active ? 'ring-2 ring-offset-1 ring-blue-500 border-blue-300' : 'border-gray-200 dark:border-gray-800 hover:border-blue-300',
+                !k.onClick && 'cursor-default')}>
+              <div className={cn('w-2.5 h-2.5 rounded-full shrink-0', k.color)} />
               <div className="min-w-0">
-                <p className="text-sm font-bold leading-tight truncate">{k.value}</p>
-                <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight truncate">{k.label}</p>
+                <p className="text-base font-bold leading-tight truncate">{k.value}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 leading-tight truncate">{k.label}</p>
               </div>
-            </div>
+            </button>
           ))}
         </div>
 
@@ -1786,13 +1793,13 @@ export default function Renovacoes() {
             const count = lista.filter(r => r.prioridade === p).length
             return (
               <button key={p} type="button" onClick={() => setFiltro(filtro === p ? 'todos' : p)}
-                className={cn('flex-1 min-w-[100px] max-w-[160px] text-left rounded-lg border px-3 py-2 transition-all', cfg.bg,
+                className={cn('flex-1 min-w-[110px] max-w-[180px] text-left rounded-lg border px-3 py-2.5 transition-all', cfg.bg,
                   filtro === p ? 'ring-2 ring-offset-1 ring-blue-500' : 'border-gray-200 dark:border-gray-800 hover:border-blue-300')}>
                 <div className="flex items-center gap-1.5">
-                  <Icon size={13} className={cfg.color} />
-                  <span className={cn('text-[11px] font-semibold', cfg.color)}>{cfg.label.split(' (')[0]}</span>
+                  <Icon size={14} className={cfg.color} />
+                  <span className={cn('text-xs font-semibold', cfg.color)}>{cfg.label.split(' (')[0]}</span>
                 </div>
-                <p className="text-lg font-bold leading-tight mt-0.5">{loading ? '…' : count}</p>
+                <p className="text-xl font-bold leading-tight mt-1">{loading ? '…' : count}</p>
               </button>
             )
           })}
@@ -1800,38 +1807,40 @@ export default function Renovacoes() {
           <div className="w-px bg-gray-200 dark:bg-gray-700 self-stretch mx-1 hidden sm:block" />
 
           {([
-            { key: 'nao_enviado' as const, label: 'Não Disp.', icon: Send, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800/30', count: lista.filter(r => !r.ultimo_lembrete).length },
-            { key: 'enviado' as const, label: 'Já Disp.', icon: Send, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/10', count: lista.filter(r => !!r.ultimo_lembrete).length },
+            { key: 'nao_enviado' as const, label: 'Não Disparados', icon: Send, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800/30', count: lista.filter(r => !r.ultimo_lembrete).length },
+            { key: 'enviado' as const, label: 'Já Disparados', icon: Send, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/10', count: lista.filter(r => !!r.ultimo_lembrete).length },
           ]).map(item => {
             const Icon = item.icon
             return (
               <button key={item.key} type="button" onClick={() => setFiltroEnvio(filtroEnvio === item.key ? 'todos' : item.key)}
-                className={cn('flex-1 min-w-[90px] max-w-[130px] text-left rounded-lg border px-3 py-2 transition-all', item.bg,
+                className={cn('flex-1 min-w-[110px] max-w-[160px] text-left rounded-lg border px-3 py-2.5 transition-all', item.bg,
                   filtroEnvio === item.key ? 'ring-2 ring-offset-1 ring-purple-500' : 'border-gray-200 dark:border-gray-800 hover:border-purple-300')}>
                 <div className="flex items-center gap-1.5">
-                  <Icon size={13} className={item.color} />
-                  <span className={cn('text-[11px] font-semibold', item.color)}>{item.label}</span>
+                  <Icon size={14} className={item.color} />
+                  <span className={cn('text-xs font-semibold', item.color)}>{item.label}</span>
                 </div>
-                <p className="text-lg font-bold leading-tight mt-0.5">{loading ? '…' : item.count}</p>
+                <p className="text-xl font-bold leading-tight mt-1">{loading ? '…' : item.count}</p>
               </button>
             )
           })}
 
           <div className="w-px bg-gray-200 dark:bg-gray-700 self-stretch mx-1 hidden sm:block" />
 
-          {[
-            { label: 'E-mails', count: lista.filter(r => r.enviou_email).length, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/10', icon: Mail },
-            { label: 'WhatsApp', count: lista.filter(r => r.enviou_whatsapp).length, color: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-50 dark:bg-teal-900/10', icon: MessageSquare },
-          ].map(item => {
+          {([
+            { key: 'email' as const, label: 'E-mails', count: lista.filter(r => r.enviou_email).length, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/10', icon: Mail },
+            { key: 'whatsapp' as const, label: 'WhatsApp', count: lista.filter(r => r.enviou_whatsapp).length, color: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-50 dark:bg-teal-900/10', icon: MessageSquare },
+          ]).map(item => {
             const Icon = item.icon
             return (
-              <div key={item.label} className={cn('flex-1 min-w-[90px] max-w-[130px] rounded-lg border px-3 py-2', item.bg, 'border-gray-200 dark:border-gray-800')}>
+              <button key={item.key} type="button" onClick={() => setFiltroCanal(filtroCanal === item.key ? 'todos' : item.key)}
+                className={cn('flex-1 min-w-[110px] max-w-[160px] text-left rounded-lg border px-3 py-2.5 transition-all', item.bg,
+                  filtroCanal === item.key ? 'ring-2 ring-offset-1 ring-emerald-500' : 'border-gray-200 dark:border-gray-800 hover:border-emerald-300')}>
                 <div className="flex items-center gap-1.5">
-                  <Icon size={13} className={item.color} />
-                  <span className={cn('text-[11px] font-semibold', item.color)}>{item.label}</span>
+                  <Icon size={14} className={item.color} />
+                  <span className={cn('text-xs font-semibold', item.color)}>{item.label}</span>
                 </div>
-                <p className="text-lg font-bold leading-tight mt-0.5">{loading ? '…' : item.count}</p>
-              </div>
+                <p className="text-xl font-bold leading-tight mt-1">{loading ? '…' : item.count}</p>
+              </button>
             )
           })}
         </div>
