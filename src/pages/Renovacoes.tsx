@@ -985,6 +985,7 @@ export default function Renovacoes() {
         const agora = new Date().toISOString()
         await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora })
         setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
+        void criarLeadKanban(r).catch(() => {})
         void queueWhatsAppFollowUp({
           to: r.telefone!,
           body: renderTemplate(`Olá {{primeiro_nome}}! Enviamos uma mensagem sobre a renovação do seu certificado {{tipo_certificado}}. Podemos ajudar?`, tplValues(r)),
@@ -1026,6 +1027,14 @@ export default function Renovacoes() {
       payload: { renovacao_id: r.id, tipo: 'renovacao_lote' },
       scheduledFor: new Date(base + i * 1500).toISOString(),
     })))
+    const agora = new Date().toISOString()
+    await Promise.all(alvos.map(r =>
+      Promise.all([
+        apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora }),
+        criarLeadKanban(r).catch(() => {}),
+      ])
+    ))
+    setLista(prev => prev.map(x => alvos.some(a => a.id === x.id) ? { ...x, status: 'contatado', ultimo_lembrete: agora } : x))
     setBulkSending(false)
     showMsg(`${alvos.length} e-mails enfileirados.`)
   }
