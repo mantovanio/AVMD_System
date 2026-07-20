@@ -1051,14 +1051,14 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     <label className="border-b border-slate-300 p-4 md:border-b-0 md:border-r">
                       <span className="block text-sm font-bold text-[#17346b]">Categoria</span>
                       <select value={productKindFilter} onChange={event => { setProductKindFilter(event.target.value); setProductClassFilter(''); setProductEmissionFilter(''); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none">
-                        <option value="">e-CNPJ, e-CPF, e-PF ou e-PJ</option>
+                        <option value="">Selecione</option>
                         {productKindOptions.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
                     <label className="border-b border-slate-300 p-4 md:border-b-0 md:border-r">
                       <span className="block text-sm font-bold text-[#17346b]">Tipo</span>
                       <select disabled={!productKindFilter} value={productClassFilter} onChange={event => { setProductClassFilter(event.target.value); setProductEmissionFilter(''); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
-                        <option value="">A1 ou A3</option>
+                        <option value="">Selecione</option>
                         {productClassOptions.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
