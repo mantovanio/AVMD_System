@@ -762,9 +762,9 @@ export default function Renovacoes() {
     const link = findLinkForProduto(r.tipo_certificado, r.vendedor_fk_id)?.link_renovacao?.trim()
     if (link) return true
     if (!options?.silent) {
-      showMsg(`O produto "${r.tipo_certificado}" não tem link de renovação vinculado. Cadastre em "Links de Renovação por Produto".`, 'err')
+      showMsg(`Aviso: o produto "${r.tipo_certificado}" não tem link de renovação. O envio seguirá sem o link.`)
     }
-    return false
+    return true
   }
 
   function tplValues(r: RenovacaoV2): Record<string, string | number> {

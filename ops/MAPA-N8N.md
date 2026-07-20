@@ -280,7 +280,7 @@ Workflow: AVMD - Email to CRM Kanban
 | `n8n/avmd-schedule-email-smoketest-certiid.workflow.json` | Smoke Test CertiID | ⏸ inativo no repo |
 | `n8n/avmd-schedule-email-smoketest-certifast.workflow.json` | Smoke Test Certifast | ⏸ inativo no repo |
 | `n8n/avmd-email-crm-kanban.workflow.json` | Email → CRM Kanban (LEGACY) | ⏸ não reativar |
-| `n8n/avmd-email-send.workflow.json` | AVMD - Email Send (SMTP) | ⏸ inativo no repo |
+| `n8n/avmd-email-send.workflow.json` | AVMD - Email Send (SMTP) | ✅ ativo |
 | `n8n/avmd-timeout-checker.workflow.json` | AVMD - Timeout Checker | ⏸ inativo no repo |
 | `n8n/avmd-event-receiver.workflow.json` | AVMD - Event Receiver | ⏸ inativo no repo |
 | `n8n/avmd-clara-logger.workflow.json` | Clara Logger (DEPRECATED) | ⏸ inativo no repo |
