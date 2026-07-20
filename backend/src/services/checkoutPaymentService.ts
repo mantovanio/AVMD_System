@@ -313,6 +313,9 @@ export class CheckoutPaymentService {
     })
     const payload = await response.json().catch(() => ({})) as Record<string, unknown>
     if (!response.ok) {
+      if (this.isMercadoPagoPixKeyError(payload)) {
+        throw new Error(this.describeMercadoPagoPixKeyError())
+      }
       if (response.status === 402 && isPix) {
         throw new Error(this.describeMercadoPagoPixHint(payload))
       }
@@ -649,6 +652,9 @@ export class CheckoutPaymentService {
     })
     const payload = await response.json().catch(() => ({})) as Record<string, unknown>
     if (!response.ok) {
+      if (this.isMercadoPagoPixKeyError(payload)) {
+        throw new Error(this.describeMercadoPagoPixKeyError())
+      }
       if (response.status === 402) {
         throw new Error(this.describeMercadoPagoPixHint(payload))
       }
@@ -696,6 +702,34 @@ export class CheckoutPaymentService {
       'Se a intenção era produção, valide se o Access Token realmente é de produção e se a conta está habilitada para Pix.',
       payloadKeys.length > 0 ? `Chaves retornadas pela API: ${payloadKeys.join(', ')}.` : null,
     ].join(' ')
+  }
+
+  private describeMercadoPagoPixKeyError() {
+    return [
+      'Mercado Pago recusou a cobrança de Pix porque a conta vendedora não tem chave Pix habilitada para renderização do QR Code.',
+      'Confirme no painel do Mercado Pago se a conta do collector tem uma chave Pix cadastrada e ativa.',
+      'Use credenciais de produção da mesma conta que possui a chave Pix; usuário de teste ou conta sem chave ativa não gera QR Pix.',
+    ].join(' ')
+  }
+
+  private isMercadoPagoPixKeyError(payload: Record<string, unknown>) {
+    const details = [
+      this.pickString(payload, ['message', 'error', 'status_detail', 'detail', 'reason']),
+      Array.isArray(payload.cause)
+        ? payload.cause.map(item => {
+            const cause = this.asObject(item)
+            return [
+              this.pickString(cause, ['description', 'message', 'code']),
+              this.pickString(cause, ['name', 'type']),
+            ].filter(Boolean).join(' ')
+          }).join(' ')
+        : '',
+    ].filter(Boolean).join(' ').toLowerCase()
+
+    return details.includes('collector user without key enabled for qr render')
+      || details.includes('financial identity use case')
+      || details.includes('qr render')
+      || details.includes('key enabled')
   }
 
   private async queuePurchaseNotifications(input: {
