@@ -121,6 +121,7 @@ type LocalFormVenda = {
   desconto: number
   voucher_codigo: string
   data_vencimento: string
+  payment_installments: number
   observacoes: string | null
   contador_id: string | null     // parceiro que indicou
   ponto_atendimento_id: string
@@ -440,6 +441,7 @@ const EMPTY_VENDA_V2: LocalFormVenda = {
   desconto: 0,
   voucher_codigo: '',
   data_vencimento: '',
+  payment_installments: 1,
   observacoes: null,
   contador_id: null,
   ponto_atendimento_id: '',
@@ -460,7 +462,16 @@ function salvarRascunhoVenda(draft: RascunhoVenda) {
 function carregarRascunhoVenda(): RascunhoVenda | null {
   try {
     const raw = localStorage.getItem(NOVA_VENDA_DRAFT_KEY)
-    return raw ? JSON.parse(raw) as RascunhoVenda : null
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as RascunhoVenda
+    return {
+      ...parsed,
+      formV2: {
+        ...EMPTY_VENDA_V2,
+        ...parsed.formV2,
+        payment_installments: Number(parsed.formV2?.payment_installments ?? 1) || 1,
+      },
+    }
   } catch {
     return null
   }
@@ -1113,6 +1124,7 @@ export default function Comercial() {
     if (descontoCalculadoVenda <= 0) return true
     return descontoCalculadoVenda <= descontoMaximoPermitido
   }, [descontoCalculadoVenda, descontoMaximoPermitido])
+  const paymentFlow = useMemo(() => classifyPaymentFlow(formV2.forma_pagamento), [formV2.forma_pagamento])
   const vendaStepStatus = useMemo(() => {
     const tipoVendaOk = !!formV2.tipo_venda
     const clienteOk = tipoVendaOk && !!formV2.cadastro_base_id
@@ -1120,9 +1132,12 @@ export default function Comercial() {
     const produtoOk = parceiroOk && !!formV2.tabela_preco_id && !!formV2.tabela_preco_item_id && !!formV2.certificado_id
     const emissaoOk = produtoOk && !!formV2.tipo_emissao
     const pontoOk = emissaoOk && !!formV2.ponto_atendimento_id
+    const vencimentoOk = paymentFlow === 'boleto' ? !!formV2.data_vencimento : true
+    const parcelasOk = paymentFlow === 'cartao' ? Number(formV2.payment_installments || 0) >= 1 : true
     const pagamentoOk = pontoOk
       && !!formV2.forma_pagamento
-      && !!formV2.data_vencimento
+      && vencimentoOk
+      && parcelasOk
       && formV2.valor_venda > 0
       && descontoDentroDoLimite
       && voucherAplicadoValido
@@ -1136,11 +1151,13 @@ export default function Comercial() {
     formV2.data_vencimento,
     formV2.forma_pagamento,
     formV2.ponto_atendimento_id,
+    formV2.payment_installments,
     formV2.tabela_preco_id,
     formV2.tabela_preco_item_id,
     formV2.tipo_emissao,
     formV2.tipo_venda,
     formV2.valor_venda,
+    paymentFlow,
     voucherAplicadoValido,
   ])
   const vendaSteps = useMemo(() => {
@@ -1169,10 +1186,14 @@ export default function Comercial() {
       parceiro: 'Selecione ou dispense o parceiro vendedor antes de continuar. Esta etapa é obrigatória para definir as regras de comissão.',
       produto: 'Escolha a tabela e selecione na ordem: produto, emissão e validade.',
       emissao: 'Com o produto confirmado, defina a modalidade de validação e o ponto de atendimento.',
-      pagamento: 'Preencha valor final, forma de pagamento, vencimento e cupom/voucher. Confira o limite de desconto da tabela.',
+      pagamento: paymentFlow === 'boleto'
+        ? 'Preencha valor final, forma de pagamento, vencimento e cupom/voucher. Confira o limite de desconto da tabela.'
+        : paymentFlow === 'cartao'
+          ? 'Preencha valor final, forma de pagamento, parcelas e cupom/voucher. Confira o limite de desconto da tabela.'
+          : 'Preencha valor final, forma de pagamento e cupom/voucher. Confira o limite de desconto da tabela.',
     }
     return { step: current.key, mensagem: msgs[current.key] ?? 'Preencha os campos obrigatórios para avançar.' }
-  }, [vendaStepStatus, vendaSteps])
+  }, [paymentFlow, vendaStepStatus, vendaSteps])
 
   // ── wizard step tracking ──────────────────────────────────────
   const wizardStepDone = useCallback((stepKey: string): boolean => {
@@ -1914,7 +1935,8 @@ export default function Comercial() {
       return
     }
     if (!formV2.forma_pagamento) { showMsg('Selecione a forma de pagamento.'); return }
-    if (!formV2.data_vencimento) { showMsg('Selecione o vencimento da forma de pagamento.'); return }
+    if (paymentFlow === 'boleto' && !formV2.data_vencimento) { showMsg('Selecione o vencimento do boleto.'); return }
+    if (paymentFlow === 'cartao' && Number(formV2.payment_installments || 0) < 1) { showMsg('Selecione a quantidade de parcelas do cartão.'); return }
     if (!currentUserId) { showMsg('Usuário não autenticado.'); return }
     setSalvandoV(true)
 
@@ -1942,7 +1964,7 @@ export default function Comercial() {
         valor_custo:             null,
         pago:                    false,
         data_pagamento:          null,
-        data_vencimento:         formV2.data_vencimento || null,
+        data_vencimento:         paymentFlow === 'boleto' ? (formV2.data_vencimento || null) : null,
         contador_id:             formV2.contador_id || null,
         documento_faturamento:   cli?.cpf_cnpj ?? null,
         nome_faturamento:        cli?.nome ?? null,
@@ -1986,6 +2008,8 @@ export default function Comercial() {
           ponto_atendimento_id: pontoAtendimentoId,
           payment_method_id: pagamentoSelecionado.paymentMethod?.id ?? null,
           payment_method_label: pagamentoSelecionado.paymentMethod?.label ?? null,
+          payment_flow: paymentFlow,
+          payment_installments: paymentFlow === 'cartao' ? formV2.payment_installments : null,
           payment_runtime: paymentRuntime,
           ambiente_teste: paymentRuntime.modo_teste_geral,
         },
@@ -2038,7 +2062,7 @@ export default function Comercial() {
           produtoNome: cert?.tipo ?? vendaCriada.tipo_produto ?? 'Produto',
           valorVenda: formV2.valor_venda,
           formaPagamento: formV2.forma_pagamento,
-          vencimento: formV2.data_vencimento || null,
+          vencimento: paymentFlow === 'boleto' ? (formV2.data_vencimento || null) : null,
           telefone: cli?.telefone ?? vendaCriada.telefone_faturamento ?? null,
           email: cli?.email ?? vendaCriada.email_faturamento ?? null,
           paymentLink,
@@ -4758,7 +4782,7 @@ export default function Comercial() {
                           {formV2.cadastro_base_id && (
                             <button type="button" title="Limpar cliente"
                               onClick={() => {
-                                setFormV2(p => ({ ...p, cadastro_base_id: '', contador_id: null, tipo_emissao: '', ponto_atendimento_id: '', tabela_preco_id: '', tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '', forma_pagamento: '', data_vencimento: '' }))
+                                setFormV2(p => ({ ...p, cadastro_base_id: '', contador_id: null, tipo_emissao: '', ponto_atendimento_id: '', tabela_preco_id: '', tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '', forma_pagamento: '', data_vencimento: '', payment_installments: 1 }))
                                 setClienteSearch('')
                                 setClienteSelecionadoObj(null)
                                 setContadorSearch('')
@@ -5096,22 +5120,52 @@ export default function Comercial() {
                   )}
 
                   {/* STEP 5: Pagamento */}
-                  {currentFormStep === 5 && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                      <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-                        <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Pagamento e Desconto</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <NumberInput label="Valor Final (R$) *" value={formV2.valor_venda}
-                            onChange={v => setFormV2(p => ({ ...p, valor_venda: v }))} />
-                          <SelectInput label="Forma de Pagamento *" value={formV2.forma_pagamento}
-                            onChange={v => setFormV2(p => ({ ...p, forma_pagamento: v }))}
-                            options={[{ value: '', label: 'Selecione' }, ...formasPagamento.map(n => ({ value: n, label: n }))]} />
-                          <TextInput label="Vencimento *" type="date" value={formV2.data_vencimento}
-                            onChange={v => setFormV2(p => ({ ...p, data_vencimento: v }))} />
-                          <TextInput label="Cupom / Voucher" value={formV2.voucher_codigo}
-                            onChange={v => setFormV2(p => ({ ...p, voucher_codigo: v }))}
-                            placeholder={tabelaSelecionadaVenda?.codigo_voucher ? `Tabela aceita: ${tabelaSelecionadaVenda.codigo_voucher}` : 'Opcional'} />
-                        </div>
+                      {currentFormStep === 5 && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                          <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+                            <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Pagamento e Desconto</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <NumberInput label="Valor Final (R$) *" value={formV2.valor_venda}
+                                onChange={v => setFormV2(p => ({ ...p, valor_venda: v }))} />
+                              <SelectInput label="Forma de Pagamento *" value={formV2.forma_pagamento}
+                                onChange={v => setFormV2(p => {
+                                  const flow = classifyPaymentFlow(v)
+                                  return {
+                                    ...p,
+                                    forma_pagamento: v,
+                                    data_vencimento: flow === 'boleto' ? p.data_vencimento : '',
+                                    payment_installments: flow === 'cartao' ? (p.payment_installments || 1) : 1,
+                                  }
+                                })}
+                                options={[{ value: '', label: 'Selecione' }, ...formasPagamento.map(n => ({ value: n, label: n }))]} />
+                              {paymentFlow === 'boleto' ? (
+                                <TextInput label="Vencimento *" type="date" value={formV2.data_vencimento}
+                                  onChange={v => setFormV2(p => ({ ...p, data_vencimento: v }))} />
+                              ) : (
+                                <div className="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 px-3 py-2 text-xs text-gray-500 dark:text-gray-400 flex items-center">
+                                  {paymentFlow === 'cartao'
+                                    ? 'Cartão é à vista no cadastro interno; o cliente poderá parcelar no checkout até 12x.'
+                                    : 'Pix é à vista e não exige vencimento.'}
+                                </div>
+                              )}
+                              {paymentFlow === 'cartao' ? (
+                                <label className="flex flex-col gap-1">
+                                  <span className="text-xs text-gray-500">Parcelas do cartão *</span>
+                                  <select
+                                    value={formV2.payment_installments}
+                                    onChange={e => setFormV2(p => ({ ...p, payment_installments: Number(e.target.value) }))}
+                                    className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  >
+                                    {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
+                                      <option key={n} value={n}>{n}x</option>
+                                    ))}
+                                  </select>
+                                </label>
+                              ) : null}
+                              <TextInput label="Cupom / Voucher" value={formV2.voucher_codigo}
+                                onChange={v => setFormV2(p => ({ ...p, voucher_codigo: v }))}
+                                placeholder={tabelaSelecionadaVenda?.codigo_voucher ? `Tabela aceita: ${tabelaSelecionadaVenda.codigo_voucher}` : 'Opcional'} />
+                            </div>
                         <div className="mt-3">
                           <label className="flex flex-col gap-1">
                             <span className="text-xs text-gray-500">Observações</span>

@@ -233,7 +233,7 @@ export class AivenCheckoutRepository implements CheckoutRepository {
   async findCommercialSalePaymentData(vendaId: string, profileId: string) {
     const result = await this.db.query<{
       id: string; forma_pagamento_id: string; valor: number; descricao: string; nome: string; email: string
-      telefone: string; documento: string; cep: string; logradouro: string; numero: string; bairro: string; cidade: string; uf: string
+      telefone: string; documento: string; cep: string; logradouro: string; numero: string; bairro: string; cidade: string; uf: string; payment_installments: number | null
     }>(`
       select venda.id,
              venda.forma_pagamento_id,
@@ -248,7 +248,8 @@ export class AivenCheckoutRepository implements CheckoutRepository {
              coalesce(venda.numero, cliente.numero, '') as numero,
              coalesce(venda.bairro, cliente.bairro, '') as bairro,
              coalesce(venda.cidade, cliente.cidade, '') as cidade,
-             coalesce(venda.uf, cliente.uf, '') as uf
+             coalesce(venda.uf, cliente.uf, '') as uf,
+             nullif(venda.metadata->>'payment_installments', '')::int as payment_installments
       from vendas_certificados venda
       join profiles solicitante on solicitante.id = $2::uuid and solicitante.status = 'ativo'
       left join cadastros_base cliente on cliente.id = venda.cadastro_base_id

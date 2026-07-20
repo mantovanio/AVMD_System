@@ -125,6 +125,59 @@ test('cria preferencia do Mercado Pago e devolve link de pagamento', async () =>
   assert.equal(attached[0].gateway, 'mercado_pago')
 })
 
+test('cria link de cartão sem token e respeita parcelas', async () => {
+  const service = new CheckoutPaymentService({
+    async getCheckoutPaymentMethodConfig() {
+      return {
+        id: 'mp-card',
+        nome: 'Cartão crédito',
+        codigo: 'credito',
+        tipo: 'cartao',
+        gateway: 'mercado_pago',
+        ambiente: 'producao',
+        client_id: null,
+        secret_key: null,
+        webhook_url: 'https://api.certiid.mantovan.com.br/api/checkout/webhook/mercado-pago',
+        provider_base_url: 'https://api.mercadopago.com',
+        provider_api_token: 'APP_USR-token',
+        provider_metadata: {},
+        runtime: { modo_teste_geral: false, bloquear_integracoes_reais: false, aviso_checkout: '' },
+      }
+    },
+    async getPaymentChargeBySaleId() {
+      return null
+    },
+    async attachPaymentChargeToSale() {},
+    async applyPaymentWebhook() {},
+  } as never, undefined, async (url, init) => {
+    assert.match(String(url), /\/checkout\/preferences$/)
+    const body = JSON.parse(String(init?.body))
+    assert.equal(body.payment_methods.installments, 12)
+    assert.equal(body.payment_methods.excluded_payment_types.some((item: { id: string }) => item.id === 'ticket'), true)
+    assert.equal(body.payment_methods.excluded_payment_types.some((item: { id: string }) => item.id === 'bank_transfer'), true)
+    return new Response(JSON.stringify({ id: 'pref-card-1', init_point: 'https://mercadopago.com/pay/card-1' }), { status: 201 })
+  })
+
+  const result = await service.createChargeForSale({
+    vendaId: 'venda-card',
+    formaPagamentoId: 'mp-card',
+    valor: 300,
+    descricao: 'Certificado Cartão',
+    comprador: {
+      nome: 'Cliente Teste',
+      email: 'cliente@teste.com',
+      telefone: '11999999999',
+      documento: '12345678901',
+    },
+    fiscal: { cep: '01001000', logradouro: 'Praça da Sé', numero: '1', bairro: 'Sé', cidade: 'São Paulo', uf: 'SP' },
+    card: { installments: 12, token: '' as string, payment_method_id: '' as string, payment_type_id: 'credit_card', identification_type: 'CPF', identification_number: '12345678901' },
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.chargeUrl, 'https://mercadopago.com/pay/card-1')
+  assert.equal(result.details?.kind, 'card')
+})
+
 test('enfileira email e whatsapp ao gerar link de pagamento', async () => {
   const attached: Array<Record<string, unknown>> = []
   const created: Array<Record<string, unknown>> = []

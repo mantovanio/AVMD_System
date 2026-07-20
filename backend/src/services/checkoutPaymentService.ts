@@ -23,12 +23,12 @@ type ChargeRequestInput = {
     uf: string
   }
   card?: {
-    token: string
-    payment_method_id: string
-    payment_type_id: 'credit_card' | 'debit_card'
+    token?: string | null
+    payment_method_id?: string | null
+    payment_type_id?: 'credit_card' | 'debit_card' | null
     installments: number
-    identification_type: string
-    identification_number: string
+    identification_type?: string | null
+    identification_number?: string | null
   } | null
 }
 
@@ -76,6 +76,7 @@ export class CheckoutPaymentService {
       descricao: sale.descricao,
       comprador: { nome: sale.nome, email: sale.email, telefone: sale.telefone, documento: sale.documento },
       fiscal: { cep: sale.cep, logradouro: sale.logradouro, numero: sale.numero, bairro: sale.bairro, cidade: sale.cidade, uf: sale.uf },
+      ...(sale.payment_installments ? { card: { installments: sale.payment_installments } } : {}),
     })
   }
 
@@ -192,7 +193,8 @@ export class CheckoutPaymentService {
   private async createMercadoPagoCharge(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): Promise<ChargeResult> {
     const method = this.inferMercadoPagoMethod(config)
     if (method === 'pix') return this.createMercadoPagoPixPayment(config, input)
-    if (method === 'boleto' || method === 'card') return this.createMercadoPagoOrder(config, input, method)
+    if (method === 'boleto') return this.createMercadoPagoOrder(config, input, method)
+    if (method === 'card') return this.createMercadoPagoCardPreference(config, input)
 
     const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/checkout/preferences`
     const callbackUrl = this.resolveMercadoPagoCallbackUrl(config)
@@ -702,6 +704,79 @@ export class CheckoutPaymentService {
       'Se a intenção era produção, valide se o Access Token realmente é de produção e se a conta está habilitada para Pix.',
       payloadKeys.length > 0 ? `Chaves retornadas pela API: ${payloadKeys.join(', ')}.` : null,
     ].join(' ')
+  }
+
+  private async createMercadoPagoCardPreference(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): Promise<ChargeResult> {
+    const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/checkout/preferences`
+    const installments = Math.max(1, Math.min(12, Number(input.card?.installments || 1)))
+    const callbackUrl = this.resolveMercadoPagoCallbackUrl(config)
+    const document = input.comprador.documento.replace(/\D/g, '')
+    const phone = input.comprador.telefone.replace(/\D/g, '')
+    const body = {
+      items: [{
+        id: input.vendaId,
+        title: input.descricao,
+        description: input.descricao,
+        quantity: 1,
+        currency_id: 'BRL',
+        unit_price: Number(input.valor.toFixed(2)),
+      }],
+      payer: {
+        name: input.comprador.nome,
+        email: input.comprador.email,
+        phone: phone ? { area_code: phone.slice(0, 2), number: phone.slice(2) } : undefined,
+        identification: document ? { type: document.length === 14 ? 'CNPJ' : 'CPF', number: document } : undefined,
+      },
+      external_reference: input.vendaId,
+      notification_url: callbackUrl,
+      payment_methods: {
+        installments,
+        excluded_payment_types: [
+          { id: 'ticket' },
+          { id: 'bank_transfer' },
+        ],
+      },
+      metadata: {
+        venda_id: input.vendaId,
+        gateway: 'mercado_pago',
+        payment_flow: 'card',
+        installments,
+      },
+    }
+
+    const response = await this.fetchWithTimeout(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.provider_api_token}`,
+        'X-Idempotency-Key': `avmd-${input.vendaId}-card-${installments}`,
+      },
+      body: JSON.stringify(body),
+    })
+    const payload = await response.json().catch(() => ({})) as Record<string, unknown>
+    if (!response.ok) {
+      throw new Error(String(payload.message || payload.error || `Mercado Pago respondeu ${response.status}`))
+    }
+
+    return {
+      ok: true,
+      status: 'pending',
+      externalId: this.pickString(payload, ['id']),
+      chargeUrl: this.pickString(payload, config.ambiente === 'sandbox' ? ['sandbox_init_point', 'init_point'] : ['init_point']),
+      payload,
+      details: {
+        gateway: 'mercado_pago',
+        order_id: this.pickString(payload, ['id']),
+        payment_id: this.pickString(payload, ['id']),
+        kind: 'card',
+        ticket_url: this.pickString(payload, config.ambiente === 'sandbox' ? ['sandbox_init_point', 'init_point'] : ['init_point']),
+        qr_code: null,
+        qr_code_base64: null,
+        digitable_line: null,
+        barcode_content: null,
+        installments,
+      },
+    }
   }
 
   private describeMercadoPagoPixKeyError() {

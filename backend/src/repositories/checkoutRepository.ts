@@ -56,6 +56,7 @@ export type CommercialSalePaymentData = {
   bairro: string
   cidade: string
   uf: string
+  payment_installments?: number | null
 }
 
 export type CheckoutScheduleContextInput = {
