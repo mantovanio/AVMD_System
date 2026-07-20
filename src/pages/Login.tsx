@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Shield, Eye, EyeOff, ArrowLeft, CheckCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { DEFAULT_AGENCY_CONFIG, buildAuthBackground, fetchAgencyConfig } from '@/lib/agencyConfig'
+import { translatePasswordPolicyError, validateStrongPassword } from '@/lib/passwordPolicy'
 
 type View = 'login' | 'register' | 'forgot'
 
@@ -10,8 +11,9 @@ function translateError(msg: string): string {
   if (normalized.includes('invalid login credentials')) return 'Email ou senha incorretos.'
   if (msg.includes('Email not confirmed'))            return 'Sua conta ainda não está pronta para acesso. Tente entrar novamente em alguns instantes.'
   if (msg.includes('User already registered'))        return 'Este email já está cadastrado.'
-  if (msg.includes('Password should be at least') || msg.includes('Passwords must be 8 characters or more'))
-                                                      return 'A senha deve ter pelo menos 8 caracteres.'
+  if (msg.includes('Password should be at least') || msg.includes('Passwords must be 8 characters or more')
+    || msg.includes('password must contain') || msg.includes('password should contain') || msg.includes('password needs to contain'))
+                                                      return translatePasswordPolicyError(msg)
   if (msg.includes('signup is disabled'))             return 'Novos cadastros estão desabilitados. Contate o administrador.'
   if (msg.includes('rate limit'))                     return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
   if (msg.includes('Failed to fetch'))                return 'Falha de conexão com o servidor de autenticação. Atualize a página e tente novamente.'
@@ -29,7 +31,7 @@ function translateError(msg: string): string {
   if (normalized.includes('account does not exist') || normalized.includes('no account')) return 'Conta não encontrada. Verifique o email ou crie uma conta.'
   if (normalized.includes('too many requests') || normalized.includes('too many')) return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
   if (normalized.includes('network')) return 'Erro de conexão. Verifique sua internet e tente novamente.'
-  return msg
+  return translatePasswordPolicyError(msg)
 }
 
 function InputField({
@@ -254,7 +256,8 @@ export default function Login() {
     e.preventDefault()
     setRegError(null)
     if (regPass !== regConfirm) { setRegError('As senhas não coincidem.'); return }
-    if (regPass.length < 8) { setRegError('A senha deve ter pelo menos 8 caracteres.'); return }
+    const passwordError = validateStrongPassword(regPass)
+    if (passwordError) { setRegError(passwordError); return }
     if (!regConsent) { setRegError('Você precisa aceitar a Política de Privacidade para criar uma conta.'); return }
     setRegLoading(true)
     const { error } = await signUp({ nome: regNome, email: regEmail, password: regPass })
@@ -298,7 +301,8 @@ export default function Login() {
     e.preventDefault()
     setForgotResetError(null)
     if (forgotNewPass !== forgotNewConfirm) { setForgotResetError('As senhas não coincidem.'); return }
-    if (forgotNewPass.length < 8) { setForgotResetError('A senha deve ter pelo menos 8 caracteres.'); return }
+    const forgotPasswordError = validateStrongPassword(forgotNewPass)
+    if (forgotPasswordError) { setForgotResetError(forgotPasswordError); return }
     setForgotResetLoading(true)
     const { error } = await confirmPasswordReset(forgotCode.trim(), forgotNewPass)
     if (error) setForgotResetError(translateError(error))

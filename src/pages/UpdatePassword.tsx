@@ -2,15 +2,7 @@ import { useEffect, useState } from 'react'
 import { CheckCircle, Eye, EyeOff, KeyRound, Loader2, Shield } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { DEFAULT_AGENCY_CONFIG, buildAuthBackground, fetchAgencyConfig } from '@/lib/agencyConfig'
-
-function translatePasswordError(msg: string) {
-  if (msg.includes('Password should be at least') || msg.includes('Passwords must be 8 characters or more')) {
-    return 'A senha deve ter pelo menos 8 caracteres.'
-  }
-  if (msg.includes('New password should be different')) return 'A nova senha precisa ser diferente da senha atual.'
-  if (msg.includes('Auth session missing')) return 'Sessão de recuperação expirada. Solicite um novo link.'
-  return msg
-}
+import { translatePasswordPolicyError, validateStrongPassword } from '@/lib/passwordPolicy'
 
 function PasswordInput({
   label,
@@ -78,8 +70,9 @@ export default function UpdatePassword() {
     e.preventDefault()
     setError(null)
 
-    if (password.length < 8) {
-      setError('A senha deve ter pelo menos 8 caracteres.')
+    const passwordError = validateStrongPassword(password)
+    if (passwordError) {
+      setError(passwordError)
       return
     }
 
@@ -93,7 +86,7 @@ export default function UpdatePassword() {
     setLoading(false)
 
     if (error) {
-      setError(translatePasswordError(error))
+      setError(translatePasswordPolicyError(error))
       return
     }
 
