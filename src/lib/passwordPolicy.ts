@@ -27,10 +27,12 @@ export function translatePasswordPolicyError(message: string) {
   if (normalized.includes('new password should be different')) {
     return 'A nova senha precisa ser diferente da senha atual.'
   }
-  if (normalized.includes('data doesn\'t match user requirements set for this instance')) {
-    return 'A senha informada não atende aos requisitos de segurança desta conta.'
-  }
-  if (normalized.includes('doesn\'t match user requirements set for this instance')) {
+  if (
+    normalized.includes('data doesn\'t match user requirements set for this instance')
+    || normalized.includes('doesn\'t match user requirements set for this instance')
+    || normalized.includes('user requirements set for this instance')
+    || normalized.includes('requirements set for this instance')
+  ) {
     return 'A senha informada não atende aos requisitos de segurança desta conta.'
   }
   if (normalized.includes('password should be at least') || normalized.includes('passwords must be 8 characters or more')) {
