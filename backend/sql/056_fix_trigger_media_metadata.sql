@@ -34,6 +34,7 @@ DECLARE
   v_sender_type        TEXT;
   v_sender_name        TEXT;
   v_has_content        BOOLEAN;
+  v_is_from_me         BOOLEAN;
   v_mime_type          TEXT;
   v_file_name          TEXT;
   v_media_url          TEXT;
