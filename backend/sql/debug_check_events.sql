@@ -1,5 +1,1 @@
-SELECT id, event_type, payload->>'mimeType', payload->>'mediaUrl', payload->>'content'
-FROM communication_events
-WHERE source='evolution'
-ORDER BY created_at DESC
-LIMIT 5;
+SELECT payload::text FROM communication_events WHERE id = 'd50289c1-3dce-44b0-8a32-4cdfd0f9f86a';
