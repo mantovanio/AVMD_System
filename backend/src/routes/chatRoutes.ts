@@ -106,6 +106,15 @@ function inferMimeTypeFromFile(fileName: string, fallback = 'application/octet-s
   return fallback
 }
 
+function resolveDownloadMimeType(upstreamMimeType: string | null | undefined, fileName: string, fallback = 'application/octet-stream') {
+  const normalized = String(upstreamMimeType ?? '').trim().toLowerCase()
+  const inferred = inferMimeTypeFromFile(fileName, fallback)
+  if (!normalized || normalized === 'application/octet-stream' || normalized === 'binary/octet-stream') {
+    return inferred
+  }
+  return normalized
+}
+
 function normalizeBase64Payload(value: string) {
   const trimmed = value.trim()
   const dataUrlMatch = trimmed.match(/^data:([^;]+);base64,(.+)$/i)
@@ -1662,7 +1671,7 @@ export async function handleChatRoutes(
             lastError = `HTTP ${mediaRes.status}`
             continue
           }
-          const contentType = mediaRes.headers.get('content-type') || mimeFromPayload || inferMimeTypeFromFile(fileName)
+          const contentType = resolveDownloadMimeType(mediaRes.headers.get('content-type') || mimeFromPayload, fileName)
           const contentLength = mediaRes.headers.get('content-length')
           res.writeHead(200, {
             'Content-Type': contentType,
@@ -1722,7 +1731,7 @@ export async function handleChatRoutes(
           continue
         }
 
-        const contentType = mediaRes.headers.get('content-type') || inferMimeTypeFromFile(requestedFileName)
+        const contentType = resolveDownloadMimeType(mediaRes.headers.get('content-type'), requestedFileName)
         const contentLength = mediaRes.headers.get('content-length')
 
         res.writeHead(200, {

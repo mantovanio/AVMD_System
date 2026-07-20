@@ -3458,7 +3458,7 @@ function MessageRow({
         : normalizedSenderName || fallbackHumanName || conversation?.agente_atual || 'Humano'
     const downloadFileName = inferMediaFileName(message.mime_type, message.file_name, message.mensagem)
     const resolvedMediaUrl = resolveChatMediaUrl(message.media_url, conversation?.whatsapp_instance, downloadFileName)
-    const mediaKind = inferMediaKind(message.mime_type, resolvedMediaUrl, message.file_name, message.mensagem)
+    const mediaKind = inferMediaKind(message.mime_type, resolvedMediaUrl, downloadFileName || message.file_name, message.mensagem)
     const isImage = mediaKind === 'image'
     const isAudio = mediaKind === 'audio'
     const isVideo = mediaKind === 'video'
@@ -3494,9 +3494,14 @@ function MessageRow({
             <span>{detailLabel}</span>
           </div>
           {isImage && resolvedMediaUrl ? (
-            <button type="button" onClick={() => setImagePreviewOpen(true)} className="block w-full overflow-hidden rounded-xl text-left">
-              <img src={resolvedMediaUrl} alt={mediaLabel} className="max-w-full rounded-xl" />
-            </button>
+            <div className="space-y-2">
+              <button type="button" onClick={() => setImagePreviewOpen(true)} className="block w-full overflow-hidden rounded-xl text-left">
+                <img src={resolvedMediaUrl} alt={mediaLabel} className="max-h-[360px] max-w-full rounded-xl object-contain" loading="lazy" />
+              </button>
+              <a href={resolvedMediaUrl} target="_blank" rel="noreferrer" download={downloadFileName} className="text-xs text-sky-600 hover:underline">
+                Baixar imagem
+              </a>
+            </div>
           ) : isAudio && resolvedMediaUrl ? (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-violet-700">Audio anexado</p>
