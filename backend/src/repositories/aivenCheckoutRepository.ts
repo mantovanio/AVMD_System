@@ -676,6 +676,46 @@ export class AivenCheckoutRepository implements CheckoutRepository {
     )
   }
 
+  async getPaymentChargeBySaleId(vendaId: string): Promise<{
+    gateway: string | null
+    externalId: string | null
+    chargeUrl: string | null
+    status: string | null
+    payload: Record<string, unknown> | null
+    details: Record<string, unknown> | null
+  } | null> {
+    const result = await this.db.query<{
+      gateway: string | null
+      external_id: string | null
+      charge_url: string | null
+      status: string | null
+      payload: Record<string, unknown> | null
+      details: Record<string, unknown> | null
+    }>(
+      `select
+         metadata->'payment_charge'->>'gateway' as gateway,
+         metadata->'payment_charge'->>'external_id' as external_id,
+         metadata->'payment_charge'->>'charge_url' as charge_url,
+         metadata->'payment_charge'->>'status' as status,
+         metadata->'payment_charge'->'payload' as payload,
+         metadata->'payment_charge'->'details' as details
+       from vendas_certificados
+       where id = $1::uuid
+       limit 1`,
+      [vendaId],
+    )
+    const row = result.rows[0]
+    if (!row) return null
+    return {
+      gateway: row.gateway ?? null,
+      externalId: row.external_id ?? null,
+      chargeUrl: row.charge_url ?? null,
+      status: row.status ?? null,
+      payload: row.payload ?? null,
+      details: row.details ?? null,
+    }
+  }
+
   async applyPaymentWebhook(input: {
     vendaId?: string | null
     externalId?: string | null

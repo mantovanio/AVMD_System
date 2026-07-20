@@ -25,9 +25,11 @@ function normalizePhoneBR(value: string): string {
 }
 
 const MAX_FOLLOWUP_ROUNDS = 3
+const WHATSAPP_SPACING_MS = 12_000
 
 export class OutboxProcessor {
   private intervalId: ReturnType<typeof setInterval> | null = null
+  private isProcessing = false
 
   constructor(
     private readonly outboxRepo: CommunicationOutboxRepository,
@@ -58,40 +60,50 @@ export class OutboxProcessor {
   }
 
   async processPending(limit = 10): Promise<OutboxProcessorResult> {
-    const items = await this.outboxRepo.listPending(limit)
-    if (items.length === 0) return { processed: 0, sent: 0, failed: 0 }
+    if (this.isProcessing) return { processed: 0, sent: 0, failed: 0 }
+    this.isProcessing = true
+    try {
+      const items = await this.outboxRepo.listPending(limit)
+      if (items.length === 0) return { processed: 0, sent: 0, failed: 0 }
 
-    let sent = 0
-    let failed = 0
+      let sent = 0
+      let failed = 0
 
-    for (const item of items) {
-      try {
-        if (item.channel === 'whatsapp') {
-          await this.sendWhatsApp(item)
-        } else if (item.channel === 'email') {
-          await this.sendEmail(item)
-        } else {
+      for (let index = 0; index < items.length; index += 1) {
+        const item = items[index]
+        try {
+          if (item.channel === 'whatsapp') {
+            await this.sendWhatsApp(item)
+            if (items.slice(index + 1).some(next => next.channel === 'whatsapp')) {
+              await this.sleep(WHATSAPP_SPACING_MS)
+            }
+          } else if (item.channel === 'email') {
+            await this.sendEmail(item)
+          } else {
+            await this.outboxRepo.markProcessed({
+              id: item.id,
+              status: 'failed',
+              error: `Canal desconhecido: ${item.channel}`,
+            })
+            failed++
+            continue
+          }
+          sent++
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Erro desconhecido'
           await this.outboxRepo.markProcessed({
             id: item.id,
             status: 'failed',
-            error: `Canal desconhecido: ${item.channel}`,
+            error: message,
           })
           failed++
-          continue
         }
-        sent++
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Erro desconhecido'
-        await this.outboxRepo.markProcessed({
-          id: item.id,
-          status: 'failed',
-          error: message,
-        })
-        failed++
       }
-    }
 
-    return { processed: items.length, sent, failed }
+      return { processed: items.length, sent, failed }
+    } finally {
+      this.isProcessing = false
+    }
   }
 
   private async sendWhatsApp(item: {
@@ -232,5 +244,9 @@ export class OutboxProcessor {
       status: ok ? 'sent' : 'failed',
       error: ok ? null : `Email n8n retornou HTTP ${response.status}`,
     })
+  }
+
+  private async sleep(ms: number) {
+    await new Promise(resolve => setTimeout(resolve, ms))
   }
 }

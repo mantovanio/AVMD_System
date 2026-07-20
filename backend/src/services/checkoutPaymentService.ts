@@ -47,7 +47,7 @@ type PaymentFlowKind = 'pix' | 'boleto' | 'card' | 'link'
 
 export class CheckoutPaymentService {
   constructor(
-    private readonly repository: Pick<CheckoutRepository, 'getCheckoutPaymentMethodConfig' | 'getCheckoutPaymentMethodConfigByGateway' | 'findCommercialSalePaymentData' | 'attachPaymentChargeToSale' | 'applyPaymentWebhook'>,
+    private readonly repository: Pick<CheckoutRepository, 'getCheckoutPaymentMethodConfig' | 'getCheckoutPaymentMethodConfigByGateway' | 'findCommercialSalePaymentData' | 'attachPaymentChargeToSale' | 'getPaymentChargeBySaleId' | 'applyPaymentWebhook'>,
     private readonly outboxRepository?: CommunicationOutboxRepository,
     private readonly fetchImpl: FetchLike = fetch,
   ) {}
@@ -96,6 +96,21 @@ export class CheckoutPaymentService {
     const config = await this.repository.getCheckoutPaymentMethodConfig(input.formaPagamentoId)
     if (!config) {
       return { ok: false, status: 'error', error: 'Forma de pagamento não encontrada.' }
+    }
+
+    const existingCharge = await this.repository.getPaymentChargeBySaleId?.(input.vendaId)
+    const existingGateway = String(existingCharge?.gateway ?? '').trim()
+    const existingStatus = String(existingCharge?.status ?? '').trim().toLowerCase()
+    const sameGateway = existingGateway && existingGateway === String(config.gateway ?? '')
+    if (sameGateway && ['pending', 'paid', 'action_required', 'processing', 'in_process'].includes(existingStatus)) {
+      return {
+        ok: true,
+        status: existingStatus === 'paid' ? 'paid' : 'pending',
+        externalId: existingCharge?.externalId ?? null,
+        chargeUrl: existingCharge?.chargeUrl ?? this.pickPaymentLink(existingCharge?.details),
+        payload: existingCharge?.payload ?? null,
+        details: existingCharge?.details ?? null,
+      }
     }
 
     const result = await this.createCharge(config, input)
@@ -176,9 +191,8 @@ export class CheckoutPaymentService {
 
   private async createMercadoPagoCharge(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): Promise<ChargeResult> {
     const method = this.inferMercadoPagoMethod(config)
-    if (method === 'pix' || method === 'boleto' || method === 'card') {
-      return this.createMercadoPagoOrder(config, input, method)
-    }
+    if (method === 'pix') return this.createMercadoPagoPixPayment(config, input)
+    if (method === 'boleto' || method === 'card') return this.createMercadoPagoOrder(config, input, method)
 
     const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/checkout/preferences`
     const callbackUrl = this.resolveMercadoPagoCallbackUrl(config)
@@ -580,18 +594,107 @@ export class CheckoutPaymentService {
           })
           .filter(Boolean)
       : []
+    const rawDetail = !message && causes.length === 0
+      ? this.pickString(payload, ['error', 'status', 'detail', 'reason'])
+      : null
     const detail = [message, ...causes].filter(Boolean).join(' | ')
     return detail
       ? `Mercado Pago recusou a cobrança (${status}): ${detail}`
-      : `Mercado Pago recusou a cobrança (${status}).`
+      : rawDetail
+        ? `Mercado Pago recusou a cobrança (${status}): ${rawDetail}`
+        : `Mercado Pago recusou a cobrança (${status}).`
+  }
+
+  private async createMercadoPagoPixPayment(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): Promise<ChargeResult> {
+    const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/v1/payments`
+    const amount = Number(input.valor.toFixed(2))
+    const nameParts = input.comprador.nome.trim().split(/\s+/)
+    const firstName = nameParts.shift() || input.comprador.nome
+    const lastName = nameParts.join(' ') || firstName
+    const document = input.comprador.documento.replace(/\D/g, '')
+    const payer: Record<string, unknown> = {
+      email: config.ambiente === 'sandbox'
+        ? 'test_user_br@testuser.com'
+        : input.comprador.email,
+      first_name: config.ambiente === 'sandbox' ? 'APRO' : firstName,
+      last_name: config.ambiente === 'sandbox' ? 'TESTE' : lastName,
+      identification: {
+        type: input.card?.identification_type || (document.length === 14 ? 'CNPJ' : 'CPF'),
+        number: input.card?.identification_number || document,
+      },
+      address: {
+        zip_code: input.fiscal.cep.replace(/\D/g, ''),
+        street_name: input.fiscal.logradouro,
+        street_number: input.fiscal.numero || 'S/N',
+        neighborhood: input.fiscal.bairro,
+        city: input.fiscal.cidade,
+        federal_unit: input.fiscal.uf,
+      },
+    }
+    const body = {
+      transaction_amount: amount,
+      description: input.descricao,
+      payment_method_id: 'pix',
+      external_reference: input.vendaId,
+      payer,
+    }
+    const response = await this.fetchWithTimeout(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.provider_api_token}`,
+        'X-Idempotency-Key': `avmd-${input.vendaId}-pix`,
+      },
+      body: JSON.stringify(body),
+    })
+    const payload = await response.json().catch(() => ({})) as Record<string, unknown>
+    if (!response.ok) {
+      if (response.status === 402) {
+        throw new Error(this.describeMercadoPagoPixHint(payload))
+      }
+      throw new Error(this.describeMercadoPagoError(payload, response.status))
+    }
+
+    const pointOfInteraction = this.asObject(payload.point_of_interaction)
+    const transactionData = this.asObject(pointOfInteraction.application_data)
+    const transactionDetails = this.asObject(payload.transaction_details)
+    const paymentMethodResponse = this.asObject(pointOfInteraction.transaction_data || payload.transaction_data)
+    const qrCode = this.pickString(paymentMethodResponse, ['qr_code'])
+    const qrCodeBase64 = this.pickString(paymentMethodResponse, ['qr_code_base64'])
+    const ticketUrl = this.pickString(paymentMethodResponse, ['ticket_url'])
+
+    return {
+      ok: true,
+      status: this.normalizeChargeStatus(payload),
+      externalId: this.pickString(payload, ['id']),
+      chargeUrl: ticketUrl,
+      payload,
+      details: {
+        gateway: 'mercado_pago',
+        order_id: this.pickString(payload, ['id']),
+        payment_id: this.pickString(payload, ['id']),
+        kind: 'pix',
+        ticket_url: ticketUrl,
+        qr_code: qrCode,
+        qr_code_base64: qrCodeBase64,
+        digitable_line: null,
+        barcode_content: null,
+        expires_at: this.pickString(payload, ['date_of_expiration']),
+        transaction_status: this.pickString(payload, ['status']),
+        transaction_status_detail: this.pickString(payload, ['status_detail']),
+        transaction_amount: this.pickString(transactionDetails, ['total_paid_amount']) ?? String(amount),
+      },
+    }
   }
 
   private describeMercadoPagoPixHint(payload: Record<string, unknown>) {
     const detail = this.describeMercadoPagoError(payload, 402)
+    const payloadKeys = Object.keys(payload).slice(0, 8)
     return [
       detail,
       'Se a intenção era teste, use as credenciais de teste do Mercado Pago com payer.first_name = APRO.',
       'Se a intenção era produção, valide se o Access Token realmente é de produção e se a conta está habilitada para Pix.',
+      payloadKeys.length > 0 ? `Chaves retornadas pela API: ${payloadKeys.join(', ')}.` : null,
     ].join(' ')
   }
 

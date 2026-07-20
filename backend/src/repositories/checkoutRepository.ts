@@ -114,6 +114,14 @@ export interface CheckoutRepository {
     payload?: Record<string, unknown> | null
     details?: Record<string, unknown> | null
   }): Promise<void>
+  getPaymentChargeBySaleId(vendaId: string): Promise<{
+    gateway: string | null
+    externalId: string | null
+    chargeUrl: string | null
+    status: string | null
+    payload: Record<string, unknown> | null
+    details: Record<string, unknown> | null
+  } | null>
   markCheckoutFlowState(input: {
     vendaId: string
     stage: string

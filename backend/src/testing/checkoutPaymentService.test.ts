@@ -30,6 +30,9 @@ test('gera cobranca mock quando integracoes reais estao bloqueadas', async () =>
     async attachPaymentChargeToSale(input: unknown) {
       attached.push(input as Record<string, unknown>)
     },
+    async getPaymentChargeBySaleId() {
+      return null
+    },
     async applyPaymentWebhook() {},
   } as never)
 
@@ -58,6 +61,9 @@ test('normaliza webhook pago e encaminha update para repositorio', async () => {
   const applied: Array<Record<string, unknown>> = []
   const service = new CheckoutPaymentService({
     async getCheckoutPaymentMethodConfig() {
+      return null
+    },
+    async getPaymentChargeBySaleId() {
       return null
     },
     async attachPaymentChargeToSale() {},
@@ -96,6 +102,9 @@ test('cria preferencia do Mercado Pago e devolve link de pagamento', async () =>
       }
     },
     async attachPaymentChargeToSale(input: unknown) { attached.push(input as Record<string, unknown>) },
+    async getPaymentChargeBySaleId() {
+      return null
+    },
     async applyPaymentWebhook() {},
   } as never, undefined, async (_url, init) => {
     const body = JSON.parse(String(init?.body))
@@ -130,6 +139,9 @@ test('enfileira email e whatsapp ao gerar link de pagamento', async () => {
       }
     },
     async attachPaymentChargeToSale(input: unknown) { attached.push(input as Record<string, unknown>) },
+    async getPaymentChargeBySaleId() {
+      return null
+    },
     async applyPaymentWebhook() {},
   } as never, {
     async create(input: unknown) {
@@ -168,6 +180,9 @@ test('consulta pagamento do Mercado Pago antes de confirmar webhook', async () =
         runtime: { modo_teste_geral: false, bloquear_integracoes_reais: false, aviso_checkout: '' },
       }
     },
+    async getPaymentChargeBySaleId() {
+      return null
+    },
     async attachPaymentChargeToSale() {},
     async applyPaymentWebhook(input: unknown) { applied.push(input as Record<string, unknown>) },
   } as never, undefined, async url => {
@@ -190,16 +205,28 @@ test('cria order Pix e retorna QR Code para o checkout', async () => {
         provider_metadata: {}, runtime: { modo_teste_geral: true, bloquear_integracoes_reais: false, aviso_checkout: '' },
       }
     },
+    async getPaymentChargeBySaleId() {
+      return null
+    },
     async attachPaymentChargeToSale() {},
     async applyPaymentWebhook() {},
   } as never, undefined, async (url, init) => {
-    assert.match(String(url), /\/v1\/orders$/)
+    assert.match(String(url), /\/v1\/payments$/)
     const body = JSON.parse(String(init?.body))
-    assert.equal(body.processing_mode, 'automatic')
-    assert.equal(body.transactions.payments[0].payment_method.id, 'pix')
+    assert.equal(body.transaction_amount, 50)
+    assert.equal(body.payment_method_id, 'pix')
+    assert.equal(body.payer.first_name, 'APRO')
     return new Response(JSON.stringify({
-      id: 'ORD-PIX-1', status: 'action_required', status_detail: 'waiting_transfer',
-      transactions: { payments: [{ id: 'PAY-PIX-1', status: 'action_required', payment_method: { id: 'pix', type: 'bank_transfer', qr_code: 'copia-cola', qr_code_base64: 'base64', ticket_url: 'https://mp/pix' } }] },
+      id: 'PAY-PIX-1',
+      status: 'pending',
+      status_detail: 'pending_waiting_transfer',
+      point_of_interaction: {
+        transaction_data: {
+          qr_code: 'copia-cola',
+          qr_code_base64: 'base64',
+          ticket_url: 'https://mp/pix',
+        },
+      },
     }), { status: 201 })
   })
   const result = await service.createChargeForSale({
@@ -208,7 +235,7 @@ test('cria order Pix e retorna QR Code para o checkout', async () => {
     fiscal: { cep: '01001000', logradouro: 'Praça da Sé', numero: '1', bairro: 'Sé', cidade: 'São Paulo', uf: 'SP' },
   })
   assert.equal(result.status, 'pending')
-  assert.equal(result.externalId, 'ORD-PIX-1')
+  assert.equal(result.externalId, 'PAY-PIX-1')
   assert.equal(result.details?.qr_code, 'copia-cola')
 })
 
@@ -230,6 +257,9 @@ test('infere boleto mesmo quando o cadastro da forma de pagamento usa nome descr
         provider_metadata: {},
         runtime: { modo_teste_geral: true, bloquear_integracoes_reais: false, aviso_checkout: '' },
       }
+    },
+    async getPaymentChargeBySaleId() {
+      return null
     },
     async attachPaymentChargeToSale() {},
     async applyPaymentWebhook() {},
@@ -289,6 +319,9 @@ test('valida HMAC e consulta order antes de confirmar pagamento', async () => {
         provider_metadata: {}, webhook_secret: secret,
         runtime: { modo_teste_geral: true, bloquear_integracoes_reais: false, aviso_checkout: '' },
       }
+    },
+    async getPaymentChargeBySaleId() {
+      return null
     },
     async attachPaymentChargeToSale() {},
     async applyPaymentWebhook(input: unknown) { applied.push(input as Record<string, unknown>) },

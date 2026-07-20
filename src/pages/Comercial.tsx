@@ -272,6 +272,18 @@ type NfseOverrideModal = {
   lote: boolean
 } | null
 
+type CobrancaModal = {
+  vendaId: string
+  clienteNome: string
+  formaPagamento: string
+  paymentKind: string | null
+  chargeUrl: string | null
+  qrCodeBase64: string | null
+  qrCode: string | null
+  digitableLine: string | null
+  message: string
+} | null
+
 type PaymentMethodId = 'safe2pay' | 'mercado_pago' | 'itau' | 'inter' | 'c6'
 type PaymentMethodConfig = {
   id: PaymentMethodId
@@ -673,6 +685,8 @@ export default function Comercial() {
   const [editForm, setEditForm] = useState<UpdateVendaInput & { tipo_produto_label?: string }>({ id: '' })
   const [editSaving, setEditSaving] = useState(false)
   const [updatingPaymentVendaId, setUpdatingPaymentVendaId] = useState<string | null>(null)
+  const [reenviandoCobrancaVendaId, setReenviandoCobrancaVendaId] = useState<string | null>(null)
+  const [cobrancaModal, setCobrancaModal] = useState<CobrancaModal>(null)
 
   // ── agenda state ─────────────────────────────────────────────
   const [agenda, setAgenda]             = useState<AgendaItem[]>([])
@@ -1968,9 +1982,20 @@ export default function Comercial() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ venda_id: vendaCriada.id, profile_id: profile.id }),
           })
-          const charge = await chargeResponse.json() as { ok?: boolean; chargeUrl?: string | null; error?: string }
+          const charge = await chargeResponse.json() as {
+            ok?: boolean
+            chargeUrl?: string | null
+            error?: string
+            details?: {
+              kind?: string | null
+              ticket_url?: string | null
+              qr_code_base64?: string | null
+              qr_code?: string | null
+              digitable_line?: string | null
+            } | null
+          }
           if (!chargeResponse.ok || !charge.ok) throw new Error(charge.error ?? 'Falha ao gerar link de pagamento.')
-          paymentLink = charge.chargeUrl ?? null
+          paymentLink = charge.details?.ticket_url ?? charge.chargeUrl ?? null
         } catch (error) {
           paymentLinkError = error instanceof Error ? error.message : 'Falha ao gerar link de pagamento.'
         }
@@ -2065,9 +2090,21 @@ export default function Comercial() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ venda_id: venda.id, profile_id: profile.id }),
       })
-      const charge = await chargeResponse.json() as { ok?: boolean; chargeUrl?: string | null; error?: string }
+      const charge = await chargeResponse.json() as {
+        ok?: boolean
+        chargeUrl?: string | null
+        error?: string
+        details?: {
+          kind?: string | null
+          ticket_url?: string | null
+          qr_code_base64?: string | null
+          qr_code?: string | null
+          digitable_line?: string | null
+        } | null
+      }
       if (!chargeResponse.ok || !charge.ok) throw new Error(charge.error ?? 'Forma alterada, mas a nova cobrança não foi gerada.')
       const paymentName = pagamentosDoGatewayAtual.find(item => item.id === formaPagamentoId)?.nome ?? 'Pagamento'
+      const paymentLink = charge.details?.ticket_url ?? charge.chargeUrl ?? null
       await dispararComunicacaoAutomaticaVenda({
         vendaId: venda.id,
         clienteNome: (venda.cadastros_base as { nome?: string } | null)?.nome ?? venda.nome_faturamento ?? null,
@@ -2077,7 +2114,18 @@ export default function Comercial() {
         vencimento: venda.data_vencimento ?? null,
         telefone: venda.telefone_faturamento ?? null,
         email: venda.email_faturamento ?? null,
-        paymentLink: charge.chargeUrl ?? null,
+        paymentLink,
+      })
+      setCobrancaModal({
+        vendaId: venda.id,
+        clienteNome: (venda.cadastros_base as { nome?: string } | null)?.nome ?? venda.nome_faturamento ?? 'Cliente',
+        formaPagamento: paymentName,
+        paymentKind: charge.details?.kind ?? null,
+        chargeUrl: paymentLink,
+        qrCodeBase64: charge.details?.qr_code_base64 ?? null,
+        qrCode: charge.details?.qr_code ?? null,
+        digitableLine: charge.details?.digitable_line ?? null,
+        message: 'A forma de pagamento foi alterada e a cobrança foi gerada novamente. Use o link abaixo para reenviar ao cliente.',
       })
       showMsg('Forma alterada, nova cobrança gerada e link enviado ao cliente.', 'ok')
       await fetchVendasV2()
@@ -2085,6 +2133,97 @@ export default function Comercial() {
       showMsg(error instanceof Error ? error.message : 'Erro ao alterar forma de pagamento.')
     } finally {
       setUpdatingPaymentVendaId(null)
+    }
+  }
+
+  function getPaymentChargeInfo(venda: VendaRow) {
+    const paymentCharge = (venda.metadata as {
+      payment_charge?: {
+        gateway?: string | null
+        charge_url?: string | null
+        status?: string | null
+        details?: {
+          kind?: string | null
+          ticket_url?: string | null
+          qr_code_base64?: string | null
+          qr_code?: string | null
+          digitable_line?: string | null
+        } | null
+      }
+    } | null)?.payment_charge ?? null
+
+    const chargeUrl = paymentCharge?.charge_url ?? paymentCharge?.details?.ticket_url ?? null
+    const paymentKind = paymentCharge?.details?.kind ?? null
+    const qrCodeBase64 = paymentCharge?.details?.qr_code_base64 ?? null
+    const qrCode = paymentCharge?.details?.qr_code ?? null
+    const digitableLine = paymentCharge?.details?.digitable_line ?? null
+    return { paymentCharge, chargeUrl, paymentKind, qrCodeBase64, qrCode, digitableLine }
+  }
+
+  async function reenviarCobrancaVenda(venda: VendaRow) {
+    if (!profile?.id || !venda.forma_pagamento_id) return
+    setReenviandoCobrancaVendaId(venda.id)
+    try {
+      const chargeResponse = await fetch(getApiUrl('/checkout/commercial-charge'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ venda_id: venda.id, profile_id: profile.id }),
+      })
+      const charge = await chargeResponse.json() as {
+        ok?: boolean
+        chargeUrl?: string | null
+        error?: string
+        details?: {
+          kind?: string | null
+          ticket_url?: string | null
+          qr_code_base64?: string | null
+          qr_code?: string | null
+          digitable_line?: string | null
+        } | null
+      }
+      if (!chargeResponse.ok || !charge.ok) {
+        throw new Error(charge.error ?? 'Não foi possível reabrir a cobrança.')
+      }
+
+      const paymentLink = charge.details?.ticket_url ?? charge.chargeUrl ?? null
+      if (!paymentLink) {
+        throw new Error('A cobrança foi localizada, mas o link de pagamento não veio na resposta.')
+      }
+
+      const paymentName = pagamentosDoGatewayAtual.find(item => item.id === venda.forma_pagamento_id)?.nome
+        ?? (venda.metadata as { forma_pagamento?: string } | null)?.forma_pagamento
+        ?? 'Pagamento'
+
+      await dispararComunicacaoAutomaticaVenda({
+        vendaId: venda.id,
+        clienteNome: (venda.cadastros_base as { nome?: string } | null)?.nome ?? venda.nome_faturamento ?? null,
+        produtoNome: venda.tipo_produto ?? 'Produto',
+        valorVenda: venda.valor_venda ?? 0,
+        formaPagamento: paymentName,
+        vencimento: venda.data_vencimento ?? null,
+        telefone: venda.telefone_faturamento ?? null,
+        email: venda.email_faturamento ?? null,
+        paymentLink,
+      })
+
+      setCobrancaModal({
+        vendaId: venda.id,
+        clienteNome: (venda.cadastros_base as { nome?: string } | null)?.nome ?? venda.nome_faturamento ?? 'Cliente',
+        formaPagamento: paymentName,
+        paymentKind: charge.details?.kind ?? null,
+        chargeUrl: paymentLink,
+        qrCodeBase64: charge.details?.qr_code_base64 ?? null,
+        qrCode: charge.details?.qr_code ?? null,
+        digitableLine: charge.details?.digitable_line ?? null,
+        message: 'A cobrança foi reaberta. Você pode copiar o link abaixo ou abrir o QR/ boleto imediatamente.',
+      })
+
+      showMsg('Cobrança reaberta e link reenviado ao cliente.', 'ok')
+      await fetchVendasV2()
+    } catch (error) {
+      showMsg(error instanceof Error ? error.message : 'Erro ao reenviar a cobrança.')
+    } finally {
+      setReenviandoCobrancaVendaId(null)
     }
   }
 
@@ -5303,10 +5442,32 @@ export default function Comercial() {
                             (v.metadata as { forma_pagamento?: string })?.forma_pagamento ?? '—'
                           )}
                           {(() => {
-                            const paymentCharge = (v.metadata as { payment_charge?: { charge_url?: string | null } } | null)?.payment_charge
-                            return paymentCharge?.charge_url ? (
-                              <a href={paymentCharge.charge_url} target="_blank" rel="noreferrer" className="ml-2 text-xs font-medium text-blue-600 underline">Abrir</a>
-                            ) : null
+                            const { paymentCharge, chargeUrl, paymentKind } = getPaymentChargeInfo(v)
+                            if (!paymentCharge) return null
+                            const isPix = paymentKind === 'pix'
+                            return (
+                              <span className="ml-2 inline-flex items-center gap-2">
+                                {chargeUrl ? (
+                                  <a href={chargeUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 underline">
+                                    Abrir
+                                  </a>
+                                ) : (
+                                  <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">Cobrança ativa</span>
+                                )}
+                                {paymentCharge?.status !== 'paid' && (
+                                  <button
+                                    type="button"
+                                    onClick={e => { e.stopPropagation(); void reenviarCobrancaVenda(v) }}
+                                    disabled={reenviandoCobrancaVendaId === v.id}
+                                    className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300"
+                                    title={isPix ? 'Reenviar QR Pix ao cliente' : 'Reenviar link de pagamento ao cliente'}
+                                  >
+                                    <RefreshCcw size={11} className={reenviandoCobrancaVendaId === v.id ? 'animate-spin' : ''} />
+                                    {reenviandoCobrancaVendaId === v.id ? 'Reenviando...' : (isPix ? 'Reenviar QR' : 'Reenviar')}
+                                  </button>
+                                )}
+                              </span>
+                            )
                           })()}
                         </td>
                         <td className="px-3 py-2 text-right font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">
@@ -7893,6 +8054,119 @@ export default function Comercial() {
                 className="px-5 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
                 {cancelSaving && <Loader2 size={14} className="animate-spin" />}
                 Confirmar Cancelamento
+              </button>
+            </div>
+          </div>
+        </FlowModal>,
+        document.body
+      )}
+
+      {cobrancaModal && createPortal(
+        <FlowModal
+          open
+          title="Cobrança gerada"
+          subtitle="Aqui está o acesso imediato para enviar ao cliente sem depender do e-mail."
+          onClose={() => setCobrancaModal(null)}
+          contentClassName="max-w-2xl"
+        >
+          <div className="max-h-[90vh] overflow-y-auto p-6 space-y-5">
+            <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-4 text-sm text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200">
+              <p className="font-semibold">{cobrancaModal.clienteNome}</p>
+              <p className="mt-1">{cobrancaModal.message}</p>
+              <p className="mt-1 text-xs text-blue-700/90 dark:text-blue-300/90">
+                Venda {cobrancaModal.vendaId} · {cobrancaModal.formaPagamento}
+              </p>
+            </div>
+
+            {cobrancaModal.paymentKind === 'pix' && (cobrancaModal.qrCodeBase64 || cobrancaModal.qrCode) && (
+              <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">QR Code Pix</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">O cliente pode escanear este QR ou copiar o código Pix abaixo.</p>
+                {cobrancaModal.qrCodeBase64 && (
+                  <img
+                    className="mx-auto my-4 h-56 w-56 rounded-xl border border-gray-100 bg-white p-2"
+                    alt="QR Code Pix"
+                    src={`data:image/png;base64,${cobrancaModal.qrCodeBase64}`}
+                  />
+                )}
+                {cobrancaModal.qrCode && (
+                  <div className="space-y-2">
+                    <p className="break-all rounded-xl bg-gray-50 p-3 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                      {cobrancaModal.qrCode}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void navigator.clipboard.writeText(cobrancaModal.qrCode ?? '')}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+                    >
+                      <Copy size={14} />
+                      Copiar código Pix
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {cobrancaModal.paymentKind !== 'pix' && cobrancaModal.digitableLine && (
+              <div className="rounded-xl border border-amber-200 bg-white p-4 shadow-sm dark:border-amber-900/40 dark:bg-gray-900">
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Linha para pagamento</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Use a linha digitável ou o link da cobrança para concluir o pagamento.</p>
+                <p className="mt-3 break-all rounded-xl bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                  {cobrancaModal.digitableLine}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void navigator.clipboard.writeText(cobrancaModal.digitableLine ?? '')}
+                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white hover:bg-amber-700"
+                >
+                  <Copy size={14} />
+                  Copiar linha digitável
+                </button>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Link de pagamento</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Se o cliente pedir alteração de forma de pagamento, este é o link que você pode reenviar.
+              </p>
+              {cobrancaModal.chargeUrl ? (
+                <div className="mt-3 space-y-3">
+                  <p className="break-all rounded-xl bg-gray-50 p-3 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                    {cobrancaModal.chargeUrl}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void navigator.clipboard.writeText(cobrancaModal.chargeUrl ?? '')}
+                      className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                    >
+                      <Copy size={14} />
+                      Copiar link
+                    </button>
+                    <a
+                      href={cobrancaModal.chargeUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                    >
+                      <ExternalLink size={14} />
+                      Abrir cobrança
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-red-600">Nenhum link foi retornado para esta cobrança.</p>
+              )}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setCobrancaModal(null)}
+                className="rounded-xl px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                Fechar
               </button>
             </div>
           </div>
