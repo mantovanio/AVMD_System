@@ -275,9 +275,9 @@ function inferMediaKind(
   const name = String(fileName ?? '').toLowerCase()
   const text = String(mensagem ?? '').trim().toLowerCase()
 
-  if (mime.startsWith('image/') || /\.(jpe?g|png|gif|webp|bmp|svg)(\?.*)?$/i.test(url) || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(name) || text === 'imagem') return 'image'
-  if (mime.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|webm)(\?.*)?$/i.test(url) || /\.(mp3|wav|ogg|m4a|webm)$/i.test(name) || text === 'áudio' || text === 'audio') return 'audio'
-  if (mime.startsWith('video/') || /\.(mp4|mov|mkv|webm)(\?.*)?$/i.test(url) || /\.(mp4|mov|mkv|webm)$/i.test(name) || text === 'vídeo' || text === 'video') return 'video'
+  if (mime.startsWith('image/') || url.startsWith('data:image/') || /\.(jpe?g|png|gif|webp|bmp|svg)(\?.*)?$/i.test(url) || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(name) || text === 'imagem') return 'image'
+  if (mime.startsWith('audio/') || url.startsWith('data:audio/') || /\.(mp3|wav|ogg|m4a|webm)(\?.*)?$/i.test(url) || /\.(mp3|wav|ogg|m4a|webm)$/i.test(name) || text === 'áudio' || text === 'audio') return 'audio'
+  if (mime.startsWith('video/') || url.startsWith('data:video/') || /\.(mp4|mov|mkv|webm)(\?.*)?$/i.test(url) || /\.(mp4|mov|mkv|webm)$/i.test(name) || text === 'vídeo' || text === 'video') return 'video'
   if (mime.startsWith('application/') || /\.(pdf|docx?|xlsx?|pptx?|txt)(\?.*)?$/i.test(url) || /\.(pdf|docx?|xlsx?|pptx?|txt)$/i.test(name) || text === 'documento' || text === 'arquivo') return 'document'
   return 'text'
 }

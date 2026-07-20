@@ -106,7 +106,14 @@ function extractMessageContent(message: JsonRecord | null): { content: string | 
 
   const fallbackContent = typeof entry?.[1] === 'string' ? entry[1] : ''
   let content = pickString(payload, 'text', 'caption', 'conversation') || fallbackContent || null
-  const mimeType = pickString(payload, 'mimetype', 'mimeType') || null
+  const inferredMimeType =
+    pickString(payload, 'mimetype', 'mimeType')
+    || (messageType.startsWith('image') ? 'image/jpeg'
+      : messageType.startsWith('video') ? 'video/mp4'
+      : messageType.startsWith('audio') ? 'audio/ogg'
+      : messageType.startsWith('document') ? 'application/pdf'
+      : '')
+  const mimeType = inferredMimeType || null
   const fileName = pickString(payload, 'fileName', 'title') || null
   const base64 = pickString(payload, 'base64', 'data') || findFirstString(entry?.[1], ['base64', 'data'])
   const mediaUrl =
