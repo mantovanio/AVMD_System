@@ -461,6 +461,17 @@ function deepPickMessageString(value: unknown, keys: string[], depth = 0, maxDep
   return ''
 }
 
+function deepPickMessageRecord(value: unknown, predicate: (record: Record<string, unknown>) => boolean, depth = 0, maxDepth = 4): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || depth > maxDepth) return null
+  const record = value as Record<string, unknown>
+  if (predicate(record)) return record
+  for (const candidate of Object.values(record)) {
+    const nested = deepPickMessageRecord(candidate, predicate, depth + 1, maxDepth)
+    if (nested) return nested
+  }
+  return null
+}
+
 function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] {
   return events
     .filter(event => event.source === 'evolution' || event.source === 'chatwoot')
@@ -492,20 +503,32 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] 
         ? Object.entries(rawMessage).find(([, v]) => v !== null && v !== undefined)
         : null
       const messagePayload = asMessageRecord(messageEntry?.[1])
+      const mediaRecord = deepPickMessageRecord(messageEntry?.[1], record =>
+        typeof record.base64 === 'string'
+        || typeof record.data === 'string'
+        || typeof record.url === 'string'
+        || typeof record.mediaUrl === 'string'
+        || typeof record.mimetype === 'string'
+        || typeof record.mimeType === 'string',
+      )
       const inlineBase64 = (payload.base64 as string | undefined)
         ?? (rawMessage?.base64 as string | undefined)
         ?? (messagePayload?.base64 as string | undefined)
+        ?? (mediaRecord?.base64 as string | undefined)
+        ?? (mediaRecord?.data as string | undefined)
         ?? null
-      const nestedBase64 = pickMessageString(messagePayload, 'base64', 'data') || deepPickMessageString(messageEntry?.[1], ['base64', 'data'])
-      const nestedUrl = pickMessageString(messagePayload, 'url', 'mediaUrl') || deepPickMessageString(messageEntry?.[1], ['url', 'mediaUrl', 'link'])
+      const nestedBase64 = pickMessageString(messagePayload, 'base64', 'data') || deepPickMessageString(messageEntry?.[1], ['base64', 'data']) || (mediaRecord?.base64 as string | undefined) || (mediaRecord?.data as string | undefined) || ''
+      const nestedUrl = pickMessageString(messagePayload, 'url', 'mediaUrl') || deepPickMessageString(messageEntry?.[1], ['url', 'mediaUrl', 'link']) || (mediaRecord?.url as string | undefined) || (mediaRecord?.mediaUrl as string | undefined) || ''
+      const nestedMime = (mediaRecord?.mimetype as string | undefined) || (mediaRecord?.mimeType as string | undefined) || null
       const mediaUrl = inlineBase64
         ? `data:${mimeType || 'application/octet-stream'};base64,${inlineBase64}`
         : nestedBase64
-          ? `data:${mimeType || 'application/octet-stream'};base64,${nestedBase64}`
+          ? `data:${mimeType || nestedMime || 'application/octet-stream'};base64,${nestedBase64}`
           : (payload.mediaUrl as string | undefined)
             ?? (data?.mediaUrl as string | undefined)
             ?? nestedUrl
             ?? null
+      const finalMimeType = mimeType || nestedMime || null
       const externalMessageId = (payload.messageId as string | undefined)
         ?? (payload.externalId as string | undefined)
         ?? (data?.messageId as string | undefined)
@@ -520,7 +543,7 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] 
         sender_type: senderType,
         sender_name: (payload.pushName as string | undefined) ?? (data?.pushName as string | undefined) ?? null,
         mensagem: content,
-        mime_type: mimeType,
+        mime_type: finalMimeType,
         file_name: fileName,
         media_url: mediaUrl,
         delivery_status: null,
