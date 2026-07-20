@@ -82,6 +82,20 @@ function pickString(source: JsonRecord | null, ...keys: string[]) {
   return ''
 }
 
+function deepFindString(value: unknown, keys: string[], depth = 0, maxDepth = 4): string {
+  if (depth > maxDepth || !value || typeof value !== 'object') return ''
+  const record = value as JsonRecord
+  for (const key of keys) {
+    const v = record[key]
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  }
+  for (const candidate of Object.values(record)) {
+    const nested = deepFindString(candidate, keys, depth + 1, maxDepth)
+    if (nested) return nested
+  }
+  return ''
+}
+
 function parseMessageId(payload: JsonRecord | null | undefined) {
   if (!payload || typeof payload !== 'object') return null
   const key = asRecord(payload.key)
@@ -179,13 +193,34 @@ function extractMessageContent(message: JsonRecord | null) {
   const quotedPayload = asRecord(quotedEntry?.[1])
   const quotedContent = pickString(quotedPayload, 'text', 'caption') || (typeof quotedEntry?.[1] === 'string' ? quotedEntry[1] : '')
   const fallbackContent = typeof entry?.[1] === 'string' ? entry[1] : ''
+  const inferredMimeType =
+    pickString(payload, 'mimetype', 'mimeType')
+    || (messageType.startsWith('image') ? 'image/jpeg'
+      : messageType.startsWith('video') ? 'video/mp4'
+      : messageType.startsWith('audio') ? 'audio/ogg'
+      : messageType.startsWith('document') ? 'application/pdf'
+      : '')
+  const mimeType = inferredMimeType || null
+  const fileName = pickString(payload, 'fileName', 'title') || deepFindString(entry?.[1], ['fileName', 'title']) || null
+  const base64 = pickString(payload, 'base64', 'data') || deepFindString(entry?.[1], ['base64', 'data'])
+  const mediaUrl =
+    pickString(payload, 'url', 'mediaUrl')
+    || deepFindString(entry?.[1], ['url', 'mediaUrl'])
+    || (base64 ? `data:${mimeType || 'application/octet-stream'};base64,${base64}` : '')
+  const mediaFallback = (() => {
+    if (messageType.startsWith('image')) return 'Imagem'
+    if (messageType.startsWith('video')) return 'Vídeo'
+    if (messageType.startsWith('audio')) return 'Áudio'
+    if (messageType.startsWith('document')) return 'Documento'
+    return ''
+  })()
 
   return {
-    content: pickString(payload, 'text', 'caption', 'conversation') || fallbackContent || null,
+    content: pickString(payload, 'text', 'caption', 'conversation') || fallbackContent || mediaFallback || null,
     messageType,
-    mimeType: pickString(payload, 'mimetype') || null,
-    fileName: pickString(payload, 'fileName', 'title') || null,
-    mediaUrl: pickString(payload, 'url', 'mediaUrl') || null,
+    mimeType,
+    fileName,
+    mediaUrl: mediaUrl || null,
     quoted: pickString(context, 'stanzaId')
       ? { messageId: pickString(context, 'stanzaId'), content: quotedContent || 'Mensagem respondida' }
       : null,
