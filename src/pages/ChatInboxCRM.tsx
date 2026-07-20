@@ -264,6 +264,24 @@ function isDocumentMime(value: string | null | undefined) {
   return Boolean(normalized && !isImageMime(normalized) && !isAudioMime(normalized) && !isVideoMime(normalized))
 }
 
+function inferMediaKind(
+  mimeType: string | null | undefined,
+  mediaUrl: string | null | undefined,
+  fileName: string | null | undefined,
+  mensagem: string | null | undefined,
+) {
+  const mime = normalizeMimeType(mimeType)
+  const url = String(mediaUrl ?? '').toLowerCase()
+  const name = String(fileName ?? '').toLowerCase()
+  const text = String(mensagem ?? '').trim().toLowerCase()
+
+  if (mime.startsWith('image/') || /\.(jpe?g|png|gif|webp|bmp|svg)(\?.*)?$/i.test(url) || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(name) || text === 'imagem') return 'image'
+  if (mime.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|webm)(\?.*)?$/i.test(url) || /\.(mp3|wav|ogg|m4a|webm)$/i.test(name) || text === 'áudio' || text === 'audio') return 'audio'
+  if (mime.startsWith('video/') || /\.(mp4|mov|mkv|webm)(\?.*)?$/i.test(url) || /\.(mp4|mov|mkv|webm)$/i.test(name) || text === 'vídeo' || text === 'video') return 'video'
+  if (mime.startsWith('application/') || /\.(pdf|docx?|xlsx?|pptx?|txt)(\?.*)?$/i.test(url) || /\.(pdf|docx?|xlsx?|pptx?|txt)$/i.test(name) || text === 'documento' || text === 'arquivo') return 'document'
+  return 'text'
+}
+
 async function blobToBase64(blob: Blob): Promise<string> {
   const buffer = await blob.arrayBuffer()
   const bytes = new Uint8Array(buffer)
@@ -3381,13 +3399,14 @@ function MessageRow({
       : isIaMsg
         ? conversation?.whatsapp_instance || 'Automacao'
         : normalizedSenderName || fallbackHumanName || conversation?.agente_atual || 'Humano'
-    const isImage = isImageMime(message.mime_type)
-    const isAudio = isAudioMime(message.mime_type)
-    const isVideo = isVideoMime(message.mime_type)
-    const isDocument = isDocumentMime(message.mime_type)
+    const resolvedMediaUrl = resolveChatMediaUrl(message.media_url, conversation?.whatsapp_instance)
+    const mediaKind = inferMediaKind(message.mime_type, resolvedMediaUrl, message.file_name, message.mensagem)
+    const isImage = mediaKind === 'image'
+    const isAudio = mediaKind === 'audio'
+    const isVideo = mediaKind === 'video'
+    const isDocument = mediaKind === 'document'
     const hasMedia = isImage || isAudio || isVideo || isDocument
     const mediaLabel = message.file_name || message.mensagem || (isAudio ? 'Audio' : isImage ? 'Imagem' : isVideo ? 'Video' : isDocument ? 'Arquivo' : '')
-    const resolvedMediaUrl = resolveChatMediaUrl(message.media_url, conversation?.whatsapp_instance)
     const [imagePreviewOpen, setImagePreviewOpen] = useState(false)
     const receiptStatus = String(message.delivery_status ?? '').trim().toLowerCase()
     const receiptLabel = receiptStatus === 'read'
