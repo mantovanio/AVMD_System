@@ -472,7 +472,7 @@ function deepPickMessageRecord(value: unknown, predicate: (record: Record<string
   return null
 }
 
-function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] {
+function parseEvolutionEventMessages(events: EvolutionEventRow[], viewerQueryString = ''): CrmMessage[] {
   return events
     .filter(event => event.source === 'evolution' || event.source === 'chatwoot')
     .map(event => {
@@ -493,6 +493,7 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] 
         ?? null
       const fileName = (payload.fileName as string | undefined)
         ?? (data?.fileName as string | undefined)
+        ?? deepPickMessageString(payload, ['fileName', 'filename', 'title', 'name'])
         ?? null
       // A url do WhatsApp (mmg.whatsapp.net/...enc) e criptografada e nao pode
       // ser tocada/exibida direto. A Evolution API (webhook com base64: true)
@@ -521,7 +522,7 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] 
       const nestedUrl = pickMessageString(messagePayload, 'url', 'mediaUrl') || deepPickMessageString(messageEntry?.[1], ['url', 'mediaUrl', 'link']) || (mediaRecord?.url as string | undefined) || (mediaRecord?.mediaUrl as string | undefined) || ''
       const nestedMime = (mediaRecord?.mimetype as string | undefined) || (mediaRecord?.mimeType as string | undefined) || null
       const mediaUrl = inlineBase64
-        ? `data:${mimeType || 'application/octet-stream'};base64,${inlineBase64}`
+        ? `data:${mimeType || nestedMime || 'application/octet-stream'};base64,${inlineBase64}`
         : nestedBase64
           ? `data:${mimeType || nestedMime || 'application/octet-stream'};base64,${nestedBase64}`
           : (payload.mediaUrl as string | undefined)
@@ -529,6 +530,9 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] 
             ?? nestedUrl
             ?? null
       const finalMimeType = mimeType || nestedMime || null
+      const eventMediaUrl = viewerQueryString && (mediaUrl || finalMimeType || fileName || /image|video|audio|document|file|sticker/i.test(messageType))
+        ? `/api/chat/event-media/${encodeURIComponent(String(event.id))}?${viewerQueryString}`
+        : null
       const externalMessageId = (payload.messageId as string | undefined)
         ?? (payload.externalId as string | undefined)
         ?? (data?.messageId as string | undefined)
@@ -545,7 +549,7 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[]): CrmMessage[] 
         mensagem: content,
         mime_type: finalMimeType,
         file_name: fileName,
-        media_url: mediaUrl,
+        media_url: mediaUrl ?? eventMediaUrl,
         delivery_status: null,
         delivered_at: null,
         read_at: null,
@@ -1147,7 +1151,7 @@ export default function ChatInboxCRM() {
       const json = await response.json() as { ok: boolean; crmMessages: CrmMessage[]; evolutionMessages: EvolutionEventRow[] }
 
       const crmMessages = (json.crmMessages ?? []) as CrmMessage[]
-      const evolutionMessages = parseEvolutionEventMessages((json.evolutionMessages ?? []) as EvolutionEventRow[])
+      const evolutionMessages = parseEvolutionEventMessages((json.evolutionMessages ?? []) as EvolutionEventRow[], viewerQueryString)
       const nextMessages = mergeConversationMessages([...crmMessages, ...evolutionMessages])
       const nextSnapshot = nextMessages
         .map(message => [

@@ -84,6 +84,13 @@ function getClerkErrorMessage(error: unknown, fallback: string) {
   return translatePasswordPolicyError(message || fallback)
 }
 
+function isPasswordRequirementsError(message: string) {
+  const normalized = message.toLowerCase()
+  return normalized.includes('requirements set for this instance')
+    || normalized.includes('não atende aos requisitos')
+    || normalized.includes('nao atende aos requisitos')
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const clerk = useClerk()
   const { isLoaded: signInLoaded, signIn, setActive } = useSignIn()
@@ -402,11 +409,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
       }
 
-      const createResult = await signIn.create({ identifier: normalizedEmail })
-      const createResultError = (createResult as { error?: unknown }).error
-      const createErrorMessage = createResultError
-        ? translatePasswordPolicyError(getClerkErrorMessage(createResultError, ''))
-        : null
+      let createErrorMessage: string | null = null
+      try {
+        const createResult = await withTimeout(
+          signIn.create({ identifier: normalizedEmail }),
+          15000,
+          'O Clerk não respondeu ao iniciar a recuperação.',
+        )
+        const createResultError = (createResult as { error?: unknown }).error
+        createErrorMessage = createResultError
+          ? getClerkErrorMessage(createResultError, '')
+          : null
+      } catch (error) {
+        const message = getClerkErrorMessage(error, '')
+        if (!isPasswordRequirementsError(message)) {
+          throw error
+        }
+        createErrorMessage = message
+        console.warn('[AuthContext] Clerk retornou politica de senha ao iniciar recuperacao; seguindo para envio do codigo.')
+      }
+
       const sendCodeResult = await withTimeout(
         recoverySignIn.resetPasswordEmailCode.sendCode(),
         15000,
@@ -414,17 +436,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       )
 
       if (sendCodeResult.error) {
-        return { error: getClerkErrorMessage(sendCodeResult.error, 'Falha ao enviar o código de recuperação.') }
+        const sendCodeError = getClerkErrorMessage(sendCodeResult.error, 'Falha ao enviar o código de recuperação.')
+        return {
+          error: isPasswordRequirementsError(sendCodeError)
+            ? 'Não foi possível iniciar a recuperação agora. Verifique o e-mail cadastrado e tente novamente.'
+            : sendCodeError,
+        }
       }
 
-      if (createErrorMessage && !createErrorMessage.toLowerCase().includes('requirements set for this instance')) {
+      if (createErrorMessage && !isPasswordRequirementsError(createErrorMessage)) {
         // O fluxo foi iniciado com sucesso; o erro do create não deve interromper a recuperação.
         console.warn('[AuthContext] createResult retornou aviso no fluxo de recuperação:', createErrorMessage)
       }
 
       return { error: `Código enviado para ${data.email ?? normalizedEmail}.` }
     } catch (error) {
-      return { error: getClerkErrorMessage(error, 'Falha ao enviar o código de recuperação. Tente novamente.') }
+      const message = getClerkErrorMessage(error, 'Falha ao enviar o código de recuperação. Tente novamente.')
+      return {
+        error: isPasswordRequirementsError(message)
+          ? 'Não foi possível iniciar a recuperação agora. Verifique o e-mail cadastrado e tente novamente.'
+          : message,
+      }
     }
   }
 

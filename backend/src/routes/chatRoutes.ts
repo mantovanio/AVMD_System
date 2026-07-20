@@ -72,6 +72,49 @@ function asString(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function deepFindString(value: unknown, keys: string[], depth = 0, maxDepth = 6): string {
+  if (!value || typeof value !== 'object' || depth > maxDepth) return ''
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = deepFindString(item, keys, depth + 1, maxDepth)
+      if (found) return found
+    }
+    return ''
+  }
+
+  const record = value as JsonRecord
+  for (const key of keys) {
+    const found = asString(record[key])
+    if (found) return found
+  }
+  for (const item of Object.values(record)) {
+    const found = deepFindString(item, keys, depth + 1, maxDepth)
+    if (found) return found
+  }
+  return ''
+}
+
+function inferMimeTypeFromFile(fileName: string, fallback = 'application/octet-stream') {
+  const lower = fileName.toLowerCase()
+  if (lower.endsWith('.pdf')) return 'application/pdf'
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
+  if (lower.endsWith('.png')) return 'image/png'
+  if (lower.endsWith('.webp')) return 'image/webp'
+  if (lower.endsWith('.ogg') || lower.endsWith('.opus')) return 'audio/ogg'
+  if (lower.endsWith('.mp3')) return 'audio/mpeg'
+  if (lower.endsWith('.mp4')) return 'video/mp4'
+  return fallback
+}
+
+function normalizeBase64Payload(value: string) {
+  const trimmed = value.trim()
+  const dataUrlMatch = trimmed.match(/^data:([^;]+);base64,(.+)$/i)
+  if (dataUrlMatch) {
+    return { mimeType: dataUrlMatch[1], base64: dataUrlMatch[2] }
+  }
+  return { mimeType: '', base64: trimmed }
+}
+
 function parseMessageId(payload: JsonRecord | null | undefined) {
   if (!payload || typeof payload !== 'object') return null
   const key = payload.key
@@ -1549,6 +1592,108 @@ export async function handleChatRoutes(
     const id = catalogoDeleteMatch[1]
     await db.query('DELETE FROM catalogo_ia WHERE id::text = $1', [id])
     writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
+  const eventMediaMatch = req.method === 'GET' ? url.match(/^\/api\/chat\/event-media\/([^/?#]+)/) : null
+  if (eventMediaMatch) {
+    const parsed = new URL(url, 'http://localhost')
+    const eventId = decodeURIComponent(eventMediaMatch[1])
+    const viewerId = parsed.searchParams.get('profile_id') ?? ''
+
+    if (!viewerId) {
+      writeJson(res, 400, { error: 'profile_id obrigatorio.' }, corsOrigin)
+      return true
+    }
+
+    const eventResult = await db.query<any>(
+      `SELECT id, conversation_id, payload
+       FROM communication_events
+       WHERE id::text = $1
+         AND source IN ('evolution', 'chatwoot')
+       LIMIT 1`,
+      [eventId],
+    )
+    const event = eventResult.rows[0]
+    if (!event) {
+      writeJson(res, 404, { error: 'Arquivo nao encontrado.' }, corsOrigin)
+      return true
+    }
+
+    const payload = (event.payload ?? {}) as JsonRecord
+    const documentKey = asString(payload.documentKey)
+      || asString(payload.remoteJid)
+      || asString(payload.contact)
+      || asString((payload.data as JsonRecord | undefined)?.remoteJid)
+    const allowed = await canViewerAccessConversation(db, viewerId, String(event.conversation_id ?? ''), documentKey)
+    if (!allowed) {
+      writeJson(res, 403, { error: 'Sem permissao para acessar esse arquivo.' }, corsOrigin)
+      return true
+    }
+
+    const fileName = deepFindString(payload, ['fileName', 'filename', 'title', 'name']) || 'arquivo'
+    const mimeFromPayload = deepFindString(payload, ['mimeType', 'mimetype'])
+    const rawBase64 = deepFindString(payload, ['base64', 'mediaBase64'])
+    const mediaUrl = deepFindString(payload, ['mediaUrl', 'url', 'link'])
+
+    if (rawBase64) {
+      const normalized = normalizeBase64Payload(rawBase64)
+      const mimeType = normalized.mimeType || mimeFromPayload || inferMimeTypeFromFile(fileName)
+      const buffer = Buffer.from(normalized.base64, 'base64')
+      res.writeHead(200, {
+        'Content-Type': mimeType,
+        'Content-Length': String(buffer.length),
+        'Content-Disposition': `inline; filename="${fileName.replace(/"/g, '')}"`,
+        'Access-Control-Allow-Origin': corsOrigin,
+        'Cache-Control': 'private, max-age=3600',
+      })
+      res.end(buffer)
+      return true
+    }
+
+    if (mediaUrl) {
+      const instances = [config.evolutionAtendimento, config.evolutionCertiid].filter(Boolean)
+      let lastError: unknown
+      for (const inst of instances) {
+        if (!inst.apiToken) continue
+        try {
+          const mediaRes = await fetch(mediaUrl, { headers: { apikey: inst.apiToken } })
+          if (!mediaRes.ok) {
+            lastError = `HTTP ${mediaRes.status}`
+            continue
+          }
+          const contentType = mediaRes.headers.get('content-type') || mimeFromPayload || inferMimeTypeFromFile(fileName)
+          const contentLength = mediaRes.headers.get('content-length')
+          res.writeHead(200, {
+            'Content-Type': contentType,
+            'Content-Length': contentLength ?? '',
+            'Content-Disposition': `inline; filename="${fileName.replace(/"/g, '')}"`,
+            'Access-Control-Allow-Origin': corsOrigin,
+            'Cache-Control': 'private, max-age=3600',
+          })
+          const reader = mediaRes.body?.getReader()
+          if (!reader) {
+            writeJson(res, 502, { error: 'Resposta de midia vazia.' }, corsOrigin)
+            return true
+          }
+          const pump = async () => {
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) { res.end(); break }
+              res.write(value)
+            }
+          }
+          pump().catch(() => { res.end() })
+          return true
+        } catch (err) {
+          lastError = err
+        }
+      }
+      writeJson(res, 502, { error: `Falha ao buscar midia do evento: ${lastError}` }, corsOrigin)
+      return true
+    }
+
+    writeJson(res, 404, { error: 'Este evento nao possui anexo disponivel.' }, corsOrigin)
     return true
   }
 
