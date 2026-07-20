@@ -1,0 +1,183 @@
+From: pending-queue <queue@avmd.local>
+Date: Mon, 20 Jul 2026 20:13:05 -0300
+Subject: fix: persist incoming media - extract jpegThumbnail as preview when no base64 available
+Patch-Hash: sha256:3ac64a62c54a8a4d60aa49716d8677e84050b0e6c4f3be7799bfd394834fdbc9
+---
+diff --git a/backend/sql/057_backfill_media_persist_standalone.js b/backend/sql/057_backfill_media_persist_standalone.js
+new file mode 100644
+index 0000000..a677c2e
+--- /dev/null
++++ b/backend/sql/057_backfill_media_persist_standalone.js
+@@ -0,0 +1,131 @@
++#!/usr/bin/env node
++/**
++ * 057_backfill_media_persist_standalone.js
++ * 
++ * Rodar com: node sql/057_backfill_media_persist_standalone.js
++ * 
++ * Migra mensagens com media_url como data: URI para path permanente.
++ * Salva o arquivo no storage/attachments e atualiza crm_chat_messages.media_url.
++ */
++const { Client } = require('pg');
++const fs = require('fs');
++const path = require('path');
++const crypto = require('crypto');
++
++const STORAGE_ROOT = process.env.FILE_STORAGE_ROOT || path.resolve('/opt/avmd/AVMD_System/storage/attachments');
++
++function inferFileName(mimeType) {
++  const mime = (mimeType || '').toLowerCase();
++  if (mime.includes('pdf')) return 'documento.pdf';
++  if (mime.includes('png')) return 'imagem.png';
++  if (mime.includes('webp')) return 'imagem.webp';
++  if (mime.includes('jpeg') || mime.includes('jpg') || mime.startsWith('image/')) return 'imagem.jpg';
++  if (mime.includes('mpeg') || mime.includes('mp3')) return 'audio.mp3';
++  if (mime.includes('ogg') || mime.includes('opus') || mime.startsWith('audio/')) return 'audio.ogg';
++  if (mime.includes('mp4') || mime.startsWith('video/')) return 'video.mp4';
++  return 'arquivo';
++}
++
++function buildStoredPath(conversationId, originalName) {
++  const safeName = originalName.replace(/[<>:"/\\|?*]/g, '_');
++  const unique = `${crypto.randomUUID()}_${safeName}`;
++  const relative = path.join(conversationId, unique);
++  const full = path.join(STORAGE_ROOT, relative);
++  const dir = path.dirname(full);
++  fs.mkdirSync(dir, { recursive: true });
++  return full;
++}
++
++async function main() {
++  const client = new Client({
++    host: process.env.PGHOST || '127.0.0.1',
++    port: parseInt(process.env.PGPORT || '5432'),
++    database: process.env.PGDATABASE || 'avmd',
++    user: process.env.PGUSER || 'avmd',
++    password: process.env.PGPASSWORD || 'avmd123ABC',
++  });
++
++  await client.connect();
++  console.log('[backfill] Conectado ao banco. Iniciando backfill de midia...');
++
++  const result = await client.query(
++    `SELECT id, conversation_id, external_message_id, media_url, mime_type, file_name
++     FROM crm_chat_messages
++     WHERE media_url LIKE 'data:%'
++     ORDER BY created_at ASC`
++  );
++
++  const messages = result.rows;
++  console.log(`[backfill] Encontradas ${messages.length} mensagens com data: URI`);
++
++  let saved = 0;
++  let skipped = 0;
++  let errors = 0;
++
++  for (const msg of messages) {
++    try {
++      if (!msg.media_url || !msg.conversation_id) {
++        skipped++;
++        continue;
++      }
++
++      const match = msg.media_url.match(/^data:([^;]+);base64,(.+)$/);
++      if (!match) {
++        skipped++;
++        continue;
++      }
++
++      const mimeType = match[1];
++      const base64 = match[2];
++      const fileName = msg.file_name || inferFileName(mimeType);
++
++      let buffer;
++      try {
++        buffer = Buffer.from(base64, 'base64');
++      } catch {
++        errors++;
++        continue;
++      }
++
++      if (buffer.length > 50 * 1024 * 1024) {
++        console.log(`[backfill] Pulando ${fileName}: muito grande (${buffer.length} bytes)`);
++        skipped++;
++        continue;
++      }
++
++      const storedPath = buildStoredPath(msg.conversation_id, fileName);
++      fs.writeFileSync(storedPath, buffer);
++
++      const fileResult = await client.query(
++        `INSERT INTO crm_conversation_files (conversation_id, original_name, stored_path, mime_type, size_bytes)
++         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
++        [msg.conversation_id, fileName, storedPath, mimeType, buffer.length]
++      );
++      const fileId = fileResult.rows[0].id;
++      const permanentUrl = `/api/chat/files/${fileId}`;
++
++      await client.query(
++        `UPDATE crm_chat_messages
++         SET media_url = $1, mime_type = COALESCE(mime_type, $2), file_name = COALESCE(file_name, $3)
++         WHERE id = $4`,
++        [permanentUrl, mimeType, fileName, msg.id]
++      );
++
++      saved++;
++      if (saved % 10 === 0) {
++        console.log(`[backfill] Progresso: ${saved}/${messages.length} salvas`);
++      }
++    } catch (err) {
++      console.error(`[backfill] Erro ao processar mensagem ${msg.id}:`, err.message);
++      errors++;
++    }
++  }
++
++  console.log(`[backfill] Concluido: ${saved} salvas, ${skipped} puladas, ${errors} erros`);
++  await client.end();
++}
++
++main().catch(err => {
++  console.error('[backfill] Erro fatal:', err);
++  process.exit(1);
++});
+diff --git a/backend/src/routes/whatsappSendRoutes.ts b/backend/src/routes/whatsappSendRoutes.ts
+index b70332e..b193efa 100644
+--- a/backend/src/routes/whatsappSendRoutes.ts
++++ b/backend/src/routes/whatsappSendRoutes.ts
+@@ -166,17 +166,28 @@ async function persistIncomingMedia(
+     const messagePayload = asRecord(entry[1])
+     if (!messagePayload) return
+ 
+-    let base64 = pickString(messagePayload, 'base64', 'data')
+-    if (!base64) base64 = deepFindString(entry[1], ['base64', 'data'])
+-    if (!base64) return
+-
+     const mimeType = pickString(messagePayload, 'mimetype', 'mimeType') || fallbackMimeType || 'application/octet-stream'
+     const fileName = pickString(messagePayload, 'fileName', 'title') || fallbackFileName || inferMediaFileName(mimeType)
+ 
+-    let buffer: Buffer
+-    try {
+-      buffer = Buffer.from(base64, 'base64')
+-    } catch { return }
++    let buffer: Buffer | null = null
++
++    const base64 = pickString(messagePayload, 'base64', 'data')
++      || deepFindString(entry?.[1], ['base64', 'data'])
++    if (base64) {
++      try { buffer = Buffer.from(base64, 'base64') } catch { /* ignore */ }
++    }
++
++    if (!buffer) {
++      const thumb = messagePayload.jpegThumbnail
++      if (thumb && typeof thumb === 'object' && typeof (thumb as any).length === 'number') {
++        try {
++          const arr = Array.isArray(thumb) ? thumb : Object.values(thumb as JsonRecord)
++          buffer = Buffer.from(arr as number[])
++        } catch { /* ignore */ }
++      }
++    }
++
++    if (!buffer || buffer.length === 0) return
+     if (buffer.length > 50 * 1024 * 1024) return
+ 
+     const storedPath = buildStoredPath(conversationJid || 'unknown', fileName)

@@ -1,0 +1,509 @@
+From: pending-queue <queue@avmd.local>
+Date: Mon, 20 Jul 2026 14:11:22 -0300
+Subject: fix: add missing v_is_from_me declaration
+Patch-Hash: sha256:d9083446fd02fe024a03ecb5cf7c5ad572d20163b9f59ff0c94aa820b83964aa
+---
+diff --git a/backend/sql/056_fix_trigger_media_metadata.sql b/backend/sql/056_fix_trigger_media_metadata.sql
+index f7f9ce3..317eb70 100644
+--- a/backend/sql/056_fix_trigger_media_metadata.sql
++++ b/backend/sql/056_fix_trigger_media_metadata.sql
+@@ -34,6 +34,7 @@ DECLARE
+   v_sender_type        TEXT;
+   v_sender_name        TEXT;
+   v_has_content        BOOLEAN;
++  v_is_from_me         BOOLEAN;
+   v_mime_type          TEXT;
+   v_file_name          TEXT;
+   v_media_url          TEXT;
+diff --git a/backend/src/repositories/aivenCheckoutRepository.ts b/backend/src/repositories/aivenCheckoutRepository.ts
+index 98324a0..f72f6e4 100644
+--- a/backend/src/repositories/aivenCheckoutRepository.ts
++++ b/backend/src/repositories/aivenCheckoutRepository.ts
+@@ -676,6 +676,46 @@ export class AivenCheckoutRepository implements CheckoutRepository {
+     )
+   }
+ 
++  async getPaymentChargeBySaleId(vendaId: string): Promise<{
++    gateway: string | null
++    externalId: string | null
++    chargeUrl: string | null
++    status: string | null
++    payload: Record<string, unknown> | null
++    details: Record<string, unknown> | null
++  } | null> {
++    const result = await this.db.query<{
++      gateway: string | null
++      external_id: string | null
++      charge_url: string | null
++      status: string | null
++      payload: Record<string, unknown> | null
++      details: Record<string, unknown> | null
++    }>(
++      `select
++         metadata->'payment_charge'->>'gateway' as gateway,
++         metadata->'payment_charge'->>'external_id' as external_id,
++         metadata->'payment_charge'->>'charge_url' as charge_url,
++         metadata->'payment_charge'->>'status' as status,
++         metadata->'payment_charge'->'payload' as payload,
++         metadata->'payment_charge'->'details' as details
++       from vendas_certificados
++       where id = $1::uuid
++       limit 1`,
++      [vendaId],
++    )
++    const row = result.rows[0]
++    if (!row) return null
++    return {
++      gateway: row.gateway ?? null,
++      externalId: row.external_id ?? null,
++      chargeUrl: row.charge_url ?? null,
++      status: row.status ?? null,
++      payload: row.payload ?? null,
++      details: row.details ?? null,
++    }
++  }
++
+   async applyPaymentWebhook(input: {
+     vendaId?: string | null
+     externalId?: string | null
+diff --git a/backend/src/repositories/checkoutRepository.ts b/backend/src/repositories/checkoutRepository.ts
+index 96354b3..05bdb1a 100644
+--- a/backend/src/repositories/checkoutRepository.ts
++++ b/backend/src/repositories/checkoutRepository.ts
+@@ -114,6 +114,14 @@ export interface CheckoutRepository {
+     payload?: Record<string, unknown> | null
+     details?: Record<string, unknown> | null
+   }): Promise<void>
++  getPaymentChargeBySaleId(vendaId: string): Promise<{
++    gateway: string | null
++    externalId: string | null
++    chargeUrl: string | null
++    status: string | null
++    payload: Record<string, unknown> | null
++    details: Record<string, unknown> | null
++  } | null>
+   markCheckoutFlowState(input: {
+     vendaId: string
+     stage: string
+diff --git a/backend/src/services/checkoutPaymentService.ts b/backend/src/services/checkoutPaymentService.ts
+index b83a607..d481aea 100644
+--- a/backend/src/services/checkoutPaymentService.ts
++++ b/backend/src/services/checkoutPaymentService.ts
+@@ -47,7 +47,7 @@ type PaymentFlowKind = 'pix' | 'boleto' | 'card' | 'link'
+ 
+ export class CheckoutPaymentService {
+   constructor(
+-    private readonly repository: Pick<CheckoutRepository, 'getCheckoutPaymentMethodConfig' | 'getCheckoutPaymentMethodConfigByGateway' | 'findCommercialSalePaymentData' | 'attachPaymentChargeToSale' | 'applyPaymentWebhook'>,
++    private readonly repository: Pick<CheckoutRepository, 'getCheckoutPaymentMethodConfig' | 'getCheckoutPaymentMethodConfigByGateway' | 'findCommercialSalePaymentData' | 'attachPaymentChargeToSale' | 'getPaymentChargeBySaleId' | 'applyPaymentWebhook'>,
+     private readonly outboxRepository?: CommunicationOutboxRepository,
+     private readonly fetchImpl: FetchLike = fetch,
+   ) {}
+@@ -98,6 +98,21 @@ export class CheckoutPaymentService {
+       return { ok: false, status: 'error', error: 'Forma de pagamento não encontrada.' }
+     }
+ 
++    const existingCharge = await this.repository.getPaymentChargeBySaleId?.(input.vendaId)
++    const existingGateway = String(existingCharge?.gateway ?? '').trim()
++    const existingStatus = String(existingCharge?.status ?? '').trim().toLowerCase()
++    const sameGateway = existingGateway && existingGateway === String(config.gateway ?? '')
++    if (sameGateway && ['pending', 'paid', 'action_required', 'processing', 'in_process'].includes(existingStatus)) {
++      return {
++        ok: true,
++        status: existingStatus === 'paid' ? 'paid' : 'pending',
++        externalId: existingCharge?.externalId ?? null,
++        chargeUrl: existingCharge?.chargeUrl ?? this.pickPaymentLink(existingCharge?.details),
++        payload: existingCharge?.payload ?? null,
++        details: existingCharge?.details ?? null,
++      }
++    }
++
+     const result = await this.createCharge(config, input)
+     await this.repository.attachPaymentChargeToSale({
+       vendaId: input.vendaId,
+@@ -176,9 +191,8 @@ export class CheckoutPaymentService {
+ 
+   private async createMercadoPagoCharge(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): Promise<ChargeResult> {
+     const method = this.inferMercadoPagoMethod(config)
+-    if (method === 'pix' || method === 'boleto' || method === 'card') {
+-      return this.createMercadoPagoOrder(config, input, method)
+-    }
++    if (method === 'pix') return this.createMercadoPagoPixPayment(config, input)
++    if (method === 'boleto' || method === 'card') return this.createMercadoPagoOrder(config, input, method)
+ 
+     const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/checkout/preferences`
+     const callbackUrl = this.resolveMercadoPagoCallbackUrl(config)
+@@ -580,18 +594,107 @@ export class CheckoutPaymentService {
+           })
+           .filter(Boolean)
+       : []
++    const rawDetail = !message && causes.length === 0
++      ? this.pickString(payload, ['error', 'status', 'detail', 'reason'])
++      : null
+     const detail = [message, ...causes].filter(Boolean).join(' | ')
+     return detail
+       ? `Mercado Pago recusou a cobrança (${status}): ${detail}`
+-      : `Mercado Pago recusou a cobrança (${status}).`
++      : rawDetail
++        ? `Mercado Pago recusou a cobrança (${status}): ${rawDetail}`
++        : `Mercado Pago recusou a cobrança (${status}).`
++  }
++
++  private async createMercadoPagoPixPayment(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): Promise<ChargeResult> {
++    const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/v1/payments`
++    const amount = Number(input.valor.toFixed(2))
++    const nameParts = input.comprador.nome.trim().split(/\s+/)
++    const firstName = nameParts.shift() || input.comprador.nome
++    const lastName = nameParts.join(' ') || firstName
++    const document = input.comprador.documento.replace(/\D/g, '')
++    const payer: Record<string, unknown> = {
++      email: config.ambiente === 'sandbox'
++        ? 'test_user_br@testuser.com'
++        : input.comprador.email,
++      first_name: config.ambiente === 'sandbox' ? 'APRO' : firstName,
++      last_name: config.ambiente === 'sandbox' ? 'TESTE' : lastName,
++      identification: {
++        type: input.card?.identification_type || (document.length === 14 ? 'CNPJ' : 'CPF'),
++        number: input.card?.identification_number || document,
++      },
++      address: {
++        zip_code: input.fiscal.cep.replace(/\D/g, ''),
++        street_name: input.fiscal.logradouro,
++        street_number: input.fiscal.numero || 'S/N',
++        neighborhood: input.fiscal.bairro,
++        city: input.fiscal.cidade,
++        federal_unit: input.fiscal.uf,
++      },
++    }
++    const body = {
++      transaction_amount: amount,
++      description: input.descricao,
++      payment_method_id: 'pix',
++      external_reference: input.vendaId,
++      payer,
++    }
++    const response = await this.fetchWithTimeout(endpoint, {
++      method: 'POST',
++      headers: {
++        'Content-Type': 'application/json',
++        'Authorization': `Bearer ${config.provider_api_token}`,
++        'X-Idempotency-Key': `avmd-${input.vendaId}-pix`,
++      },
++      body: JSON.stringify(body),
++    })
++    const payload = await response.json().catch(() => ({})) as Record<string, unknown>
++    if (!response.ok) {
++      if (response.status === 402) {
++        throw new Error(this.describeMercadoPagoPixHint(payload))
++      }
++      throw new Error(this.describeMercadoPagoError(payload, response.status))
++    }
++
++    const pointOfInteraction = this.asObject(payload.point_of_interaction)
++    const transactionData = this.asObject(pointOfInteraction.application_data)
++    const transactionDetails = this.asObject(payload.transaction_details)
++    const paymentMethodResponse = this.asObject(pointOfInteraction.transaction_data || payload.transaction_data)
++    const qrCode = this.pickString(paymentMethodResponse, ['qr_code'])
++    const qrCodeBase64 = this.pickString(paymentMethodResponse, ['qr_code_base64'])
++    const ticketUrl = this.pickString(paymentMethodResponse, ['ticket_url'])
++
++    return {
++      ok: true,
++      status: this.normalizeChargeStatus(payload),
++      externalId: this.pickString(payload, ['id']),
++      chargeUrl: ticketUrl,
++      payload,
++      details: {
++        gateway: 'mercado_pago',
++        order_id: this.pickString(payload, ['id']),
++        payment_id: this.pickString(payload, ['id']),
++        kind: 'pix',
++        ticket_url: ticketUrl,
++        qr_code: qrCode,
++        qr_code_base64: qrCodeBase64,
++        digitable_line: null,
++        barcode_content: null,
++        expires_at: this.pickString(payload, ['date_of_expiration']),
++        transaction_status: this.pickString(payload, ['status']),
++        transaction_status_detail: this.pickString(payload, ['status_detail']),
++        transaction_amount: this.pickString(transactionDetails, ['total_paid_amount']) ?? String(amount),
++      },
++    }
+   }
+ 
+   private describeMercadoPagoPixHint(payload: Record<string, unknown>) {
+     const detail = this.describeMercadoPagoError(payload, 402)
++    const payloadKeys = Object.keys(payload).slice(0, 8)
+     return [
+       detail,
+       'Se a intenção era teste, use as credenciais de teste do Mercado Pago com payer.first_name = APRO.',
+       'Se a intenção era produção, valide se o Access Token realmente é de produção e se a conta está habilitada para Pix.',
++      payloadKeys.length > 0 ? `Chaves retornadas pela API: ${payloadKeys.join(', ')}.` : null,
+     ].join(' ')
+   }
+ 
+diff --git a/backend/src/testing/checkoutPaymentService.test.ts b/backend/src/testing/checkoutPaymentService.test.ts
+index 8b6235e..ae1f9f6 100644
+--- a/backend/src/testing/checkoutPaymentService.test.ts
++++ b/backend/src/testing/checkoutPaymentService.test.ts
+@@ -30,6 +30,9 @@ test('gera cobranca mock quando integracoes reais estao bloqueadas', async () =>
+     async attachPaymentChargeToSale(input: unknown) {
+       attached.push(input as Record<string, unknown>)
+     },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async applyPaymentWebhook() {},
+   } as never)
+ 
+@@ -60,6 +63,9 @@ test('normaliza webhook pago e encaminha update para repositorio', async () => {
+     async getCheckoutPaymentMethodConfig() {
+       return null
+     },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async attachPaymentChargeToSale() {},
+     async applyPaymentWebhook(input: unknown) {
+       applied.push(input as Record<string, unknown>)
+@@ -96,6 +102,9 @@ test('cria preferencia do Mercado Pago e devolve link de pagamento', async () =>
+       }
+     },
+     async attachPaymentChargeToSale(input: unknown) { attached.push(input as Record<string, unknown>) },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async applyPaymentWebhook() {},
+   } as never, undefined, async (_url, init) => {
+     const body = JSON.parse(String(init?.body))
+@@ -130,6 +139,9 @@ test('enfileira email e whatsapp ao gerar link de pagamento', async () => {
+       }
+     },
+     async attachPaymentChargeToSale(input: unknown) { attached.push(input as Record<string, unknown>) },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async applyPaymentWebhook() {},
+   } as never, {
+     async create(input: unknown) {
+@@ -168,6 +180,9 @@ test('consulta pagamento do Mercado Pago antes de confirmar webhook', async () =
+         runtime: { modo_teste_geral: false, bloquear_integracoes_reais: false, aviso_checkout: '' },
+       }
+     },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async attachPaymentChargeToSale() {},
+     async applyPaymentWebhook(input: unknown) { applied.push(input as Record<string, unknown>) },
+   } as never, undefined, async url => {
+@@ -190,16 +205,28 @@ test('cria order Pix e retorna QR Code para o checkout', async () => {
+         provider_metadata: {}, runtime: { modo_teste_geral: true, bloquear_integracoes_reais: false, aviso_checkout: '' },
+       }
+     },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async attachPaymentChargeToSale() {},
+     async applyPaymentWebhook() {},
+   } as never, undefined, async (url, init) => {
+-    assert.match(String(url), /\/v1\/orders$/)
++    assert.match(String(url), /\/v1\/payments$/)
+     const body = JSON.parse(String(init?.body))
+-    assert.equal(body.processing_mode, 'automatic')
+-    assert.equal(body.transactions.payments[0].payment_method.id, 'pix')
++    assert.equal(body.transaction_amount, 50)
++    assert.equal(body.payment_method_id, 'pix')
++    assert.equal(body.payer.first_name, 'APRO')
+     return new Response(JSON.stringify({
+-      id: 'ORD-PIX-1', status: 'action_required', status_detail: 'waiting_transfer',
+-      transactions: { payments: [{ id: 'PAY-PIX-1', status: 'action_required', payment_method: { id: 'pix', type: 'bank_transfer', qr_code: 'copia-cola', qr_code_base64: 'base64', ticket_url: 'https://mp/pix' } }] },
++      id: 'PAY-PIX-1',
++      status: 'pending',
++      status_detail: 'pending_waiting_transfer',
++      point_of_interaction: {
++        transaction_data: {
++          qr_code: 'copia-cola',
++          qr_code_base64: 'base64',
++          ticket_url: 'https://mp/pix',
++        },
++      },
+     }), { status: 201 })
+   })
+   const result = await service.createChargeForSale({
+@@ -208,7 +235,7 @@ test('cria order Pix e retorna QR Code para o checkout', async () => {
+     fiscal: { cep: '01001000', logradouro: 'Praça da Sé', numero: '1', bairro: 'Sé', cidade: 'São Paulo', uf: 'SP' },
+   })
+   assert.equal(result.status, 'pending')
+-  assert.equal(result.externalId, 'ORD-PIX-1')
++  assert.equal(result.externalId, 'PAY-PIX-1')
+   assert.equal(result.details?.qr_code, 'copia-cola')
+ })
+ 
+@@ -231,6 +258,9 @@ test('infere boleto mesmo quando o cadastro da forma de pagamento usa nome descr
+         runtime: { modo_teste_geral: true, bloquear_integracoes_reais: false, aviso_checkout: '' },
+       }
+     },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async attachPaymentChargeToSale() {},
+     async applyPaymentWebhook() {},
+   } as never, undefined, async (url, init) => {
+@@ -290,6 +320,9 @@ test('valida HMAC e consulta order antes de confirmar pagamento', async () => {
+         runtime: { modo_teste_geral: true, bloquear_integracoes_reais: false, aviso_checkout: '' },
+       }
+     },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async attachPaymentChargeToSale() {},
+     async applyPaymentWebhook(input: unknown) { applied.push(input as Record<string, unknown>) },
+   } as never, undefined, async url => {
+diff --git a/scripts/check-renovacao.cjs b/scripts/check-renovacao.cjs
+new file mode 100644
+index 0000000..2aca921
+--- /dev/null
++++ b/scripts/check-renovacao.cjs
+@@ -0,0 +1,15 @@
++const pg = require('pg');
++const fs = require('fs');
++const env = fs.readFileSync('/opt/avmd/AVMD_System/backend/.env.local', 'utf8');
++const url = env.match(/DATABASE_URL=(.+)/)[1].trim();
++const c = new pg.Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
++Promise.all([
++  c.query("SELECT id, body, status, error, created_at FROM communication_outbox WHERE to_address LIKE '%992443779%' ORDER BY created_at DESC LIMIT 5"),
++  c.query("SELECT id, mensagem, direction, sender_name, created_at FROM crm_chat_messages WHERE document_key LIKE '%992443779%' ORDER BY created_at DESC LIMIT 5"),
++]).then(([outbox, msgs]) => {
++  console.log('=== OUTBOX ===');
++  console.log(JSON.stringify(outbox.rows, null, 2));
++  console.log('=== MESSAGES ===');
++  console.log(JSON.stringify(msgs.rows, null, 2));
++  c.end();
++}).catch(e => { console.error(e.message); c.end(); });
+diff --git a/scripts/check-renovacao.js b/scripts/check-renovacao.js
+new file mode 100644
+index 0000000..bcecb73
+--- /dev/null
++++ b/scripts/check-renovacao.js
+@@ -0,0 +1,8 @@
++const pg = require('pg');
++const fs = require('fs');
++const env = fs.readFileSync('/opt/avmd/AVMD_System/backend/.env.local', 'utf8');
++const url = env.match(/DATABASE_URL=(.+)/)[1].trim();
++const c = new pg.Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
++c.query("SELECT id, cliente, telefone, tipo_certificado, data_vencimento, status, ultimo_lembrete FROM renovacoes WHERE telefone LIKE '%992443779%' OR cliente ILIKE '%CORTE%' LIMIT 5")
++  .then(r => { console.log(JSON.stringify(r.rows, null, 2)); c.end(); })
++  .catch(e => { console.error(e.message); c.end(); });
+diff --git a/src/pages/Comercial.tsx b/src/pages/Comercial.tsx
+index f52d867..e7e3380 100644
+--- a/src/pages/Comercial.tsx
++++ b/src/pages/Comercial.tsx
+@@ -673,6 +673,7 @@ export default function Comercial() {
+   const [editForm, setEditForm] = useState<UpdateVendaInput & { tipo_produto_label?: string }>({ id: '' })
+   const [editSaving, setEditSaving] = useState(false)
+   const [updatingPaymentVendaId, setUpdatingPaymentVendaId] = useState<string | null>(null)
++  const [reenviandoCobrancaVendaId, setReenviandoCobrancaVendaId] = useState<string | null>(null)
+ 
+   // ── agenda state ─────────────────────────────────────────────
+   const [agenda, setAgenda]             = useState<AgendaItem[]>([])
+@@ -2088,6 +2089,68 @@ export default function Comercial() {
+     }
+   }
+ 
++  function getPaymentChargeInfo(venda: VendaRow) {
++    const paymentCharge = (venda.metadata as {
++      payment_charge?: {
++        gateway?: string | null
++        charge_url?: string | null
++        status?: string | null
++        details?: {
++          kind?: string | null
++          ticket_url?: string | null
++        } | null
++      }
++    } | null)?.payment_charge ?? null
++
++    const chargeUrl = paymentCharge?.charge_url ?? paymentCharge?.details?.ticket_url ?? null
++    const paymentKind = paymentCharge?.details?.kind ?? null
++    return { paymentCharge, chargeUrl, paymentKind }
++  }
++
++  async function reenviarCobrancaVenda(venda: VendaRow) {
++    if (!profile?.id || !venda.forma_pagamento_id) return
++    setReenviandoCobrancaVendaId(venda.id)
++    try {
++      const chargeResponse = await fetch(getApiUrl('/checkout/commercial-charge'), {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ venda_id: venda.id, profile_id: profile.id }),
++      })
++      const charge = await chargeResponse.json() as { ok?: boolean; chargeUrl?: string | null; error?: string }
++      if (!chargeResponse.ok || !charge.ok) {
++        throw new Error(charge.error ?? 'Não foi possível reabrir a cobrança.')
++      }
++
++      const paymentLink = charge.chargeUrl ?? null
++      if (!paymentLink) {
++        throw new Error('A cobrança foi localizada, mas o link de pagamento não veio na resposta.')
++      }
++
++      const paymentName = pagamentosDoGatewayAtual.find(item => item.id === venda.forma_pagamento_id)?.nome
++        ?? (venda.metadata as { forma_pagamento?: string } | null)?.forma_pagamento
++        ?? 'Pagamento'
++
++      await dispararComunicacaoAutomaticaVenda({
++        vendaId: venda.id,
++        clienteNome: (venda.cadastros_base as { nome?: string } | null)?.nome ?? venda.nome_faturamento ?? null,
++        produtoNome: venda.tipo_produto ?? 'Produto',
++        valorVenda: venda.valor_venda ?? 0,
++        formaPagamento: paymentName,
++        vencimento: venda.data_vencimento ?? null,
++        telefone: venda.telefone_faturamento ?? null,
++        email: venda.email_faturamento ?? null,
++        paymentLink,
++      })
++
++      showMsg('Cobrança reaberta e link reenviado ao cliente.', 'ok')
++      await fetchVendasV2()
++    } catch (error) {
++      showMsg(error instanceof Error ? error.message : 'Erro ao reenviar a cobrança.')
++    } finally {
++      setReenviandoCobrancaVendaId(null)
++    }
++  }
++
+   async function salvarCliente() {
+     if (!formCliente.cpf_cnpj.trim() || !formCliente.nome.trim()) return
+     setSalvandoCliente(true)
+@@ -5303,10 +5366,28 @@ export default function Comercial() {
+                             (v.metadata as { forma_pagamento?: string })?.forma_pagamento ?? '—'
+                           )}
+                           {(() => {
+-                            const paymentCharge = (v.metadata as { payment_charge?: { charge_url?: string | null } } | null)?.payment_charge
+-                            return paymentCharge?.charge_url ? (
+-                              <a href={paymentCharge.charge_url} target="_blank" rel="noreferrer" className="ml-2 text-xs font-medium text-blue-600 underline">Abrir</a>
+-                            ) : null
++                            const { paymentCharge, chargeUrl, paymentKind } = getPaymentChargeInfo(v)
++                            if (!chargeUrl) return null
++                            const isPix = paymentKind === 'pix'
++                            return (
++                              <span className="ml-2 inline-flex items-center gap-2">
++                                <a href={chargeUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 underline">
++                                  Abrir
++                                </a>
++                                {paymentCharge?.status !== 'paid' && (
++                                  <button
++                                    type="button"
++                                    onClick={e => { e.stopPropagation(); void reenviarCobrancaVenda(v) }}
++                                    disabled={reenviandoCobrancaVendaId === v.id}
++                                    className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300"
++                                    title={isPix ? 'Reenviar QR Pix ao cliente' : 'Reenviar link de pagamento ao cliente'}
++                                  >
++                                    <RefreshCcw size={11} className={reenviandoCobrancaVendaId === v.id ? 'animate-spin' : ''} />
++                                    {reenviandoCobrancaVendaId === v.id ? 'Reenviando...' : (isPix ? 'Reenviar QR' : 'Reenviar')}
++                                  </button>
++                                )}
++                              </span>
++                            )
+                           })()}
+                         </td>
+                         <td className="px-3 py-2 text-right font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">

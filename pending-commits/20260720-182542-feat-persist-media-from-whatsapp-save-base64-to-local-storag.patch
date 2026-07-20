@@ -1,0 +1,357 @@
+From: pending-queue <queue@avmd.local>
+Date: Mon, 20 Jul 2026 18:25:44 -0300
+Subject: feat: persist media from WhatsApp - save base64 to local storage
+Patch-Hash: sha256:f952242f259a6c0ecf8b46c8aca7abc342917f4d030bdf0c7ab7e94675542427
+---
+diff --git a/backend/sql/057_backfill_media_persist.sql b/backend/sql/057_backfill_media_persist.sql
+new file mode 100644
+index 0000000..4821def
+--- /dev/null
++++ b/backend/sql/057_backfill_media_persist.sql
+@@ -0,0 +1,17 @@
++-- 057_backfill_media_persist.sql
++-- Identifica mensagens com media_url como data: URI que podem ser persistidas
++
++-- Verificar quantas mensagens têm data: URI
++SELECT COUNT(*) as total_data_uri
++FROM crm_chat_messages
++WHERE media_url LIKE 'data:%';
++
++-- Verificar quantas mensagens têm URL do CDN do WhatsApp (precisam de proxy)
++SELECT COUNT(*) as total_whatsapp_cdn
++FROM crm_chat_messages
++WHERE media_url LIKE '%mmg.whatsapp.net%';
++
++-- Verificar quantas mensagens já têm path permanente (/api/chat/files/)
++SELECT COUNT(*) as total_permanent
++FROM crm_chat_messages
++WHERE media_url LIKE '/api/chat/files/%';
+diff --git a/backend/sql/057_backfill_media_persist.ts b/backend/sql/057_backfill_media_persist.ts
+new file mode 100644
+index 0000000..6064577
+--- /dev/null
++++ b/backend/sql/057_backfill_media_persist.ts
+@@ -0,0 +1,123 @@
++/**
++ * 057_backfill_media_persist.ts
++ * 
++ * Rodar com: npx tsx sql/057_backfill_media_persist.ts
++ * 
++ * Migra mensagens que têm media_url como data: URI para path permanente
++ * salva o arquivo no storage/attachments e atualiza crm_chat_messages.media_url.
++ */
++import { createAivenSqlClient } from '../db/aivenClient.js'
++import { FileRepository } from '../repositories/fileRepository.js'
++import { buildStoredPath, saveFile, getRelativePath } from '../utils/storage.js'
++
++const db = createAivenSqlClient()
++const fileRepository = new FileRepository(db)
++
++interface MessageRow {
++  id: string
++  conversation_id: string
++  external_message_id: string | null
++  media_url: string | null
++  mime_type: string | null
++  file_name: string | null
++  mensagem: string | null
++}
++
++function inferFileName(mimeType: string): string {
++  const mime = mimeType.toLowerCase()
++  if (mime.includes('pdf')) return 'documento.pdf'
++  if (mime.includes('png')) return 'imagem.png'
++  if (mime.includes('webp')) return 'imagem.webp'
++  if (mime.includes('jpeg') || mime.includes('jpg') || mime.startsWith('image/')) return 'imagem.jpg'
++  if (mime.includes('mpeg') || mime.includes('mp3')) return 'audio.mp3'
++  if (mime.includes('ogg') || mime.includes('opus') || mime.startsWith('audio/')) return 'audio.ogg'
++  if (mime.includes('mp4') || mime.startsWith('video/')) return 'video.mp4'
++  return 'arquivo'
++}
++
++async function main() {
++  console.log('[backfill] Iniciando backfill de midia...')
++
++  const result = await db.query<MessageRow>(
++    `SELECT id, conversation_id, external_message_id, media_url, mime_type, file_name, mensagem
++     FROM crm_chat_messages
++     WHERE media_url LIKE 'data:%'
++     ORDER BY created_at ASC`
++  )
++
++  const messages = result.rows
++  console.log(`[backfill] Encontradas ${messages.length} mensagens com data: URI`)
++
++  let saved = 0
++  let skipped = 0
++  let errors = 0
++
++  for (const msg of messages) {
++    try {
++      if (!msg.media_url || !msg.conversation_id) {
++        skipped++
++        continue
++      }
++
++      const match = msg.media_url.match(/^data:([^;]+);base64,(.+)$/)
++      if (!match) {
++        skipped++
++        continue
++      }
++
++      const mimeType = match[1]
++      const base64 = match[2]
++      const fileName = msg.file_name || inferFileName(mimeType)
++
++      let buffer: Buffer
++      try {
++        buffer = Buffer.from(base64, 'base64')
++      } catch {
++        errors++
++        continue
++      }
++
++      if (buffer.length > 50 * 1024 * 1024) {
++        console.log(`[backfill] Pulando ${fileName}: arquivo muito grande (${buffer.length} bytes)`)
++        skipped++
++        continue
++      }
++
++      const storedPath = buildStoredPath(msg.conversation_id, fileName)
++      saveFile(storedPath, buffer)
++
++      const fileRecord = await fileRepository.create({
++        conversation_id: msg.conversation_id,
++        original_name: fileName,
++        stored_path: storedPath,
++        mime_type: mimeType,
++        size_bytes: buffer.length,
++        uploaded_by: null,
++      })
++
++      const permanentUrl = `/api/chat/files/${fileRecord.id}`
++
++      await db.query(
++        `UPDATE crm_chat_messages
++         SET media_url = $1, mime_type = COALESCE(mime_type, $2), file_name = COALESCE(file_name, $3)
++         WHERE id = $4`,
++        [permanentUrl, mimeType, fileName, msg.id],
++      )
++
++      saved++
++      if (saved % 10 === 0) {
++        console.log(`[backfill] Progresso: ${saved}/${messages.length} salvas`)
++      }
++    } catch (err) {
++      console.error(`[backfill] Erro ao processar mensagem ${msg.id}:`, err)
++      errors++
++    }
++  }
++
++  console.log(`[backfill] Concluido: ${saved} salvas, ${skipped} puladas, ${errors} erros`)
++}
++
++main().catch(err => {
++  console.error('[backfill] Erro fatal:', err)
++  process.exit(1)
++})
+diff --git a/backend/sql/debug_check_events.sql b/backend/sql/debug_check_events.sql
+index b0747e9..9664c13 100644
+--- a/backend/sql/debug_check_events.sql
++++ b/backend/sql/debug_check_events.sql
+@@ -1,10 +1,3 @@
+-SELECT id, event_type,
+-  payload->>'mimeType' as mime,
+-  payload->>'mediaUrl' as media_url,
+-  payload->>'content' as content,
+-  COALESCE(payload#>>'{data,message,imageMessage}', payload#>>'{data,message,videoMessage}', payload#>>'{data,message,documentMessage}', payload#>>'{data,message,audioMessage}', 'N/A') as msg_type
++SELECT id, payload->>'mimeType' as mime, payload->>'mediaUrl' as media_url, payload->>'content' as content, payload->>'messageType' as msg_type
+ FROM communication_events
+-WHERE source='evolution'
+-  AND created_at > NOW() - INTERVAL '1 hour'
+-ORDER BY created_at DESC
+-LIMIT 10;
++WHERE id = 'a3d0129b-693b-4a32-8638-95ab28ac1e8c';
+diff --git a/backend/src/routes/chatRoutes.ts b/backend/src/routes/chatRoutes.ts
+index 7fe35ec..bd25871 100644
+--- a/backend/src/routes/chatRoutes.ts
++++ b/backend/src/routes/chatRoutes.ts
+@@ -993,12 +993,16 @@ export async function handleChatRoutes(
+         return true
+       }
+       const mime = fileRecord.mime_type || 'application/octet-stream'
+-      const disposition = `attachment; filename="${fileRecord.original_name}"`
++      const isInline = mime.startsWith('image/') || mime.startsWith('audio/') || mime.startsWith('video/')
++      const disposition = isInline
++        ? `inline; filename="${fileRecord.original_name}"`
++        : `attachment; filename="${fileRecord.original_name}"`
+       res.writeHead(200, {
+         'Content-Type': mime,
+         'Content-Disposition': disposition,
+         'Content-Length': data.length.toString(),
+         'Access-Control-Allow-Origin': corsOrigin,
++        'Cache-Control': 'private, max-age=86400',
+       })
+       res.end(data)
+       return true
+diff --git a/backend/src/routes/whatsappSendRoutes.ts b/backend/src/routes/whatsappSendRoutes.ts
+index 8d6a650..ce78ed7 100644
+--- a/backend/src/routes/whatsappSendRoutes.ts
++++ b/backend/src/routes/whatsappSendRoutes.ts
+@@ -7,6 +7,8 @@ import type { RenovacaoRepository, RenovacaoRow } from '../repositories/renovaca
+ import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
+ import type { ConfigRepository } from '../repositories/configRepository.js'
+ import { CommunicationEventRepository } from '../repositories/communicationEventRepository.js'
++import { FileRepository } from '../repositories/fileRepository.js'
++import { buildStoredPath, saveFile, getRelativePath } from '../utils/storage.js'
+ import { readJson, writeJson } from '../utils/http.js'
+ 
+ interface SendWhatsAppButton {
+@@ -64,6 +66,7 @@ type LeadRow = {
+ const config = loadConfig()
+ const db = createAivenSqlClient()
+ const communicationEventRepository = new CommunicationEventRepository(db)
++const fileRepository = new FileRepository(db)
+ 
+ function asRecord(value: unknown): JsonRecord | null {
+   return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : null
+@@ -131,6 +134,87 @@ function buildRemoteJid(phoneDigits: string | null) {
+   return phoneDigits ? `${phoneDigits}@s.whatsapp.net` : null
+ }
+ 
++function inferFileName(mimeType: string): string {
++  const mime = mimeType.toLowerCase()
++  if (mime.includes('pdf')) return 'documento.pdf'
++  if (mime.includes('png')) return 'imagem.png'
++  if (mime.includes('webp')) return 'imagem.webp'
++  if (mime.includes('jpeg') || mime.includes('jpg') || mime.startsWith('image/')) return 'imagem.jpg'
++  if (mime.includes('mpeg') || mime.includes('mp3')) return 'audio.mp3'
++  if (mime.includes('ogg') || mime.includes('opus') || mime.startsWith('audio/')) return 'audio.ogg'
++  if (mime.includes('mp4') || mime.startsWith('video/')) return 'video.mp4'
++  if (mime.includes('msword') || mime.includes('document')) return 'documento.docx'
++  if (mime.includes('spreadsheet') || mime.includes('excel')) return 'planilha.xlsx'
++  return 'arquivo'
++}
++
++async function persistMediaBase64(
++  rawPayload: JsonRecord,
++  fallbackMimeType: string | null,
++  fallbackFileName: string | null,
++  conversationJid: string,
++  externalMessageId: string | null,
++): Promise<void> {
++  try {
++    const data = asRecord(rawPayload.data)
++    const message = asRecord(data?.message)
++    if (!message) return
++
++    const entry = Object.entries(message).find(([key, value]) =>
++      value !== null && value !== undefined && key !== 'messageContextInfo',
++    )
++    if (!entry) return
++
++    const messagePayload = asRecord(entry[1])
++    if (!messagePayload) return
++
++    let base64 = pickString(messagePayload, 'base64', 'data')
++    if (!base64) base64 = deepFindString(entry[1], ['base64', 'data'])
++    if (!base64) return
++
++    const mimeType = pickString(messagePayload, 'mimetype', 'mimeType') || fallbackMimeType || 'application/octet-stream'
++    const fileName = pickString(messagePayload, 'fileName', 'title') || fallbackFileName || inferFileName(mimeType)
++
++    let buffer: Buffer
++    try {
++      buffer = Buffer.from(base64, 'base64')
++    } catch { return }
++    if (buffer.length > 50 * 1024 * 1024) return
++
++    const storedPath = buildStoredPath(conversationJid || 'unknown', fileName)
++    saveFile(storedPath, buffer)
++
++    const convResult = await db.query<{ id: string }>(
++      `SELECT id FROM crm_chat_conversations WHERE document_key = $1 ORDER BY updated_at DESC LIMIT 1`,
++      [conversationJid],
++    )
++    const convUuid = convResult.rows[0]?.id
++    if (!convUuid) return
++
++    const fileRecord = await fileRepository.create({
++      conversation_id: convUuid,
++      original_name: fileName,
++      stored_path: storedPath,
++      mime_type: mimeType,
++      size_bytes: buffer.length,
++      uploaded_by: null,
++    })
++
++    const permanentUrl = `/api/chat/files/${fileRecord.id}`
++
++    if (externalMessageId) {
++      await db.query(
++        `UPDATE crm_chat_messages
++           SET media_url = $1, mime_type = COALESCE(mime_type, $2), file_name = COALESCE(file_name, $3)
++         WHERE external_message_id = $4`,
++        [permanentUrl, mimeType, fileName, externalMessageId],
++      )
++    }
++  } catch (err) {
++    console.error('[persistMediaBase64] Erro ao salvar midia:', err)
++  }
++}
++
+ function inferCanalFromInstance(instanceName: string | null | undefined) {
+   const normalized = String(instanceName ?? '').trim().toLowerCase()
+   if (!normalized) return 'atendimento'
+@@ -669,6 +753,16 @@ export async function handleWhatsappSendRoutes(
+       payload,
+     })
+ 
++    if (!normalized.fromMe && normalized.mediaUrl) {
++      persistMediaBase64(
++        normalized.raw,
++        normalized.mimeType,
++        normalized.fileName,
++        normalized.conversationId || '',
++        normalized.externalMessageId,
++      ).catch(() => { /* best effort */ })
++    }
++
+     const forwarded = await forwardInboundToN8n(normalized, lead?.id ?? null, renovacaoRepo, linksRepo, configRepository)
+ 
+     writeJson(res, 200, {
+diff --git a/scripts/check-renovacao.cjs b/scripts/check-renovacao.cjs
+new file mode 100644
+index 0000000..2aca921
+--- /dev/null
++++ b/scripts/check-renovacao.cjs
+@@ -0,0 +1,15 @@
++const pg = require('pg');
++const fs = require('fs');
++const env = fs.readFileSync('/opt/avmd/AVMD_System/backend/.env.local', 'utf8');
++const url = env.match(/DATABASE_URL=(.+)/)[1].trim();
++const c = new pg.Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
++Promise.all([
++  c.query("SELECT id, body, status, error, created_at FROM communication_outbox WHERE to_address LIKE '%992443779%' ORDER BY created_at DESC LIMIT 5"),
++  c.query("SELECT id, mensagem, direction, sender_name, created_at FROM crm_chat_messages WHERE document_key LIKE '%992443779%' ORDER BY created_at DESC LIMIT 5"),
++]).then(([outbox, msgs]) => {
++  console.log('=== OUTBOX ===');
++  console.log(JSON.stringify(outbox.rows, null, 2));
++  console.log('=== MESSAGES ===');
++  console.log(JSON.stringify(msgs.rows, null, 2));
++  c.end();
++}).catch(e => { console.error(e.message); c.end(); });
+diff --git a/scripts/check-renovacao.js b/scripts/check-renovacao.js
+new file mode 100644
+index 0000000..bcecb73
+--- /dev/null
++++ b/scripts/check-renovacao.js
+@@ -0,0 +1,8 @@
++const pg = require('pg');
++const fs = require('fs');
++const env = fs.readFileSync('/opt/avmd/AVMD_System/backend/.env.local', 'utf8');
++const url = env.match(/DATABASE_URL=(.+)/)[1].trim();
++const c = new pg.Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
++c.query("SELECT id, cliente, telefone, tipo_certificado, data_vencimento, status, ultimo_lembrete FROM renovacoes WHERE telefone LIKE '%992443779%' OR cliente ILIKE '%CORTE%' LIMIT 5")
++  .then(r => { console.log(JSON.stringify(r.rows, null, 2)); c.end(); })
++  .catch(e => { console.error(e.message); c.end(); });

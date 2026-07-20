@@ -1,0 +1,403 @@
+From: pending-queue <queue@avmd.local>
+Date: Mon, 20 Jul 2026 12:31:40 -0300
+Subject: fix: type canal para 'renovacao' | 'atendimento'
+Patch-Hash: sha256:a5d1fb593b09acfbf77fddbb6747a085708a96a723a237d91ed490d3948e914c
+---
+diff --git a/backend/src/repositories/aivenCheckoutRepository.ts b/backend/src/repositories/aivenCheckoutRepository.ts
+index 98324a0..f72f6e4 100644
+--- a/backend/src/repositories/aivenCheckoutRepository.ts
++++ b/backend/src/repositories/aivenCheckoutRepository.ts
+@@ -676,6 +676,46 @@ export class AivenCheckoutRepository implements CheckoutRepository {
+     )
+   }
+ 
++  async getPaymentChargeBySaleId(vendaId: string): Promise<{
++    gateway: string | null
++    externalId: string | null
++    chargeUrl: string | null
++    status: string | null
++    payload: Record<string, unknown> | null
++    details: Record<string, unknown> | null
++  } | null> {
++    const result = await this.db.query<{
++      gateway: string | null
++      external_id: string | null
++      charge_url: string | null
++      status: string | null
++      payload: Record<string, unknown> | null
++      details: Record<string, unknown> | null
++    }>(
++      `select
++         metadata->'payment_charge'->>'gateway' as gateway,
++         metadata->'payment_charge'->>'external_id' as external_id,
++         metadata->'payment_charge'->>'charge_url' as charge_url,
++         metadata->'payment_charge'->>'status' as status,
++         metadata->'payment_charge'->'payload' as payload,
++         metadata->'payment_charge'->'details' as details
++       from vendas_certificados
++       where id = $1::uuid
++       limit 1`,
++      [vendaId],
++    )
++    const row = result.rows[0]
++    if (!row) return null
++    return {
++      gateway: row.gateway ?? null,
++      externalId: row.external_id ?? null,
++      chargeUrl: row.charge_url ?? null,
++      status: row.status ?? null,
++      payload: row.payload ?? null,
++      details: row.details ?? null,
++    }
++  }
++
+   async applyPaymentWebhook(input: {
+     vendaId?: string | null
+     externalId?: string | null
+diff --git a/backend/src/repositories/checkoutRepository.ts b/backend/src/repositories/checkoutRepository.ts
+index 96354b3..05bdb1a 100644
+--- a/backend/src/repositories/checkoutRepository.ts
++++ b/backend/src/repositories/checkoutRepository.ts
+@@ -114,6 +114,14 @@ export interface CheckoutRepository {
+     payload?: Record<string, unknown> | null
+     details?: Record<string, unknown> | null
+   }): Promise<void>
++  getPaymentChargeBySaleId(vendaId: string): Promise<{
++    gateway: string | null
++    externalId: string | null
++    chargeUrl: string | null
++    status: string | null
++    payload: Record<string, unknown> | null
++    details: Record<string, unknown> | null
++  } | null>
+   markCheckoutFlowState(input: {
+     vendaId: string
+     stage: string
+diff --git a/backend/src/services/checkoutPaymentService.ts b/backend/src/services/checkoutPaymentService.ts
+index b83a607..d481aea 100644
+--- a/backend/src/services/checkoutPaymentService.ts
++++ b/backend/src/services/checkoutPaymentService.ts
+@@ -47,7 +47,7 @@ type PaymentFlowKind = 'pix' | 'boleto' | 'card' | 'link'
+ 
+ export class CheckoutPaymentService {
+   constructor(
+-    private readonly repository: Pick<CheckoutRepository, 'getCheckoutPaymentMethodConfig' | 'getCheckoutPaymentMethodConfigByGateway' | 'findCommercialSalePaymentData' | 'attachPaymentChargeToSale' | 'applyPaymentWebhook'>,
++    private readonly repository: Pick<CheckoutRepository, 'getCheckoutPaymentMethodConfig' | 'getCheckoutPaymentMethodConfigByGateway' | 'findCommercialSalePaymentData' | 'attachPaymentChargeToSale' | 'getPaymentChargeBySaleId' | 'applyPaymentWebhook'>,
+     private readonly outboxRepository?: CommunicationOutboxRepository,
+     private readonly fetchImpl: FetchLike = fetch,
+   ) {}
+@@ -98,6 +98,21 @@ export class CheckoutPaymentService {
+       return { ok: false, status: 'error', error: 'Forma de pagamento não encontrada.' }
+     }
+ 
++    const existingCharge = await this.repository.getPaymentChargeBySaleId?.(input.vendaId)
++    const existingGateway = String(existingCharge?.gateway ?? '').trim()
++    const existingStatus = String(existingCharge?.status ?? '').trim().toLowerCase()
++    const sameGateway = existingGateway && existingGateway === String(config.gateway ?? '')
++    if (sameGateway && ['pending', 'paid', 'action_required', 'processing', 'in_process'].includes(existingStatus)) {
++      return {
++        ok: true,
++        status: existingStatus === 'paid' ? 'paid' : 'pending',
++        externalId: existingCharge?.externalId ?? null,
++        chargeUrl: existingCharge?.chargeUrl ?? this.pickPaymentLink(existingCharge?.details),
++        payload: existingCharge?.payload ?? null,
++        details: existingCharge?.details ?? null,
++      }
++    }
++
+     const result = await this.createCharge(config, input)
+     await this.repository.attachPaymentChargeToSale({
+       vendaId: input.vendaId,
+@@ -176,9 +191,8 @@ export class CheckoutPaymentService {
+ 
+   private async createMercadoPagoCharge(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): Promise<ChargeResult> {
+     const method = this.inferMercadoPagoMethod(config)
+-    if (method === 'pix' || method === 'boleto' || method === 'card') {
+-      return this.createMercadoPagoOrder(config, input, method)
+-    }
++    if (method === 'pix') return this.createMercadoPagoPixPayment(config, input)
++    if (method === 'boleto' || method === 'card') return this.createMercadoPagoOrder(config, input, method)
+ 
+     const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/checkout/preferences`
+     const callbackUrl = this.resolveMercadoPagoCallbackUrl(config)
+@@ -580,18 +594,107 @@ export class CheckoutPaymentService {
+           })
+           .filter(Boolean)
+       : []
++    const rawDetail = !message && causes.length === 0
++      ? this.pickString(payload, ['error', 'status', 'detail', 'reason'])
++      : null
+     const detail = [message, ...causes].filter(Boolean).join(' | ')
+     return detail
+       ? `Mercado Pago recusou a cobrança (${status}): ${detail}`
+-      : `Mercado Pago recusou a cobrança (${status}).`
++      : rawDetail
++        ? `Mercado Pago recusou a cobrança (${status}): ${rawDetail}`
++        : `Mercado Pago recusou a cobrança (${status}).`
++  }
++
++  private async createMercadoPagoPixPayment(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): Promise<ChargeResult> {
++    const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/v1/payments`
++    const amount = Number(input.valor.toFixed(2))
++    const nameParts = input.comprador.nome.trim().split(/\s+/)
++    const firstName = nameParts.shift() || input.comprador.nome
++    const lastName = nameParts.join(' ') || firstName
++    const document = input.comprador.documento.replace(/\D/g, '')
++    const payer: Record<string, unknown> = {
++      email: config.ambiente === 'sandbox'
++        ? 'test_user_br@testuser.com'
++        : input.comprador.email,
++      first_name: config.ambiente === 'sandbox' ? 'APRO' : firstName,
++      last_name: config.ambiente === 'sandbox' ? 'TESTE' : lastName,
++      identification: {
++        type: input.card?.identification_type || (document.length === 14 ? 'CNPJ' : 'CPF'),
++        number: input.card?.identification_number || document,
++      },
++      address: {
++        zip_code: input.fiscal.cep.replace(/\D/g, ''),
++        street_name: input.fiscal.logradouro,
++        street_number: input.fiscal.numero || 'S/N',
++        neighborhood: input.fiscal.bairro,
++        city: input.fiscal.cidade,
++        federal_unit: input.fiscal.uf,
++      },
++    }
++    const body = {
++      transaction_amount: amount,
++      description: input.descricao,
++      payment_method_id: 'pix',
++      external_reference: input.vendaId,
++      payer,
++    }
++    const response = await this.fetchWithTimeout(endpoint, {
++      method: 'POST',
++      headers: {
++        'Content-Type': 'application/json',
++        'Authorization': `Bearer ${config.provider_api_token}`,
++        'X-Idempotency-Key': `avmd-${input.vendaId}-pix`,
++      },
++      body: JSON.stringify(body),
++    })
++    const payload = await response.json().catch(() => ({})) as Record<string, unknown>
++    if (!response.ok) {
++      if (response.status === 402) {
++        throw new Error(this.describeMercadoPagoPixHint(payload))
++      }
++      throw new Error(this.describeMercadoPagoError(payload, response.status))
++    }
++
++    const pointOfInteraction = this.asObject(payload.point_of_interaction)
++    const transactionData = this.asObject(pointOfInteraction.application_data)
++    const transactionDetails = this.asObject(payload.transaction_details)
++    const paymentMethodResponse = this.asObject(pointOfInteraction.transaction_data || payload.transaction_data)
++    const qrCode = this.pickString(paymentMethodResponse, ['qr_code'])
++    const qrCodeBase64 = this.pickString(paymentMethodResponse, ['qr_code_base64'])
++    const ticketUrl = this.pickString(paymentMethodResponse, ['ticket_url'])
++
++    return {
++      ok: true,
++      status: this.normalizeChargeStatus(payload),
++      externalId: this.pickString(payload, ['id']),
++      chargeUrl: ticketUrl,
++      payload,
++      details: {
++        gateway: 'mercado_pago',
++        order_id: this.pickString(payload, ['id']),
++        payment_id: this.pickString(payload, ['id']),
++        kind: 'pix',
++        ticket_url: ticketUrl,
++        qr_code: qrCode,
++        qr_code_base64: qrCodeBase64,
++        digitable_line: null,
++        barcode_content: null,
++        expires_at: this.pickString(payload, ['date_of_expiration']),
++        transaction_status: this.pickString(payload, ['status']),
++        transaction_status_detail: this.pickString(payload, ['status_detail']),
++        transaction_amount: this.pickString(transactionDetails, ['total_paid_amount']) ?? String(amount),
++      },
++    }
+   }
+ 
+   private describeMercadoPagoPixHint(payload: Record<string, unknown>) {
+     const detail = this.describeMercadoPagoError(payload, 402)
++    const payloadKeys = Object.keys(payload).slice(0, 8)
+     return [
+       detail,
+       'Se a intenção era teste, use as credenciais de teste do Mercado Pago com payer.first_name = APRO.',
+       'Se a intenção era produção, valide se o Access Token realmente é de produção e se a conta está habilitada para Pix.',
++      payloadKeys.length > 0 ? `Chaves retornadas pela API: ${payloadKeys.join(', ')}.` : null,
+     ].join(' ')
+   }
+ 
+diff --git a/backend/src/testing/checkoutPaymentService.test.ts b/backend/src/testing/checkoutPaymentService.test.ts
+index 8b6235e..ae1f9f6 100644
+--- a/backend/src/testing/checkoutPaymentService.test.ts
++++ b/backend/src/testing/checkoutPaymentService.test.ts
+@@ -30,6 +30,9 @@ test('gera cobranca mock quando integracoes reais estao bloqueadas', async () =>
+     async attachPaymentChargeToSale(input: unknown) {
+       attached.push(input as Record<string, unknown>)
+     },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async applyPaymentWebhook() {},
+   } as never)
+ 
+@@ -60,6 +63,9 @@ test('normaliza webhook pago e encaminha update para repositorio', async () => {
+     async getCheckoutPaymentMethodConfig() {
+       return null
+     },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async attachPaymentChargeToSale() {},
+     async applyPaymentWebhook(input: unknown) {
+       applied.push(input as Record<string, unknown>)
+@@ -96,6 +102,9 @@ test('cria preferencia do Mercado Pago e devolve link de pagamento', async () =>
+       }
+     },
+     async attachPaymentChargeToSale(input: unknown) { attached.push(input as Record<string, unknown>) },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async applyPaymentWebhook() {},
+   } as never, undefined, async (_url, init) => {
+     const body = JSON.parse(String(init?.body))
+@@ -130,6 +139,9 @@ test('enfileira email e whatsapp ao gerar link de pagamento', async () => {
+       }
+     },
+     async attachPaymentChargeToSale(input: unknown) { attached.push(input as Record<string, unknown>) },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async applyPaymentWebhook() {},
+   } as never, {
+     async create(input: unknown) {
+@@ -168,6 +180,9 @@ test('consulta pagamento do Mercado Pago antes de confirmar webhook', async () =
+         runtime: { modo_teste_geral: false, bloquear_integracoes_reais: false, aviso_checkout: '' },
+       }
+     },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async attachPaymentChargeToSale() {},
+     async applyPaymentWebhook(input: unknown) { applied.push(input as Record<string, unknown>) },
+   } as never, undefined, async url => {
+@@ -190,16 +205,28 @@ test('cria order Pix e retorna QR Code para o checkout', async () => {
+         provider_metadata: {}, runtime: { modo_teste_geral: true, bloquear_integracoes_reais: false, aviso_checkout: '' },
+       }
+     },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async attachPaymentChargeToSale() {},
+     async applyPaymentWebhook() {},
+   } as never, undefined, async (url, init) => {
+-    assert.match(String(url), /\/v1\/orders$/)
++    assert.match(String(url), /\/v1\/payments$/)
+     const body = JSON.parse(String(init?.body))
+-    assert.equal(body.processing_mode, 'automatic')
+-    assert.equal(body.transactions.payments[0].payment_method.id, 'pix')
++    assert.equal(body.transaction_amount, 50)
++    assert.equal(body.payment_method_id, 'pix')
++    assert.equal(body.payer.first_name, 'APRO')
+     return new Response(JSON.stringify({
+-      id: 'ORD-PIX-1', status: 'action_required', status_detail: 'waiting_transfer',
+-      transactions: { payments: [{ id: 'PAY-PIX-1', status: 'action_required', payment_method: { id: 'pix', type: 'bank_transfer', qr_code: 'copia-cola', qr_code_base64: 'base64', ticket_url: 'https://mp/pix' } }] },
++      id: 'PAY-PIX-1',
++      status: 'pending',
++      status_detail: 'pending_waiting_transfer',
++      point_of_interaction: {
++        transaction_data: {
++          qr_code: 'copia-cola',
++          qr_code_base64: 'base64',
++          ticket_url: 'https://mp/pix',
++        },
++      },
+     }), { status: 201 })
+   })
+   const result = await service.createChargeForSale({
+@@ -208,7 +235,7 @@ test('cria order Pix e retorna QR Code para o checkout', async () => {
+     fiscal: { cep: '01001000', logradouro: 'Praça da Sé', numero: '1', bairro: 'Sé', cidade: 'São Paulo', uf: 'SP' },
+   })
+   assert.equal(result.status, 'pending')
+-  assert.equal(result.externalId, 'ORD-PIX-1')
++  assert.equal(result.externalId, 'PAY-PIX-1')
+   assert.equal(result.details?.qr_code, 'copia-cola')
+ })
+ 
+@@ -231,6 +258,9 @@ test('infere boleto mesmo quando o cadastro da forma de pagamento usa nome descr
+         runtime: { modo_teste_geral: true, bloquear_integracoes_reais: false, aviso_checkout: '' },
+       }
+     },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async attachPaymentChargeToSale() {},
+     async applyPaymentWebhook() {},
+   } as never, undefined, async (url, init) => {
+@@ -290,6 +320,9 @@ test('valida HMAC e consulta order antes de confirmar pagamento', async () => {
+         runtime: { modo_teste_geral: true, bloquear_integracoes_reais: false, aviso_checkout: '' },
+       }
+     },
++    async getPaymentChargeBySaleId() {
++      return null
++    },
+     async attachPaymentChargeToSale() {},
+     async applyPaymentWebhook(input: unknown) { applied.push(input as Record<string, unknown>) },
+   } as never, undefined, async url => {
+diff --git a/scripts/check-renovacao.cjs b/scripts/check-renovacao.cjs
+new file mode 100644
+index 0000000..2aca921
+--- /dev/null
++++ b/scripts/check-renovacao.cjs
+@@ -0,0 +1,15 @@
++const pg = require('pg');
++const fs = require('fs');
++const env = fs.readFileSync('/opt/avmd/AVMD_System/backend/.env.local', 'utf8');
++const url = env.match(/DATABASE_URL=(.+)/)[1].trim();
++const c = new pg.Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
++Promise.all([
++  c.query("SELECT id, body, status, error, created_at FROM communication_outbox WHERE to_address LIKE '%992443779%' ORDER BY created_at DESC LIMIT 5"),
++  c.query("SELECT id, mensagem, direction, sender_name, created_at FROM crm_chat_messages WHERE document_key LIKE '%992443779%' ORDER BY created_at DESC LIMIT 5"),
++]).then(([outbox, msgs]) => {
++  console.log('=== OUTBOX ===');
++  console.log(JSON.stringify(outbox.rows, null, 2));
++  console.log('=== MESSAGES ===');
++  console.log(JSON.stringify(msgs.rows, null, 2));
++  c.end();
++}).catch(e => { console.error(e.message); c.end(); });
+diff --git a/scripts/check-renovacao.js b/scripts/check-renovacao.js
+new file mode 100644
+index 0000000..bcecb73
+--- /dev/null
++++ b/scripts/check-renovacao.js
+@@ -0,0 +1,8 @@
++const pg = require('pg');
++const fs = require('fs');
++const env = fs.readFileSync('/opt/avmd/AVMD_System/backend/.env.local', 'utf8');
++const url = env.match(/DATABASE_URL=(.+)/)[1].trim();
++const c = new pg.Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
++c.query("SELECT id, cliente, telefone, tipo_certificado, data_vencimento, status, ultimo_lembrete FROM renovacoes WHERE telefone LIKE '%992443779%' OR cliente ILIKE '%CORTE%' LIMIT 5")
++  .then(r => { console.log(JSON.stringify(r.rows, null, 2)); c.end(); })
++  .catch(e => { console.error(e.message); c.end(); });
+diff --git a/src/lib/communication.ts b/src/lib/communication.ts
+index 425c274..4cc5f55 100644
+--- a/src/lib/communication.ts
++++ b/src/lib/communication.ts
+@@ -106,13 +106,13 @@ export async function queueWhatsAppFollowUp(input: {
+   to: string
+   body: string
+   renovacaoId: string
+-  canal?: string
++  canal?: 'renovacao' | 'atendimento'
+   instanceName?: string
+   round?: number
+ }) {
+   const round = Math.max(1, Math.min(input.round ?? 1, MAX_FOLLOWUP_ROUNDS))
+   const delayMs = FOLLOWUP_DELAY_MS[round] ?? FOLLOWUP_DELAY_MS[1]
+-  const canal = input.canal ?? 'renovacao'
++  const canal: 'renovacao' | 'atendimento' = input.canal ?? 'renovacao'
+   const active = await loadActiveWhatsAppIntegration(canal).catch(() => null)
+   return queueCommunication({
+     channel: 'whatsapp',
