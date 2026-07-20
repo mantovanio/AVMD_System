@@ -106,13 +106,13 @@ export async function queueWhatsAppFollowUp(input: {
   to: string
   body: string
   renovacaoId: string
-  canal?: string
+  canal?: 'renovacao' | 'atendimento'
   instanceName?: string
   round?: number
 }) {
   const round = Math.max(1, Math.min(input.round ?? 1, MAX_FOLLOWUP_ROUNDS))
   const delayMs = FOLLOWUP_DELAY_MS[round] ?? FOLLOWUP_DELAY_MS[1]
-  const canal = input.canal ?? 'renovacao'
+  const canal: 'renovacao' | 'atendimento' = input.canal ?? 'renovacao'
   const active = await loadActiveWhatsAppIntegration(canal).catch(() => null)
   return queueCommunication({
     channel: 'whatsapp',
