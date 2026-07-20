@@ -141,11 +141,11 @@ export class CommercialRepository {
     if (!admin.rows[0]) throw new Error('Apenas administradores podem alterar a forma de pagamento.')
 
     const settings = await this.db.query<{ gateway: string | null }>(`
-      select coalesce(value->>'default_method_id', method->>'id') as gateway
-      from app_settings
-      left join lateral jsonb_array_elements(coalesce(value->'methods', '[]'::jsonb)) method
+      select coalesce(s.value->>'default_method_id', method->>'id') as gateway
+      from app_settings s
+      left join lateral jsonb_array_elements(coalesce(s.value->'methods', '[]'::jsonb)) method
         on method->>'is_default' = 'true'
-      where key = 'payment_methods'
+      where s.key = 'payment_methods'
       limit 1
     `)
     const gateway = settings.rows[0]?.gateway ?? null
