@@ -746,6 +746,7 @@ export default function Comercial() {
   const importClientesRef                       = useRef<HTMLInputElement>(null)
   const tabelaProdutosSectionRef                = useRef<HTMLDivElement | null>(null)
   const tabelaAgentesSectionRef                 = useRef<HTMLDivElement | null>(null)
+  const vendasRefreshLockRef                    = useRef(false)
   const [importandoSafeweb, setImportandoSafeweb] = useState(false)
   const [importandoClientes, setImportandoClientes] = useState(false)
   const [resultSafeweb, setResultSafeweb] = useState<{ clientes: number; novos: number; atualizados: number; divergentes: number } | null>(null)
@@ -1523,6 +1524,10 @@ export default function Comercial() {
     const start = (paginaAtual - 1) * itensPorPagina
     return vendasFiltradas.slice(start, start + itensPorPagina)
   }, [vendasFiltradas, paginaAtual, itensPorPagina])
+  const vendasComPagamentoPendente = useMemo(() => vendasV2.some(v => {
+    const { paymentCharge } = getPaymentChargeInfo(v)
+    return Boolean(paymentCharge && paymentCharge.status !== 'paid' && v.status_pagamento !== 'pago')
+  }), [vendasV2])
 
   // ── fetch V2 ─────────────────────────────────────────────────
   const fetchVendasV2 = useCallback(async () => {
@@ -1691,6 +1696,23 @@ export default function Comercial() {
     }
   }, [tab, fetchIndisponibilidades])
   useEffect(() => { void fetchCatalogo()  }, [fetchCatalogo])
+  useEffect(() => {
+    if (tab !== 'vendas' || !vendasComPagamentoPendente) return
+
+    const refresh = async () => {
+      if (vendasRefreshLockRef.current) return
+      vendasRefreshLockRef.current = true
+      try {
+        await fetchVendasV2()
+      } finally {
+        vendasRefreshLockRef.current = false
+      }
+    }
+
+    const interval = setInterval(() => { void refresh() }, 15_000)
+    void refresh()
+    return () => clearInterval(interval)
+  }, [tab, vendasComPagamentoPendente, fetchVendasV2])
 
   useEffect(() => {
     const previous = vendaAutomationSnapshotRef.current
