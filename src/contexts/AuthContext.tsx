@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { useClerk, useSession, useSignIn, useUser } from '@clerk/clerk-react'
 import { supabase } from '@/lib/supabase'
 import { getApiUrl, useLegacySupabase } from '@/lib/api'
+import { translatePasswordPolicyError } from '@/lib/passwordPolicy'
 import type { Profile } from '@/types'
 
 export interface SignUpData {
@@ -80,7 +81,7 @@ function getClerkErrorMessage(error: unknown, fallback: string) {
     return 'Código de verificação expirado. Solicite um novo código.'
   }
 
-  return message || fallback
+  return translatePasswordPolicyError(message || fallback)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

@@ -59,6 +59,48 @@ function isClerkNotFoundError(error: unknown) {
   return status === 404 || message.includes('no user was found with id') || message.includes('not found')
 }
 
+async function resolveClerkUserByProfile(
+  clerkClient: ReturnType<typeof createClerkClient>,
+  profileRepository: ProfileRepository,
+  profileId: string,
+) {
+  const profile = await profileRepository.findById(profileId)
+  if (!profile) return { profile: null, clerkUserId: null }
+
+  if (profile.clerk_user_id) {
+    try {
+      const clerkUser = await clerkClient.users.getUser(profile.clerk_user_id)
+      if (clerkUser?.id) {
+        return { profile, clerkUserId: clerkUser.id }
+      }
+    } catch (error) {
+      if (!isClerkNotFoundError(error)) {
+        throw error
+      }
+    }
+  }
+
+  const email = profile.email?.trim().toLowerCase()
+  if (!email) {
+    return { profile, clerkUserId: null }
+  }
+
+  const clerkUsers = await clerkClient.users.getUserList({ emailAddress: [email], limit: 1 })
+  const clerkUser = clerkUsers.data.find(user =>
+    user.emailAddresses?.some(item => item.emailAddress?.trim().toLowerCase() === email),
+  )
+
+  if (!clerkUser?.id) {
+    return { profile, clerkUserId: null }
+  }
+
+  if (profile.clerk_user_id !== clerkUser.id) {
+    await profileRepository.update(profile.id, { clerk_user_id: clerkUser.id })
+  }
+
+  return { profile, clerkUserId: clerkUser.id }
+}
+
 export async function handleAdminUsersRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -112,24 +154,36 @@ export async function handleAdminUsersRoutes(
 
   if (body.action === 'update_password') {
     const { userId, password } = body.payload
-    const profile = await profileRepository.findById(userId)
-    if (!profile?.clerk_user_id) {
+    const resolved = await resolveClerkUserByProfile(clerkClient, profileRepository, userId)
+    const profile = resolved.profile
+    const clerkUserId = resolved.clerkUserId
+
+    if (!profile) {
+      writeJson(res, 404, { ok: false, error: 'Perfil não encontrado.' }, corsOrigin)
+      return true
+    }
+
+    if (!clerkUserId) {
       writeJson(res, 400, { ok: false, error: 'Este usuário ainda não está vinculado ao Clerk. Vincule a conta de login antes de alterar a senha.' }, corsOrigin)
       return true
     }
     try {
-      const clerkUser = await clerkClient.users.getUser(profile.clerk_user_id)
+      const clerkUser = await clerkClient.users.getUser(clerkUserId)
       if (!clerkUser?.id) {
         writeJson(res, 400, { ok: false, error: 'Conta vinculada não encontrada no Clerk. Refaça o vínculo antes de alterar a senha.' }, corsOrigin)
         return true
       }
-      await clerkClient.users.updateUser(profile.clerk_user_id, {
+      await clerkClient.users.updateUser(clerkUserId, {
         password,
         skipPasswordChecks: true,
         signOutOfOtherSessions: true,
       })
-      writeJson(res, 200, { ok: true, userId: profile.clerk_user_id, verified: true }, corsOrigin)
+      writeJson(res, 200, { ok: true, userId: clerkUserId, verified: true }, corsOrigin)
     } catch (error) {
+      if (isClerkNotFoundError(error)) {
+        writeJson(res, 400, { ok: false, error: 'A conta vinculada ao Clerk não foi encontrada. Refaça o vínculo antes de alterar a senha.' }, corsOrigin)
+        return true
+      }
       writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
     }
     return true

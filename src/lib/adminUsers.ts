@@ -33,11 +33,18 @@ const DEFAULT_VINCULO_BY_PERFIL: Record<PerfilAcesso, TipoVinculoUsuario> = {
 function normalizeAdminUserError(error: string | undefined) {
   const text = String(error ?? '').trim()
   if (!text) return 'Falha ao processar o usuário.'
+  const normalized = text.toLowerCase()
   if (text === 'Given password is not strong enough.') {
     return 'A senha inicial está fraca. Use pelo menos 8 caracteres com letras maiúsculas, minúsculas e números.'
   }
-  if (text.toLowerCase().includes('missing data')) {
+  if (normalized.includes('missing data')) {
     return 'Dados obrigatórios não foram aceitos pelo provedor de autenticação. Revise nome, e-mail e uma senha forte.'
+  }
+  if (normalized.includes('no user was found with id') || normalized.includes('account vinculada não encontrada') || normalized.includes('não foi encontrada')) {
+    return 'A conta vinculada ao login não foi encontrada. Refaça o vínculo antes de alterar a senha.'
+  }
+  if (normalized.includes('not found')) {
+    return 'Conta não encontrada. Refaça o vínculo antes de alterar a senha.'
   }
   return text
 }
