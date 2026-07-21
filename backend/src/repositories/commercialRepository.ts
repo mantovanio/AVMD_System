@@ -173,7 +173,30 @@ export class CommercialRepository {
             'payment_method_id', forma.gateway,
             'payment_method_label', forma.nome,
             'forma_pagamento_alterada_por', $3::uuid,
-            'forma_pagamento_alterada_em', now()
+            'forma_pagamento_alterada_em', now(),
+            'payment_charge_history',
+              case
+                when venda.metadata->'payment_charge' is null then coalesce(venda.metadata->'payment_charge_history', '[]'::jsonb)
+                else coalesce(venda.metadata->'payment_charge_history', '[]'::jsonb)
+                  || jsonb_build_array(
+                    (venda.metadata->'payment_charge') || jsonb_build_object(
+                      'status', 'substituido',
+                      'substituido_em', now(),
+                      'substituido_por', $3::uuid,
+                      'nova_forma_pagamento_id', $2::text
+                    )
+                  )
+              end,
+            'payment_charge',
+              case
+                when venda.metadata->'payment_charge' is null then null
+                else (venda.metadata->'payment_charge') || jsonb_build_object(
+                  'status', 'substituido',
+                  'substituido_em', now(),
+                  'substituido_por', $3::uuid,
+                  'nova_forma_pagamento_id', $2::text
+                )
+              end
           ),
           updated_at = now()
       from formas_pagamento_v2 forma

@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { readJson, writeJson } from '../utils/http.js'
 import { CommercialRepository } from '../repositories/commercialRepository.js'
+import type { CheckoutPaymentService } from '../services/checkoutPaymentService.js'
 
 type SalesRequest = { limit?: number }
 type SaleStatusRequest = { id: string; status: string }
@@ -110,7 +111,7 @@ type CommissionReportRequest = {
 type CustomerPortalAccessRequest = { customerId?: string }
 type CustomerPortalAccessStatusRequest = { customerId?: string; status?: string }
 
-export async function handleCommercialRoutes(req: IncomingMessage, res: ServerResponse, repository: CommercialRepository, corsOrigin: string) {
+export async function handleCommercialRoutes(req: IncomingMessage, res: ServerResponse, repository: CommercialRepository, corsOrigin: string, paymentService?: CheckoutPaymentService) {
   const method = req.method ?? ''
   const url = req.url ?? ''
 
@@ -143,7 +144,19 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
         writeJson(res, 404, { ok: false, error: 'Venda ou forma de pagamento não encontrada.' }, corsOrigin)
         return true
       }
-      writeJson(res, 200, { ok: true, venda }, corsOrigin)
+      const charge = paymentService
+        ? await paymentService.createCommercialPaymentLink({ vendaId: body.id, profileId: body.admin_profile_id })
+        : null
+      if (charge && !charge.ok) {
+        writeJson(res, 502, {
+          ok: false,
+          venda,
+          charge,
+          error: charge.error ?? 'Forma alterada, mas a nova cobrança não foi gerada.',
+        }, corsOrigin)
+        return true
+      }
+      writeJson(res, 200, { ok: true, venda, charge }, corsOrigin)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Não foi possível alterar a forma de pagamento.'
       const status = message.includes('administradores') ? 403 : 400

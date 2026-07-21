@@ -102,8 +102,10 @@ export class CheckoutPaymentService {
     const existingCharge = await this.repository.getPaymentChargeBySaleId?.(input.vendaId)
     const existingGateway = String(existingCharge?.gateway ?? '').trim()
     const existingStatus = String(existingCharge?.status ?? '').trim().toLowerCase()
+    const existingMethodId = String(existingCharge?.details?.forma_pagamento_id ?? '').trim()
     const sameGateway = existingGateway && existingGateway === String(config.gateway ?? '')
-    if (sameGateway && ['pending', 'paid', 'action_required', 'processing', 'in_process'].includes(existingStatus)) {
+    const samePaymentMethod = !existingMethodId || existingMethodId === input.formaPagamentoId
+    if (sameGateway && samePaymentMethod && ['pending', 'paid', 'action_required', 'processing', 'in_process'].includes(existingStatus)) {
       return {
         ok: true,
         status: existingStatus === 'paid' ? 'paid' : 'pending',
@@ -122,7 +124,7 @@ export class CheckoutPaymentService {
       chargeUrl: result.chargeUrl ?? null,
       status: result.status,
       payload: result.payload ?? (result.error ? { error: result.error } : {}),
-      details: result.details ?? null,
+      details: { ...(result.details ?? {}), forma_pagamento_id: input.formaPagamentoId },
     })
     if (result.ok) {
       await this.queuePurchaseNotifications({

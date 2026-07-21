@@ -176,9 +176,23 @@ export async function updateVendaPaymentMethod(input: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   })
-  const data = await response.json() as ApiResponse<'venda', Record<string, unknown>> & { error?: string }
+  const data = await response.json() as ApiResponse<'venda', Record<string, unknown>> & {
+    error?: string
+    charge?: {
+      ok?: boolean
+      chargeUrl?: string | null
+      error?: string | null
+      details?: {
+        kind?: string | null
+        ticket_url?: string | null
+        qr_code_base64?: string | null
+        qr_code?: string | null
+        digitable_line?: string | null
+      } | null
+    } | null
+  }
   if (!response.ok || !data.ok) throw new Error(data.error ?? 'Não foi possível alterar a forma de pagamento.')
-  return data.venda ?? null
+  return { venda: data.venda ?? null, charge: data.charge ?? null }
 }
 
 export async function updateVenda(input: UpdateVendaInput) {

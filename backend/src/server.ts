@@ -194,7 +194,7 @@ const server = createServer(async (req, res) => {
     const handledCatalog = await handleCatalogRoutes(req, res, catalogRepository, renovacaoRepository, config.corsOrigin)
     if (handledCatalog) return
 
-    const handledCommercial = await handleCommercialRoutes(req, res, commercialRepository, config.corsOrigin)
+    const handledCommercial = await handleCommercialRoutes(req, res, commercialRepository, config.corsOrigin, checkoutPaymentService)
     if (handledCommercial) return
 
     const cancelamentoRepository = new CancelamentoRepository(db)

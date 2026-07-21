@@ -349,6 +349,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [cartConfirmed, setCartConfirmed] = useState(false)
   const [faturamentoConfirmed, setFaturamentoConfirmed] = useState(false)
   const [titularConfirmed, setTitularConfirmed] = useState(false)
+  const [pagamentoConfirmed, setPagamentoConfirmed] = useState(false)
   const [pagamentos, setPagamentos] = useState<PaymentOption[]>([])
   const [agendaAgents, setAgendaAgents] = useState<AgendaAgent[]>([])
   const [agendaPoints, setAgendaPoints] = useState<AgendaPoint[]>([])
@@ -418,6 +419,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
         setCartConfirmed(false)
         setFaturamentoConfirmed(false)
         setTitularConfirmed(false)
+        setPagamentoConfirmed(false)
         setPagamentos(context.pagamentos)
         setAgendaAgents(context.agentes)
         setAgendaPoints(context.pontos)
@@ -660,18 +662,19 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     if (!cartConfirmed) return 2
     if (!faturamentoDone || !faturamentoConfirmed) return 3
     if (!titularDone || !titularConfirmed) return 4
-    if (!pagamentoDone) return 5
+    if (!pagamentoDone || !pagamentoConfirmed) return 5
     return 6
-  }, [cartConfirmed, faturamentoConfirmed, faturamentoDone, itemSelecionado, pagamentoDone, productConfirmed, titularConfirmed, titularDone])
+  }, [cartConfirmed, faturamentoConfirmed, faturamentoDone, itemSelecionado, pagamentoConfirmed, pagamentoDone, productConfirmed, titularConfirmed, titularDone])
 
   const canShowFaturamento = !!itemSelecionado && productConfirmed && cartConfirmed
   const canShowTitular = canShowFaturamento && faturamentoDone && faturamentoConfirmed
   const canShowPagamento = canShowTitular && titularDone && titularConfirmed
-  const canShowAvisos = canShowPagamento
+  const canShowAvisos = canShowPagamento && pagamentoDone && pagamentoConfirmed
 
   function updateComprador<K extends keyof FormState['comprador']>(key: K, value: FormState['comprador'][K]) {
     setFaturamentoConfirmed(false)
     setTitularConfirmed(false)
+    setPagamentoConfirmed(false)
     setForm(prev => ({
       ...prev,
       comprador: {
@@ -690,6 +693,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
 
   function updateTitular<K extends keyof FormState['titular']>(key: K, value: FormState['titular'][K]) {
     setTitularConfirmed(false)
+    setPagamentoConfirmed(false)
     setForm(prev => ({
       ...prev,
       titular: {
@@ -832,12 +836,24 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     setSelectedItemId(itemId)
     setProductConfirmed(false)
     setCartConfirmed(false)
+    setFaturamentoConfirmed(false)
+    setTitularConfirmed(false)
+    setPagamentoConfirmed(false)
+  }
+
+  function scrollToFormSteps() {
+    requestAnimationFrame(() => {
+      formStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
   }
 
   function confirmProductSelection() {
     if (!itemSelecionado) return
     setProductConfirmed(true)
     setCartConfirmed(false)
+    setFaturamentoConfirmed(false)
+    setTitularConfirmed(false)
+    setPagamentoConfirmed(false)
     requestAnimationFrame(() => {
       cartSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
@@ -847,14 +863,59 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     setSelectedItemId('')
     setProductConfirmed(false)
     setCartConfirmed(false)
+    setFaturamentoConfirmed(false)
+    setTitularConfirmed(false)
+    setPagamentoConfirmed(false)
   }
 
   function confirmCartSelection() {
     if (!itemSelecionado) return
     setCartConfirmed(true)
+    setFaturamentoConfirmed(false)
+    setTitularConfirmed(false)
+    setPagamentoConfirmed(false)
+    scrollToFormSteps()
+  }
+
+  function voltarParaProduto() {
+    setProductConfirmed(false)
+    setCartConfirmed(false)
+    setFaturamentoConfirmed(false)
+    setTitularConfirmed(false)
+    setPagamentoConfirmed(false)
+    setError(null)
+  }
+
+  function voltarParaCarrinho() {
+    setCartConfirmed(false)
+    setFaturamentoConfirmed(false)
+    setTitularConfirmed(false)
+    setPagamentoConfirmed(false)
+    setError(null)
     requestAnimationFrame(() => {
-      formStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      cartSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
+  }
+
+  function voltarParaFaturamento() {
+    setFaturamentoConfirmed(false)
+    setTitularConfirmed(false)
+    setPagamentoConfirmed(false)
+    setError(null)
+    scrollToFormSteps()
+  }
+
+  function voltarParaTitular() {
+    setTitularConfirmed(false)
+    setPagamentoConfirmed(false)
+    setError(null)
+    scrollToFormSteps()
+  }
+
+  function voltarParaPagamento() {
+    setPagamentoConfirmed(false)
+    setError(null)
+    scrollToFormSteps()
   }
 
   function confirmFaturamentoSelection() {
@@ -867,9 +928,9 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     }
     setError(null)
     setFaturamentoConfirmed(true)
-    requestAnimationFrame(() => {
-      formStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    })
+    setTitularConfirmed(false)
+    setPagamentoConfirmed(false)
+    scrollToFormSteps()
   }
 
   function confirmTitularSelection() {
@@ -882,9 +943,24 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     }
     setError(null)
     setTitularConfirmed(true)
-    requestAnimationFrame(() => {
-      formStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setPagamentoConfirmed(false)
+    scrollToFormSteps()
+  }
+
+  function confirmPagamentoSelection() {
+    if (!form.forma_pagamento_id) {
+      setFieldErrors(prev => ({ ...prev, forma_pagamento_id: 'Escolha a forma de pagamento.' }))
+      setError('Escolha a forma de pagamento antes de avançar.')
+      return
+    }
+    setError(null)
+    setFieldErrors(prev => {
+      const next = { ...prev }
+      delete next['forma_pagamento_id']
+      return next
     })
+    setPagamentoConfirmed(true)
+    scrollToFormSteps()
   }
 
   function openSchedulingModal() {
@@ -1045,6 +1121,9 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
           },
         })
       }
+      setFaturamentoConfirmed(false)
+      setTitularConfirmed(false)
+      setPagamentoConfirmed(false)
       setSelectedSlotKey('')
       setDraftSlotKey('')
       setSelectedDay(slotsByDay[0]?.day ?? '')
@@ -1108,28 +1187,28 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   <div className="grid overflow-hidden rounded-2xl border border-slate-300 md:grid-cols-4">
                     <label className="border-b border-slate-300 p-4 md:border-b-0 md:border-r">
                       <span className="block text-sm font-bold text-[#17346b]">Categoria</span>
-                      <select value={productKindFilter} onChange={event => { setProductKindFilter(event.target.value); setProductClassFilter(''); setProductEmissionFilter(''); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none">
+                      <select value={productKindFilter} onChange={event => { setProductKindFilter(event.target.value); setProductClassFilter(''); setProductEmissionFilter(''); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false); setCartConfirmed(false); setFaturamentoConfirmed(false); setTitularConfirmed(false); setPagamentoConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none">
                         <option value="">Selecione</option>
                         {productKindOptions.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
                     <label className="border-b border-slate-300 p-4 md:border-b-0 md:border-r">
                       <span className="block text-sm font-bold text-[#17346b]">Tipo</span>
-                      <select disabled={!productKindFilter} value={productClassFilter} onChange={event => { setProductClassFilter(event.target.value); setProductEmissionFilter(''); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
+                      <select disabled={!productKindFilter} value={productClassFilter} onChange={event => { setProductClassFilter(event.target.value); setProductEmissionFilter(''); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false); setCartConfirmed(false); setFaturamentoConfirmed(false); setTitularConfirmed(false); setPagamentoConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
                         <option value="">Selecione</option>
                         {productClassOptions.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
                     <label className="border-b border-slate-300 p-4 md:border-b-0 md:border-r">
                       <span className="block text-sm font-bold text-[#17346b]">Atendimento</span>
-                      <select disabled={!productClassFilter} value={productEmissionFilter} onChange={event => { setProductEmissionFilter(event.target.value); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
+                      <select disabled={!productClassFilter} value={productEmissionFilter} onChange={event => { setProductEmissionFilter(event.target.value); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false); setCartConfirmed(false); setFaturamentoConfirmed(false); setTitularConfirmed(false); setPagamentoConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
                         <option value="">Selecione</option>
                         {productEmissionOptions.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
                     <label className="p-4">
                       <span className="block text-sm font-bold text-[#17346b]">Validade</span>
-                      <select disabled={!productEmissionFilter} value={productValidityFilter} onChange={event => { setProductValidityFilter(event.target.value); setSelectedItemId(''); setProductConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
+                      <select disabled={!productEmissionFilter} value={productValidityFilter} onChange={event => { setProductValidityFilter(event.target.value); setSelectedItemId(''); setProductConfirmed(false); setCartConfirmed(false); setFaturamentoConfirmed(false); setTitularConfirmed(false); setPagamentoConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none disabled:text-slate-400">
                         <option value="">Selecione</option>
                         {productValidityOptions.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
@@ -1256,7 +1335,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     <li>Confira o prazo antes de seguir para os dados.</li>
                   </ul>
                   <div className="mt-5 flex flex-col gap-3">
-                    <button type="button" onClick={() => setProductConfirmed(false)} className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    <button type="button" onClick={voltarParaProduto} className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                       Voltar para o produto
                     </button>
                     <button type="button" onClick={confirmCartSelection} className="rounded-xl bg-[#17346b] px-4 py-3 text-sm font-semibold text-white hover:bg-[#102654]">
@@ -1312,6 +1391,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     onClick={() => {
                       setFaturamentoConfirmed(false)
                       setTitularConfirmed(false)
+                      setPagamentoConfirmed(false)
                       setForm(prev => ({
                         ...prev,
                         comprador: {
@@ -1328,6 +1408,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     onClick={() => {
                       setFaturamentoConfirmed(false)
                       setTitularConfirmed(false)
+                      setPagamentoConfirmed(false)
                       setForm(prev => ({
                         ...prev,
                         comprador: {
@@ -1551,7 +1632,10 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     </div>
                   </div>
                 </div>
-                <div className="flex justify-end">
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <button type="button" onClick={voltarParaCarrinho} className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    Voltar
+                  </button>
                   <button type="button" onClick={confirmFaturamentoSelection} className="rounded-xl bg-[#17346b] px-6 py-3 text-sm font-semibold text-white hover:bg-[#102654]">
                     Próximo
                   </button>
@@ -1574,6 +1658,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   checked={form.titularMesmoFaturamento}
                   onChange={e => {
                     setTitularConfirmed(false)
+                    setPagamentoConfirmed(false)
                     setForm(prev => ({ ...prev, titularMesmoFaturamento: e.target.checked }))
                   }}
                   className="mt-1 h-5 w-5 rounded border-sky-300 text-[#17346b] focus:ring-[#17346b]"
@@ -1716,7 +1801,10 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   />
                 </div>
               )}
-              <div className="mt-5 flex justify-end">
+              <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <button type="button" onClick={voltarParaFaturamento} className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                  Voltar
+                </button>
                 <button type="button" onClick={confirmTitularSelection} className="rounded-xl bg-[#17346b] px-6 py-3 text-sm font-semibold text-white hover:bg-[#102654]">
                   Próximo
                 </button>
@@ -1741,6 +1829,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                         key={option.id}
                         type="button"
                         onClick={() => {
+                          setPagamentoConfirmed(false)
                           setForm(prev => ({ ...prev, forma_pagamento_id: option.id }))
                           setFieldErrors(prev => {
                             const next = { ...prev }
@@ -1863,6 +1952,14 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   <p className="mt-1">A configuração pública do cartão não veio no checkout atual. Pix e boleto continuam funcionando.</p>
                 </div>
               )}
+              <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <button type="button" onClick={voltarParaTitular} className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                  Voltar
+                </button>
+                <button type="button" onClick={confirmPagamentoSelection} className="rounded-xl bg-[#17346b] px-6 py-3 text-sm font-semibold text-white hover:bg-[#102654]">
+                  Próximo
+                </button>
+              </div>
             </SectionCard>
             )}
 
@@ -1943,6 +2040,19 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   <p className="mt-2 text-sm font-semibold text-slate-900">{pagamentoSelecionado ? publicPaymentLabel(pagamentoSelecionado) : 'Não informado'}</p>
                   <p className="mt-1 text-sm text-slate-500">Depois de finalizar, você receberá as instruções oficiais para pagamento e validação.</p>
                 </div>
+              </div>
+              <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <button type="button" onClick={voltarParaPagamento} className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                  Voltar para editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void iniciarCheckout()}
+                  disabled={checkoutLoading || isMercadoPagoCard}
+                  className="rounded-xl bg-[#ea7b18] px-6 py-3 text-sm font-semibold text-white hover:bg-[#cf6611] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {checkoutLoading ? 'Finalizando compra...' : 'Concluir compra'}
+                </button>
               </div>
             </SectionCard>
             )}
