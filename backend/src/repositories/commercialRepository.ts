@@ -135,7 +135,7 @@ export class CommercialRepository {
   async updateSalePaymentMethod(input: UpdateCommercialSalePaymentMethodInput) {
     const admin = await this.db.query<{ id: string }>(`
       select id from profiles
-      where id = $1 and perfil = 'admin' and status = 'ativo'
+      where id = $1::uuid and perfil = 'admin' and status = 'ativo'
       limit 1
     `, [input.admin_profile_id])
     if (!admin.rows[0]) throw new Error('Apenas administradores podem alterar a forma de pagamento.')
@@ -143,7 +143,7 @@ export class CommercialRepository {
     const currentSale = await this.db.query<{ pago: boolean | null; status_pagamento: string | null }>(`
       select pago, status_pagamento
       from vendas_certificados
-      where id = $1
+      where id = $1::uuid
       limit 1
     `, [input.id])
     const sale = currentSale.rows[0] ?? null
@@ -172,15 +172,15 @@ export class CommercialRepository {
             'forma_pagamento', forma.nome,
             'payment_method_id', forma.gateway,
             'payment_method_label', forma.nome,
-            'forma_pagamento_alterada_por', $3,
+            'forma_pagamento_alterada_por', $3::uuid,
             'forma_pagamento_alterada_em', now()
           ),
           updated_at = now()
       from formas_pagamento_v2 forma
-      where venda.id = $1
-        and forma.id = $2
+      where venda.id = $1::uuid
+        and forma.id = $2::uuid
         and forma.ativo = true
-        and ($4::text is null or forma.gateway = $4)
+        and ($4::text is null or forma.gateway = $4::text)
       returning venda.*
     `, [input.id, input.forma_pagamento_id, input.admin_profile_id, gateway])
     const venda = result.rows[0] ?? null
