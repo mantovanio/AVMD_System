@@ -714,8 +714,7 @@ export class CheckoutPaymentService {
     const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/checkout/preferences`
     const installments = Math.max(1, Math.min(12, Number(input.card?.installments || 1)))
     const callbackUrl = this.resolveMercadoPagoCallbackUrl(config)
-    const document = input.comprador.documento.replace(/\D/g, '')
-    const phone = input.comprador.telefone.replace(/\D/g, '')
+    const payerName = input.comprador.nome.trim() || 'Cliente'
     const body = {
       items: [{
         id: input.vendaId,
@@ -725,12 +724,9 @@ export class CheckoutPaymentService {
         currency_id: 'BRL',
         unit_price: Number(input.valor.toFixed(2)),
       }],
-      payer: {
-        name: input.comprador.nome,
-        email: input.comprador.email,
-        phone: phone ? { area_code: phone.slice(0, 2), number: phone.slice(2) } : undefined,
-        identification: document ? { type: document.length === 14 ? 'CNPJ' : 'CPF', number: document } : undefined,
-      },
+      // No cartão via Checkout Pro, deixar e-mail/documento fora da preferência evita
+      // que o Mercado Pago associe a cobrança à conta vendedora já logada no navegador.
+      payer: { name: payerName },
       external_reference: input.vendaId,
       notification_url: callbackUrl,
       payment_methods: {
@@ -745,6 +741,8 @@ export class CheckoutPaymentService {
         gateway: 'mercado_pago',
         payment_flow: 'card',
         installments,
+        payer_email: input.comprador.email,
+        payer_document: input.comprador.documento.replace(/\D/g, ''),
       },
     }
 
