@@ -1135,7 +1135,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-semibold text-[#17346b]">Produtos disponíveis</p>
-                            <p className="text-xs text-slate-500">Escolha o produto final antes de seguir para o carrinho.</p>
+                            <p className="text-xs text-slate-500">Escolha o produto final antes de avançar para a próxima etapa.</p>
                           </div>
                           <p className="text-xs font-semibold text-slate-400">{filteredProducts.length} opção(ões)</p>
                         </div>
@@ -1192,7 +1192,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                             </>
                           ) : <div className="p-8 text-center text-sm text-slate-500">Escolha um produto para continuar.</div>}
                         </div>
-                        <button type="button" disabled={!itemSelecionado} onClick={confirmProductSelection} className="mt-2 w-full rounded-xl bg-[#0b8fc1] px-5 py-4 text-sm font-bold text-white transition hover:bg-[#087ca8] disabled:cursor-not-allowed disabled:bg-slate-300">Ir para o carrinho</button>
+                        <button type="button" disabled={!itemSelecionado} onClick={confirmProductSelection} className="mt-2 w-full rounded-xl bg-[#0b8fc1] px-5 py-4 text-sm font-bold text-white transition hover:bg-[#087ca8] disabled:cursor-not-allowed disabled:bg-slate-300">Próximo</button>
                       </aside>
                     </div>
                   )}
@@ -1203,7 +1203,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
             {checkoutStep === 2 && itemSelecionado && productConfirmed && (
             <SectionCard
               title="Carrinho"
-              description="Revise o item escolhido antes de seguir para os dados pessoais."
+              description="Revise o item escolhido antes de avançar para os dados pessoais."
               icon={ShoppingCart}
               highlight={false}
               done={cartConfirmed}
@@ -1236,7 +1236,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                       Voltar para o produto
                     </button>
                     <button type="button" onClick={confirmCartSelection} className="rounded-xl bg-[#17346b] px-4 py-3 text-sm font-semibold text-white hover:bg-[#102654]">
-                      Prosseguir para os dados
+                      Próximo
                     </button>
                   </div>
                 </div>
