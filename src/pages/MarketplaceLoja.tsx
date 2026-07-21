@@ -293,24 +293,43 @@ function productKind(item: LojaItemRow) {
   return getProductProfile(item.certificados ?? null).kind
 }
 
-function productCertificateCategory(item: LojaItemRow) {
-  const cert = item.certificados
-  const raw = normalizedSearch([
-    cert?.tipo,
-    cert?.descricao_produto,
-    cert?.descricao,
-    cert?.modelo,
-    cert?.categoria,
-  ].filter(Boolean).join(' '))
+function detectCertificateCategory(value: string) {
+  const raw = normalizedSearch(value)
   if (/\be[\s-]?cnpj\b/.test(raw)) return 'e-CNPJ'
   if (/\be[\s-]?cpf\b/.test(raw)) return 'e-CPF'
   if (/\be[\s-]?pj\b/.test(raw)) return 'e-PJ'
   if (/\be[\s-]?pf\b/.test(raw)) return 'e-PF'
+  return ''
+}
+
+function productCertificateCategory(item: LojaItemRow) {
+  const cert = item.certificados
+  const identityCategory = detectCertificateCategory([
+    cert?.tipo,
+    cert?.categoria,
+    cert?.modelo,
+  ].filter(Boolean).join(' '))
+  if (identityCategory) return identityCategory
+
+  const fallbackCategory = detectCertificateCategory([
+    cert?.descricao_produto,
+    cert?.descricao,
+  ].filter(Boolean).join(' '))
+  if (fallbackCategory) return fallbackCategory
+
   return productKind(item)
 }
 
 function productCertificateClass(item: LojaItemRow) {
   return getProductProfile(item.certificados ?? null).certificateClass
+}
+
+function productCommercialDescription(item: LojaItemRow) {
+  const profile = getProductProfile(item.certificados ?? null)
+  const category = productCertificateCategory(item)
+  const classLabel = profile.certificateClass !== 'Não informado' ? profile.certificateClass : 'classe sob consulta'
+  const validityLabel = normalizedProductValidity(item).toLowerCase()
+  return `Certificado ${category} ${classLabel} para emissão segura, com ${validityLabel}.`
 }
 
 function productValidity(item: LojaItemRow) {
@@ -1138,10 +1157,10 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                               >
                                 <div className="flex items-start justify-between gap-4">
                                   <div className="min-w-0">
-                                    <p className="text-[11px] uppercase tracking-[0.18em] font-semibold opacity-70">{profile.kind}</p>
+                                    <p className="text-[11px] uppercase tracking-[0.18em] font-semibold opacity-70">{productCertificateCategory(item)}</p>
                                     <p className="mt-1 text-base font-semibold leading-snug">{profile.displayName}</p>
                                     <p className={cn('mt-1 text-sm leading-relaxed', selected ? 'text-white/80' : 'text-slate-500')}>
-                                      {profile.commercialDescription}
+                                      {productCommercialDescription(item)}
                                     </p>
                                   </div>
                                   <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
@@ -1163,9 +1182,9 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                           {itemSelecionado ? (
                             <>
                               <div className="p-5">
-                                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">{getProductProfile(itemSelecionado.certificados).kind}</p>
+                                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">{productCertificateCategory(itemSelecionado)}</p>
                                 <p className="mt-1 text-lg font-bold text-slate-900">{getProductProfile(itemSelecionado.certificados).displayName}</p>
-                                <p className="mt-2 text-sm text-slate-500 leading-relaxed">{getProductProfile(itemSelecionado.certificados).commercialDescription}</p>
+                                <p className="mt-2 text-sm text-slate-500 leading-relaxed">{productCommercialDescription(itemSelecionado)}</p>
                                 <p className="mt-2 text-sm text-slate-600">{getProductProfile(itemSelecionado.certificados).details}</p>
                                 <ProductTags item={itemSelecionado} compact />
                               </div>
@@ -1194,7 +1213,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   <div className="p-5">
                     <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Item no carrinho</p>
                     <p className="mt-2 text-lg font-bold text-slate-900">{itemSelecionado.certificados?.tipo ?? 'Produto'}</p>
-                    <p className="mt-2 text-sm text-slate-500 leading-relaxed">{getProductProfile(itemSelecionado.certificados).commercialDescription}</p>
+                    <p className="mt-2 text-sm text-slate-500 leading-relaxed">{productCommercialDescription(itemSelecionado)}</p>
                     <p className="mt-2 text-sm text-slate-600">Detalhes: {getProductProfile(itemSelecionado.certificados).details}</p>
                     <div className="mt-4">
                       <ProductTags item={itemSelecionado} compact />
@@ -1991,7 +2010,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                 <>
                   <div className="mt-4 rounded-[24px] bg-slate-50 p-4">
                     <p className="text-lg font-semibold text-slate-900">{itemSelecionado.certificados?.tipo ?? 'Produto'}</p>
-                    <p className="mt-2 text-sm text-slate-500 leading-relaxed">{getProductProfile(itemSelecionado.certificados).commercialDescription}</p>
+                    <p className="mt-2 text-sm text-slate-500 leading-relaxed">{productCommercialDescription(itemSelecionado)}</p>
                     <ProductTags item={itemSelecionado} compact />
                     <p className="text-3xl font-semibold text-emerald-600 mt-4">{formatCurrency(itemSelecionado.valor)}</p>
                   </div>
