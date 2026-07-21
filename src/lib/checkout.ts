@@ -114,11 +114,12 @@ function formatValidityLabel(validity: string) {
   return value.toLowerCase()
 }
 
-function buildCommercialDescription(kind: string, certificateClass: string, validity: string) {
-  const typeLabel = kind === 'Outros' ? 'Produto digital' : `Certificado ${kind}`
-  const classLabel = certificateClass !== 'Não informado' ? certificateClass : 'classe sob consulta'
+function buildCommercialDescription(cert: Pick<Certificado, 'tipo' | 'descricao' | 'descricao_produto'>, validity: string) {
+  const name = cert.tipo?.trim() || 'Certificado digital'
+  const complement = (cert.descricao_produto?.trim() || cert.descricao?.trim() || '').replace(/\s+/g, ' ')
   const validityLabel = formatValidityLabel(validity)
-  return `${typeLabel} ${classLabel} para emissão segura, com ${validityLabel}.`
+  const suffix = validityLabel !== 'prazo não informado' ? `com ${validityLabel}` : 'com prazo sob consulta'
+  return complement ? `${name}: ${complement} (${suffix}).` : `${name} (${suffix}).`
 }
 
 export function getProductProfile(cert: Pick<Certificado, 'tipo' | 'descricao' | 'validade' | 'modelo' | 'categoria' | 'tipo_emissao_padrao' | 'periodo_uso' | 'descricao_produto'> | null | undefined): ProductProfile {
@@ -135,31 +136,27 @@ export function getProductProfile(cert: Pick<Certificado, 'tipo' | 'descricao' |
   const kindText = normalizeText([cert.tipo, cert.descricao_produto, cert.descricao, cert.modelo, cert.categoria].filter(Boolean).join(' '))
   const kind = getProductKindFromText(kindText)
 
-  const classText = normalizeText([cert.tipo, cert.descricao_produto, cert.descricao, cert.modelo, cert.categoria, cert.periodo_uso].filter(Boolean).join(' '))
+  const modelText = normalizeText(cert.modelo ?? '')
+  const classText = normalizeText([cert.tipo, cert.modelo, cert.categoria].filter(Boolean).join(' '))
   const certificateClass = /safeid/.test(classText)
     ? 'SafeID'
-    : (/\ba3\b/.test(classText) || /cartao|cartão|token|leitora|mídia|midia|pendrive/.test(classText))
+    : (/\ba3\b/.test(modelText) || (!/\ba1\b/.test(modelText) && /\ba3\b/.test(classText)))
       ? 'A3'
-      : (/\ba1\b/.test(classText) ? 'A1' : 'Não informado')
+      : (/\ba1\b/.test(modelText) || /\ba1\b/.test(classText) ? 'A1' : 'Não informado')
 
   const validitySource = certificateClass === 'SafeID'
     ? (cert.periodo_uso?.trim() || cert.validade?.trim() || '')
     : (cert.validade?.trim() || '')
   const validity = validitySource || formatValidityFromText(normalizeText([cert.tipo, cert.descricao_produto, cert.descricao].filter(Boolean).join(' ')))
 
-  const displayName = dedupeParts([
-    cert.tipo,
-    certificateClass !== 'Não informado' && !normalizeText(cert.tipo ?? '').includes(normalizeText(certificateClass)) ? certificateClass : null,
-    cert.categoria && !normalizeText(cert.tipo ?? '').includes(normalizeText(cert.categoria)) ? cert.categoria : null,
-  ]).join(' · ') || 'Produto'
+  const displayName = cert.tipo?.trim() || 'Produto'
 
   const details = dedupeParts([
-    cert.modelo,
-    certificateClass,
-    validity,
+    validity && validity !== 'Não informada' ? `Validade: ${validity}` : null,
+    cert.periodo_uso?.trim() ? `Uso: ${cert.periodo_uso.trim()}` : null,
   ]).join(' · ') || '—'
 
-  const commercialDescription = buildCommercialDescription(kind, certificateClass, validity)
+  const commercialDescription = buildCommercialDescription(cert, validity)
 
   return { kind, certificateClass, validity, displayName, details, commercialDescription }
 }

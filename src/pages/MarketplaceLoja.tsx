@@ -319,11 +319,7 @@ function productCertificateClass(item: LojaItemRow) {
 }
 
 function productCommercialDescription(item: LojaItemRow) {
-  const profile = getProductProfile(item.certificados ?? null)
-  const category = productCertificateCategory(item)
-  const classLabel = profile.certificateClass !== 'Não informado' ? profile.certificateClass : 'classe sob consulta'
-  const validityLabel = normalizedProductValidity(item).toLowerCase()
-  return `Certificado ${category} ${classLabel} para emissão segura, com ${validityLabel}.`
+  return getProductProfile(item.certificados ?? null).commercialDescription
 }
 
 function productValidity(item: LojaItemRow) {
