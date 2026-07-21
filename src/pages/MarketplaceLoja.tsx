@@ -1047,6 +1047,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.55fr)_340px] gap-6 items-start">
           <div className="space-y-6">
+            {checkoutStep === 1 && (
             <SectionCard
               title={modoLinkDireto ? 'Produto selecionado para este link' : 'Escolha o certificado ideal'}
               description={modoLinkDireto
@@ -1180,6 +1181,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                 </div>
               )}
             </SectionCard>
+            )}
 
             {checkoutStep === 2 && itemSelecionado && productConfirmed && (
             <SectionCard
@@ -1802,7 +1804,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
             </SectionCard>
             )}
 
-            {canShowPagamento && (
+            {checkoutStep === 6 && canShowPagamento && (
             <SectionCard
               title="Cupom de desconto"
               description="Se você possui um cupom de desconto, insira o código abaixo para aplicar o desconto no valor total."
@@ -1845,7 +1847,45 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
             </SectionCard>
             )}
 
-            {checkoutStep >= 5 && canShowAvisos && (
+            {checkoutStep === 6 && canShowAvisos && itemSelecionado && (
+            <SectionCard
+              title="Resumo final do pedido"
+              description="Confira todas as informações antes de finalizar e seguir para o pagamento."
+              icon={CheckCircle2}
+              highlight={false}
+              done={false}
+            >
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Produto</p>
+                  <p className="mt-2 text-lg font-bold text-slate-900">{getProductProfile(itemSelecionado.certificados).displayName}</p>
+                  <p className="mt-1 text-sm text-slate-500">{productCommercialDescription(itemSelecionado)}</p>
+                  <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+                    <span className="text-sm font-semibold text-slate-600">Total</span>
+                    <span className="text-2xl font-bold text-emerald-600">{formatCurrency(Math.max(0, Number(itemSelecionado.valor) - voucherDesconto))}</span>
+                  </div>
+                </div>
+                <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Faturamento</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">{form.comprador.nome || 'Não informado'}</p>
+                  <p className="mt-1 text-sm text-slate-500">{form.comprador.email || 'E-mail não informado'}</p>
+                  <p className="mt-1 text-sm text-slate-500">{form.comprador.telefone || 'WhatsApp não informado'}</p>
+                </div>
+                <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Titular</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">{titularEfetivo.nome || 'Não informado'}</p>
+                  <p className="mt-1 text-sm text-slate-500">{titularEfetivo.cpf || 'CPF não informado'}</p>
+                </div>
+                <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Pagamento</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">{pagamentoSelecionado?.nome ?? 'Não informado'}</p>
+                  <p className="mt-1 text-sm text-slate-500">Depois de finalizar, você receberá as instruções oficiais para pagamento e validação.</p>
+                </div>
+              </div>
+            </SectionCard>
+            )}
+
+            {checkoutStep === 6 && canShowAvisos && (
             <SectionCard
               title="Avisos importantes"
               description="Revise estes lembretes antes de concluir a compra."
@@ -2007,7 +2047,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
             <button
               type="button"
               onClick={() => void iniciarCheckout()}
-              disabled={checkoutLoading || !itemSelecionado || isMercadoPagoCard}
+              disabled={checkoutLoading || !itemSelecionado || checkoutStep !== 6 || isMercadoPagoCard}
               className="hidden xl:inline-flex w-full items-center justify-center rounded-[22px] px-5 py-4 bg-[#ea7b18] text-white text-sm font-semibold hover:bg-[#cf6611] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#fde4cf]"
             >
               {checkoutLoading ? (
@@ -2032,7 +2072,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
           <button
             type="button"
             onClick={() => void iniciarCheckout()}
-            disabled={checkoutLoading || !itemSelecionado || isMercadoPagoCard}
+            disabled={checkoutLoading || !itemSelecionado || checkoutStep !== 6 || isMercadoPagoCard}
             className="inline-flex items-center justify-center rounded-2xl px-4 py-3 bg-[#ea7b18] text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed min-w-[160px]"
           >
             {checkoutLoading ? (
