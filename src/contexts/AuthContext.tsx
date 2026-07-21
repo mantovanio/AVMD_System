@@ -56,6 +56,20 @@ type ClerkResetPasswordFlow = {
   }
 }
 
+type ClerkEmailSecondFactor = {
+  strategy?: string
+  emailAddressId?: string
+  safeIdentifier?: string
+}
+
+type ClerkSignInAttempt = {
+  status?: string
+  createdSessionId?: string | null
+  supportedSecondFactors?: ClerkEmailSecondFactor[]
+  prepareSecondFactor: (params: { strategy: 'email_code'; emailAddressId?: string }) => Promise<ClerkSignInAttempt>
+  attemptSecondFactor: (params: { strategy: 'email_code'; code: string }) => Promise<ClerkSignInAttempt>
+}
+
 function getClerkErrorMessage(error: unknown, fallback: string) {
   const payload = error as ClerkErrorLike | undefined
   const first = payload?.errors?.[0]
@@ -104,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInLoadedRef = useRef(false)
   const userLoadedRef = useRef(false)
   const sessionLoadedRef = useRef(false)
+  const pendingSecondFactorSignInRef = useRef<ClerkSignInAttempt | null>(null)
 
   const currentUser = useMemo<AuthUser | null>(() => {
     if (!user || !userLoaded || !isSignedIn) return null
@@ -185,13 +200,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setProfile(result.data ?? null)
       } else {
-        const response = await fetch(getApiUrl('/auth/profile'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, email }),
-        })
-        const data = await response.json().catch(() => null) as { ok: boolean; profile: Profile | null } | null
-        setProfile(data?.profile ?? null)
+        const controller = new AbortController()
+        const timeout = window.setTimeout(() => controller.abort(), 8000)
+        try {
+          const response = await fetch(getApiUrl('/auth/profile'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({ userId, email }),
+          })
+          const data = await response.json().catch(() => null) as { ok: boolean; profile: Profile | null } | null
+          setProfile(data?.profile ?? null)
+        } finally {
+          window.clearTimeout(timeout)
+        }
       }
     } catch {
       setProfile(null)
@@ -268,6 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         15000,
         'O Clerk não respondeu ao iniciar a autenticação. Verifique a conexão e tente novamente.',
       )
+      pendingSecondFactorSignInRef.current = null
 
       if (result.status === 'complete') {
         return { error: await activateCreatedSession(result.createdSessionId) }
@@ -287,6 +310,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           15000,
           'O Clerk não respondeu ao enviar o código de verificação.',
         )
+        pendingSecondFactorSignInRef.current = result as ClerkSignInAttempt
 
         return {
           error: null,
@@ -317,17 +341,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      const signInAttempt = pendingSecondFactorSignInRef.current ?? (signIn as unknown as ClerkSignInAttempt)
       const result = await withTimeout(
-        signIn.attemptSecondFactor({ strategy: 'email_code', code: normalizedCode }),
+        signInAttempt.attemptSecondFactor({ strategy: 'email_code', code: normalizedCode }),
         15000,
         'O Clerk não respondeu ao validar o código de verificação.',
       )
 
       if (result.status !== 'complete') {
+        pendingSecondFactorSignInRef.current = result
         return { error: `Não foi possível concluir a verificação (${result.status}).` }
       }
 
-      return { error: await activateCreatedSession(result.createdSessionId) }
+      pendingSecondFactorSignInRef.current = null
+      return { error: await activateCreatedSession(result.createdSessionId ?? null) }
     } catch (error) {
       return { error: getClerkErrorMessage(error, 'Não foi possível validar o código de verificação.') }
     }
@@ -338,20 +365,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: 'A autenticação ainda está carregando. Atualize a página e tente novamente.' }
     }
 
-    const emailFactor = signIn.supportedSecondFactors?.find(factor => factor.strategy === 'email_code')
+    const signInAttempt = pendingSecondFactorSignInRef.current ?? (signIn as unknown as ClerkSignInAttempt)
+    const emailFactor = signInAttempt.supportedSecondFactors?.find(factor => factor.strategy === 'email_code')
     if (!emailFactor) {
       return { error: 'Não encontramos um e-mail válido para reenviar o código.' }
     }
 
     try {
-      await withTimeout(
-        signIn.prepareSecondFactor({
+      const result = await withTimeout(
+        signInAttempt.prepareSecondFactor({
           strategy: 'email_code',
           emailAddressId: emailFactor.emailAddressId,
         }),
         15000,
         'O Clerk não respondeu ao reenviar o código de verificação.',
       )
+      pendingSecondFactorSignInRef.current = result
       return {
         error: null,
         nextStep: 'second_factor',
