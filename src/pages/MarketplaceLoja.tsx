@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   CreditCard,
   Loader2,
-  Lock,
   Mail,
   MapPin,
   Phone,
@@ -201,8 +200,6 @@ function requiredFieldOrder(form: FormState) {
     'comprador.nome',
     'comprador.email',
     'comprador.telefone',
-    'acesso.senha',
-    'acesso.confirmar_senha',
     'comprador.cep',
     'comprador.logradouro',
     'comprador.numero',
@@ -228,8 +225,6 @@ function getValueByFieldId(form: FormState, id: string, titularEfetivo: ReturnTy
     case 'comprador.nome': return form.comprador.nome
     case 'comprador.email': return form.comprador.email
     case 'comprador.telefone': return form.comprador.telefone
-    case 'acesso.senha': return form.acesso.senha
-    case 'acesso.confirmar_senha': return form.acesso.confirmar_senha
     case 'comprador.cep': return form.comprador.cep
     case 'comprador.logradouro': return form.comprador.logradouro
     case 'comprador.numero': return form.comprador.numero
@@ -381,8 +376,6 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [voucherDesconto, setVoucherDesconto] = useState(0)
   const [voucherAplicando, setVoucherAplicando] = useState(false)
   const [voucherErro, setVoucherErro] = useState('')
-  const [showAcessoSenha, setShowAcessoSenha] = useState(false)
-  const [showConfirmSenha, setShowConfirmSenha] = useState(false)
   const [mockCard, setMockCard] = useState({
     numero: '',
     nome: '',
@@ -1394,52 +1387,6 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     highlight={nextFieldId === 'comprador.telefone'}
                     icon={Phone}
                     onFocus={() => setFocusedField('comprador.telefone')}
-                    onBlurField={() => setFocusedField(null)}
-                  />
-                  <GuidedField
-                    id="acesso.senha"
-                    label="Senha de acesso"
-                    value={form.acesso.senha}
-                    onChange={value => setForm(prev => ({ ...prev, acesso: { ...prev.acesso, senha: value } }))}
-                    type={showAcessoSenha ? 'text' : 'password'}
-                    helper="Opcional na compra. Se deixar em branco, a confirmação seguirá por e-mail e a senha poderá ser criada depois no portal."
-                    error={fieldErrors['acesso.senha']}
-                    focused={focusedField === 'acesso.senha'}
-                    highlight={nextFieldId === 'acesso.senha'}
-                    icon={Lock}
-                    rightElement={(
-                      <button
-                        type="button"
-                        onClick={() => setShowAcessoSenha(prev => !prev)}
-                        className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
-                      >
-                        {showAcessoSenha ? 'Ocultar' : 'Ver'}
-                      </button>
-                    )}
-                    onFocus={() => setFocusedField('acesso.senha')}
-                    onBlurField={() => setFocusedField(null)}
-                  />
-                  <GuidedField
-                    id="acesso.confirmar_senha"
-                    label="Confirmar senha"
-                    value={form.acesso.confirmar_senha}
-                    onChange={value => setForm(prev => ({ ...prev, acesso: { ...prev.acesso, confirmar_senha: value } }))}
-                    type={showConfirmSenha ? 'text' : 'password'}
-                    helper="Repita a senha apenas se estiver criando o acesso agora."
-                    error={fieldErrors['acesso.confirmar_senha']}
-                    focused={focusedField === 'acesso.confirmar_senha'}
-                    highlight={nextFieldId === 'acesso.confirmar_senha'}
-                    icon={Lock}
-                    rightElement={(
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmSenha(prev => !prev)}
-                        className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
-                      >
-                        {showConfirmSenha ? 'Ocultar' : 'Ver'}
-                      </button>
-                    )}
-                    onFocus={() => setFocusedField('acesso.confirmar_senha')}
                     onBlurField={() => setFocusedField(null)}
                   />
                 </div>
