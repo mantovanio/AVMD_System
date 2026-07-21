@@ -25,7 +25,6 @@ import { getApiUrl } from '@/lib/api'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig, type AgencyConfig } from '@/lib/agencyConfig'
 import type { LojaMarketplace, TabelaPreco } from '@/types'
 import { getProductProfile, loadMarketplaceCheckoutContext, lookupExistingCheckoutCustomer, submitMarketplaceCheckout, type AgendaAgent, type AgendaPoint, type AgendaSlot, type LojaItemRow, type PaymentOption, type PaymentRuntime } from '@/lib/checkout'
-import { maskEmail } from '@/lib/checkout'
 import {
   GuidedField,
   ChoiceCard,
@@ -376,15 +375,12 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [cadastroLoading, setCadastroLoading] = useState(false)
   const [cnpjLoading, setCnpjLoading] = useState(false)
   const formStartRef = useRef<HTMLDivElement | null>(null)
+  const cartSectionRef = useRef<HTMLDivElement | null>(null)
 
   const [voucherCodigo, setVoucherCodigo] = useState('')
   const [voucherDesconto, setVoucherDesconto] = useState(0)
   const [voucherAplicando, setVoucherAplicando] = useState(false)
   const [voucherErro, setVoucherErro] = useState('')
-  const [recoveryDocumento, setRecoveryDocumento] = useState('')
-  const [recoveryEmailMasked, setRecoveryEmailMasked] = useState<string | null>(null)
-  const [recoveryLoading, setRecoveryLoading] = useState(false)
-  const [recoveryError, setRecoveryError] = useState('')
   const [showAcessoSenha, setShowAcessoSenha] = useState(false)
   const [showConfirmSenha, setShowConfirmSenha] = useState(false)
   const [mockCard, setMockCard] = useState({
@@ -483,6 +479,10 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const itemSelecionado = useMemo(
     () => produtosAtivos.find(item => item.id === selectedItemId) ?? null,
     [produtosAtivos, selectedItemId]
+  )
+  const visibleProducts = useMemo(
+    () => itemSelecionado && !productConfirmed ? [itemSelecionado] : filteredProducts,
+    [filteredProducts, itemSelecionado, productConfirmed]
   )
   const pagamentoSelecionado = useMemo(
     () => pagamentos.find(item => item.id === form.forma_pagamento_id) ?? null,
@@ -763,33 +763,6 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     return true
   }
 
-  async function localizarEmailRecuperacao() {
-    const documento = onlyDigits(recoveryDocumento)
-    if (![11, 14].includes(documento.length)) {
-      setRecoveryEmailMasked(null)
-      setRecoveryError('Informe um CPF ou CNPJ válido.')
-      return
-    }
-
-    setRecoveryLoading(true)
-    setRecoveryError('')
-    try {
-      const cadastro = await lookupExistingCheckoutCustomer(documento)
-      const masked = maskEmail(cadastro?.email ?? null)
-      if (!masked) {
-        setRecoveryEmailMasked(null)
-        setRecoveryError('Não encontramos e-mail para este documento.')
-        return
-      }
-      setRecoveryEmailMasked(masked)
-    } catch {
-      setRecoveryEmailMasked(null)
-      setRecoveryError('Não foi possível consultar o cadastro agora.')
-    } finally {
-      setRecoveryLoading(false)
-    }
-  }
-
   async function handleCepBlur() {
     const cep = onlyDigits(form.comprador.cep)
     if (cep.length !== 8) return
@@ -862,8 +835,14 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     setProductConfirmed(true)
     setCartConfirmed(false)
     requestAnimationFrame(() => {
-      formStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      cartSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
+  }
+
+  function reopenProductList() {
+    setSelectedItemId('')
+    setProductConfirmed(false)
+    setCartConfirmed(false)
   }
 
   function confirmCartSelection() {
@@ -1137,10 +1116,12 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                             <p className="text-sm font-semibold text-[#17346b]">Produtos disponíveis</p>
                             <p className="text-xs text-slate-500">Escolha o produto final antes de avançar para a próxima etapa.</p>
                           </div>
-                          <p className="text-xs font-semibold text-slate-400">{filteredProducts.length} opção(ões)</p>
+                          <p className="text-xs font-semibold text-slate-400">
+                            {itemSelecionado && !productConfirmed ? 'Produto escolhido' : `${filteredProducts.length} opção(ões)`}
+                          </p>
                         </div>
                         <div className="grid gap-3">
-                          {filteredProducts.map(item => {
+                          {visibleProducts.map(item => {
                             const selected = selectedItemId === item.id
                             const profile = getProductProfile(item.certificados)
                             return (
@@ -1192,7 +1173,14 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                             </>
                           ) : <div className="p-8 text-center text-sm text-slate-500">Escolha um produto para continuar.</div>}
                         </div>
-                        <button type="button" disabled={!itemSelecionado} onClick={confirmProductSelection} className="mt-2 w-full rounded-xl bg-[#0b8fc1] px-5 py-4 text-sm font-bold text-white transition hover:bg-[#087ca8] disabled:cursor-not-allowed disabled:bg-slate-300">Próximo</button>
+                        <div className="mt-2 grid gap-3">
+                          {itemSelecionado && !productConfirmed && (
+                            <button type="button" onClick={reopenProductList} className="w-full rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                              Voltar
+                            </button>
+                          )}
+                          <button type="button" disabled={!itemSelecionado} onClick={confirmProductSelection} className="w-full rounded-xl bg-[#0b8fc1] px-5 py-4 text-sm font-bold text-white transition hover:bg-[#087ca8] disabled:cursor-not-allowed disabled:bg-slate-300">Próximo</button>
+                        </div>
                       </aside>
                     </div>
                   )}
@@ -1208,7 +1196,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
               highlight={false}
               done={cartConfirmed}
             >
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,.8fr)]">
+              <div ref={cartSectionRef} className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,.8fr)]">
                 <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white">
                   <div className="p-5">
                     <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Item no carrinho</p>
@@ -1454,37 +1442,6 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     onFocus={() => setFocusedField('acesso.confirmar_senha')}
                     onBlurField={() => setFocusedField(null)}
                   />
-                </div>
-
-                <div className="rounded-[24px] border border-emerald-200 bg-emerald-50/80 p-4">
-                  <p className="text-sm font-semibold text-emerald-900">Recuperar e-mail cadastrado</p>
-                  <p className="mt-1 text-xs text-emerald-800">
-                    Se o cliente não lembrar o e-mail, digite o CPF ou CNPJ do representante para localizar o cadastro.
-                  </p>
-                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
-                    <input
-                      type="text"
-                      value={recoveryDocumento}
-                      onChange={event => setRecoveryDocumento(formatCpfCnpj(event.target.value))}
-                      placeholder="CPF ou CNPJ do representante"
-                      className="w-full rounded-[20px] border border-slate-200 bg-white px-4 py-3.5 text-sm outline-none focus:border-[#17346b] focus:ring-2 focus:ring-sky-100"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void localizarEmailRecuperacao()}
-                      disabled={recoveryLoading}
-                      className="rounded-[20px] bg-[#17346b] px-5 py-3.5 text-sm font-semibold text-white disabled:opacity-50"
-                    >
-                      {recoveryLoading ? 'Localizando...' : 'Ver e-mail'}
-                    </button>
-                  </div>
-                  {recoveryError && <p className="mt-2 text-sm text-red-600">{recoveryError}</p>}
-                  {recoveryEmailMasked && (
-                    <div className="mt-3 rounded-2xl border border-emerald-200 bg-white px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.18em] text-emerald-700 font-semibold">E-mail encontrado</p>
-                      <p className="mt-1 text-sm font-medium text-slate-900">{recoveryEmailMasked}</p>
-                    </div>
-                  )}
                 </div>
 
                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
