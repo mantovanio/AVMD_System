@@ -385,7 +385,7 @@ const FALLBACK_CERTS = ['e-CPF A1', 'e-CPF A3', 'e-CNPJ A1', 'e-CNPJ A3', 'NF-e 
 
 const STATUS_VENDA_LABEL: Record<StatusVendaCertificado, string> = {
   rascunho:     'Não Confirmada',
-  vendido:      'Vendida',
+  vendido:      'Venda Realizada',
   agendado:     'Agendada',
   em_validacao: 'Em Validação',
   emitido:      'Emitida',
