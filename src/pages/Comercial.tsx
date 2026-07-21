@@ -55,6 +55,7 @@ import {
 } from '@/lib/nfse'
 import { getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { getApiUrl } from '@/lib/api'
+import { getProductProfile } from '@/lib/checkout'
 import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenTitularByCpf, updateAivenCommercialSaleStatus, updateAivenCommercialSalePaymentStatus, updateVenda, updateVendaPaymentMethod, type CancelamentoVendaInput, type UpdateVendaInput } from '@/lib/commercialAiven'
 import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
 import { useAuth } from '@/contexts/AuthContext'
@@ -822,6 +823,7 @@ export default function Comercial() {
   const [currentFormStep, setCurrentFormStep]     = useState(0)
   const [produtoKindFilter, setProdutoKindFilter] = useState('')
   const [produtoEmissaoFilter, setProdutoEmissaoFilter] = useState('')
+  const [produtoAtendimentoFilter, setProdutoAtendimentoFilter] = useState('')
   const [produtoValidadeFilter, setProdutoValidadeFilter] = useState('')
 
   // ── derived ──────────────────────────────────────────────────
@@ -1021,8 +1023,9 @@ export default function Comercial() {
     })
   // ── product filter derivations (cascata tipo→validade) ──
   function productKind(cert: Certificado): string {
+    const profile = getProductProfile(cert)
+    if (profile.kind && profile.kind !== 'Outros') return profile.kind
     const raw = `${cert.tipo ?? ''} ${resolveModelo(cert) ?? ''} ${cert.modelo ?? ''} ${cert.categoria ?? ''}`.trim().toLowerCase()
-    const modelo = resolveModelo(cert)
     let base = ''
     if (/safeid/.test(raw)) base = 'SafeID'
     else if (/nuvem|cloud/.test(raw)) base = 'Nuvem'
@@ -1035,6 +1038,8 @@ export default function Comercial() {
     return base || cert.tipo?.trim() || 'Outros'
   }
   function productClass(cert: Certificado): string {
+    const profile = getProductProfile(cert)
+    if (profile.certificateClass && profile.certificateClass !== 'Não informado') return profile.certificateClass
     const text = `${cert.tipo ?? ''} ${resolveModelo(cert) ?? ''} ${cert.categoria ?? ''} ${cert.periodo_uso ?? ''}`.toLowerCase()
     if (/safeid/.test(text)) return 'SafeID'
     if (/\ba3\b/.test(text) || /cart|token|leitora|midia|mídia|pendrive/.test(text)) return 'A3'
@@ -1042,17 +1047,33 @@ export default function Comercial() {
     return '—'
   }
   function productDisplayName(cert: Certificado) {
-    return cleanRepeatedProductLabel([
+    return getProductProfile(cert).displayName || cleanRepeatedProductLabel([
       cert.tipo,
       resolveModelo(cert) && productClass(cert) !== resolveModelo(cert) ? resolveModelo(cert) : null,
       cert.categoria && !String(cert.tipo ?? '').toLowerCase().includes(String(cert.categoria).toLowerCase()) ? cert.categoria : null,
     ]) || 'Produto'
   }
+  function productCommercialDescription(cert: Certificado) {
+    return getProductProfile(cert).commercialDescription
+  }
+  function productDetails(cert: Certificado) {
+    return getProductProfile(cert).details
+  }
   function productValidity(cert: Certificado): string {
-    if (productClass(cert) === 'SafeID') {
-      return (cert.periodo_uso ?? '').trim() || (cert.validade ?? '').trim() || 'Não definido'
-    }
-    return (cert.validade ?? '').trim() || 'Não definido'
+    const profile = getProductProfile(cert)
+    return profile.validity && profile.validity !== 'Não informada'
+      ? profile.validity
+      : productClass(cert) === 'SafeID'
+        ? ((cert.periodo_uso ?? '').trim() || (cert.validade ?? '').trim() || 'Não definido')
+        : ((cert.validade ?? '').trim() || 'Não definido')
+  }
+  function productServiceMode(cert: Certificado): string {
+    const raw = `${cert.tipo_emissao_padrao ?? ''} ${cert.tipo ?? ''} ${cert.descricao_produto ?? ''} ${cert.descricao ?? ''}`.toLowerCase()
+    if (/renova/.test(raw)) return 'Renovação on-line'
+    if (/fast/.test(raw)) return 'Fast'
+    if (/presencial/.test(raw)) return 'Presencial'
+    if (/video|vídeo|videoconfer/.test(raw)) return 'Videoconferência'
+    return cert.tipo_emissao_padrao?.trim() || 'Presencial'
   }
 
   const produtoKindOptions = useMemo(
@@ -1071,16 +1092,24 @@ export default function Comercial() {
     () => produtosByKind.filter(c => !produtoEmissaoFilter || productClass(c.cert) === produtoEmissaoFilter),
     [produtoEmissaoFilter, produtosByKind]
   )
-  const produtoValidadeOptions = useMemo(
-    () => sortByPriority(
-      produtosByEmissao.map(c => productValidity(c.cert)),
-      ['1 mês', '3 meses', '6 meses', '12 meses', '24 meses', '36 meses', '48 meses', '60 meses']
-    ),
+  const produtoAtendimentoOptions = useMemo(
+    () => sortByPriority(produtosByEmissao.map(c => productServiceMode(c.cert)), ['Videoconferência', 'Presencial', 'Fast', 'Renovação on-line']),
     [produtosByEmissao]
   )
+  const produtosByAtendimento = useMemo(
+    () => produtosByEmissao.filter(c => !produtoAtendimentoFilter || productServiceMode(c.cert) === produtoAtendimentoFilter),
+    [produtoAtendimentoFilter, produtosByEmissao]
+  )
+  const produtoValidadeOptions = useMemo(
+    () => sortByPriority(
+      produtosByAtendimento.map(c => productValidity(c.cert)),
+      ['1 mês', '3 meses', '6 meses', '12 meses', '24 meses', '36 meses', '48 meses', '60 meses']
+    ),
+    [produtosByAtendimento]
+  )
   const produtosFiltrados = useMemo(
-    () => produtosByEmissao.filter(c => !produtoValidadeFilter || productValidity(c.cert) === produtoValidadeFilter),
-    [produtoValidadeFilter, produtosByEmissao]
+    () => produtosByAtendimento.filter(c => !produtoValidadeFilter || productValidity(c.cert) === produtoValidadeFilter),
+    [produtoValidadeFilter, produtosByAtendimento]
   )
 
   const motivoSemCertificados = useMemo(() => {
@@ -1922,6 +1951,7 @@ export default function Comercial() {
     setCurrentFormStep(0)
     setProdutoKindFilter('')
     setProdutoEmissaoFilter('')
+    setProdutoAtendimentoFilter('')
     setProdutoValidadeFilter('')
   }
 
@@ -2360,6 +2390,7 @@ export default function Comercial() {
     setCurrentFormStep(0)
     setProdutoKindFilter('')
     setProdutoEmissaoFilter('')
+    setProdutoAtendimentoFilter('')
     setProdutoValidadeFilter('')
     setShowFormV(true)
     setShowClienteForm(true)
@@ -2375,6 +2406,7 @@ export default function Comercial() {
     setCurrentFormStep(0)
     setProdutoKindFilter('')
     setProdutoEmissaoFilter('')
+    setProdutoAtendimentoFilter('')
     setProdutoValidadeFilter('')
     setShowFormV(true)
     setShowClienteForm(false)
@@ -4978,18 +5010,49 @@ export default function Comercial() {
                   {currentFormStep === 3 && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
                       <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-                        <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Tabela de Preço e Produto</h4>
-                        <SelectInput label="Tabela de Preço *" value={formV2.tabela_preco_id}
-                          onChange={v => {
-                            setFormV2(p => ({ ...p, tabela_preco_id: v, certificado_id: '', tabela_preco_item_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
-                            setProdutoKindFilter('')
-                            setProdutoEmissaoFilter('')
-                            setProdutoValidadeFilter('')
-                          }}
-                          options={[
-                            { value: '', label: 'Selecione a tabela' },
-                            ...tabelasDisponiveisVenda.map(t => ({ value: t.id, label: t.nome })),
-                          ]} />
+                        <div className="mb-4">
+                          <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tabela de venda</h4>
+                          <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Escolha a tabela para liberar os produtos, preços, voucher e regras comerciais corretas.</p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                          {tabelasDisponiveisVenda.map(tabela => {
+                            const active = formV2.tabela_preco_id === tabela.id
+                            const totalProdutosTabela = tabelaItens.filter(item => item.tabela_preco_id === tabela.id && item.ativo).length
+                            return (
+                              <button
+                                key={tabela.id}
+                                type="button"
+                                onClick={() => {
+                                  setFormV2(p => ({ ...p, tabela_preco_id: tabela.id, certificado_id: '', tabela_preco_item_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
+                                  setProdutoKindFilter('')
+                                  setProdutoEmissaoFilter('')
+                                  setProdutoAtendimentoFilter('')
+                                  setProdutoValidadeFilter('')
+                                }}
+                                className={cn(
+                                  'rounded-2xl border p-4 text-left transition-all',
+                                  active
+                                    ? 'border-blue-400 bg-blue-50 text-blue-900 shadow-sm dark:border-blue-700 dark:bg-blue-950/30 dark:text-blue-100'
+                                    : 'border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50/60 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-blue-900/50 dark:hover:bg-blue-950/20'
+                                )}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-bold">{tabela.nome}</p>
+                                    <p className="mt-1 text-xs opacity-70">{totalProdutosTabela} produto(s) ativo(s)</p>
+                                  </div>
+                                  <span className={cn('h-5 w-5 rounded-full border-2 p-1 shrink-0', active ? 'border-blue-600 dark:border-blue-300' : 'border-gray-300 dark:border-gray-600')}>
+                                    {active && <span className="block h-full w-full rounded-full bg-blue-600 dark:bg-blue-300" />}
+                                  </span>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                                  {tabela.codigo_voucher && <span className="rounded-full bg-amber-100 px-2 py-1 font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">Voucher: {tabela.codigo_voucher}</span>}
+                                  {Number(tabela.max_desconto_percentual) > 0 && <span className="rounded-full bg-emerald-100 px-2 py-1 font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Desc. {tabela.max_desconto_percentual}%</span>}
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
                       </div>
 
                       {formV2.tabela_preco_id && certsDaTabela.length > 0 && (
@@ -5002,7 +5065,7 @@ export default function Comercial() {
                                 <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Produto, depois emissão, depois validade e por fim o produto final.</p>
                               </div>
                               <div className="flex flex-wrap gap-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">
-                                {['Produto', 'Emissão', 'Validade', 'Produto final'].map((etapa, idx) => (
+                                {['Produto', 'Tipo', 'Atendimento', 'Validade'].map((etapa, idx) => (
                                   <span key={etapa} className={cn(
                                     'rounded-full border px-3 py-1',
                                     idx === 0 ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300' : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900'
@@ -5012,13 +5075,14 @@ export default function Comercial() {
                                 ))}
                               </div>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
                               <label className="flex flex-col gap-1">
                                 <span className="text-xs text-gray-500 font-medium">Produto *</span>
                                 <select value={produtoKindFilter}
                                   onChange={e => {
                                     setProdutoKindFilter(e.target.value)
                                     setProdutoEmissaoFilter('')
+                                    setProdutoAtendimentoFilter('')
                                     setProdutoValidadeFilter('')
                                     setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
                                   }}
@@ -5032,6 +5096,7 @@ export default function Comercial() {
                                 <select value={produtoEmissaoFilter}
                                   onChange={e => {
                                     setProdutoEmissaoFilter(e.target.value)
+                                    setProdutoAtendimentoFilter('')
                                     setProdutoValidadeFilter('')
                                     setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
                                   }}
@@ -5042,15 +5107,29 @@ export default function Comercial() {
                                 </select>
                               </label>
                               <label className="flex flex-col gap-1">
+                                <span className="text-xs text-gray-500 font-medium">Atendimento *</span>
+                                <select value={produtoAtendimentoFilter}
+                                  onChange={e => {
+                                    setProdutoAtendimentoFilter(e.target.value)
+                                    setProdutoValidadeFilter('')
+                                    setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
+                                  }}
+                                  disabled={!produtoEmissaoFilter}
+                                  className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60">
+                                  <option value="">{!produtoEmissaoFilter ? 'Selecione o tipo' : 'Selecione'}</option>
+                                  {produtoAtendimentoOptions.map(v => <option key={v} value={v}>{v}</option>)}
+                                </select>
+                              </label>
+                              <label className="flex flex-col gap-1">
                                 <span className="text-xs text-gray-500 font-medium">Validade *</span>
                                 <select value={produtoValidadeFilter}
                                   onChange={e => {
                                     setProdutoValidadeFilter(e.target.value)
                                     setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
                                   }}
-                                  disabled={!produtoEmissaoFilter}
+                                  disabled={!produtoAtendimentoFilter}
                                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60">
-                                  <option value="">{!produtoEmissaoFilter ? 'Selecione a emissão' : 'Selecione'}</option>
+                                  <option value="">{!produtoAtendimentoFilter ? 'Selecione o atendimento' : 'Selecione'}</option>
                                   {produtoValidadeOptions.map(v => <option key={v} value={v}>{v}</option>)}
                                 </select>
                               </label>
@@ -5059,8 +5138,8 @@ export default function Comercial() {
 
                           {/* Lista de produtos filtrados */}
                           {produtoValidadeFilter && (
-                            <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-                              <div className="flex items-center justify-between gap-3 bg-gray-50 dark:bg-gray-900/60 px-4 py-3 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white p-4 dark:bg-gray-900">
+                              <div className="mb-3 flex items-center justify-between gap-3 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                 <span>Produtos finalizados</span>
                                 <span>{produtosFiltrados.length} opção(ões)</span>
                               </div>
@@ -5069,49 +5148,56 @@ export default function Comercial() {
                                   Nenhum produto encontrado para esta combinação.
                                 </div>
                               ) : (
-                                produtosFiltrados.map(({ item, cert }) => {
-                                  const isSelected = formV2.tabela_preco_item_id === item.id
-                                  const productMeta = cleanRepeatedProductLabel([
-                                    cert?.modelo,
-                                    productClass(cert),
-                                    productValidity(cert),
-                                  ]) || '—'
-                                  return (
-                                    <button key={item.id} type="button"
-                                      onClick={() => {
-                                        setFormV2(p => ({
-                                          ...p,
-                                          tabela_preco_item_id: item.id,
-                                          certificado_id: item.certificado_id ?? '',
-                                          valor_venda: item.valor ?? 0,
-                                          desconto: 0,
-                                          voucher_codigo: '',
-                                        }))
-                                      }}
-                                      className={cn(
-                                        'grid w-full grid-cols-[1fr_auto] items-center gap-4 border-t border-gray-100 dark:border-gray-800 px-4 py-4 text-left transition-colors',
-                                        isSelected
-                                          ? 'bg-blue-600 text-white dark:bg-blue-700'
-                                          : 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-gray-800'
-                                      )}>
-                                      <div className="flex flex-col">
-                                        <span className="text-sm font-semibold">{productDisplayName(cert)}</span>
-                                        <span className="text-xs opacity-70">{productMeta}</span>
-                                      </div>
-                                      <div className="flex items-center gap-3">
-                                        <span className="text-sm font-semibold whitespace-nowrap">
-                                          {item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                        </span>
-                                        <span className={cn(
-                                          'h-5 w-5 rounded-full border-2 p-1 shrink-0',
-                                          isSelected ? 'border-white' : 'border-gray-300 dark:border-gray-600'
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                                  {produtosFiltrados.map(({ item, cert }) => {
+                                    const isSelected = formV2.tabela_preco_item_id === item.id
+                                    return (
+                                      <button key={item.id} type="button"
+                                        onClick={() => {
+                                          setFormV2(p => ({
+                                            ...p,
+                                            tabela_preco_item_id: item.id,
+                                            certificado_id: item.certificado_id ?? '',
+                                            valor_venda: item.valor ?? 0,
+                                            desconto: 0,
+                                            voucher_codigo: '',
+                                          }))
+                                        }}
+                                        className={cn(
+                                          'rounded-2xl border p-4 text-left transition-all',
+                                          isSelected
+                                            ? 'border-blue-500 bg-blue-600 text-white shadow-lg shadow-blue-100 dark:border-blue-500 dark:bg-blue-700 dark:shadow-none'
+                                            : 'border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50/70 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-blue-900/50 dark:hover:bg-blue-950/20'
                                         )}>
-                                          {isSelected && <span className="block h-full w-full rounded-full bg-white" />}
-                                        </span>
-                                      </div>
-                                    </button>
-                                  )
-                                })
+                                        <div className="flex items-start justify-between gap-4">
+                                          <div className="min-w-0">
+                                            <p className={cn('text-[11px] uppercase tracking-[0.18em] font-bold', isSelected ? 'text-blue-100' : 'text-gray-400')}>
+                                              {productKind(cert)}
+                                            </p>
+                                            <p className="mt-1 text-base font-bold">{productDisplayName(cert)}</p>
+                                            <p className={cn('mt-2 text-sm leading-relaxed', isSelected ? 'text-blue-50' : 'text-gray-600 dark:text-gray-300')}>
+                                              {productCommercialDescription(cert)}
+                                            </p>
+                                          </div>
+                                          <span className={cn('h-5 w-5 rounded-full border-2 p-1 shrink-0', isSelected ? 'border-white' : 'border-gray-300 dark:border-gray-600')}>
+                                            {isSelected && <span className="block h-full w-full rounded-full bg-white" />}
+                                          </span>
+                                        </div>
+                                        <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+                                          <span className={cn('rounded-full px-2 py-1', isSelected ? 'bg-white/15 text-white' : 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300')}>{productClass(cert)}</span>
+                                          <span className={cn('rounded-full px-2 py-1', isSelected ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600 dark:bg-gray-800 dark:text-gray-300')}>{productServiceMode(cert)}</span>
+                                          <span className={cn('rounded-full px-2 py-1', isSelected ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600 dark:bg-gray-800 dark:text-gray-300')}>{productDetails(cert)}</span>
+                                        </div>
+                                        <div className="mt-4 flex items-end justify-between gap-3 border-t border-current/10 pt-4">
+                                          <span className={cn('text-xs', isSelected ? 'text-blue-100' : 'text-gray-500')}>Preço de venda</span>
+                                          <span className="text-xl font-black">
+                                            {item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                          </span>
+                                        </div>
+                                      </button>
+                                    )
+                                  })}
+                                </div>
                               )}
                             </div>
                           )}
@@ -5317,6 +5403,7 @@ export default function Comercial() {
                     setCurrentFormStep(0)
                     setProdutoKindFilter('')
                     setProdutoEmissaoFilter('')
+                    setProdutoAtendimentoFilter('')
                     setProdutoValidadeFilter('')
                     setShowFormV(true)
                   }}
