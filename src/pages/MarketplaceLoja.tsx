@@ -279,6 +279,14 @@ function statusPagamentoLabel(option: PaymentOption) {
   return 'A validação só é liberada após a confirmação'
 }
 
+function publicPaymentLabel(option: PaymentOption | null | undefined) {
+  const source = `${option?.nome ?? ''} ${option?.codigo ?? ''} ${option?.tipo ?? ''}`.toLowerCase()
+  if (source.includes('pix')) return 'Pix'
+  if (source.includes('boleto')) return 'Boleto'
+  if (source.includes('card') || source.includes('cart')) return 'Cartão'
+  return option?.nome?.replace(/\s*-\s*mercado pago\s*/i, '').trim() || 'Pagamento'
+}
+
 function normalizedSearch(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 }
@@ -339,6 +347,8 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [productValidityFilter, setProductValidityFilter] = useState('')
   const [productConfirmed, setProductConfirmed] = useState(false)
   const [cartConfirmed, setCartConfirmed] = useState(false)
+  const [faturamentoConfirmed, setFaturamentoConfirmed] = useState(false)
+  const [titularConfirmed, setTitularConfirmed] = useState(false)
   const [pagamentos, setPagamentos] = useState<PaymentOption[]>([])
   const [agendaAgents, setAgendaAgents] = useState<AgendaAgent[]>([])
   const [agendaPoints, setAgendaPoints] = useState<AgendaPoint[]>([])
@@ -406,6 +416,8 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
         setSelectedItemId(initialItemId)
         setProductConfirmed(Boolean(initialItemId && normalizeLojaConfig(context.loja.configuracoes).modo_exibicao === 'link_direto'))
         setCartConfirmed(false)
+        setFaturamentoConfirmed(false)
+        setTitularConfirmed(false)
         setPagamentos(context.pagamentos)
         setAgendaAgents(context.agentes)
         setAgendaPoints(context.pontos)
@@ -646,18 +658,20 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const checkoutStep = useMemo(() => {
     if (!itemSelecionado || !productConfirmed) return 1
     if (!cartConfirmed) return 2
-    if (!faturamentoDone) return 3
-    if (!titularDone) return 4
+    if (!faturamentoDone || !faturamentoConfirmed) return 3
+    if (!titularDone || !titularConfirmed) return 4
     if (!pagamentoDone) return 5
     return 6
-  }, [cartConfirmed, faturamentoDone, itemSelecionado, pagamentoDone, productConfirmed, titularDone])
+  }, [cartConfirmed, faturamentoConfirmed, faturamentoDone, itemSelecionado, pagamentoDone, productConfirmed, titularConfirmed, titularDone])
 
   const canShowFaturamento = !!itemSelecionado && productConfirmed && cartConfirmed
-  const canShowTitular = canShowFaturamento && faturamentoDone
-  const canShowPagamento = canShowTitular && titularDone
+  const canShowTitular = canShowFaturamento && faturamentoDone && faturamentoConfirmed
+  const canShowPagamento = canShowTitular && titularDone && titularConfirmed
   const canShowAvisos = canShowPagamento
 
   function updateComprador<K extends keyof FormState['comprador']>(key: K, value: FormState['comprador'][K]) {
+    setFaturamentoConfirmed(false)
+    setTitularConfirmed(false)
     setForm(prev => ({
       ...prev,
       comprador: {
@@ -675,6 +689,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   }
 
   function updateTitular<K extends keyof FormState['titular']>(key: K, value: FormState['titular'][K]) {
+    setTitularConfirmed(false)
     setForm(prev => ({
       ...prev,
       titular: {
@@ -837,6 +852,36 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   function confirmCartSelection() {
     if (!itemSelecionado) return
     setCartConfirmed(true)
+    requestAnimationFrame(() => {
+      formStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
+  function confirmFaturamentoSelection() {
+    const errors = validateForm(form, itemSelecionado)
+    const faturamentoErrors = Object.fromEntries(Object.entries(errors).filter(([id]) => id.startsWith('comprador.')))
+    setFieldErrors(prev => ({ ...prev, ...faturamentoErrors }))
+    if (Object.keys(faturamentoErrors).length > 0) {
+      setError('Revise os dados de faturamento antes de avançar.')
+      return
+    }
+    setError(null)
+    setFaturamentoConfirmed(true)
+    requestAnimationFrame(() => {
+      formStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
+  function confirmTitularSelection() {
+    const errors = validateForm(form, itemSelecionado)
+    const titularErrors = Object.fromEntries(Object.entries(errors).filter(([id]) => id.startsWith('titular.')))
+    setFieldErrors(prev => ({ ...prev, ...titularErrors }))
+    if (Object.keys(titularErrors).length > 0) {
+      setError('Revise os dados do titular antes de avançar.')
+      return
+    }
+    setError(null)
+    setTitularConfirmed(true)
     requestAnimationFrame(() => {
       formStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
@@ -1264,25 +1309,33 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     label="Pessoa Jurídica"
                     helper="Minha empresa vai pagar. O certificado será emitido para um responsável (pessoa física)."
                     active={form.comprador.tipo === 'pessoa_juridica'}
-                    onClick={() => setForm(prev => ({
-                      ...prev,
-                      comprador: {
-                        ...prev.comprador,
-                        tipo: 'pessoa_juridica',
-                      },
-                    }))}
+                    onClick={() => {
+                      setFaturamentoConfirmed(false)
+                      setTitularConfirmed(false)
+                      setForm(prev => ({
+                        ...prev,
+                        comprador: {
+                          ...prev.comprador,
+                          tipo: 'pessoa_juridica',
+                        },
+                      }))
+                    }}
                   />
                   <ChoiceCard
                     label="Pessoa Física"
                     helper="Vou pagar como pessoa física. O certificado pode ser no meu nome ou de outra pessoa."
                     active={form.comprador.tipo === 'pessoa_fisica'}
-                    onClick={() => setForm(prev => ({
-                      ...prev,
-                      comprador: {
-                        ...prev.comprador,
-                        tipo: 'pessoa_fisica',
-                      },
-                    }))}
+                    onClick={() => {
+                      setFaturamentoConfirmed(false)
+                      setTitularConfirmed(false)
+                      setForm(prev => ({
+                        ...prev,
+                        comprador: {
+                          ...prev.comprador,
+                          tipo: 'pessoa_fisica',
+                        },
+                      }))
+                    }}
                   />
                 </div>
 
@@ -1498,6 +1551,11 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     </div>
                   </div>
                 </div>
+                <div className="flex justify-end">
+                  <button type="button" onClick={confirmFaturamentoSelection} className="rounded-xl bg-[#17346b] px-6 py-3 text-sm font-semibold text-white hover:bg-[#102654]">
+                    Próximo
+                  </button>
+                </div>
               </div>
             </SectionCard>
             )}
@@ -1514,7 +1572,10 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                 <input
                   type="checkbox"
                   checked={form.titularMesmoFaturamento}
-                  onChange={e => setForm(prev => ({ ...prev, titularMesmoFaturamento: e.target.checked }))}
+                  onChange={e => {
+                    setTitularConfirmed(false)
+                    setForm(prev => ({ ...prev, titularMesmoFaturamento: e.target.checked }))
+                  }}
                   className="mt-1 h-5 w-5 rounded border-sky-300 text-[#17346b] focus:ring-[#17346b]"
                 />
                 <div>
@@ -1655,6 +1716,11 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   />
                 </div>
               )}
+              <div className="mt-5 flex justify-end">
+                <button type="button" onClick={confirmTitularSelection} className="rounded-xl bg-[#17346b] px-6 py-3 text-sm font-semibold text-white hover:bg-[#102654]">
+                  Próximo
+                </button>
+              </div>
             </SectionCard>
             )}
 
@@ -1693,7 +1759,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="text-sm font-semibold text-slate-900">{option.nome}</p>
+                            <p className="text-sm font-semibold text-slate-900">{publicPaymentLabel(option)}</p>
                             <p className="text-xs text-slate-500 mt-1">{statusPagamentoLabel(option)}</p>
                           </div>
                           {active ? <CheckCircle2 size={18} className="text-[#ea7b18]" /> : <CreditCard size={18} className="text-slate-400" />}
@@ -1704,7 +1770,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                 </div>
               ) : (
                 <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
-                  Nenhuma forma de pagamento ficou visível nesta loja agora. Isso normalmente indica configuração incompleta do Mercado Pago no ambiente de teste.
+                  Nenhuma forma de pagamento ficou visível nesta loja agora. Avise nossa equipe para liberar Pix, Cartão ou Boleto.
                 </div>
               )}
               <div className="mt-4 rounded-[22px] border border-sky-100 bg-sky-50/50 px-4 py-3 text-xs text-sky-800 leading-relaxed">
@@ -1736,7 +1802,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
               )}
               {isMockMercadoPagoCard && mockCardEnabled && (
                 <div className="mt-5 rounded-[24px] border border-slate-200 bg-white p-4">
-                  <p className="text-sm font-semibold text-slate-900">Cartão de teste do Mercado Pago</p>
+                  <p className="text-sm font-semibold text-slate-900">Cartão de teste</p>
                   <p className="mt-1 text-xs text-slate-500">
                     Este formulário entra em modo simulado quando a Public Key não está configurada.
                   </p>
@@ -1793,8 +1859,8 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
               )}
               {isMercadoPagoCard && !pagamentoSelecionado?.public_key && !mockCardEnabled && (
                 <div className="mt-3 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
-                  <p className="font-semibold">Cartão seguro do Mercado Pago ainda não carregou.</p>
-                  <p className="mt-1">A Public Key não veio da configuração atual. Pix e boleto continuam funcionando no fluxo de teste e o link de pagamento pode ser gerado pelo painel comercial.</p>
+                  <p className="font-semibold">Cartão seguro ainda não carregou.</p>
+                  <p className="mt-1">A configuração pública do cartão não veio no checkout atual. Pix e boleto continuam funcionando.</p>
                 </div>
               )}
             </SectionCard>
@@ -1874,7 +1940,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                 </div>
                 <div className="rounded-[22px] border border-slate-200 bg-white p-4">
                   <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Pagamento</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">{pagamentoSelecionado?.nome ?? 'Não informado'}</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">{pagamentoSelecionado ? publicPaymentLabel(pagamentoSelecionado) : 'Não informado'}</p>
                   <p className="mt-1 text-sm text-slate-500">Depois de finalizar, você receberá as instruções oficiais para pagamento e validação.</p>
                 </div>
               </div>
@@ -1964,7 +2030,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     />
                     <InfoLine
                       label="Pagamento"
-                      value={pagamentos.find(item => item.id === form.forma_pagamento_id)?.nome ?? 'Aguardando escolha'}
+                      value={form.forma_pagamento_id ? publicPaymentLabel(pagamentos.find(item => item.id === form.forma_pagamento_id)) : 'Aguardando escolha'}
                     />
                     {checkoutSuccess && (
                       <InfoLine
