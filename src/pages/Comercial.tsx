@@ -2126,12 +2126,15 @@ export default function Comercial() {
   async function alterarFormaPagamentoVenda(venda: VendaRow, formaPagamentoId: string) {
     if (!isAdmin || !profile?.id || !formaPagamentoId || formaPagamentoId === venda.forma_pagamento_id) return
     setUpdatingPaymentVendaId(venda.id)
+    const paymentName = pagamentosDoGatewayAtual.find(item => item.id === formaPagamentoId)?.nome ?? 'Pagamento'
     try {
       await updateVendaPaymentMethod({
         id: venda.id,
         forma_pagamento_id: formaPagamentoId,
         admin_profile_id: profile.id,
       })
+      await fetchVendasV2()
+
       const chargeResponse = await fetch(getApiUrl('/checkout/commercial-charge'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ venda_id: venda.id, profile_id: profile.id }),
@@ -2149,7 +2152,6 @@ export default function Comercial() {
         } | null
       }
       if (!chargeResponse.ok || !charge.ok) throw new Error(charge.error ?? 'Forma alterada, mas a nova cobrança não foi gerada.')
-      const paymentName = pagamentosDoGatewayAtual.find(item => item.id === formaPagamentoId)?.nome ?? 'Pagamento'
       const paymentLink = charge.details?.ticket_url ?? charge.chargeUrl ?? null
       await dispararComunicacaoAutomaticaVenda({
         vendaId: venda.id,
@@ -2176,7 +2178,12 @@ export default function Comercial() {
       showMsg('Forma alterada, nova cobrança gerada e link enviado ao cliente.', 'ok')
       await fetchVendasV2()
     } catch (error) {
-      showMsg(error instanceof Error ? error.message : 'Erro ao alterar forma de pagamento.')
+      await fetchVendasV2()
+      const message = error instanceof Error ? error.message : 'Erro ao alterar forma de pagamento.'
+      showMsg(message.includes('Forma alterada')
+        ? `${paymentName} foi gravado na venda, mas a cobrança não foi gerada automaticamente: ${message}`
+        : message,
+      'err')
     } finally {
       setUpdatingPaymentVendaId(null)
     }
