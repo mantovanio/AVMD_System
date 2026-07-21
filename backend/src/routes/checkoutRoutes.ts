@@ -40,15 +40,22 @@ export async function handleCheckoutRoutes(req: IncomingMessage, res: ServerResp
     return
   }
 
-  if (req.method === 'POST' && req.url?.startsWith('/api/checkout/webhook/mercado-pago')) {
-    const body = await readJson<Record<string, unknown>>(req)
+  if ((req.method === 'POST' || req.method === 'GET') && req.url?.startsWith('/api/checkout/webhook/mercado-pago')) {
+    const url = new URL(req.url, 'http://localhost')
+    const body = req.method === 'POST'
+      ? await readJson<Record<string, unknown>>(req)
+      : {
+          type: url.searchParams.get('type') || url.searchParams.get('topic') || undefined,
+          id: url.searchParams.get('id') || url.searchParams.get('data.id') || undefined,
+          data: { id: url.searchParams.get('data.id') || url.searchParams.get('id') || undefined },
+        }
     if (!paymentService) {
       writeJson(res, 500, { ok: false, error: 'Servico de pagamento indisponivel.' }, corsOrigin)
       return
     }
     try {
-      const url = new URL(req.url, 'http://localhost')
-      const isOrder = url.pathname.endsWith('/orders') || String(body.type ?? '') === 'order'
+      const type = String(body.type ?? url.searchParams.get('topic') ?? '').toLowerCase()
+      const isOrder = url.pathname.endsWith('/orders') || type === 'order' || type === 'merchant_order'
       const result = isOrder
         ? await paymentService.applyMercadoPagoOrderWebhook({
             payload: body,

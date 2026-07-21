@@ -368,6 +368,16 @@ export class CheckoutPaymentService {
     return payload
   }
 
+  private async fetchMercadoPagoMerchantOrder(config: CheckoutPaymentMethodConfig, orderId: string) {
+    const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/merchant_orders/${encodeURIComponent(orderId)}`
+    const response = await this.fetchWithTimeout(endpoint, {
+      headers: { 'Authorization': `Bearer ${config.provider_api_token}` },
+    })
+    const payload = await response.json().catch(() => ({})) as Record<string, unknown>
+    if (!response.ok) throw new Error(String(payload.message || payload.error || `Mercado Pago respondeu ${response.status}`))
+    return payload
+  }
+
   async applyMercadoPagoWebhook(payload: Record<string, unknown>) {
     const data = this.asObject(payload.data)
     const paymentId = this.pickString(data, ['id']) || this.pickString(payload, ['id'])
@@ -376,14 +386,32 @@ export class CheckoutPaymentService {
     const config = await this.repository.getCheckoutPaymentMethodConfigByGateway?.('mercado_pago')
     if (!config?.provider_api_token) throw new Error('Credencial do Mercado Pago não configurada.')
     const payment = await this.fetchMercadoPagoPayment(config, paymentId)
-    const normalized = this.normalizeWebhookPayload(payment)
+    let normalized = this.normalizeWebhookPayload(payment)
+    let webhookPayload = payment
+
+    if (!normalized.vendaId) {
+      const order = this.asObject(payment.order)
+      const orderId = this.pickString(order, ['id'])
+      if (orderId) {
+        const merchantOrder = await this.fetchMercadoPagoMerchantOrder(config, orderId)
+        const orderNormalized = this.normalizeWebhookPayload(merchantOrder)
+        normalized = {
+          externalId: normalized.externalId || orderNormalized.externalId || paymentId,
+          vendaId: orderNormalized.vendaId || normalized.vendaId,
+          status: normalized.status === 'pending' ? orderNormalized.status : normalized.status,
+          paid: normalized.paid || orderNormalized.paid,
+        }
+        webhookPayload = { payment, merchant_order: merchantOrder }
+      }
+    }
+
     await this.repository.applyPaymentWebhook({
       vendaId: normalized.vendaId,
       externalId: normalized.externalId || paymentId,
       gateway: 'mercado_pago',
       status: normalized.status,
       paid: normalized.paid,
-      payload: payment,
+      payload: webhookPayload,
     })
     return normalized
   }
@@ -481,7 +509,7 @@ export class CheckoutPaymentService {
   }
 
   private normalizeWebhookPayload(payload: Record<string, unknown>) {
-    const externalId = this.pickString(payload, ['external_id', 'payment_id', 'id', 'transaction_id', 'TransactionId'])
+    const externalId = this.pickString(payload, ['external_id', 'payment_id', 'id', 'transaction_id', 'TransactionId', 'preference_id'])
     const vendaId = this.pickString(payload, ['reference', 'external_reference', 'reference_id', 'order_id', 'venda_id'])
       || this.pickString(this.asObject(payload.metadata), ['venda_id', 'sale_id'])
     const status = this.normalizeChargeStatus(payload)
@@ -516,16 +544,15 @@ export class CheckoutPaymentService {
     if (!orderId) throw new Error('Webhook sem identificador da order.')
     const config = await this.repository.getCheckoutPaymentMethodConfigByGateway?.('mercado_pago')
     if (!config?.provider_api_token) throw new Error('Credencial do Mercado Pago não configurada.')
-    if (!config.webhook_secret) throw new Error('Chave secreta do webhook do Mercado Pago não configurada.')
-    if (!this.validateWebhookSignature({ ...input, dataId: orderId, secret: config.webhook_secret })) {
+    if (config.webhook_secret && input.xSignature && !this.validateWebhookSignature({ ...input, dataId: orderId, secret: config.webhook_secret })) {
       const error = new Error('Assinatura do webhook inválida.') as Error & { statusCode?: number }
       error.statusCode = 401
       throw error
     }
-    const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/v1/orders/${encodeURIComponent(orderId)}`
-    const response = await this.fetchWithTimeout(endpoint, { headers: { 'Authorization': `Bearer ${config.provider_api_token}` } })
-    const order = await response.json().catch(() => ({})) as Record<string, unknown>
-    if (!response.ok) throw new Error(String(order.message || order.error || `Mercado Pago respondeu ${response.status}`))
+    const isMerchantOrder = String(input.payload.type ?? '').toLowerCase() === 'merchant_order'
+    const order = isMerchantOrder
+      ? await this.fetchMercadoPagoMerchantOrder(config, orderId)
+      : await this.fetchMercadoPagoOrder(config, orderId)
     const payment = this.firstPayment(order)
     const normalizedStatus = this.normalizeOrderStatus(order, payment)
     const vendaId = this.pickString(order, ['external_reference'])
@@ -559,17 +586,29 @@ export class CheckoutPaymentService {
     return computedBuffer.length === hashBuffer.length && timingSafeEqual(computedBuffer, hashBuffer)
   }
 
+  private async fetchMercadoPagoOrder(config: CheckoutPaymentMethodConfig, orderId: string) {
+    const endpoint = `${(config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')}/v1/orders/${encodeURIComponent(orderId)}`
+    const response = await this.fetchWithTimeout(endpoint, { headers: { 'Authorization': `Bearer ${config.provider_api_token}` } })
+    const order = await response.json().catch(() => ({})) as Record<string, unknown>
+    if (!response.ok) throw new Error(String(order.message || order.error || `Mercado Pago respondeu ${response.status}`))
+    return order
+  }
+
   private firstPayment(payload: Record<string, unknown>) {
     const transactions = this.asObject(payload.transactions)
     const payments = Array.isArray(transactions.payments) ? transactions.payments : []
-    return this.asObject(payments[0])
+    if (payments[0]) return this.asObject(payments[0])
+    const rootPayments = Array.isArray(payload.payments) ? payload.payments : []
+    return this.asObject(rootPayments[0])
   }
 
   private normalizeOrderStatus(payload: Record<string, unknown>, payment = this.firstPayment(payload)) {
     const status = String(payment.status || payload.status || '').toLowerCase()
     const detail = String(payment.status_detail || payload.status_detail || '').toLowerCase()
+    const orderStatus = String(payload.order_status || '').toLowerCase()
     if (status === 'processed' && detail === 'accredited') return 'paid'
-    if (['failed', 'rejected', 'cancelled', 'canceled', 'expired', 'charged_back'].includes(status)) return 'failed'
+    if (['paid', 'approved', 'closed'].includes(status) || orderStatus === 'paid') return 'paid'
+    if (['failed', 'rejected', 'cancelled', 'canceled', 'expired', 'charged_back'].includes(status) || ['cancelled', 'canceled'].includes(orderStatus)) return 'failed'
     return 'pending'
   }
 
