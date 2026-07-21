@@ -170,6 +170,7 @@ export async function updateVendaPaymentMethod(input: {
   id: string
   forma_pagamento_id: string
   admin_profile_id: string
+  payment_installments?: number | null
 }) {
   const response = await fetch(getApiUrl('/comercial/vendas/forma-pagamento'), {
     method: 'POST',

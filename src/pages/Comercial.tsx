@@ -285,6 +285,13 @@ type CobrancaModal = {
   message: string
 } | null
 
+type PaymentInstallmentsModal = {
+  venda: VendaRow
+  formaPagamentoId: string
+  formaPagamentoNome: string
+  parcelas: number
+} | null
+
 type PaymentMethodId = 'safe2pay' | 'mercado_pago' | 'itau' | 'inter' | 'c6'
 type PaymentMethodConfig = {
   id: PaymentMethodId
@@ -696,6 +703,7 @@ export default function Comercial() {
   const [editForm, setEditForm] = useState<UpdateVendaInput & { tipo_produto_label?: string }>({ id: '' })
   const [editSaving, setEditSaving] = useState(false)
   const [updatingPaymentVendaId, setUpdatingPaymentVendaId] = useState<string | null>(null)
+  const [paymentInstallmentsModal, setPaymentInstallmentsModal] = useState<PaymentInstallmentsModal>(null)
   const [reenviandoCobrancaVendaId, setReenviandoCobrancaVendaId] = useState<string | null>(null)
   const [cobrancaModal, setCobrancaModal] = useState<CobrancaModal>(null)
 
@@ -2125,6 +2133,22 @@ export default function Comercial() {
 
   async function alterarFormaPagamentoVenda(venda: VendaRow, formaPagamentoId: string) {
     if (!isAdmin || !profile?.id || !formaPagamentoId || formaPagamentoId === venda.forma_pagamento_id) return
+    const paymentName = pagamentosDoGatewayAtual.find(item => item.id === formaPagamentoId)?.nome ?? 'Pagamento'
+    if (classifyPaymentFlow(paymentName) === 'cartao') {
+      const currentInstallments = Number((venda.metadata as { payment_installments?: number | string } | null)?.payment_installments ?? 1) || 1
+      setPaymentInstallmentsModal({
+        venda,
+        formaPagamentoId,
+        formaPagamentoNome: paymentName,
+        parcelas: Math.max(1, Math.min(12, currentInstallments)),
+      })
+      return
+    }
+    await executarAlteracaoFormaPagamentoVenda(venda, formaPagamentoId, null)
+  }
+
+  async function executarAlteracaoFormaPagamentoVenda(venda: VendaRow, formaPagamentoId: string, paymentInstallments: number | null) {
+    if (!isAdmin || !profile?.id || !formaPagamentoId || formaPagamentoId === venda.forma_pagamento_id) return
     setUpdatingPaymentVendaId(venda.id)
     const paymentName = pagamentosDoGatewayAtual.find(item => item.id === formaPagamentoId)?.nome ?? 'Pagamento'
     try {
@@ -2132,6 +2156,7 @@ export default function Comercial() {
         id: venda.id,
         forma_pagamento_id: formaPagamentoId,
         admin_profile_id: profile.id,
+        payment_installments: paymentInstallments,
       })
       await fetchVendasV2()
       const charge = result.charge
@@ -2159,6 +2184,7 @@ export default function Comercial() {
         digitableLine: charge.details?.digitable_line ?? null,
         message: 'A forma de pagamento foi alterada e a cobrança foi gerada novamente. Use o link abaixo para reenviar ao cliente.',
       })
+      setPaymentInstallmentsModal(null)
       showMsg('Forma alterada, nova cobrança gerada e link enviado ao cliente.', 'ok')
       await fetchVendasV2()
     } catch (error) {
@@ -8121,6 +8147,62 @@ export default function Comercial() {
                 className="px-5 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
                 {cancelSaving && <Loader2 size={14} className="animate-spin" />}
                 Confirmar Cancelamento
+              </button>
+            </div>
+          </div>
+        </FlowModal>,
+        document.body
+      )}
+
+      {paymentInstallmentsModal && createPortal(
+        <FlowModal
+          open
+          title="Parcelas do cartão"
+          subtitle="Escolha o máximo de parcelas que o cliente verá no checkout do Mercado Pago."
+          onClose={() => setPaymentInstallmentsModal(null)}
+          contentClassName="max-w-md"
+        >
+          <div className="p-6 space-y-5">
+            <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-4 text-sm text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200">
+              <p className="font-semibold">{paymentInstallmentsModal.formaPagamentoNome}</p>
+              <p className="mt-1">Venda {paymentInstallmentsModal.venda.id}</p>
+              <p className="mt-1 text-xs">A cobrança anterior será marcada como substituída e uma nova cobrança ativa será criada.</p>
+            </div>
+
+            <label className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Máximo de parcelas</span>
+              <select
+                value={paymentInstallmentsModal.parcelas}
+                onChange={event => setPaymentInstallmentsModal(prev => prev ? { ...prev, parcelas: Number(event.target.value) } : prev)}
+                className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
+                  <option key={n} value={n}>{n}x</option>
+                ))}
+              </select>
+            </label>
+
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setPaymentInstallmentsModal(null)}
+                disabled={updatingPaymentVendaId === paymentInstallmentsModal.venda.id}
+                className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void executarAlteracaoFormaPagamentoVenda(
+                  paymentInstallmentsModal.venda,
+                  paymentInstallmentsModal.formaPagamentoId,
+                  paymentInstallmentsModal.parcelas,
+                )}
+                disabled={updatingPaymentVendaId === paymentInstallmentsModal.venda.id}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {updatingPaymentVendaId === paymentInstallmentsModal.venda.id && <Loader2 size={14} className="animate-spin" />}
+                Gerar cobrança
               </button>
             </div>
           </div>

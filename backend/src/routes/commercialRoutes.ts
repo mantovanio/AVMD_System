@@ -6,7 +6,7 @@ import type { CheckoutPaymentService } from '../services/checkoutPaymentService.
 type SalesRequest = { limit?: number }
 type SaleStatusRequest = { id: string; status: string }
 type SalePaymentStatusRequest = { id: string; status: string }
-type SalePaymentMethodRequest = { id: string; forma_pagamento_id: string; admin_profile_id: string }
+type SalePaymentMethodRequest = { id: string; forma_pagamento_id: string; admin_profile_id: string; payment_installments?: number | null }
 type ScheduleRequest = { dataBase?: string | null; status?: string | null; agenteId?: string | null }
 type UpdateVendaRequest = {
   id: string

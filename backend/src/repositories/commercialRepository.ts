@@ -25,6 +25,7 @@ export type UpdateCommercialSalePaymentMethodInput = {
   id: string
   forma_pagamento_id: string
   admin_profile_id: string
+  payment_installments?: number | null
 }
 
 export type UpdateVendaInput = {
@@ -161,6 +162,9 @@ export class CommercialRepository {
       limit 1
     `)
     const gateway = settings.rows[0]?.gateway ?? null
+    const installments = input.payment_installments
+      ? Math.max(1, Math.min(12, Number(input.payment_installments)))
+      : null
 
     const result = await this.db.query<Record<string, unknown>>(`
       update vendas_certificados venda
@@ -172,6 +176,11 @@ export class CommercialRepository {
             'forma_pagamento', forma.nome,
             'payment_method_id', forma.gateway,
             'payment_method_label', forma.nome,
+            'payment_installments',
+              case
+                when $5::int is null then null
+                else $5::int
+              end,
             'forma_pagamento_alterada_por', $3::uuid,
             'forma_pagamento_alterada_em', now(),
             'payment_charge_history',
@@ -205,7 +214,7 @@ export class CommercialRepository {
         and forma.ativo = true
         and ($4::text is null or forma.gateway = $4::text)
       returning venda.*
-    `, [input.id, input.forma_pagamento_id, input.admin_profile_id, gateway])
+    `, [input.id, input.forma_pagamento_id, input.admin_profile_id, gateway, installments])
     const venda = result.rows[0] ?? null
     if (venda) {
       await this.recordIntegrationEvent({

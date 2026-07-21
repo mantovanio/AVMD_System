@@ -1,11 +1,12 @@
 import type { CheckoutPaymentMethodConfig, CheckoutRepository } from '../repositories/checkoutRepository.js'
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 
 type FetchLike = typeof fetch
 
 type ChargeRequestInput = {
   vendaId: string
+  attemptId?: string
   valor: number
   descricao: string
   comprador: {
@@ -94,6 +95,7 @@ export class CheckoutPaymentService {
     fiscal: ChargeRequestInput['fiscal']
     card?: ChargeRequestInput['card']
   }): Promise<ChargeResult> {
+    const chargeInput = { ...input, attemptId: randomUUID() }
     const config = await this.repository.getCheckoutPaymentMethodConfig(input.formaPagamentoId)
     if (!config) {
       return { ok: false, status: 'error', error: 'Forma de pagamento não encontrada.' }
@@ -116,7 +118,7 @@ export class CheckoutPaymentService {
       }
     }
 
-    const result = await this.createCharge(config, input)
+    const result = await this.createCharge(config, chargeInput)
     await this.repository.attachPaymentChargeToSale({
       vendaId: input.vendaId,
       gateway: config.gateway ?? 'manual',
@@ -227,7 +229,7 @@ export class CheckoutPaymentService {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${config.provider_api_token}`,
-        'X-Idempotency-Key': input.vendaId,
+        'X-Idempotency-Key': `avmd-${input.vendaId}-link-${input.attemptId ?? Date.now()}`,
       },
       body: JSON.stringify(body),
     })
@@ -305,7 +307,7 @@ export class CheckoutPaymentService {
       payer,
       transactions: { payments: [payment] },
     }
-    const idempotencyKey = `avmd-${input.vendaId}-${isPix ? 'pix' : isBoleto ? 'boleto' : 'card'}`
+    const idempotencyKey = `avmd-${input.vendaId}-${isPix ? 'pix' : isBoleto ? 'boleto' : 'card'}-${input.attemptId ?? Date.now()}`
     const response = await this.fetchWithTimeout(endpoint, {
       method: 'POST',
       headers: {
@@ -650,7 +652,7 @@ export class CheckoutPaymentService {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${config.provider_api_token}`,
-        'X-Idempotency-Key': `avmd-${input.vendaId}-pix`,
+        'X-Idempotency-Key': `avmd-${input.vendaId}-pix-${input.attemptId ?? Date.now()}`,
       },
       body: JSON.stringify(body),
     })
@@ -751,7 +753,7 @@ export class CheckoutPaymentService {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${config.provider_api_token}`,
-        'X-Idempotency-Key': `avmd-${input.vendaId}-card-${installments}`,
+        'X-Idempotency-Key': `avmd-${input.vendaId}-card-${installments}-${input.attemptId ?? Date.now()}`,
       },
       body: JSON.stringify(body),
     })
