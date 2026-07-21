@@ -426,10 +426,10 @@ const PERFIL_OPTS: { value: PerfilAcesso; label: string }[] = [
 ]
 
 const TIPO_EMISSAO_OPTIONS = [
-  { value: 'presencial',       label: 'Presencial'        },
-  { value: 'videoconferencia', label: 'Videoconferência'  },
-  { value: 'auto_atendimento', label: 'Auto Atendimento'  },
-  { value: 'online',           label: 'Online'            },
+  { value: 'Videoconferência',  label: 'Videoconferência'  },
+  { value: 'Presencial',        label: 'Presencial'        },
+  { value: 'Fast',              label: 'Fast'              },
+  { value: 'Renovação on-line', label: 'Renovação on-line' },
 ]
 
 const STATUS_VENDA_V2_OPTIONS: StatusVendaCertificado[] = [
@@ -1202,7 +1202,7 @@ export default function Comercial() {
       { key: 'tipo_venda', label: '1. Tipo de venda', done: vendaStepStatus.tipoVendaOk },
       { key: 'cliente', label: '2. Cliente', done: vendaStepStatus.clienteOk },
       { key: 'parceiro', label: '3. Parceiro vendedor', done: vendaStepStatus.parceiroOk },
-      { key: 'produto', label: '4. Produto, emissão e validade', done: vendaStepStatus.produtoOk },
+      { key: 'produto', label: '4. Produto, tipo e validade', done: vendaStepStatus.produtoOk },
       { key: 'emissao', label: '5. Validação e ponto de atendimento', done: vendaStepStatus.emissaoOk && vendaStepStatus.pontoOk },
       { key: 'pagamento', label: '6. Pagamento e desconto', done: vendaStepStatus.pagamentoOk },
     ] as const
@@ -1221,8 +1221,8 @@ export default function Comercial() {
       tipo_venda: 'Selecione o tipo de venda para começar.',
       cliente: 'Informe o tipo de venda e depois busque ou cadastre um cliente.',
       parceiro: 'Selecione ou dispense o parceiro vendedor antes de continuar. Esta etapa é obrigatória para definir as regras de comissão.',
-      produto: 'Escolha a tabela e selecione na ordem: produto, emissão e validade.',
-      emissao: 'Com o produto confirmado, defina a modalidade de validação e o ponto de atendimento.',
+      produto: 'Escolha a tabela e selecione na ordem: produto, tipo de certificado, modalidade e validade.',
+      emissao: 'Com o produto confirmado, confira a modalidade de emissão e escolha o ponto de atendimento.',
       pagamento: paymentFlow === 'boleto'
         ? 'Preencha valor final, forma de pagamento, vencimento e cupom/voucher. Confira o limite de desconto da tabela.'
         : paymentFlow === 'cartao'
@@ -4984,13 +4984,20 @@ export default function Comercial() {
                       <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
                         <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Validação e Ponto de Atendimento</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <SelectInput label="Modalidade de Validação *" value={formV2.tipo_emissao}
-                            onChange={v => setFormV2(p => ({
-                              ...p,
-                              tipo_emissao: v,
-                              ponto_atendimento_id: '',
-                            }))}
-                            options={[{ value: '', label: 'Selecione a modalidade' }, ...TIPO_EMISSAO_OPTIONS]} />
+                          {formV2.tipo_emissao ? (
+                            <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 dark:border-green-900/40 dark:bg-green-950/20">
+                              <span className="text-xs font-medium text-green-700 dark:text-green-300">Modalidade de emissão definida no produto</span>
+                              <p className="mt-1 text-sm font-bold text-green-900 dark:text-green-100">{formV2.tipo_emissao}</p>
+                            </div>
+                          ) : (
+                            <SelectInput label="Modalidade de Emissão *" value={formV2.tipo_emissao}
+                              onChange={v => setFormV2(p => ({
+                                ...p,
+                                tipo_emissao: v,
+                                ponto_atendimento_id: '',
+                              }))}
+                              options={[{ value: '', label: 'Selecione a modalidade' }, ...TIPO_EMISSAO_OPTIONS]} />
+                          )}
                           <SelectInput label="Ponto de Atendimento *" value={formV2.ponto_atendimento_id}
                             onChange={v => setFormV2(p => ({ ...p, ponto_atendimento_id: v }))}
                             disabled={!vendaStepStatus.emissaoOk}
@@ -5023,7 +5030,7 @@ export default function Comercial() {
                                 key={tabela.id}
                                 type="button"
                                 onClick={() => {
-                                  setFormV2(p => ({ ...p, tabela_preco_id: tabela.id, certificado_id: '', tabela_preco_item_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
+                                  setFormV2(p => ({ ...p, tabela_preco_id: tabela.id, certificado_id: '', tabela_preco_item_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '', tipo_emissao: '', ponto_atendimento_id: '' }))
                                   setProdutoKindFilter('')
                                   setProdutoEmissaoFilter('')
                                   setProdutoAtendimentoFilter('')
@@ -5062,10 +5069,10 @@ export default function Comercial() {
                             <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
                               <div>
                                 <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Selecione na ordem certa</h4>
-                                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Produto, depois emissão, depois validade e por fim o produto final.</p>
+                                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Produto, depois tipo de certificado, modalidade de emissão, validade e por fim o produto final.</p>
                               </div>
                               <div className="flex flex-wrap gap-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">
-                                {['Produto', 'Tipo', 'Atendimento', 'Validade'].map((etapa, idx) => (
+                                {['Produto', 'Tipo de certificado', 'Modalidade', 'Validade'].map((etapa, idx) => (
                                   <span key={etapa} className={cn(
                                     'rounded-full border px-3 py-1',
                                     idx === 0 ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300' : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900'
@@ -5084,7 +5091,7 @@ export default function Comercial() {
                                     setProdutoEmissaoFilter('')
                                     setProdutoAtendimentoFilter('')
                                     setProdutoValidadeFilter('')
-                                    setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
+                                    setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '', tipo_emissao: '', ponto_atendimento_id: '' }))
                                   }}
                                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                                   <option value="">Selecione</option>
@@ -5092,13 +5099,13 @@ export default function Comercial() {
                                 </select>
                               </label>
                               <label className="flex flex-col gap-1">
-                                <span className="text-xs text-gray-500 font-medium">Emissão *</span>
+                                <span className="text-xs text-gray-500 font-medium">Tipo de certificado *</span>
                                 <select value={produtoEmissaoFilter}
                                   onChange={e => {
                                     setProdutoEmissaoFilter(e.target.value)
                                     setProdutoAtendimentoFilter('')
                                     setProdutoValidadeFilter('')
-                                    setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
+                                    setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '', tipo_emissao: '', ponto_atendimento_id: '' }))
                                   }}
                                   disabled={!produtoKindFilter}
                                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60">
@@ -5107,16 +5114,16 @@ export default function Comercial() {
                                 </select>
                               </label>
                               <label className="flex flex-col gap-1">
-                                <span className="text-xs text-gray-500 font-medium">Atendimento *</span>
+                                <span className="text-xs text-gray-500 font-medium">Modalidade de emissão *</span>
                                 <select value={produtoAtendimentoFilter}
                                   onChange={e => {
                                     setProdutoAtendimentoFilter(e.target.value)
                                     setProdutoValidadeFilter('')
-                                    setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
+                                    setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '', tipo_emissao: '', ponto_atendimento_id: '' }))
                                   }}
                                   disabled={!produtoEmissaoFilter}
                                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60">
-                                  <option value="">{!produtoEmissaoFilter ? 'Selecione o tipo' : 'Selecione'}</option>
+                                  <option value="">{!produtoEmissaoFilter ? 'Selecione o tipo de certificado' : 'Selecione'}</option>
                                   {produtoAtendimentoOptions.map(v => <option key={v} value={v}>{v}</option>)}
                                 </select>
                               </label>
@@ -5125,11 +5132,11 @@ export default function Comercial() {
                                 <select value={produtoValidadeFilter}
                                   onChange={e => {
                                     setProdutoValidadeFilter(e.target.value)
-                                    setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '' }))
+                                    setFormV2(p => ({ ...p, tabela_preco_item_id: '', certificado_id: '', valor_venda: 0, desconto: 0, voucher_codigo: '', tipo_emissao: '', ponto_atendimento_id: '' }))
                                   }}
                                   disabled={!produtoAtendimentoFilter}
                                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-900/60">
-                                  <option value="">{!produtoAtendimentoFilter ? 'Selecione o atendimento' : 'Selecione'}</option>
+                                  <option value="">{!produtoAtendimentoFilter ? 'Selecione a modalidade' : 'Selecione'}</option>
                                   {produtoValidadeOptions.map(v => <option key={v} value={v}>{v}</option>)}
                                 </select>
                               </label>
@@ -5161,6 +5168,8 @@ export default function Comercial() {
                                             valor_venda: item.valor ?? 0,
                                             desconto: 0,
                                             voucher_codigo: '',
+                                            tipo_emissao: productServiceMode(cert),
+                                            ponto_atendimento_id: '',
                                           }))
                                         }}
                                         className={cn(
