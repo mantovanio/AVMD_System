@@ -166,12 +166,13 @@ async function persistIncomingMedia(
     const messagePayload = asRecord(entry[1])
     if (!messagePayload) return
 
-    let base64 = pickString(messagePayload, 'base64', 'data')
+    let base64 = pickString(message, 'base64', 'data')
+    if (!base64) base64 = pickString(messagePayload, 'base64', 'data')
     if (!base64) base64 = deepFindString(entry[1], ['base64', 'data'])
     if (!base64) return
 
-    const mimeType = pickString(messagePayload, 'mimetype', 'mimeType') || fallbackMimeType || 'application/octet-stream'
-    const fileName = pickString(messagePayload, 'fileName', 'title') || fallbackFileName || inferMediaFileName(mimeType)
+    const mimeType = pickString(messagePayload, 'mimetype', 'mimeType') || pickString(message, 'mimetype', 'mimeType') || fallbackMimeType || 'application/octet-stream'
+    const fileName = pickString(messagePayload, 'fileName', 'title') || pickString(message, 'fileName', 'title') || fallbackFileName || inferMediaFileName(mimeType)
 
     let buffer: Buffer
     try {
