@@ -158,9 +158,24 @@ function buildSlotKey(slot: AgendaSlot | null | undefined) {
 
 function labelEmissao(tipo: string | null | undefined): string | null {
   if (!tipo) return null
-  if (/fast/i.test(tipo)) return 'Fast'
-  if (/online|video|vídeo|remot/i.test(tipo)) return 'Videoconferência'
+  const normalized = normalizedSearch(tipo)
+  if (/renov/.test(normalized)) return 'Renovação on-line'
+  if (/fast/.test(normalized)) return 'Fast'
+  if (/presencial|balcao|balcao|loja|posto/.test(normalized)) return 'Presencial'
+  if (/online|video|remot|videoconferencia/.test(normalized)) return 'Videoconferência'
   return tipo
+}
+
+function productServiceMode(item: LojaItemRow) {
+  return labelEmissao(item.certificados?.tipo_emissao_padrao) ?? 'Outros'
+}
+
+function normalizedProductValidity(item: LojaItemRow) {
+  const raw = normalizedSearch(productValidity(item))
+  if (/4/.test(raw)) return '4 meses'
+  if (/12|1 ano/.test(raw)) return '12 meses'
+  if (/24|2 anos/.test(raw)) return '24 meses'
+  return productValidity(item)
 }
 
 function inferTipoPessoa(doc: string): CheckoutBuyerType {
@@ -424,10 +439,20 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const productsByKind = useMemo(() => produtosAtivos.filter(item => !productKindFilter || productCertificateCategory(item) === productKindFilter), [productKindFilter, produtosAtivos])
   const productClassOptions = useMemo(() => Array.from(new Set(productsByKind.map(productCertificateClass).filter(value => value === 'A1' || value === 'A3'))).sort(), [productsByKind])
   const productsByClass = useMemo(() => productsByKind.filter(item => !productClassFilter || productCertificateClass(item) === productClassFilter), [productClassFilter, productsByKind])
-  const productEmissionOptions = useMemo(() => Array.from(new Set(productsByClass.map(item => item.certificados?.tipo_emissao_padrao?.trim()).filter(Boolean))).sort(), [productsByClass])
-  const productsByEmission = useMemo(() => productsByClass.filter(item => !productEmissionFilter || (item.certificados?.tipo_emissao_padrao?.trim() ?? '') === productEmissionFilter), [productEmissionFilter, productsByClass])
-  const productValidityOptions = useMemo(() => Array.from(new Set(productsByEmission.map(productValidity))).sort(), [productsByEmission])
-  const filteredProducts = useMemo(() => productsByEmission.filter(item => !productValidityFilter || productValidity(item) === productValidityFilter), [productValidityFilter, productsByEmission])
+  const serviceOrder = ['Videoconferência', 'Presencial', 'Fast', 'Renovação on-line']
+  const validityOrder = ['4 meses', '12 meses', '24 meses']
+  const productEmissionOptions = useMemo(() => Array.from(new Set(productsByClass.map(productServiceMode).filter(Boolean))).sort((a, b) => {
+    const ai = serviceOrder.indexOf(a)
+    const bi = serviceOrder.indexOf(b)
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) || a.localeCompare(b)
+  }), [productsByClass])
+  const productsByEmission = useMemo(() => productsByClass.filter(item => !productEmissionFilter || productServiceMode(item) === productEmissionFilter), [productEmissionFilter, productsByClass])
+  const productValidityOptions = useMemo(() => Array.from(new Set(productsByEmission.map(normalizedProductValidity))).sort((a, b) => {
+    const ai = validityOrder.indexOf(a)
+    const bi = validityOrder.indexOf(b)
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) || a.localeCompare(b)
+  }), [productsByEmission])
+  const filteredProducts = useMemo(() => productsByEmission.filter(item => !productValidityFilter || normalizedProductValidity(item) === productValidityFilter), [productValidityFilter, productsByEmission])
 
   const lojaConfig = useMemo(
     () => normalizeLojaConfig(loja?.configuracoes),
