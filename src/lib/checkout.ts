@@ -91,9 +91,8 @@ function dedupeParts(parts: Array<string | null | undefined>) {
 
 function getProductKindFromText(raw: string) {
   if (raw.includes('combo')) return 'Combo'
-  if (/safeid/.test(raw)) return 'SafeID'
-  if (/nuvem|cloud/.test(raw)) return 'Nuvem'
-  if (/token|cartao|cartão|leitora|validacao domiciliar/.test(raw) && !/e-cpf|e-pf|e-cnpj|e-pj|safeid/.test(raw)) return 'Mídias e serviços'
+  if (/safeid|nuvem|cloud/.test(raw)) return 'SafeID'
+  if (/token|cartao|cartão|leitora|validacao domiciliar/.test(raw) && !/e-cpf|e-pf|e-cnpj|e-pj|safeid|nuvem|cloud/.test(raw)) return 'Mídias e serviços'
   if (/e-cnpj|e-pj/.test(raw)) return 'e-CNPJ'
   if (/e-cpf|e-pf/.test(raw)) return 'e-CPF'
   return 'Outros'
@@ -138,7 +137,7 @@ export function getProductProfile(cert: Pick<Certificado, 'tipo' | 'descricao' |
 
   const modelText = normalizeText(cert.modelo ?? '')
   const classText = normalizeText([cert.tipo, cert.modelo, cert.categoria].filter(Boolean).join(' '))
-  const certificateClass = /safeid/.test(classText)
+  const certificateClass = /safeid|nuvem|cloud/.test(classText)
     ? 'SafeID'
     : (/\ba3\b/.test(modelText) || (!/\ba1\b/.test(modelText) && /\ba3\b/.test(classText)))
       ? 'A3'
