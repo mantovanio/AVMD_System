@@ -1587,27 +1587,30 @@ export default function Comercial() {
   }), [vendasV2])
 
   // ── fetch V2 ─────────────────────────────────────────────────
-  const fetchVendasV2 = useCallback(async () => {
-    setLoadingV(true)
-    const rows = await fetchAivenCommercialSales(50) as VendaRow[]
-    setVendasV2(rows)
-    const vendaIds = rows.map(v => v.id)
-    if (vendaIds.length > 0) {
-      const agendaRows = await fetchAivenCommercialSchedule({ dataBase: null })
-      const statusMap: Record<string, StatusAgendamentoValidacao | null> = {}
-      for (const item of agendaRows) {
-        if (!item.venda_certificado_id || !vendaIds.includes(item.venda_certificado_id)) continue
-        if (!(item.venda_certificado_id in statusMap)) {
-          statusMap[item.venda_certificado_id] = item.status_agendamento
+  const fetchVendasV2 = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoadingV(true)
+    try {
+      const rows = await fetchAivenCommercialSales(50) as VendaRow[]
+      setVendasV2(rows)
+      const vendaIds = rows.map(v => v.id)
+      if (vendaIds.length > 0) {
+        const agendaRows = await fetchAivenCommercialSchedule({ dataBase: null })
+        const statusMap: Record<string, StatusAgendamentoValidacao | null> = {}
+        for (const item of agendaRows) {
+          if (!item.venda_certificado_id || !vendaIds.includes(item.venda_certificado_id)) continue
+          if (!(item.venda_certificado_id in statusMap)) {
+            statusMap[item.venda_certificado_id] = item.status_agendamento
+          }
         }
+        setAgendamentoStatusPorVenda(statusMap)
+      } else {
+        setAgendamentoStatusPorVenda({})
       }
-      setAgendamentoStatusPorVenda(statusMap)
-    } else {
-      setAgendamentoStatusPorVenda({})
+      const perfis = await fetchAivenCommercialSaleProfiles()
+      setVendedorNomes(new Map(perfis.map(p => [p.id, p.nome])))
+    } finally {
+      if (!options?.silent) setLoadingV(false)
     }
-    const perfis = await fetchAivenCommercialSaleProfiles()
-    setVendedorNomes(new Map(perfis.map(p => [p.id, p.nome])))
-    setLoadingV(false)
   }, [])
 
   const fetchClientes = useCallback(async () => {
@@ -1760,7 +1763,7 @@ export default function Comercial() {
       if (vendasRefreshLockRef.current) return
       vendasRefreshLockRef.current = true
       try {
-        await fetchVendasV2()
+        await fetchVendasV2({ silent: true })
       } finally {
         vendasRefreshLockRef.current = false
       }
