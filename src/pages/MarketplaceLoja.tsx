@@ -297,11 +297,31 @@ function productKind(item: LojaItemRow) {
 
 function detectCertificateCategory(value: string) {
   const raw = normalizedSearch(value)
+  if (/safeid|nuvem|cloud/.test(raw)) return 'SafeID'
+  if (/e[\s-]?medico|medico/.test(raw)) return 'e-Médico'
+  if (/e[\s-]?juridico/.test(raw)) return 'e-Jurídico'
+  if (/e[\s-]?engenheiro|engenheiro/.test(raw)) return 'e-Engenheiro'
+  if (/e[\s-]?saude|saude/.test(raw)) return 'e-Saúde'
+  if (/e[\s-]?arquiteto|arquiteto/.test(raw)) return 'e-Arquiteto'
+  if (/\bmei\b/.test(raw)) return 'MEI'
+  if (/\bnf[\s-]?e\b|\bnfe\b|nota fiscal/.test(raw)) return 'NFE'
   if (/\be[\s-]?cnpj\b/.test(raw)) return 'e-CNPJ'
   if (/\be[\s-]?cpf\b/.test(raw)) return 'e-CPF'
   if (/\be[\s-]?pj\b/.test(raw)) return 'e-PJ'
   if (/\be[\s-]?pf\b/.test(raw)) return 'e-PF'
   return ''
+}
+
+const certificateOrder = ['e-CPF', 'e-CNPJ', 'SafeID', 'e-Médico', 'e-Jurídico', 'e-Engenheiro', 'e-Saúde', 'e-Arquiteto', 'e-PF', 'e-PJ', 'MEI', 'NFE']
+
+function certificateSort(a: string, b: string) {
+  const ai = certificateOrder.indexOf(a)
+  const bi = certificateOrder.indexOf(b)
+  return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) || a.localeCompare(b)
+}
+
+function certificateOptionLabel(option: string) {
+  return option === 'SafeID' ? 'SafeID / Nuvem' : option
 }
 
 function productCertificateCategory(item: LojaItemRow) {
@@ -527,7 +547,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
     [itens]
   )
 
-  const productKindOptions = useMemo(() => Array.from(new Set(produtosAtivos.map(productCertificateCategory).filter(Boolean))).sort(), [produtosAtivos])
+  const productKindOptions = useMemo(() => Array.from(new Set(produtosAtivos.map(productCertificateCategory).filter(Boolean))).sort(certificateSort), [produtosAtivos])
   const productsByKind = useMemo(() => produtosAtivos.filter(item => !productKindFilter || productCertificateCategory(item) === productKindFilter), [productKindFilter, produtosAtivos])
   const productClassOptions = useMemo(() => Array.from(new Set(productsByKind.map(productCertificateClass).filter(value => value === 'A1' || value === 'A3'))).sort(), [productsByKind])
   const productsByClass = useMemo(() => productsByKind.filter(item => !productClassFilter || productCertificateClass(item) === productClassFilter), [productClassFilter, productsByKind])
@@ -1257,13 +1277,13 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                 <ProductHero item={itemSelecionado} />
               ) : (
                 <div className="space-y-6">
-                  <p className="text-base font-semibold text-[#17346b]">Selecione a categoria, o tipo, o atendimento e a validade para encontrar seu certificado.</p>
+                  <p className="text-base font-semibold text-[#17346b]">Selecione o certificado, o tipo, o atendimento e a validade para encontrar o produto correto.</p>
                   <div className="grid overflow-hidden rounded-2xl border border-slate-300 md:grid-cols-4">
                     <label className="border-b border-slate-300 p-4 md:border-b-0 md:border-r">
-                      <span className="block text-sm font-bold text-[#17346b]">Categoria</span>
+                      <span className="block text-sm font-bold text-[#17346b]">Certificado</span>
                       <select value={productKindFilter} onChange={event => { setProductKindFilter(event.target.value); setProductClassFilter(''); setProductEmissionFilter(''); setProductValidityFilter(''); setSelectedItemId(''); setProductConfirmed(false); setCartConfirmed(false); setFaturamentoConfirmed(false); setTitularConfirmed(false); setPagamentoConfirmed(false) }} className="mt-2 w-full bg-transparent text-sm text-slate-700 outline-none">
                         <option value="">Selecione</option>
-                        {productKindOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                        {productKindOptions.map(option => <option key={option} value={option}>{certificateOptionLabel(option)}</option>)}
                       </select>
                     </label>
                     <label className="border-b border-slate-300 p-4 md:border-b-0 md:border-r">
@@ -1292,7 +1312,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   {!productClassFilter || !productKindFilter || !productEmissionFilter || !productValidityFilter ? (
                     <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-slate-300 bg-slate-50/40 px-6 text-center">
                       <Store size={54} strokeWidth={1.25} className="text-slate-300" />
-                      <p className="mt-5 text-lg font-semibold text-slate-600">Preencha os filtros na ordem: categoria, tipo, atendimento e validade.</p>
+                      <p className="mt-5 text-lg font-semibold text-slate-600">Preencha os filtros na ordem: certificado, tipo, atendimento e validade.</p>
                     </div>
                   ) : filteredProducts.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-slate-500">Nenhum produto disponível para esta combinação.</div>
