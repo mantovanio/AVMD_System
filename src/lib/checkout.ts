@@ -93,15 +93,9 @@ function getProductKindFromText(raw: string) {
   if (raw.includes('combo')) return 'Combo'
   if (/safeid|nuvem|cloud/.test(raw)) return 'SafeID'
   if (/token|cartao|cartão|leitora|validacao domiciliar/.test(raw) && !/e-cpf|e-pf|e-cnpj|e-pj|safeid|nuvem|cloud/.test(raw)) return 'Mídias e serviços'
-  if (/e-medico|emedico|medico/.test(raw)) return 'e-Médico'
-  if (/e-juridico|ejuridico/.test(raw)) return 'e-Jurídico'
-  if (/e-engenheiro|eengenheiro|engenheiro/.test(raw)) return 'e-Engenheiro'
-  if (/e-saude|esaude|saude/.test(raw)) return 'e-Saúde'
-  if (/e-arquiteto|earquiteto|arquiteto/.test(raw)) return 'e-Arquiteto'
-  if (/\bmei\b/.test(raw)) return 'MEI'
-  if (/\bnf-e\b|\bnfe\b|nota fiscal/.test(raw)) return 'NFE'
-  if (/e-cnpj|e-pj/.test(raw)) return 'e-CNPJ'
-  if (/e-cpf|e-pf/.test(raw)) return 'e-CPF'
+  if (/\bnf-e\b|\bnfe\b|nota fiscal|e-cnpj/.test(raw)) return 'e-CNPJ'
+  if (/e-pj|\bmei\b/.test(raw)) return 'e-PJ'
+  if (/e-medico|emedico|medico|e-juridico|ejuridico|e-engenheiro|eengenheiro|engenheiro|e-saude|esaude|saude|e-arquiteto|earquiteto|arquiteto|e-cpf|e-pf/.test(raw)) return 'e-CPF'
   return 'Outros'
 }
 

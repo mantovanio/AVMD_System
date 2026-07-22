@@ -298,21 +298,16 @@ function productKind(item: LojaItemRow) {
 function detectCertificateCategory(value: string) {
   const raw = normalizedSearch(value)
   if (/safeid|nuvem|cloud/.test(raw)) return 'SafeID'
-  if (/e[\s-]?medico|medico/.test(raw)) return 'e-Médico'
-  if (/e[\s-]?juridico/.test(raw)) return 'e-Jurídico'
-  if (/e[\s-]?engenheiro|engenheiro/.test(raw)) return 'e-Engenheiro'
-  if (/e[\s-]?saude|saude/.test(raw)) return 'e-Saúde'
-  if (/e[\s-]?arquiteto|arquiteto/.test(raw)) return 'e-Arquiteto'
-  if (/\bmei\b/.test(raw)) return 'MEI'
-  if (/\bnf[\s-]?e\b|\bnfe\b|nota fiscal/.test(raw)) return 'NFE'
+  if (/\bnf[\s-]?e\b|\bnfe\b|nota fiscal/.test(raw)) return 'e-CNPJ'
+  if (/\be[\s-]?pj\b|\bmei\b/.test(raw)) return 'e-PJ'
+  if (/e[\s-]?medico|medico|e[\s-]?juridico|e[\s-]?engenheiro|engenheiro|e[\s-]?saude|saude|e[\s-]?arquiteto|arquiteto/.test(raw)) return 'e-CPF'
   if (/\be[\s-]?cnpj\b/.test(raw)) return 'e-CNPJ'
   if (/\be[\s-]?cpf\b/.test(raw)) return 'e-CPF'
-  if (/\be[\s-]?pj\b/.test(raw)) return 'e-PJ'
   if (/\be[\s-]?pf\b/.test(raw)) return 'e-PF'
   return ''
 }
 
-const certificateOrder = ['e-CPF', 'e-CNPJ', 'SafeID', 'e-Médico', 'e-Jurídico', 'e-Engenheiro', 'e-Saúde', 'e-Arquiteto', 'e-PF', 'e-PJ', 'MEI', 'NFE']
+const certificateOrder = ['e-CPF', 'e-PF', 'e-CNPJ', 'e-PJ', 'SafeID']
 
 function certificateSort(a: string, b: string) {
   const ai = certificateOrder.indexOf(a)
