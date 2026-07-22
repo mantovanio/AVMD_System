@@ -404,14 +404,29 @@ export class CatalogRepository {
       'inscricao_estadual','iss_retido','status']
     let upserted = 0
     for (const p of payloads) {
+      const cpfCnpj = String(p.cpf_cnpj ?? '').trim()
+      if (!cpfCnpj) continue
+      const existing = await this.db.query<{ id: string }>(
+        `select id from cadastros_base where cpf_cnpj = $1 order by updated_at desc nulls last, created_at desc nulls last limit 1`,
+        [cpfCnpj],
+      )
+      if (existing.rows[0]?.id) {
+        const updateFields = fields.filter(f => f !== 'cpf_cnpj')
+        const vals = updateFields.map(f => p[f] ?? null)
+        const setClauses = updateFields.map((f, i) => `${f} = $${i + 2}`).join(', ')
+        await this.db.query(
+          `update cadastros_base set ${setClauses}, updated_at = now() where id = $1::uuid`,
+          [existing.rows[0].id, ...vals],
+        )
+        upserted++
+        continue
+      }
       const id = randomUUID()
       const vals = fields.map(f => p[f] ?? null)
       const cols = fields.join(', ')
       const phs = fields.map((_, i) => `$${i + 2}`).join(', ')
-      const ups = fields.filter(f => f !== 'cpf_cnpj').map(f => `${f} = excluded.${f}`).join(', ')
       await this.db.query(
-        `insert into cadastros_base (id, ${cols}) values ($1, ${phs})
-         on conflict (cpf_cnpj) do update set ${ups}, updated_at = now()`,
+        `insert into cadastros_base (id, ${cols}) values ($1, ${phs})`,
         [id, ...vals]
       )
       upserted++
