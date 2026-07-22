@@ -341,8 +341,9 @@ function productCertificateClass(item: LojaItemRow) {
   return getProductProfile(item.certificados ?? null).certificateClass
 }
 
-function productCommercialDescription(item: LojaItemRow) {
-  return getProductProfile(item.certificados ?? null).commercialDescription
+function productCompactSummary(item: LojaItemRow) {
+  const profile = getProductProfile(item.certificados ?? null)
+  return [profile.certificateClass, profile.validity].filter(value => value && value !== 'Não informado' && value !== 'Não informada').join(' · ') || profile.details
 }
 
 function productValidity(item: LojaItemRow) {
@@ -1643,7 +1644,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                                       <p className="text-[11px] uppercase tracking-[0.18em] font-semibold opacity-70">{productCertificateCategory(item)}</p>
                                       <p className="mt-1 text-base font-semibold leading-snug">{profile.displayName}</p>
                                       <p className={cn('mt-1 text-sm leading-relaxed', selected ? 'text-white/80' : 'text-slate-500')}>
-                                        {productCommercialDescription(item)}
+                                        {productCompactSummary(item)}
                                       </p>
                                     </div>
                                     <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
@@ -1667,8 +1668,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                                 <div className="p-5">
                                   <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">{productCertificateCategory(itemSelecionado)}</p>
                                   <p className="mt-1 text-lg font-bold text-slate-900">{getProductProfile(itemSelecionado.certificados).displayName}</p>
-                                  <p className="mt-2 text-sm text-slate-500 leading-relaxed">{productCommercialDescription(itemSelecionado)}</p>
-                                  <p className="mt-2 text-sm text-slate-600">{getProductProfile(itemSelecionado.certificados).details}</p>
+                                  <p className="mt-2 text-sm text-slate-600">{productCompactSummary(itemSelecionado)}</p>
                                   <ProductTags item={itemSelecionado} compact />
                                 </div>
                                 <div className="border-t border-slate-200 px-5 py-6 text-center text-3xl font-bold text-emerald-600">{formatCurrency(itemSelecionado.valor)}</div>
@@ -1706,8 +1706,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   <div className="p-5">
                     <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Item no carrinho</p>
                     <p className="mt-2 text-lg font-bold text-slate-900">{itemSelecionado.certificados?.tipo ?? 'Produto'}</p>
-                    <p className="mt-2 text-sm text-slate-500 leading-relaxed">{productCommercialDescription(itemSelecionado)}</p>
-                    <p className="mt-2 text-sm text-slate-600">Detalhes: {getProductProfile(itemSelecionado.certificados).details}</p>
+                    <p className="mt-2 text-sm text-slate-600">Detalhes: {productCompactSummary(itemSelecionado)}</p>
                     <div className="mt-4">
                       <ProductTags item={itemSelecionado} compact />
                     </div>
@@ -2411,7 +2410,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                 <div className="rounded-[22px] border border-slate-200 bg-white p-4">
                   <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Produto</p>
                   <p className="mt-2 text-lg font-bold text-slate-900">{getProductProfile(itemSelecionado.certificados).displayName}</p>
-                  <p className="mt-1 text-sm text-slate-500">{productCommercialDescription(itemSelecionado)}</p>
+                  <p className="mt-1 text-sm text-slate-500">{productCompactSummary(itemSelecionado)}</p>
                   <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
                     <span className="text-sm font-semibold text-slate-600">Total</span>
                     <span className="text-2xl font-bold text-emerald-600">{formatCurrency(Math.max(0, Number(itemSelecionado.valor) - voucherDesconto))}</span>
@@ -2519,7 +2518,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                 <>
                   <div className="mt-4 rounded-[24px] bg-slate-50 p-4">
                     <p className="text-lg font-semibold text-slate-900">{itemSelecionado.certificados?.tipo ?? 'Produto'}</p>
-                    <p className="mt-2 text-sm text-slate-500 leading-relaxed">{productCommercialDescription(itemSelecionado)}</p>
+                    <p className="mt-2 text-sm text-slate-500 leading-relaxed">{productCompactSummary(itemSelecionado)}</p>
                     <ProductTags item={itemSelecionado} compact />
                     <p className="text-3xl font-semibold text-emerald-600 mt-4">{formatCurrency(itemSelecionado.valor)}</p>
                   </div>
