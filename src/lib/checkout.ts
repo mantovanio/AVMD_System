@@ -126,12 +126,53 @@ function formatValidityLabel(validity: string) {
   return value.toLowerCase()
 }
 
-function buildCommercialDescription(cert: Pick<Certificado, 'tipo' | 'descricao' | 'descricao_produto'>, validity: string) {
-  const name = cert.tipo?.trim() || 'Certificado digital'
-  const complement = (cert.descricao_produto?.trim() || cert.descricao?.trim() || '').replace(/\s+/g, ' ')
+function sanitizeProductComplement(value: string) {
+  return value
+    .replace(/^certificado(?:\s+digital)?\s+[^-–—,.;:]+(?:[-–—]\s*)?/i, ' ')
+    .replace(/\([^)]*(?:valida[cç][aã]o|videoconfer|presencial|fast|renova)[^)]*\)/gi, ' ')
+    .replace(/\bnecess[aá]ri[ao]s?\s+valida[cç][aã]o\b.*$/gi, ' ')
+    .replace(/\bvalida[cç][aã]o\s+(?:por\s+)?(?:videoconfer[eê]ncia|presencial|fast|online|on-line)\b/gi, ' ')
+    .replace(/\bvalidade(?:\s+total)?(?:\s+de)?\s+\d+\s*(?:m[eê]s|meses|anos?|ano)\b/gi, ' ')
+    .replace(/\bper[ií]odo\s+de\s+uso(?:\s+de)?\s+\d+\s*(?:m[eê]s|meses|anos?|ano)\b/gi, ' ')
+    .replace(/\b(?:a1|a3)\b/gi, ' ')
+    .replace(/\s*[-–—]\s*$/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+function normalizeProductName(name: string, certificateClass: string) {
+  const cleaned = name
+    .replace(/^certificado(?:\s+digital)?\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*[-–—]\s*/g, ' - ')
+    .trim()
+  if (!certificateClass || certificateClass === 'Não informado') return cleaned
+  const classPattern = new RegExp(`\\s*[-–—]?\\s*\\b${certificateClass}\\b`, 'i')
+  return classPattern.test(cleaned)
+    ? cleaned.replace(classPattern, ` ${certificateClass}`).replace(/\s{2,}/g, ' ').trim()
+    : `${cleaned} ${certificateClass}`
+}
+
+function buildCommercialDescription(
+  cert: Pick<Certificado, 'tipo' | 'descricao' | 'descricao_produto' | 'validade' | 'periodo_uso'>,
+  validity: string,
+  certificateClass: string,
+  isSafeIdLike: boolean,
+) {
+  const rawName = cert.tipo?.trim() || 'Certificado digital'
+  const productName = normalizeProductName(rawName, certificateClass)
   const validityLabel = formatValidityLabel(validity)
-  const suffix = validityLabel !== 'prazo não informado' ? `com ${validityLabel}` : 'com prazo sob consulta'
-  return complement ? `${name}: ${complement} (${suffix}).` : `${name} (${suffix}).`
+  const complement = sanitizeProductComplement(cert.descricao_produto?.trim() || cert.descricao?.trim() || '')
+
+  if (isSafeIdLike) {
+    const usage = normalizeValidityToMonthsLabel(cert.periodo_uso?.trim() || validity)
+    const totalValidity = normalizeValidityToMonthsLabel(cert.validade?.trim() || validity)
+    return `Certificado Digital (Nuvem) ${productName} - período de uso ${formatValidityLabel(usage)} e validade total de ${formatValidityLabel(totalValidity)}.`
+  }
+
+  const validityPart = validityLabel !== 'prazo não informado' ? ` - Validade ${validityLabel}` : ''
+  const complementPart = complement ? `, ${complement.replace(/\.$/, '')}` : ''
+  return `Certificado Digital ${productName}${validityPart}${complementPart}.`
 }
 
 export function getProductProfile(cert: Pick<Certificado, 'tipo' | 'descricao' | 'validade' | 'modelo' | 'categoria' | 'tipo_emissao_padrao' | 'periodo_uso' | 'descricao_produto'> | null | undefined): ProductProfile {
@@ -164,12 +205,14 @@ export function getProductProfile(cert: Pick<Certificado, 'tipo' | 'descricao' |
 
   const displayName = cert.tipo?.trim() || 'Produto'
 
-  const details = dedupeParts([
-    validity && validity !== 'Não informada' ? `Validade: ${validity}` : null,
-    cert.periodo_uso?.trim() ? `Uso: ${cert.periodo_uso.trim()}` : null,
-  ]).join(' · ') || '—'
+  const details = isSafeIdLike
+    ? dedupeParts([
+        cert.periodo_uso?.trim() ? `Uso: ${normalizeValidityToMonthsLabel(cert.periodo_uso.trim())}` : null,
+        validity && validity !== 'Não informada' ? `Validade total: ${validity}` : null,
+      ]).join(' · ') || '—'
+    : (validity && validity !== 'Não informada' ? `Validade: ${validity}` : '—')
 
-  const commercialDescription = buildCommercialDescription(cert, validity)
+  const commercialDescription = buildCommercialDescription(cert, validity, certificateClass, isSafeIdLike)
 
   return { kind, certificateClass, validity, displayName, details, commercialDescription }
 }

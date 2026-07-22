@@ -6299,7 +6299,7 @@ export default function Comercial() {
                 const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s
               })
               return (
-                <DataTable headers={['', 'Status', 'Tipo emissão', 'Código', 'Nome', 'Validade total', 'Período de uso', 'Descrição do Produto', 'Tipo', 'Produto vinculado na AC', 'Preço de venda', 'Valor Custo AC', 'Valor Custo AR', 'Agrupador', 'Hash', 'Ações']}
+                <DataTable headers={['', 'Status', 'Tipo emissão', 'Código', 'Nome', 'Validade total', 'Período de uso', 'Complemento técnico', 'Tipo', 'Produto vinculado na AC', 'Preço de venda', 'Valor Custo AC', 'Valor Custo AR', 'Agrupador', 'Hash', 'Ações']}
                   initialWidths={[40, 60, 120, 70, 180, 80, 100, 220, 100, 160, 100, 100, 100, 100, 100, 80]}>
                   {certificados.length === 0 ? (
                     <EmptyRow colSpan={16} label="Nenhum certificado cadastrado. Use 'Importar Planilha' ou 'Novo Certificado'." />
@@ -7980,7 +7980,7 @@ export default function Comercial() {
                 <TextInput label="Descrição" value={formCert.descricao ?? ''} onChange={v => setFormCert(p => ({ ...p, descricao: v || null }))} className="md:col-span-6" />
               </div>
               <label className="flex flex-col gap-1 mt-3">
-                <span className="text-xs text-gray-500">Descrição do Produto</span>
+                <span className="text-xs text-gray-500">Complemento técnico do produto</span>
                 <textarea rows={2} value={formCert.descricao_produto ?? ''} onChange={e => setFormCert(p => ({ ...p, descricao_produto: e.target.value || null }))}
                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </label>
