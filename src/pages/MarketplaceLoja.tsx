@@ -165,7 +165,10 @@ function labelEmissao(tipo: string | null | undefined): string | null {
 }
 
 function productServiceMode(item: LojaItemRow) {
-  return labelEmissao(item.certificados?.tipo_emissao_padrao) ?? 'Outros'
+  const emission = labelEmissao(item.certificados?.tipo_emissao_padrao)
+  if (emission === 'Renovação on-line') return emission
+  if (/safeid|nuvem|cloud/.test(productCatalogText(item))) return 'SafeID'
+  return emission ?? 'Outros'
 }
 
 function normalizedProductValidity(item: LojaItemRow) {
@@ -297,13 +300,13 @@ function productKind(item: LojaItemRow) {
 
 function detectCertificateCategory(value: string) {
   const raw = normalizedSearch(value)
-  if (/safeid|nuvem|cloud/.test(raw)) return 'Nuvem'
   if (/\bnf[\s-]?e\b|\bnfe\b|nota fiscal|\be[\s-]?pj\b/.test(raw)) return 'e-PJ'
   if (/\bmei\b/.test(raw)) return 'e-CNPJ'
   if (/e[\s-]?medico|medico|e[\s-]?juridico|e[\s-]?engenheiro|engenheiro|e[\s-]?saude|saude|e[\s-]?arquiteto|arquiteto/.test(raw)) return 'e-CPF'
   if (/\be[\s-]?cnpj\b/.test(raw)) return 'e-CNPJ'
   if (/\be[\s-]?cpf\b/.test(raw)) return 'e-CPF'
   if (/\be[\s-]?pf\b/.test(raw)) return 'e-PF'
+  if (/safeid|nuvem|cloud/.test(raw)) return 'Nuvem'
   return ''
 }
 
@@ -363,9 +366,28 @@ function productMediaSummary(item: LojaItemRow) {
   return ''
 }
 
+function formatMonthsLabel(value: string | null | undefined) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  const normalized = normalizedSearch(raw)
+  const numeric = normalized.match(/^(\d+)$/)?.[1]
+  if (numeric) return `${Number(numeric)} meses`
+  const months = normalized.match(/(\d+)\s*m(?:es|eses)?/)?.[1]
+  if (months) return `${Number(months)} meses`
+  const years = normalized.match(/(\d+)\s*ano/)?.[1]
+  if (years) return `${Number(years) * 12} meses`
+  return raw
+}
+
 function productCompactSummary(item: LojaItemRow) {
   const profile = getProductProfile(item.certificados ?? null)
   const media = productMediaSummary(item)
+  const isSafeId = /safeid|nuvem|cloud/.test(productCatalogText(item))
+  if (isSafeId) {
+    const usage = formatMonthsLabel(item.certificados?.periodo_uso)
+    const totalValidity = formatMonthsLabel(item.certificados?.validade)
+    return [profile.certificateClass, usage ? `uso ${usage}` : '', totalValidity ? `validade total ${totalValidity}` : '', media].filter(Boolean).join(' · ')
+  }
   return [profile.certificateClass, profile.validity, media].filter(value => value && value !== 'Não informado' && value !== 'Não informada').join(' · ') || profile.details
 }
 
@@ -376,10 +398,10 @@ function productValidity(item: LojaItemRow) {
 function productGuidance(item: LojaItemRow) {
   const profile = getProductProfile(item.certificados ?? null)
   const category = productCertificateCategory(item)
-  const isSafeId = profile.kind === 'Nuvem'
+  const productText = productCatalogText(item)
+  const isSafeId = /safeid|nuvem|cloud/.test(productText)
   const isNfe = /pj/i.test(category)
   const isCompany = /cnpj|pj/i.test(category)
-  const productText = productCatalogText(item)
   const mediaGuidance = (() => {
     if (/safeid|nuvem|cloud/.test(productText)) {
       return {
@@ -862,7 +884,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const productsByKind = useMemo(() => produtosAtivos.filter(item => !productKindFilter || productCertificateCategory(item) === productKindFilter), [productKindFilter, produtosAtivos])
   const productClassOptions = useMemo(() => Array.from(new Set(productsByKind.map(productCertificateClass).filter(value => value === 'A1' || value === 'A3'))).sort(), [productsByKind])
   const productsByClass = useMemo(() => productsByKind.filter(item => !productClassFilter || productCertificateClass(item) === productClassFilter), [productClassFilter, productsByKind])
-  const serviceOrder = ['Videoconferência', 'Presencial', 'Fast', 'Renovação on-line']
+  const serviceOrder = ['Videoconferência', 'Presencial', 'Fast', 'SafeID', 'Renovação on-line']
   const validityOrder = ['4 meses', '12 meses', '24 meses']
   const productEmissionOptions = useMemo(() => Array.from(new Set(productsByClass.map(productServiceMode).filter(Boolean))).sort((a, b) => {
     const ai = serviceOrder.indexOf(a)
@@ -1685,7 +1707,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                           </div>
                         </div>
 
-                        <div className="ml-auto grid w-full gap-3 sm:max-w-xs">
+                        <div className={cn('grid w-full gap-3', itemSelecionado && !productConfirmed ? 'sm:grid-cols-2' : 'sm:ml-auto sm:max-w-xs')}>
                             {itemSelecionado && !productConfirmed && (
                               <button type="button" onClick={reopenProductList} className="w-full rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
                                 Voltar

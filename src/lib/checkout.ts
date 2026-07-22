@@ -91,11 +91,11 @@ function dedupeParts(parts: Array<string | null | undefined>) {
 
 function getProductKindFromText(raw: string) {
   if (raw.includes('combo')) return 'Combo'
-  if (/safeid|nuvem|cloud/.test(raw)) return 'Nuvem'
   if (/token|cartao|cartão|leitora|validacao domiciliar/.test(raw) && !/e-cpf|e-pf|e-cnpj|e-pj|safeid|nuvem|cloud/.test(raw)) return 'Mídias e serviços'
   if (/\bnf-e\b|\bnfe\b|nota fiscal|e-pj/.test(raw)) return 'e-PJ'
   if (/e-cnpj|\bmei\b/.test(raw)) return 'e-CNPJ'
   if (/e-medico|emedico|medico|e-juridico|ejuridico|e-engenheiro|eengenheiro|engenheiro|e-saude|esaude|saude|e-arquiteto|earquiteto|arquiteto|e-cpf|e-pf/.test(raw)) return 'e-CPF'
+  if (/safeid|nuvem|cloud/.test(raw)) return 'Nuvem'
   return 'Outros'
 }
 

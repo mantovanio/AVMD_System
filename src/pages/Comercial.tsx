@@ -622,12 +622,36 @@ type CertFilters = {
   busca:  string
   status: string
   categoria: string
+  tipoEmissao: string
+  codigo: string
+  nome: string
+  validade: string
+  periodoUso: string
+  complemento: string
+  produtoAc: string
+  precoVenda: string
+  valorCustoAc: string
+  valorCustoAr: string
+  agrupador: string
+  hash: string
 }
 
 const EMPTY_CERT_FILTERS: CertFilters = {
   busca: '',
   status: '',
   categoria: '',
+  tipoEmissao: '',
+  codigo: '',
+  nome: '',
+  validade: '',
+  periodoUso: '',
+  complemento: '',
+  produtoAc: '',
+  precoVenda: '',
+  valorCustoAc: '',
+  valorCustoAr: '',
+  agrupador: '',
+  hash: '',
 }
 
 const EMPTY_VENDA_FILTERS: VendaFilters = {
@@ -1541,6 +1565,14 @@ export default function Comercial() {
 
   const certificadosFiltrados = useMemo(() => {
     const categoriaSelecionada = normalizeCategoriaCertificado(certFilters.categoria)
+    const contains = (value: unknown, filter: string) => String(value ?? '').toLowerCase().includes(filter.trim().toLowerCase())
+    const containsMoney = (value: unknown, filter: string) => {
+      const wanted = filter.trim().replace(/\./g, '').replace(',', '.')
+      if (!wanted) return true
+      const raw = String(value ?? '')
+      const numeric = Number(value)
+      return raw.includes(filter.trim()) || (!Number.isNaN(numeric) && numeric.toFixed(2).includes(wanted))
+    }
     return certificados.filter(c => {
       const termo = certFilters.busca.trim().toLowerCase()
       if (termo) {
@@ -1553,6 +1585,18 @@ export default function Comercial() {
       if (certFilters.status === 'ativo' && !c.ativo) return false
       if (certFilters.status === 'inativo' && c.ativo) return false
       if (categoriaSelecionada && normalizeCategoriaCertificado(c.categoria) !== categoriaSelecionada) return false
+      if (certFilters.tipoEmissao && !contains(c.tipo_emissao_padrao, certFilters.tipoEmissao)) return false
+      if (certFilters.codigo && !contains(c.codigo, certFilters.codigo)) return false
+      if (certFilters.nome && !contains(c.tipo, certFilters.nome)) return false
+      if (certFilters.validade && !contains(formatarValidadeMeses(c.validade), certFilters.validade) && !contains(c.validade, certFilters.validade)) return false
+      if (certFilters.periodoUso && !contains(c.periodo_uso, certFilters.periodoUso)) return false
+      if (certFilters.complemento && !contains(c.descricao_produto, certFilters.complemento)) return false
+      if (certFilters.produtoAc && !contains(c.produto_vinculado_ac, certFilters.produtoAc)) return false
+      if (certFilters.precoVenda && !containsMoney(c.preco_venda, certFilters.precoVenda)) return false
+      if (certFilters.valorCustoAc && !containsMoney(c.valor_custo_ac, certFilters.valorCustoAc)) return false
+      if (certFilters.valorCustoAr && !containsMoney(c.valor_custo, certFilters.valorCustoAr)) return false
+      if (certFilters.agrupador && !contains(c.agrupador, certFilters.agrupador)) return false
+      if (certFilters.hash && !contains(c.hash, certFilters.hash)) return false
       return true
     })
   }, [certificados, certFilters])
@@ -6263,10 +6307,10 @@ export default function Comercial() {
 
 
             {/* ── FILTROS ── */}
-            <div className="flex flex-wrap items-end gap-3">
+            <div className="grid gap-3 rounded-2xl border border-gray-200 bg-white/80 p-4 dark:border-gray-800 dark:bg-gray-900/60 md:grid-cols-2 xl:grid-cols-6">
               <TextInput label="Buscar" value={certFilters.busca}
                 onChange={v => setCertFilters(p => ({ ...p, busca: v }))}
-                className="flex-1 min-w-0" placeholder="Nome, código, hash, produto AC..." />
+                className="min-w-0 xl:col-span-2" placeholder="Nome, código, hash, produto AC..." />
               <SelectInput label="Status" value={certFilters.status}
                 onChange={v => setCertFilters(p => ({ ...p, status: v }))}
                 options={[
@@ -6275,16 +6319,52 @@ export default function Comercial() {
                   { value: 'inativo', label: 'Inativo' },
                 ]}
                 className="min-w-0" />
+              <TextInput label="Tipo emissão" value={certFilters.tipoEmissao}
+                onChange={v => setCertFilters(p => ({ ...p, tipoEmissao: v }))}
+                className="min-w-0" placeholder="Presencial, Fast..." />
+              <TextInput label="Código" value={certFilters.codigo}
+                onChange={v => setCertFilters(p => ({ ...p, codigo: v }))}
+                className="min-w-0" placeholder="Código" />
+              <TextInput label="Nome" value={certFilters.nome}
+                onChange={v => setCertFilters(p => ({ ...p, nome: v }))}
+                className="min-w-0" placeholder="Nome do certificado" />
               <SelectInput label="Categoria" value={certFilters.categoria}
                 onChange={v => setCertFilters(p => ({ ...p, categoria: v }))}
                 options={[
                   { value: '', label: 'Todas' },
                   ...categoriasDisponiveis,
                 ]}
-                className="min-w-[160px]" />
-              {certFilters.busca || certFilters.status || certFilters.categoria ? (
+                className="min-w-0" />
+              <TextInput label="Validade total" value={certFilters.validade}
+                onChange={v => setCertFilters(p => ({ ...p, validade: v }))}
+                className="min-w-0" placeholder="12, 24..." />
+              <TextInput label="Período de uso" value={certFilters.periodoUso}
+                onChange={v => setCertFilters(p => ({ ...p, periodoUso: v }))}
+                className="min-w-0" placeholder="4, 12..." />
+              <TextInput label="Complemento técnico" value={certFilters.complemento}
+                onChange={v => setCertFilters(p => ({ ...p, complemento: v }))}
+                className="min-w-0 xl:col-span-2" placeholder="Token, cartão, nuvem..." />
+              <TextInput label="Produto AC" value={certFilters.produtoAc}
+                onChange={v => setCertFilters(p => ({ ...p, produtoAc: v }))}
+                className="min-w-0" placeholder="Produto vinculado" />
+              <TextInput label="Preço venda" value={certFilters.precoVenda}
+                onChange={v => setCertFilters(p => ({ ...p, precoVenda: v }))}
+                className="min-w-0" placeholder="169,90" />
+              <TextInput label="Custo AC" value={certFilters.valorCustoAc}
+                onChange={v => setCertFilters(p => ({ ...p, valorCustoAc: v }))}
+                className="min-w-0" placeholder="30,00" />
+              <TextInput label="Custo AR" value={certFilters.valorCustoAr}
+                onChange={v => setCertFilters(p => ({ ...p, valorCustoAr: v }))}
+                className="min-w-0" placeholder="Custo AR" />
+              <TextInput label="Agrupador" value={certFilters.agrupador}
+                onChange={v => setCertFilters(p => ({ ...p, agrupador: v }))}
+                className="min-w-0" placeholder="Agrupador" />
+              <TextInput label="Hash" value={certFilters.hash}
+                onChange={v => setCertFilters(p => ({ ...p, hash: v }))}
+                className="min-w-0" placeholder="Hash" />
+              {Object.values(certFilters).some(Boolean) ? (
                 <button type="button" onClick={() => setCertFilters(EMPTY_CERT_FILTERS)}
-                  className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700">
+                  className="flex items-center justify-center gap-1 rounded-lg border border-gray-300 px-3 py-2 text-xs text-gray-500 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800">
                   <X size={12} /> Limpar
                 </button>
               ) : null}
