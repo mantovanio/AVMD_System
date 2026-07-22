@@ -78,7 +78,7 @@ export class CommercialRepository {
   constructor(private readonly db: AivenSqlClient) {}
 
   async listSales(input: CommercialSalesInput = {}) {
-    const limit = Math.min(Math.max(Number(input.limit || 50), 1), 200)
+    const limit = Math.min(Math.max(Number(input.limit || 2000), 1), 5000)
     const result = await this.db.query(`
       select
         v.*,
@@ -87,7 +87,7 @@ export class CommercialRepository {
       from vendas_certificados v
       left join cadastros_base cb on cb.id = v.cadastro_base_id
       left join pontos_atendimento pa on pa.id = v.ponto_atendimento_id
-      order by v.created_at desc
+      order by coalesce(v.data_inicio_validade::date, v.created_at::date) desc, v.created_at desc
       limit $1
     `, [limit])
     return result.rows

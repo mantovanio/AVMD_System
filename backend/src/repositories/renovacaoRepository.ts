@@ -74,6 +74,66 @@ export class RenovacaoRepository {
     'updated_at',
   ].join(', ')
 
+  private async reconcileConvertedFromSales(): Promise<number> {
+    const result = await this.db.query<{ id: string }>(
+      `WITH matched AS (
+         SELECT r.id
+           FROM renovacoes r
+          WHERE r.deleted_at IS NULL
+            AND coalesce(r.renovado, false) = false
+            AND r.status IN ('pendente', 'contatado')
+            AND EXISTS (
+              SELECT 1
+                FROM vendas_certificados v
+                LEFT JOIN cadastros_base cb ON cb.id = v.cadastro_base_id
+               WHERE coalesce(v.status_venda, '') <> 'cancelado'
+                 AND (
+                   coalesce(v.pago, false) = true
+                   OR coalesce(v.status_pagamento, '') = 'pago'
+                   OR coalesce(v.status_venda, '') IN ('vendido', 'agendado', 'em_validacao', 'emitido')
+                 )
+                 AND coalesce(v.data_inicio_validade::date, v.created_at::date) >= (r.data_vencimento::date - INTERVAL '180 days')
+                 AND (
+                   (r.cadastro_base_id IS NOT NULL AND v.cadastro_base_id = r.cadastro_base_id)
+                   OR regexp_replace(coalesce(v.documento_faturamento, cb.cpf_cnpj, ''), '\\D', '', 'g')
+                      = regexp_replace(coalesce(r.cpf, r.cnpj, ''), '\\D', '', 'g')
+                 )
+                 AND (
+                   regexp_replace(lower(coalesce(r.tipo_certificado, '')), '[^a-z0-9]+', '', 'g') = ''
+                   OR regexp_replace(lower(coalesce(v.tipo_produto, '')), '[^a-z0-9]+', '', 'g') = ''
+                   OR position(
+                     regexp_replace(lower(coalesce(r.tipo_certificado, '')), '[^a-z0-9]+', '', 'g')
+                     in regexp_replace(lower(coalesce(v.tipo_produto, '')), '[^a-z0-9]+', '', 'g')
+                   ) > 0
+                   OR position(
+                     regexp_replace(lower(coalesce(v.tipo_produto, '')), '[^a-z0-9]+', '', 'g')
+                     in regexp_replace(lower(coalesce(r.tipo_certificado, '')), '[^a-z0-9]+', '', 'g')
+                   ) > 0
+                 )
+            )
+       ), updated AS (
+         UPDATE renovacoes r
+            SET status = 'convertido',
+                renovado = true,
+                observacoes = concat_ws(E'\n', nullif(r.observacoes, ''), 'Convertido automaticamente: venda/pedido localizado no Comercial.'),
+                updated_at = now()
+           FROM matched m
+          WHERE r.id = m.id
+          RETURNING r.id
+       ), cancelled AS (
+         DELETE FROM communication_outbox o
+          USING updated u
+          WHERE o.status = 'pending'
+            AND o.payload->>'renovacao_id' = u.id::text
+            AND coalesce(o.payload->>'tipo', '') LIKE 'renovacao%'
+            AND o.scheduled_for > now()
+          RETURNING o.id
+       )
+       SELECT id FROM updated`,
+    )
+    return result.rows.length
+  }
+
   async findAll(limit = 500, offset = 0): Promise<RenovacaoRow[]> {
     const result = await this.db.query<RenovacaoRow>(
       `SELECT ${this.listColumns} FROM renovacoes
@@ -85,9 +145,12 @@ export class RenovacaoRepository {
     return result.rows
   }
   async findOperacionais(janelaDias = 30, limit = 500, offset = 0): Promise<RenovacaoRow[]> {
+    await this.reconcileConvertedFromSales()
     const result = await this.db.query<RenovacaoRow>(
       `SELECT ${this.listColumns} FROM renovacoes
        WHERE deleted_at IS NULL
+         AND coalesce(renovado, false) = false
+         AND status NOT IN ('convertido', 'perdido')
          AND data_vencimento >= (CURRENT_DATE - ($1 || ' days')::interval)
        ORDER BY data_vencimento ASC
        LIMIT $2 OFFSET $3`,
@@ -119,11 +182,30 @@ export class RenovacaoRepository {
   }
 
   async findPendentesN8n(): Promise<RenovacaoRow[]> {
+    await this.reconcileConvertedFromSales()
     const result = await this.db.query<RenovacaoRow>(
       `SELECT * FROM renovacoes
        WHERE deleted_at IS NULL
          AND status IN ('pendente','contatado')
+         AND coalesce(renovado, false) = false
          AND data_vencimento >= (CURRENT_DATE - INTERVAL '10 days')
+         AND NOT EXISTS (
+           SELECT 1
+             FROM vendas_certificados v
+             LEFT JOIN cadastros_base cb ON cb.id = v.cadastro_base_id
+            WHERE coalesce(v.status_venda, '') <> 'cancelado'
+              AND (
+                coalesce(v.pago, false) = true
+                OR coalesce(v.status_pagamento, '') = 'pago'
+                OR coalesce(v.status_venda, '') IN ('vendido', 'agendado', 'em_validacao', 'emitido')
+              )
+              AND coalesce(v.data_inicio_validade::date, v.created_at::date) >= (renovacoes.data_vencimento::date - INTERVAL '180 days')
+              AND (
+                (renovacoes.cadastro_base_id IS NOT NULL AND v.cadastro_base_id = renovacoes.cadastro_base_id)
+                OR regexp_replace(coalesce(v.documento_faturamento, cb.cpf_cnpj, ''), '\\D', '', 'g')
+                   = regexp_replace(coalesce(renovacoes.cpf, renovacoes.cnpj, ''), '\\D', '', 'g')
+              )
+         )
        ORDER BY data_vencimento ASC`,
     )
     return result.rows
