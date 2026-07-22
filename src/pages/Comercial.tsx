@@ -793,7 +793,7 @@ export default function Comercial() {
   const vendasRefreshLockRef                    = useRef(false)
   const [importandoSafeweb, setImportandoSafeweb] = useState(false)
   const [importandoClientes, setImportandoClientes] = useState(false)
-  const [resultSafeweb, setResultSafeweb] = useState<{ clientes: number; novos: number; atualizados: number; divergentes: number } | null>(null)
+  const [resultSafeweb, setResultSafeweb] = useState<{ clientes: number; novos: number; criados: number; atualizados: number; divergentes: number } | null>(null)
   const [resultClientes, setResultClientes] = useState<{ inseridos: number; atualizados: number } | null>(null)
   const [safewebVendas, setSafewebVendas] = useState<VendaRow[]>([])
   const [loadingSafewebVendas, setLoadingSafewebVendas] = useState(false)
@@ -3527,6 +3527,25 @@ export default function Comercial() {
       }
       const parseNum = (v: string) => parseFloat((v ?? '').replace(/[R$\s.]/g, '').replace(',', '.')) || 0
       const cleanDoc = (v: string) => (v ?? '').replace(/\D/g, '')
+      const norm = (v: string) => String(v ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()
+      const isPago = (v: string) => /pago|aprovado|liquidado|quitado|compensado|recebido/.test(norm(v))
+      const normalizeStatusVendaImport = (v: string): StatusVendaCertificado => {
+        const n = norm(v)
+        if (/cancel/.test(n)) return 'cancelado'
+        if (/emit/.test(n)) return 'emitido'
+        if (/valid/.test(n)) return 'em_validacao'
+        if (/agend/.test(n)) return 'agendado'
+        if (/vend|conclu|finaliz/.test(n)) return 'vendido'
+        return 'vendido'
+      }
+      const findCertificadoByProduto = (produto: string) => {
+        const wanted = norm(produto)
+        if (!wanted) return null
+        return certificados.find(cert => {
+          const label = norm([cert.tipo, cert.descricao_produto, cert.descricao, cert.categoria, cert.modelo].filter(Boolean).join(' '))
+          return label === wanted || label.includes(wanted) || wanted.includes(norm(cert.tipo ?? ''))
+        }) ?? null
+      }
       // converte DD/MM/YYYY ou DD/MM/YYYY HH:MM:SS → YYYY-MM-DD
       const parseDate = (v: string): string | null => {
         const s = (v ?? '').trim()
@@ -3562,7 +3581,11 @@ export default function Comercial() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ payloads: clientesUniq }),
       })
-      if (!rBCI.ok) { showMsg('Erro ao importar clientes'); return }
+      if (!rBCI.ok) {
+        const errBody = await rBCI.json().catch(() => null)
+        showMsg(errBody?.error ?? errBody?.message ?? 'Erro ao importar clientes')
+        return
+      }
 
       // 2. busca IDs de clientes para vincular às vendas
       const allDocs = clientesUniq.map(c => c.cpf_cnpj)
@@ -3574,18 +3597,33 @@ export default function Comercial() {
         const protocolo = pick(r, ['n_protocolo', 'numero_protocolo', 'protocolo', 'num_protocolo', 'protocolo_numero', 'n_pedido', 'numero_pedido', 'pedido', 'pedido_numero', 'id_pedido', 'id_venda', 'codigo_venda']).trim()
         if (!protocolo) return null
         const doc = cleanDoc(pick(r, ['doc_cliente', 'documento', 'cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento_cliente', 'cpf_do_titular', 'cnpj_do_cliente']))
+        const produto = pick(r, ['produto', 'certificado', 'tipo_produto', 'produto_nome', 'descricao_produto', 'nome_produto']).trim()
+        const cert = findCertificadoByProduto(produto)
+        const statusFinanceiro = pick(r, ['status_financeiro', 'status_pagamento'])
+        const pago = isPago(statusFinanceiro)
+        const dataPagamento = parseDate(pick(r, ['data_pagto', 'data_pagamento', 'data_pagto_', 'data_pago']))
         return {
           protocolo_numero:       protocolo,
+          pedido_numero:          pick(r, ['n_pedido', 'numero_pedido', 'pedido', 'pedido_numero', 'id_pedido']).trim() || null,
           cadastro_base_id:       idByDoc.get(doc) ?? null,
-          tipo_produto:           pick(r, ['produto', 'certificado', 'tipo_produto', 'produto_nome', 'descricao_produto', 'nome_produto']).trim() || null,
+          certificado_id:          cert?.id ?? null,
+          tipo_produto:           produto || null,
+          tipo_venda:             pick(r, ['tipo_venda']).trim() || null,
           tipo_emissao:           pick(r, ['tipo_emissao', 'tipo_de_emissao_realizada', 'emissao', 'forma_emissao', 'modalidade']).trim() || null,
+          tabela_preco:           pick(r, ['tabela_de_venda', 'tabela_preco']).trim() || null,
           valor_venda:            parseNum(pick(r, ['valor_venda', 'valor_do_boleto', 'valor_boleto', 'valor', 'preco', 'preco_venda', 'total', 'valor_total'])),
-          status_venda:           (pick(r, ['status_venda']) || 'emitido') as StatusVendaCertificado,
-          pago:                   /pago|aprovado|liquidado|quitado/i.test(pick(r, ['status_financeiro', 'status_pagamento'])),
-          status_pagamento:       (/pago|aprovado|liquidado|quitado/i.test(pick(r, ['status_financeiro', 'status_pagamento'])) ? 'pago' : 'em_aberto') as StatusPagamentoVenda,
+          desconto:               parseNum(pick(r, ['valor_desconto', 'desconto'])),
+          status_venda:           normalizeStatusVendaImport(pick(r, ['status_venda'])),
+          pago,
+          status_pagamento:       (pago ? 'pago' : 'em_aberto') as StatusPagamentoVenda,
+          data_pagamento:         dataPagamento,
           validado_safeweb:       true,
           data_vencimento:        parseDate(pick(r, ['data_vencimento', 'data_fim_validade', 'validade', 'fim_validade', 'data_expiracao'])),
           data_inicio_validade:   parseDate(pick(r, ['data_venda', 'data_inicio_validade', 'data_inicio', 'inicio_validade', 'data_emissao'])),
+          documento_faturamento:   doc || null,
+          nome_faturamento:        pick(r, ['cliente', 'nome', 'nome_cliente']).trim() || null,
+          email_faturamento:       pick(r, ['e_mail', 'email', 'email_cliente']).trim() || null,
+          telefone_faturamento:    pick(r, ['telefone', 'celular', 'whatsapp']).trim() || null,
           numero_serie:           pick(r, ['numero_de_serie', 'numero_serie', 'serie', 'serial']).trim() || null,
           voucher_codigo:         pick(r, ['vouchercodigo', 'voucher_codigo', 'vouchercod', 'voucher']).trim() || null,
           voucher_percentual:     parseNum(pick(r, ['voucherpercentual', 'voucher_percentual', 'percentual_voucher', 'desconto_percentual'])) || null,
@@ -3595,6 +3633,19 @@ export default function Comercial() {
           status_certificado:     pick(r, ['status_venda', 'status_do_certificado', 'status_certificado', 'status']).trim() || null,
           nome_parceiro_safeweb:  pick(r, ['vendedor', 'nome_do_parceiro', 'nome_parceiro', 'parceiro', 'contador']).trim() || null,
           observacoes:            pick(r, ['observacao', 'observacoes', 'obs', 'mensagem_sefaz', 'link_videoconferencia_renovacao']).trim() || null,
+          metadata:               {
+            origem_importacao: 'comercial_arquivo_externo',
+            forma_pagamento: pick(r, ['forma_pagamento']).trim() || null,
+            autoridade_certificadora: pick(r, ['autoridade_certificadora']).trim() || null,
+            vendedor_importado: pick(r, ['vendedor']).trim() || null,
+            agente_registro_importado: pick(r, ['agente_de_registro']).trim() || null,
+            ar_solicitacao: pick(r, ['ar_de_solicitacao']).trim() || null,
+            data_status: parseDate(pick(r, ['data_status'])),
+            data_agenda: parseDate(pick(r, ['data_agenda'])),
+            data_cadastro_cliente: parseDate(pick(r, ['data_cadastro_cliente'])),
+            data_nota: parseDate(pick(r, ['data_nota'])),
+            nf: pick(r, ['nf']).trim() || null,
+          },
         }
       }).filter((x): x is NonNullable<typeof x> => x !== null)
 
@@ -3612,9 +3663,9 @@ export default function Comercial() {
       const existData3 = await existResp3.json()
       const existSet = new Set((existData3.protocolos ?? []) as string[])
       const paraAtualizar = vendasPayloads.filter(v =>  existSet.has(v.protocolo_numero))
-      const novos         = vendasPayloads.filter(v => !existSet.has(v.protocolo_numero)).length
+      const paraCriar = vendasPayloads.filter(v => !existSet.has(v.protocolo_numero))
 
-      // 5. atualiza apenas os que já existem (INSERT violaria NOT NULL de vendedor_id, etc.)
+      // 5. atualiza os que já existem e cria pedidos para vendas novas
       for (let i = 0; i < paraAtualizar.length; i += BATCH) {
         const batch = paraAtualizar.slice(i, i + BATCH)
         const rBVU = await fetch(getApiUrl('/comercial/vendas/batch-update'), {
@@ -3623,13 +3674,43 @@ export default function Comercial() {
         })
         if (!rBVU.ok) { showMsg('Erro ao importar vendas'); return }
       }
+      let criados = 0
+      const pontoPadrao = pontosAtivos[0]?.id ?? pontos[0]?.id ?? ''
+      if (paraCriar.length && (!currentUserId || !pontoPadrao)) {
+        showMsg('Clientes importados, mas não foi possível criar os pedidos: usuário logado ou ponto de atendimento padrão não encontrado.')
+        return
+      }
+      for (const venda of paraCriar) {
+        const rCreate = await fetch(getApiUrl('/comercial/vendas/criar'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...venda,
+            quantidade: 1,
+            vendedor_id: currentUserId,
+            ponto_atendimento_id: pontoPadrao,
+            pedido_status: venda.pedido_numero ? 'gerado' : 'nao_gerado',
+            protocolo_status: venda.protocolo_numero ? 'gerado' : 'nao_gerado',
+            api_payload_pedido: {},
+            api_payload_protocolo: {},
+          }),
+        })
+        if (!rCreate.ok) {
+          const errBody = await rCreate.json().catch(() => null)
+          showMsg(errBody?.error ?? `Erro ao criar pedido importado ${venda.protocolo_numero}`)
+          return
+        }
+        criados++
+      }
 
       // 6. conta divergentes: vendas emitidas sem validado_safeweb
       const divResp = await fetch(getApiUrl('/comercial/vendas/count-sem-validacao'))
       const divData = await divResp.json()
       const divergentes = divData.count ?? 0
 
-      setResultSafeweb({ clientes: clientesUniq.length, novos, atualizados: paraAtualizar.length, divergentes })
+      setResultSafeweb({ clientes: clientesUniq.length, novos: paraCriar.length, criados, atualizados: paraAtualizar.length, divergentes })
+      await fetchVendasV2()
+      await fetchCatalogo()
     } finally {
       setImportandoSafeweb(false)
     }
@@ -3702,7 +3783,11 @@ export default function Comercial() {
       const rLeads = await fetch(getApiUrl('/comercial/clientes/batch-import'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payloads }),
       })
-      if (!rLeads.ok) { showMsg('Erro ao importar clientes'); return }
+      if (!rLeads.ok) {
+        const errBody = await rLeads.json().catch(() => null)
+        showMsg(errBody?.error ?? errBody?.message ?? 'Erro ao importar clientes')
+        return
+      }
 
       setResultClientes({ inseridos, atualizados })
     } finally {
@@ -7686,17 +7771,16 @@ export default function Comercial() {
                   <Upload size={18} className="text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-800 dark:text-gray-100">Relatório Mensal Safeweb</h3>
-                  <p className="text-xs text-gray-500">Importa clientes e vendas do relatório XLS/XLSX recebido mensalmente da Safeweb.</p>
+                  <h3 className="font-semibold text-gray-800 dark:text-gray-100">Importar Vendas e Pedidos</h3>
+                  <p className="text-xs text-gray-500">Importa clientes, pedidos, protocolos e certificados vendidos de CSV/XLS/XLSX externo.</p>
                 </div>
               </div>
 
               <div className="mt-4 bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-xs text-gray-500 dark:text-gray-400 space-y-1">
-                <p className="font-medium text-gray-700 dark:text-gray-300">Colunas esperadas (separadas por ponto-e-vírgula ou tabela XLS):</p>
-                <p>Protocolo · Nome · Documento · Produto · Tipo de Emissão Realizada · Valor do Boleto</p>
-                <p>Data Inicio Validade · Data Fim Validade · Numero de Série · VoucherCodigo · VoucherPercentual · VoucherValor</p>
-                <p>Nome da Autoridade de Registro · Nome do Local de Atendimento · Status do Certificado · Nome do Parceiro</p>
-                <p>E-mail do Titular · Telefone do Titular</p>
+                <p className="font-medium text-gray-700 dark:text-gray-300">Colunas esperadas:</p>
+                <p>Doc. Cliente · Cliente · E-mail · Telefone · Nº Pedido · Nº Protocolo · Tipo Emissão · Tipo Venda · Status Venda</p>
+                <p>Produto · Data Venda · Valor Desconto · Valor Venda · Forma Pagamento · Status Financeiro · Data Vencimento · Data Pagto</p>
+                <p>PA/Emissor · Agente de Registro · AR de Solicitação · Vendedor · Tabela de Venda · Observação</p>
               </div>
 
               {resultSafeweb && (
@@ -7716,12 +7800,12 @@ export default function Comercial() {
                       <p className="text-xs text-gray-500 mt-1">Clientes processados</p>
                     </div>
                     <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 text-center">
-                      <p className="text-2xl font-bold text-green-700 dark:text-green-400">{resultSafeweb.atualizados}</p>
-                      <p className="text-xs text-gray-500 mt-1">Batidos (já no CRM)</p>
+                      <p className="text-2xl font-bold text-green-700 dark:text-green-400">{resultSafeweb.criados}</p>
+                      <p className="text-xs text-gray-500 mt-1">Pedidos criados</p>
                     </div>
                     <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 text-center">
-                      <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{resultSafeweb.novos}</p>
-                      <p className="text-xs text-gray-500 mt-1">Novos (só na Safeweb)</p>
+                      <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{resultSafeweb.atualizados}</p>
+                      <p className="text-xs text-gray-500 mt-1">Pedidos atualizados</p>
                     </div>
                     <div className={cn('rounded-xl p-3 text-center', resultSafeweb.divergentes > 0 ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-gray-50 dark:bg-gray-800')}>
                       <p className={cn('text-2xl font-bold', resultSafeweb.divergentes > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-gray-400')}>{resultSafeweb.divergentes}</p>
