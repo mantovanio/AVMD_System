@@ -595,15 +595,28 @@ function productGuidance(item: LojaItemRow) {
   if (professionalGuidance) return professionalGuidance
 
   if (isSafeId) {
+    const safeIdAudience = isCompany || isNfe ? 'pessoa jurídica' : 'pessoa física'
+    const safeIdEntity = isCompany || isNfe ? 'empresa' : 'titular'
+    const safeIdDocuments = isCompany || isNfe
+      ? [
+          'Documento oficial com foto do representante legal.',
+          'CPF do representante legal, quando não constar no documento apresentado.',
+          'Contrato social, requerimento de empresário, estatuto/ata ou documento equivalente atualizado.',
+          'Cartão CNPJ ou dados cadastrais da empresa para conferência.',
+          'E-mail e WhatsApp válidos para vinculação e confirmação do acesso.',
+        ]
+      : [
+          'Documento oficial com foto do titular em bom estado.',
+          'CPF do titular, quando não constar no documento apresentado.',
+          'E-mail e WhatsApp válidos para vinculação e confirmação do acesso.',
+        ]
     return {
-      title: 'Nuvem SafeID',
+      title: isCompany || isNfe ? 'SafeID e-CNPJ' : 'SafeID e-CPF',
       description: [
-        'Certificado Digital em Nuvem para pessoa física ou jurídica, armazenado em ambiente seguro da Autoridade Certificadora.',
-        'Permite usar o certificado pela internet, sem depender de token, cartão ou leitora física, mediante autenticação do titular.',
+        `Certificado Digital em Nuvem para ${safeIdAudience}, armazenado em ambiente seguro da Autoridade Certificadora.`,
+        `Permite que ${safeIdEntity === 'empresa' ? 'a empresa use' : 'o titular use'} o certificado pela internet, sem token, cartão, leitora ou instalação em mídia física.`,
         'O acesso pode ser feito de diferentes dispositivos compatíveis, como computador, smartphone ou tablet, desde que o usuário consiga realizar a autenticação necessária.',
         'É uma alternativa prática para quem busca mobilidade, evita problemas com mídia física e precisa assinar ou acessar sistemas digitais com frequência.',
-        mediaGuidance.label,
-        ...mediaGuidance.paragraphs,
       ],
       benefits: [
         'Usar o certificado em computador, celular ou tablet com acesso à internet.',
@@ -611,12 +624,7 @@ function productGuidance(item: LojaItemRow) {
         'Assinar documentos digitais e acessar serviços públicos ou privados com validade jurídica.',
         'Facilitar rotinas de empresas, profissionais e representantes que precisam mobilidade no uso.',
       ],
-      documents: [
-        'Documento oficial com foto do titular ou representante legal.',
-        'CPF do titular, quando não constar no documento apresentado.',
-        'E-mail e WhatsApp válidos para vinculação e confirmação do acesso.',
-        'Para pessoa jurídica, apresentar contrato social ou documento empresarial equivalente.',
-      ],
+      documents: safeIdDocuments,
     }
   }
 

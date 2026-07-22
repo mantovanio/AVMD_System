@@ -154,8 +154,19 @@ function normalizeProductName(name: string, certificateClass: string) {
     : `${cleaned} ${certificateClass}`
 }
 
+function getSafeIdAudience(cert: Pick<Certificado, 'tipo' | 'descricao' | 'descricao_produto' | 'categoria' | 'modelo'>) {
+  const text = normalizeText([cert.tipo, cert.descricao_produto, cert.descricao, cert.categoria, cert.modelo].filter(Boolean).join(' '))
+  if (/\bnf-e\b|\bnfe\b|nota fiscal|e-pj|e-cnpj|\bmei\b/.test(text)) {
+    return 'para pessoa jurídica'
+  }
+  if (/e-cpf|e-pf|e-medico|emedico|medico|e-juridico|ejuridico|e-engenheiro|eengenheiro|engenheiro|e-saude|esaude|saude|e-arquiteto|earquiteto|arquiteto/.test(text)) {
+    return 'para pessoa física'
+  }
+  return 'para pessoa física ou jurídica'
+}
+
 function buildCommercialDescription(
-  cert: Pick<Certificado, 'tipo' | 'descricao' | 'descricao_produto' | 'validade' | 'periodo_uso'>,
+  cert: Pick<Certificado, 'tipo' | 'descricao' | 'descricao_produto' | 'validade' | 'periodo_uso' | 'categoria' | 'modelo'>,
   validity: string,
   certificateClass: string,
   isSafeIdLike: boolean,
@@ -168,7 +179,8 @@ function buildCommercialDescription(
   if (isSafeIdLike) {
     const usage = normalizeValidityToMonthsLabel(cert.periodo_uso?.trim() || validity)
     const totalValidity = normalizeValidityToMonthsLabel(cert.validade?.trim() || validity)
-    return `Certificado Digital (Nuvem) ${productName} - período de uso ${formatValidityLabel(usage)} e validade total de ${formatValidityLabel(totalValidity)}.`
+    const audience = getSafeIdAudience(cert)
+    return `Certificado Digital em Nuvem ${audience} - ${productName}. Período de uso ${formatValidityLabel(usage)} e validade total de ${formatValidityLabel(totalValidity)}.`
   }
 
   const validityPart = validityLabel !== 'prazo não informado' ? ` - Validade ${validityLabel}` : ''
@@ -192,7 +204,7 @@ export function getProductProfile(cert: Pick<Certificado, 'tipo' | 'descricao' |
 
   const modelText = normalizeText(cert.modelo ?? '')
   const classText = normalizeText([cert.tipo, cert.modelo, cert.categoria].filter(Boolean).join(' '))
-  const isSafeIdLike = /safeid|nuvem|cloud/.test(classText)
+  const isSafeIdLike = /safeid|nuvem|cloud/.test(kindText)
   const certificateClass = /\ba3\b/.test(modelText) || (!/\ba1\b/.test(modelText) && /\ba3\b/.test(classText)) || isSafeIdLike
     ? 'A3'
     : (/\ba1\b/.test(modelText) || /\ba1\b/.test(classText) ? 'A1' : 'Não informado')
