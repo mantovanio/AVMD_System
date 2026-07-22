@@ -2877,21 +2877,59 @@ export default function Comercial() {
   function lerPlanilha(file: File): Promise<Record<string, string>[]> {
     if (file.size > 5 * 1024 * 1024) return Promise.reject(new Error('Arquivo muito grande. O limite para importação é 5 MB.'))
     return new Promise((resolve, reject) => {
+      const normalize = (h: string) =>
+        String(h ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+      const normalizeRows = (json: Record<string, unknown>[]) => json
+        .map(r => {
+          const out: Record<string, string> = {}
+          Object.entries(r).forEach(([k, v]) => { out[normalize(k)] = String(v ?? '') })
+          return out
+        })
+        .filter(row => Object.values(row).some(value => String(value ?? '').trim()))
+      const rowsFromWorksheet = (ws: XLSX.WorkSheet) => {
+        const matrix = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '', raw: false })
+        const normalizedMatrix = matrix.map(row => row.map(cell => String(cell ?? '').trim()))
+        const headerIndex = normalizedMatrix.findIndex(row => {
+          const normalizedHeaders = row.map(normalize).filter(Boolean)
+          const hasDocument = normalizedHeaders.some(h => ['cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento', 'doc'].includes(h) || h.includes('cpf') || h.includes('cnpj'))
+          const hasName = normalizedHeaders.some(h => ['nome', 'nome_razao_social', 'razao_social', 'cliente', 'nome_cliente', 'titular'].includes(h) || h.includes('nome') || h.includes('cliente'))
+          const hasSaleId = normalizedHeaders.some(h => h.includes('protocolo') || h.includes('pedido') || h.includes('venda'))
+          return (hasDocument && hasName) || hasSaleId
+        })
+        const start = headerIndex >= 0 ? headerIndex : 0
+        const headers = (normalizedMatrix[start] ?? []).map(normalize)
+        const dataRows = normalizedMatrix.slice(start + 1)
+        return dataRows
+          .map(row => {
+            const out: Record<string, string> = {}
+            headers.forEach((header, index) => {
+              if (header) out[header] = row[index] ?? ''
+            })
+            return out
+          })
+          .filter(row => Object.values(row).some(value => String(value ?? '').trim()))
+      }
       const reader = new FileReader()
       reader.onload = e => {
         try {
           const data = new Uint8Array(e.target!.result as ArrayBuffer)
+          if (/\.(csv|tsv|txt)$/i.test(file.name)) {
+            const utf8 = new TextDecoder('utf-8').decode(data)
+            const text = utf8.includes('\uFFFD') ? new TextDecoder('windows-1252').decode(data) : utf8
+            const csvText = text.replace(/^\uFEFF/, '').replace(/^sep=.\r?\n/i, '')
+            const delimiter = file.name.toLowerCase().endsWith('.tsv')
+              ? '\t'
+              : (csvText.split(/\r?\n/).find(line => line.trim()) ?? '').split(';').length >= (csvText.split(/\r?\n/).find(line => line.trim()) ?? '').split(',').length ? ';' : ','
+            const wbCsv = XLSX.read(csvText, { type: 'string', raw: false, FS: delimiter })
+            const wsCsv = wbCsv.Sheets[wbCsv.SheetNames[0]]
+            const rowsCsv = rowsFromWorksheet(wsCsv)
+            resolve(rowsCsv.length ? rowsCsv : normalizeRows(XLSX.utils.sheet_to_json(wsCsv, { defval: '', raw: false })))
+            return
+          }
           const wb = XLSX.read(data, { type: 'array' })
           const ws = wb.Sheets[wb.SheetNames[0]]
-          const normalize = (h: string) =>
-            String(h ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
-          const json: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws, { defval: '' })
-          const rows = json.map(r => {
-            const out: Record<string, string> = {}
-            Object.entries(r).forEach(([k, v]) => { out[normalize(k)] = String(v ?? '') })
-            return out
-          })
-          resolve(rows)
+          const rowsXlsx = rowsFromWorksheet(ws)
+          resolve(rowsXlsx.length ? rowsXlsx : normalizeRows(XLSX.utils.sheet_to_json(ws, { defval: '' })))
         } catch (err) { reject(err) }
       }
       reader.onerror = reject
@@ -3502,8 +3540,8 @@ export default function Comercial() {
 
       // 1. upsert clientes
       const clientePayloads = rows.map(r => {
-        const doc = cleanDoc(pick(r, ['documento', 'cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento_cliente', 'cpf_do_titular', 'cnpj_do_cliente']))
-        const nome = pick(r, ['nome', 'nome_razao_social', 'razao_social', 'cliente', 'nome_cliente', 'titular', 'nome_do_titular', 'nome_faturamento']).trim()
+        const doc = cleanDoc(pick(r, ['doc_cliente', 'documento', 'cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento_cliente', 'cpf_do_titular', 'cnpj_do_cliente']))
+        const nome = pick(r, ['cliente', 'nome', 'nome_razao_social', 'razao_social', 'nome_cliente', 'titular', 'nome_do_titular', 'nome_faturamento']).trim()
         if (!doc || !nome) return null
         const tipo: TipoCliente = doc.length === 11 ? 'pessoa_fisica' : 'pessoa_juridica'
         return {
@@ -3511,7 +3549,7 @@ export default function Comercial() {
           nome,
           tipo_cliente: tipo,
           tipo_cadastro: 'cliente' as const,
-          email:        pick(r, ['e_mail_do_titular', 'email_do_titular', 'email', 'e_mail', 'email_cliente']).trim() || null,
+          email:        pick(r, ['e_mail', 'email', 'e_mail_do_titular', 'email_do_titular', 'email_cliente']).trim() || null,
           telefone:     pick(r, ['telefone_do_titular', 'telefone', 'celular', 'whatsapp', 'telefone_cliente']).trim() || null,
           iss_retido:   false,
           status:       'ativo' as const,
@@ -3533,30 +3571,30 @@ export default function Comercial() {
 
       // 3. monta payloads de venda COM validado_safeweb = true
       const vendasPayloads = rows.map(r => {
-        const protocolo = pick(r, ['protocolo', 'numero_protocolo', 'n_protocolo', 'num_protocolo', 'protocolo_numero', 'pedido', 'numero_pedido', 'n_pedido', 'pedido_numero', 'id_pedido', 'id_venda', 'codigo_venda']).trim()
+        const protocolo = pick(r, ['n_protocolo', 'numero_protocolo', 'protocolo', 'num_protocolo', 'protocolo_numero', 'n_pedido', 'numero_pedido', 'pedido', 'pedido_numero', 'id_pedido', 'id_venda', 'codigo_venda']).trim()
         if (!protocolo) return null
-        const doc = cleanDoc(pick(r, ['documento', 'cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento_cliente', 'cpf_do_titular', 'cnpj_do_cliente']))
+        const doc = cleanDoc(pick(r, ['doc_cliente', 'documento', 'cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento_cliente', 'cpf_do_titular', 'cnpj_do_cliente']))
         return {
           protocolo_numero:       protocolo,
           cadastro_base_id:       idByDoc.get(doc) ?? null,
           tipo_produto:           pick(r, ['produto', 'certificado', 'tipo_produto', 'produto_nome', 'descricao_produto', 'nome_produto']).trim() || null,
-          tipo_emissao:           pick(r, ['tipo_de_emissao_realizada', 'tipo_emissao', 'emissao', 'forma_emissao', 'modalidade']).trim() || null,
-          valor_venda:            parseNum(pick(r, ['valor_do_boleto', 'valor_boleto', 'valor', 'valor_venda', 'preco', 'preco_venda', 'total', 'valor_total'])),
-          status_venda:           'emitido' as StatusVendaCertificado,
-          pago:                   true,
-          status_pagamento:       'pago' as StatusPagamentoVenda,
+          tipo_emissao:           pick(r, ['tipo_emissao', 'tipo_de_emissao_realizada', 'emissao', 'forma_emissao', 'modalidade']).trim() || null,
+          valor_venda:            parseNum(pick(r, ['valor_venda', 'valor_do_boleto', 'valor_boleto', 'valor', 'preco', 'preco_venda', 'total', 'valor_total'])),
+          status_venda:           (pick(r, ['status_venda']) || 'emitido') as StatusVendaCertificado,
+          pago:                   /pago|aprovado|liquidado|quitado/i.test(pick(r, ['status_financeiro', 'status_pagamento'])),
+          status_pagamento:       (/pago|aprovado|liquidado|quitado/i.test(pick(r, ['status_financeiro', 'status_pagamento'])) ? 'pago' : 'em_aberto') as StatusPagamentoVenda,
           validado_safeweb:       true,
-          data_vencimento:        parseDate(pick(r, ['data_fim_validade', 'data_vencimento', 'validade', 'fim_validade', 'data_expiracao'])),
-          data_inicio_validade:   parseDate(pick(r, ['data_inicio_validade', 'data_inicio', 'inicio_validade', 'data_emissao'])),
+          data_vencimento:        parseDate(pick(r, ['data_vencimento', 'data_fim_validade', 'validade', 'fim_validade', 'data_expiracao'])),
+          data_inicio_validade:   parseDate(pick(r, ['data_venda', 'data_inicio_validade', 'data_inicio', 'inicio_validade', 'data_emissao'])),
           numero_serie:           pick(r, ['numero_de_serie', 'numero_serie', 'serie', 'serial']).trim() || null,
           voucher_codigo:         pick(r, ['vouchercodigo', 'voucher_codigo', 'vouchercod', 'voucher']).trim() || null,
           voucher_percentual:     parseNum(pick(r, ['voucherpercentual', 'voucher_percentual', 'percentual_voucher', 'desconto_percentual'])) || null,
           voucher_valor:          parseNum(pick(r, ['vouchervalor', 'voucher_valor', 'valor_voucher', 'desconto_valor'])) || null,
-          nome_ar:                pick(r, ['nome_da_autoridade_de_registro', 'nome_ar', 'ar', 'autoridade_registro']).trim() || null,
-          nome_local_atendimento: pick(r, ['nome_do_local_de_atendimento', 'nome_local', 'local_atendimento', 'posto_atendimento']).trim() || null,
-          status_certificado:     pick(r, ['status_do_certificado', 'status_certificado', 'status']).trim() || null,
-          nome_parceiro_safeweb:  pick(r, ['nome_do_parceiro', 'nome_parceiro', 'parceiro', 'vendedor', 'contador']).trim() || null,
-          observacoes:            pick(r, ['observacao', 'observacoes', 'obs']).trim() || null,
+          nome_ar:                pick(r, ['ar_de_solicitacao', 'autoridade_certificadora', 'nome_da_autoridade_de_registro', 'nome_ar', 'ar', 'autoridade_registro']).trim() || null,
+          nome_local_atendimento: pick(r, ['pa_emissor', 'nome_do_local_de_atendimento', 'nome_local', 'local_atendimento', 'posto_atendimento']).trim() || null,
+          status_certificado:     pick(r, ['status_venda', 'status_do_certificado', 'status_certificado', 'status']).trim() || null,
+          nome_parceiro_safeweb:  pick(r, ['vendedor', 'nome_do_parceiro', 'nome_parceiro', 'parceiro', 'contador']).trim() || null,
+          observacoes:            pick(r, ['observacao', 'observacoes', 'obs', 'mensagem_sefaz', 'link_videoconferencia_renovacao']).trim() || null,
         }
       }).filter((x): x is NonNullable<typeof x> => x !== null)
 
@@ -3604,38 +3642,51 @@ export default function Comercial() {
     try {
       const rows = await lerPlanilha(file)
       if (!rows.length) { showMsg('Planilha sem dados.'); return }
+      const firstColumns = Object.keys(rows[0] ?? {})
+      const pick = (row: Record<string, string>, aliases: string[]) => {
+        for (const alias of aliases) {
+          const direct = row[alias]
+          if (direct != null && String(direct).trim()) return String(direct)
+        }
+        return ''
+      }
       const cleanDoc = (v: string) => (v ?? '').replace(/\D/g, '')
 
       const payloads = rows.map(r => {
-        const doc = cleanDoc(r['cnpj_cpf'] ?? r['cpf_cnpj'] ?? r['documento'] ?? '')
-        const nome = r['nome_razao_social'] ?? r['nome'] ?? ''
+        const doc = cleanDoc(pick(r, ['doc_cliente', 'cnpj_cpf', 'cpf_cnpj', 'cpfcnpj', 'cnpjcpf', 'documento', 'cpf', 'cnpj', 'doc', 'documento_cliente']))
+        const nome = pick(r, ['cliente', 'nome_razao_social', 'razao_social', 'nome', 'nome_cliente', 'titular', 'nome_do_titular'])
         if (!doc || !nome) return null
         const tipo: TipoCliente = doc.length === 11 ? 'pessoa_fisica' : 'pessoa_juridica'
-        const ddd = (r['ddd'] ?? '').replace(/\D/g, '')
-        const tel = (r['telefone'] ?? '').replace(/\D/g, '')
+        const ddd = pick(r, ['ddd']).replace(/\D/g, '')
+        const tel = pick(r, ['telefone', 'celular', 'whatsapp', 'fone', 'telefone_1', 'telefone_cliente']).replace(/\D/g, '')
         const telefone = ddd && tel ? `(${ddd}) ${tel}` : (tel || null)
         return {
           cpf_cnpj: doc,
           nome,
-          nome_fantasia:       (r['nome_fantasia'] ?? '').trim() || null,
+          nome_fantasia:       pick(r, ['nome_fantasia', 'fantasia']).trim() || null,
           tipo_cliente:        tipo,
           tipo_cadastro:       'cliente' as const,
-          email:               (r['e_mail'] ?? r['email'] ?? '').trim() || null,
+          email:               pick(r, ['e_mail', 'email', 'email_cliente']).trim() || null,
           telefone,
-          cep:                 (r['cep'] ?? '').replace(/\D/g, '') || null,
-          logradouro:          (r['endereco'] ?? r['logradouro'] ?? '').trim() || null,
-          numero:              (r['numero'] ?? '').trim() || null,
-          complemento:         (r['complemento'] ?? '').trim() || null,
-          bairro:              (r['bairro'] ?? '').trim() || null,
-          cidade:              (r['cidade'] ?? '').trim() || null,
-          uf:                  (r['uf'] ?? '').trim().toUpperCase() || null,
-          inscricao_estadual:  (r['ie'] ?? r['inscricao_estadual'] ?? '').trim() || null,
-          inscricao_municipal: (r['im'] ?? r['inscricao_municipal'] ?? '').trim() || null,
+          cep:                 pick(r, ['cep']).replace(/\D/g, '') || null,
+          logradouro:          pick(r, ['endereco', 'logradouro', 'rua']).trim() || null,
+          numero:              pick(r, ['numero', 'n']).trim() || null,
+          complemento:         pick(r, ['complemento']).trim() || null,
+          bairro:              pick(r, ['bairro']).trim() || null,
+          cidade:              pick(r, ['cidade', 'municipio']).trim() || null,
+          uf:                  pick(r, ['uf', 'estado']).trim().toUpperCase() || null,
+          inscricao_estadual:  pick(r, ['ie', 'inscricao_estadual']).trim() || null,
+          inscricao_municipal: pick(r, ['im', 'inscricao_municipal']).trim() || null,
           iss_retido: false,
           status: 'ativo' as const,
-          metadata: { contador: (r['contador'] ?? '').trim() || null } as Record<string, unknown>,
+          metadata: { contador: pick(r, ['contador', 'parceiro']).trim() || null } as Record<string, unknown>,
         }
       }).filter((x): x is NonNullable<typeof x> => x !== null)
+
+      if (!payloads.length) {
+        showMsg(`Arquivo lido com ${rows.length} linha(s), mas nenhum cliente foi reconhecido. Confira se existem colunas de documento e nome. Colunas encontradas: ${firstColumns.slice(0, 12).join(', ') || 'sem cabeçalho detectado'}.`)
+        return
+      }
 
       // check existing to count inserts vs updates
       const docs = payloads.map(p => p.cpf_cnpj)
