@@ -1544,9 +1544,9 @@ export default function Comercial() {
 
   const vendasFiltradas = useMemo(() => {
     return vendasV2.filter(v => {
-      const criado = new Date(v.created_at)
-      const dataInicialOk = !vendaFilters.dataInicial || criado >= new Date(`${vendaFilters.dataInicial}T00:00:00`)
-      const dataFinalOk   = !vendaFilters.dataFinal   || criado <= new Date(`${vendaFilters.dataFinal}T23:59:59`)
+      const dataVendaRef = new Date(v.data_inicio_validade || v.created_at)
+      const dataInicialOk = !vendaFilters.dataInicial || dataVendaRef >= new Date(`${vendaFilters.dataInicial}T00:00:00`)
+      const dataFinalOk   = !vendaFilters.dataFinal   || dataVendaRef <= new Date(`${vendaFilters.dataFinal}T23:59:59`)
       const pedido    = (v.pedido_numero ?? '').toLowerCase()
       const protocolo = (v.protocolo_numero ?? '').toLowerCase()
       const cliente   = ((v.cadastros_base as { nome?: string } | null)?.nome ?? v.nome_faturamento ?? '').toLowerCase()
@@ -4678,7 +4678,7 @@ export default function Comercial() {
       String(v.valor_venda ?? 0),
       STATUS_VENDA_LABEL[v.status_venda],
       ((v.metadata as { forma_pagamento?: string })?.forma_pagamento ?? ''),
-      new Date(v.created_at).toLocaleDateString('pt-BR'),
+      new Date(v.data_inicio_validade || v.created_at).toLocaleDateString('pt-BR'),
       (v.observacoes ?? ''),
     ])
     const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -5868,7 +5868,7 @@ export default function Comercial() {
                           {(v.pontos_atendimento as { nome?: string } | null)?.nome ?? '—'}
                         </td>
                         <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap hidden sm:table-cell">
-                          {new Date(v.created_at).toLocaleDateString('pt-BR')}
+                          {new Date(v.data_inicio_validade || v.created_at).toLocaleDateString('pt-BR')}
                         </td>
                         <td className="px-3 py-2 text-gray-500 whitespace-nowrap hidden xl:table-cell">
                           {v.vendedor_id ? (vendedorNomes.get(v.vendedor_id) ?? '—') : '—'}
