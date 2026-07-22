@@ -300,10 +300,10 @@ function productKind(item: LojaItemRow) {
 
 function detectCertificateCategory(value: string) {
   const raw = normalizedSearch(value)
-  if (/\bnf[\s-]?e\b|\bnfe\b|nota fiscal|\be[\s-]?pj\b/.test(raw)) return 'e-PJ'
   if (/\bmei\b/.test(raw)) return 'e-CNPJ'
-  if (/e[\s-]?medico|medico|e[\s-]?juridico|e[\s-]?engenheiro|engenheiro|e[\s-]?saude|saude|e[\s-]?arquiteto|arquiteto/.test(raw)) return 'e-CPF'
   if (/\be[\s-]?cnpj\b/.test(raw)) return 'e-CNPJ'
+  if (/\bnf[\s-]?e\b|\bnfe\b|nota fiscal|\be[\s-]?pj\b/.test(raw)) return 'e-PJ'
+  if (/e[\s-]?medico|medico|e[\s-]?juridico|e[\s-]?engenheiro|engenheiro|e[\s-]?saude|saude|e[\s-]?arquiteto|arquiteto/.test(raw)) return 'e-CPF'
   if (/\be[\s-]?cpf\b/.test(raw)) return 'e-CPF'
   if (/\be[\s-]?pf\b/.test(raw)) return 'e-PF'
   if (/safeid|nuvem|cloud/.test(raw)) return 'Nuvem'
