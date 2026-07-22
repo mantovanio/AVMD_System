@@ -93,8 +93,8 @@ function getProductKindFromText(raw: string) {
   if (raw.includes('combo')) return 'Combo'
   if (/safeid|nuvem|cloud/.test(raw)) return 'SafeID'
   if (/token|cartao|cartão|leitora|validacao domiciliar/.test(raw) && !/e-cpf|e-pf|e-cnpj|e-pj|safeid|nuvem|cloud/.test(raw)) return 'Mídias e serviços'
-  if (/\bnf-e\b|\bnfe\b|nota fiscal|e-cnpj/.test(raw)) return 'e-CNPJ'
-  if (/e-pj|\bmei\b/.test(raw)) return 'e-PJ'
+  if (/\bnf-e\b|\bnfe\b|nota fiscal|e-pj|\bmei\b/.test(raw)) return 'e-PJ'
+  if (/e-cnpj/.test(raw)) return 'e-CNPJ'
   if (/e-medico|emedico|medico|e-juridico|ejuridico|e-engenheiro|eengenheiro|engenheiro|e-saude|esaude|saude|e-arquiteto|earquiteto|arquiteto|e-cpf|e-pf/.test(raw)) return 'e-CPF'
   return 'Outros'
 }
