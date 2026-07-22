@@ -297,7 +297,7 @@ function productKind(item: LojaItemRow) {
 
 function detectCertificateCategory(value: string) {
   const raw = normalizedSearch(value)
-  if (/safeid|nuvem|cloud/.test(raw)) return 'SafeID'
+  if (/safeid|nuvem|cloud/.test(raw)) return 'Nuvem'
   if (/\bnf[\s-]?e\b|\bnfe\b|nota fiscal|\be[\s-]?pj\b/.test(raw)) return 'e-PJ'
   if (/\bmei\b/.test(raw)) return 'e-CNPJ'
   if (/e[\s-]?medico|medico|e[\s-]?juridico|e[\s-]?engenheiro|engenheiro|e[\s-]?saude|saude|e[\s-]?arquiteto|arquiteto/.test(raw)) return 'e-CPF'
@@ -307,7 +307,7 @@ function detectCertificateCategory(value: string) {
   return ''
 }
 
-const certificateOrder = ['e-CPF', 'e-PF', 'e-CNPJ', 'e-PJ', 'SafeID']
+const certificateOrder = ['e-CPF', 'e-PF', 'e-CNPJ', 'e-PJ', 'Nuvem']
 
 function certificateSort(a: string, b: string) {
   const ai = certificateOrder.indexOf(a)
@@ -316,7 +316,7 @@ function certificateSort(a: string, b: string) {
 }
 
 function certificateOptionLabel(option: string) {
-  return option === 'SafeID' ? 'SafeID / Nuvem' : option
+  return option
 }
 
 function productCertificateCategory(item: LojaItemRow) {
@@ -376,7 +376,7 @@ function productValidity(item: LojaItemRow) {
 function productGuidance(item: LojaItemRow) {
   const profile = getProductProfile(item.certificados ?? null)
   const category = productCertificateCategory(item)
-  const isSafeId = profile.kind === 'SafeID'
+  const isSafeId = profile.kind === 'Nuvem'
   const isNfe = /pj/i.test(category)
   const isCompany = /cnpj|pj/i.test(category)
   const productText = productCatalogText(item)
@@ -574,7 +574,7 @@ function productGuidance(item: LojaItemRow) {
 
   if (isSafeId) {
     return {
-      title: 'SafeID / Nuvem',
+      title: 'Nuvem SafeID',
       description: [
         'Certificado Digital em Nuvem para pessoa física ou jurídica, armazenado em ambiente seguro da Autoridade Certificadora.',
         'Permite usar o certificado pela internet, sem depender de token, cartão ou leitora física, mediante autenticação do titular.',
@@ -1619,6 +1619,14 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                       </select>
                     </label>
                   </div>
+                  {productEmissionFilter === 'Videoconferência' && (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-relaxed text-amber-900">
+                      <p className="font-bold">Atenção para validação por videoconferência</p>
+                      <p className="mt-1">
+                        Para seguir por vídeo, o titular precisa atender aos critérios de validação biométrica aceitos pela emissão. Em geral, é necessário já possuir biometria cadastrada ou apresentar CNH válida emitida a partir de 2018.
+                      </p>
+                    </div>
+                  )}
 
                   {!productClassFilter || !productKindFilter || !productEmissionFilter || !productValidityFilter ? (
                     <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-slate-300 bg-slate-50/40 px-6 text-center">
