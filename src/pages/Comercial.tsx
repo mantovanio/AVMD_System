@@ -7956,7 +7956,7 @@ export default function Comercial() {
                   ]}
                 />
                 <NumberInput label="Validade total (meses) *" value={formCert.validade_meses ?? 0} onChange={v => setFormCert(p => ({ ...p, validade_meses: v || null, validade: v ? `${v} meses` : '' }))} step={1} min={0} />
-                <TextInput label="Período de uso" value={formCert.periodo_uso ?? ''} onChange={v => setFormCert(p => ({ ...p, periodo_uso: v || null }))} placeholder="Ex.: 12 meses, 1 ano" />
+                <TextInput label="Período de uso" value={formCert.periodo_uso ?? ''} onChange={v => setFormCert(p => ({ ...p, periodo_uso: v || null }))} placeholder="Ex.: 12 meses, 24 meses" />
                 <SelectInput
                   label="Tipo Produto"
                   value={formCert.categoria ?? ''}

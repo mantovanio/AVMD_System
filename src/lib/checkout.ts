@@ -100,11 +100,24 @@ function getProductKindFromText(raw: string) {
 
 function formatValidityFromText(raw: string) {
   const totalMonths = raw.match(/validade(?: total)?(?: de)? (\d+) meses?/)?.[1]
-  if (totalMonths) return Number(totalMonths) === 24 ? '2 anos' : `${totalMonths} meses`
-  if (/validade (?:de )?2 anos|validade 2 anos/.test(raw)) return '2 anos'
+  if (totalMonths) return `${Number(totalMonths)} meses`
+  if (/validade (?:de )?2 anos|validade 2 anos/.test(raw)) return '24 meses'
   if (/4 meses|degustacao/.test(raw)) return '4 meses'
-  if (/12 meses|1 ano/.test(raw)) return '1 ano'
+  if (/12 meses|1 ano/.test(raw)) return '12 meses'
   return 'Não informada'
+}
+
+function normalizeValidityToMonthsLabel(value: string) {
+  const raw = value.trim()
+  if (!raw) return ''
+  const normalized = normalizeText(raw)
+  const numeric = normalized.match(/^(\d+)$/)?.[1]
+  if (numeric) return `${Number(numeric)} meses`
+  const months = normalized.match(/(\d+)\s*m(?:es|eses)?/)?.[1]
+  if (months) return `${Number(months)} meses`
+  const years = normalized.match(/(\d+)\s*ano/)?.[1]
+  if (years) return `${Number(years) * 12} meses`
+  return raw
 }
 
 function formatValidityLabel(validity: string) {
@@ -145,7 +158,9 @@ export function getProductProfile(cert: Pick<Certificado, 'tipo' | 'descricao' |
   const validitySource = isSafeIdLike
     ? (cert.periodo_uso?.trim() || cert.validade?.trim() || '')
     : (cert.validade?.trim() || '')
-  const validity = validitySource || formatValidityFromText(normalizeText([cert.tipo, cert.descricao_produto, cert.descricao].filter(Boolean).join(' ')))
+  const validity = validitySource
+    ? normalizeValidityToMonthsLabel(validitySource)
+    : formatValidityFromText(normalizeText([cert.tipo, cert.descricao_produto, cert.descricao].filter(Boolean).join(' ')))
 
   const displayName = cert.tipo?.trim() || 'Produto'
 
