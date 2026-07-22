@@ -362,6 +362,78 @@ function productGuidance(item: LojaItemRow) {
     item.certificados?.categoria,
     item.certificados?.modelo,
   ].filter(Boolean).join(' '))
+  const mediaGuidance = (() => {
+    if (/safeid|nuvem|cloud/.test(productText)) {
+      return {
+        label: 'Formato do produto: certificado em nuvem',
+        paragraphs: [
+          'Este produto não acompanha token, cartão ou leitora física. O certificado fica disponível em nuvem e o uso depende da autenticação do titular.',
+          'É indicado para quem precisa mobilidade e quer evitar instalação local ou dependência de mídia física.',
+        ],
+      }
+    }
+    if (/cartao.*leitora|cartão.*leitora|leitora.*cartao|leitora.*cartão/.test(productText)) {
+      return {
+        label: 'Formato do produto: cartão + leitora',
+        paragraphs: [
+          'Este produto acompanha o certificado gravado em cartão e a leitora necessária para uso no computador.',
+          'É indicado para quem ainda não possui leitora compatível ou quer receber o conjunto completo para utilização do certificado A3.',
+        ],
+      }
+    }
+    if (/token/.test(productText)) {
+      return {
+        label: 'Formato do produto: token',
+        paragraphs: [
+          'Este produto acompanha mídia token USB, onde o certificado fica armazenado com segurança.',
+          'É indicado para uso em computadores compatíveis com o dispositivo e exige a instalação dos drivers ou componentes necessários para funcionamento.',
+        ],
+      }
+    }
+    if (/cartao|cartão|smartcard/.test(productText)) {
+      return {
+        label: 'Formato do produto: cartão',
+        paragraphs: [
+          'Este produto acompanha o certificado em cartão/smartcard. Para utilizar no computador, é necessário possuir uma leitora compatível.',
+          'Se o cliente não tiver leitora, deve escolher uma opção que inclua cartão + leitora ou adquirir a leitora separadamente.',
+        ],
+      }
+    }
+    if (/sem midia|sem mídia/.test(productText)) {
+      return {
+        label: 'Formato do produto: A3 sem mídia',
+        paragraphs: [
+          'Este produto é destinado a quem já possui uma mídia compatível, como token ou cartão, e precisa apenas emitir ou renovar o certificado.',
+          'Antes de seguir, confirme se a mídia existente está funcionando, é aceita pela Autoridade Certificadora e está disponível para uso durante a emissão.',
+        ],
+      }
+    }
+    if (/arquivo|instalado|computador|\ba1\b/.test(productText)) {
+      return {
+        label: 'Formato do produto: arquivo instalado no computador',
+        paragraphs: [
+          'Este produto é emitido em arquivo digital, normalmente instalado no computador do titular ou responsável.',
+          'É indicado para uso no equipamento onde será instalado. Recomendamos guardar a senha e o backup com segurança, pois a perda do arquivo pode exigir nova emissão.',
+        ],
+      }
+    }
+    if (/renova/.test(productText)) {
+      return {
+        label: 'Formato do produto: renovação',
+        paragraphs: [
+          'Este produto é voltado para renovação de certificado, aproveitando o cadastro e as condições permitidas pela Autoridade Certificadora.',
+          'A renovação pode exigir validação adicional conforme regras da emissão, validade, mídia e situação cadastral do titular ou empresa.',
+        ],
+      }
+    }
+    return {
+      label: 'Formato do produto',
+      paragraphs: [
+        'A composição final do certificado depende da opção escolhida: arquivo, nuvem, token, cartão, cartão com leitora ou emissão sem mídia.',
+        'Confira o nome do produto, tipo, atendimento e validade antes de avançar para garantir que a opção selecionada atende ao uso desejado.',
+      ],
+    }
+  })()
   const professionalGuidance = [
     {
       test: /medico/,
@@ -369,6 +441,9 @@ function productGuidance(item: LojaItemRow) {
       description: [
         'Certificado digital para médicos e profissionais vinculados à área médica que precisam assinar documentos eletrônicos com identificação profissional.',
         'É indicado para rotinas como assinatura de laudos, receitas, prontuários, declarações e acesso a plataformas de saúde que exigem certificado digital.',
+        'Na prática, funciona como a identidade eletrônica do profissional, ajudando a comprovar autoria, integridade e validade jurídica dos documentos assinados.',
+        mediaGuidance.label,
+        ...mediaGuidance.paragraphs,
       ],
       benefits: [
         'Assinar receitas, laudos, atestados e documentos médicos digitais com validade jurídica.',
@@ -389,6 +464,9 @@ function productGuidance(item: LojaItemRow) {
       description: [
         'Certificado digital para advogados e profissionais jurídicos que precisam atuar em sistemas eletrônicos e assinar documentos digitais.',
         'É indicado para processos eletrônicos, peticionamento, procurações, contratos e demais rotinas jurídicas que exigem identificação segura.',
+        'Ele permite que o profissional mantenha sua atuação digital com segurança, rastreabilidade e reconhecimento nos ambientes que aceitam certificação ICP-Brasil.',
+        mediaGuidance.label,
+        ...mediaGuidance.paragraphs,
       ],
       benefits: [
         'Acessar sistemas de processo eletrônico e portais jurídicos compatíveis.',
@@ -409,6 +487,9 @@ function productGuidance(item: LojaItemRow) {
       description: [
         'Certificado digital para engenheiros e profissionais técnicos que precisam assinar projetos, laudos e documentos eletrônicos.',
         'É indicado para rotinas profissionais que exigem identificação digital e comprovação de autoria em documentos técnicos.',
+        'Ajuda a substituir assinaturas físicas em fluxos digitais, mantendo segurança, validade jurídica e identificação do responsável técnico.',
+        mediaGuidance.label,
+        ...mediaGuidance.paragraphs,
       ],
       benefits: [
         'Assinar projetos, laudos, relatórios e documentos técnicos digitalmente.',
@@ -429,6 +510,9 @@ function productGuidance(item: LojaItemRow) {
       description: [
         'Certificado digital para profissionais e serviços da área da saúde que precisam assinar e acessar sistemas digitais com segurança.',
         'É indicado para documentos, registros e plataformas que exigem autenticação eletrônica do profissional.',
+        'A emissão facilita a rotina digital do atendimento, protegendo dados sensíveis e confirmando a identidade de quem assina ou acessa o sistema.',
+        mediaGuidance.label,
+        ...mediaGuidance.paragraphs,
       ],
       benefits: [
         'Assinar documentos de saúde com segurança e validade jurídica.',
@@ -449,6 +533,9 @@ function productGuidance(item: LojaItemRow) {
       description: [
         'Certificado digital para arquitetos que precisam assinar projetos, documentos técnicos e acessar serviços digitais profissionais.',
         'É indicado para dar validade jurídica e segurança à assinatura eletrônica de documentos ligados à atividade profissional.',
+        'Permite formalizar entregas digitais, reduzir impressão de documentos e comprovar autoria em projetos, propostas, laudos e arquivos técnicos.',
+        mediaGuidance.label,
+        ...mediaGuidance.paragraphs,
       ],
       benefits: [
         'Assinar projetos, laudos, propostas e documentos técnicos digitalmente.',
@@ -473,6 +560,10 @@ function productGuidance(item: LojaItemRow) {
       description: [
         'Certificado Digital em Nuvem para pessoa física ou jurídica, armazenado em ambiente seguro da Autoridade Certificadora.',
         'Permite usar o certificado pela internet, sem depender de token, cartão ou leitora física, mediante autenticação do titular.',
+        'O acesso pode ser feito de diferentes dispositivos compatíveis, como computador, smartphone ou tablet, desde que o usuário consiga realizar a autenticação necessária.',
+        'É uma alternativa prática para quem busca mobilidade, evita problemas com mídia física e precisa assinar ou acessar sistemas digitais com frequência.',
+        mediaGuidance.label,
+        ...mediaGuidance.paragraphs,
       ],
       benefits: [
         'Usar o certificado em computador, celular ou tablet com acesso à internet.',
@@ -495,6 +586,10 @@ function productGuidance(item: LojaItemRow) {
       description: [
         'Certificado voltado para emissão de Nota Fiscal Eletrônica e rotinas fiscais da pessoa jurídica.',
         'É indicado para empresas que precisam emitir NF-e, acessar sistemas fiscais e cumprir obrigações digitais vinculadas ao CNPJ.',
+        'Esse certificado identifica a empresa no ambiente eletrônico e permite realizar operações fiscais com autenticidade, integridade e segurança.',
+        'Também pode ser exigido em integrações com emissores, contabilidades, sistemas de gestão e portais governamentais relacionados à emissão fiscal.',
+        mediaGuidance.label,
+        ...mediaGuidance.paragraphs,
       ],
       benefits: [
         'Emitir Nota Fiscal Eletrônica e transmitir obrigações fiscais com segurança.',
@@ -517,6 +612,9 @@ function productGuidance(item: LojaItemRow) {
       description: [
         'Certificado digital vinculado ao CNPJ do Microempreendedor Individual, usado para identificar a empresa no ambiente digital.',
         'É indicado para o MEI que precisa acessar serviços públicos, assinar documentos e cumprir rotinas digitais vinculadas ao CNPJ.',
+        'Mesmo sendo uma empresa individual, o MEI usa o certificado para representar o CNPJ em ambientes eletrônicos que exigem autenticação segura.',
+        mediaGuidance.label,
+        ...mediaGuidance.paragraphs,
       ],
       benefits: [
         'Acessar serviços digitais vinculados ao CNPJ do MEI com mais segurança.',
@@ -539,6 +637,10 @@ function productGuidance(item: LojaItemRow) {
       description: [
         'Identidade eletrônica da pessoa jurídica no meio digital, vinculada ao CNPJ da empresa e ao seu representante legal.',
         'Permite assinar documentos, acessar serviços fiscais e representar a empresa em transações eletrônicas com segurança.',
+        'O certificado contém os dados da empresa e do representante responsável, funcionando como uma identificação digital para operações empresariais.',
+        'Pode ser usado em obrigações fiscais, sistemas governamentais, assinatura de contratos, procurações eletrônicas e demais processos digitais da empresa.',
+        mediaGuidance.label,
+        ...mediaGuidance.paragraphs,
       ],
       benefits: [
         'Assinar contratos, procurações, propostas e documentos empresariais com validade jurídica.',
@@ -560,6 +662,10 @@ function productGuidance(item: LojaItemRow) {
     description: [
       'Identidade digital da pessoa física, usada para assinar documentos eletrônicos e acessar serviços digitais com segurança.',
       'Também atende aplicações profissionais, como e-Médico, e-Jurídico, e-Engenheiro, e-Saúde e e-Arquiteto, quando o produto escolhido exigir esse uso.',
+      'O certificado comprova a identidade do titular no meio eletrônico e permite realizar assinaturas digitais com validade jurídica.',
+      'Pode ser instalado em arquivo, token, cartão ou disponibilizado em nuvem, conforme o produto escolhido e a forma de emissão disponível.',
+      mediaGuidance.label,
+      ...mediaGuidance.paragraphs,
     ],
     benefits: [
       'Assinar contratos, petições, laudos, procurações e documentos digitais com validade jurídica.',
@@ -579,35 +685,37 @@ function productGuidance(item: LojaItemRow) {
 function ProductGuidancePanel({ item }: { item: LojaItemRow }) {
   const guidance = productGuidance(item)
   return (
-    <div className="grid gap-4 xl:grid-cols-3">
-      <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="space-y-4">
+      <div className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#0b8fc1]">Descrição</p>
         <p className="mt-3 text-base font-bold text-slate-950">{guidance.title}</p>
-        <div className="mt-2 space-y-2 text-sm leading-relaxed text-slate-600">
+        <div className="mt-3 space-y-3 text-sm leading-relaxed text-slate-600">
           {guidance.description.map(item => <p key={item}>{item}</p>)}
         </div>
       </div>
-      <div className="rounded-[24px] border border-emerald-100 bg-emerald-50/70 p-5 shadow-sm">
-        <p className="text-sm font-bold text-emerald-950">Benefícios deste certificado</p>
-        <ul className="mt-3 space-y-2 text-sm leading-relaxed text-emerald-900">
-          {guidance.benefits.map(item => (
-            <li key={item} className="flex gap-2">
-              <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-600" />
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="rounded-[24px] border border-sky-100 bg-sky-50/80 p-5 shadow-sm">
-        <p className="text-sm font-bold text-sky-950">Documentos necessários</p>
-        <ul className="mt-3 space-y-2 text-sm leading-relaxed text-sky-900">
-          {guidance.documents.map(item => (
-            <li key={item} className="flex gap-2">
-              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-[24px] border border-emerald-100 bg-emerald-50/70 p-5 shadow-sm">
+          <p className="text-sm font-bold text-emerald-950">Benefícios deste certificado</p>
+          <ul className="mt-3 space-y-2 text-sm leading-relaxed text-emerald-900">
+            {guidance.benefits.map(item => (
+              <li key={item} className="flex gap-2">
+                <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-600" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="rounded-[24px] border border-sky-100 bg-sky-50/80 p-5 shadow-sm">
+          <p className="text-sm font-bold text-sky-950">Documentos necessários</p>
+          <ul className="mt-3 space-y-2 text-sm leading-relaxed text-sky-900">
+            {guidance.documents.map(item => (
+              <li key={item} className="flex gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </div>
   )
