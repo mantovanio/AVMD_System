@@ -352,52 +352,242 @@ function productValidity(item: LojaItemRow) {
 function productGuidance(item: LojaItemRow) {
   const profile = getProductProfile(item.certificados ?? null)
   const category = productCertificateCategory(item)
-  const isCompany = /cnpj|pj/i.test(category)
   const isSafeId = profile.kind === 'SafeID'
+  const isNfe = /pj/i.test(category)
+  const isCompany = /cnpj|pj/i.test(category)
+  const productText = normalizedSearch([
+    item.certificados?.tipo,
+    item.certificados?.descricao,
+    item.certificados?.descricao_produto,
+    item.certificados?.categoria,
+    item.certificados?.modelo,
+  ].filter(Boolean).join(' '))
+  const professionalGuidance = [
+    {
+      test: /medico/,
+      title: 'e-Médico',
+      description: [
+        'Certificado digital para médicos e profissionais vinculados à área médica que precisam assinar documentos eletrônicos com identificação profissional.',
+        'É indicado para rotinas como assinatura de laudos, receitas, prontuários, declarações e acesso a plataformas de saúde que exigem certificado digital.',
+      ],
+      benefits: [
+        'Assinar receitas, laudos, atestados e documentos médicos digitais com validade jurídica.',
+        'Acessar sistemas e portais profissionais que exigem identificação segura.',
+        'Agilizar atendimentos, autorizações e rotinas administrativas da prática médica.',
+        'Reduzir papel e deslocamentos em processos que aceitam assinatura digital.',
+      ],
+      documents: [
+        'Documento oficial com foto em bom estado.',
+        'CPF do titular, quando não constar no documento apresentado.',
+        'Carteira profissional ou comprovação de registro no conselho de classe, quando exigida.',
+        'E-mail e WhatsApp válidos para contato e confirmação da emissão.',
+      ],
+    },
+    {
+      test: /juridico/,
+      title: 'e-Jurídico',
+      description: [
+        'Certificado digital para advogados e profissionais jurídicos que precisam atuar em sistemas eletrônicos e assinar documentos digitais.',
+        'É indicado para processos eletrônicos, peticionamento, procurações, contratos e demais rotinas jurídicas que exigem identificação segura.',
+      ],
+      benefits: [
+        'Acessar sistemas de processo eletrônico e portais jurídicos compatíveis.',
+        'Assinar petições, procurações, contratos e documentos profissionais.',
+        'Dar mais agilidade à atuação jurídica sem depender de presença física.',
+        'Manter rastreabilidade e validade jurídica nas assinaturas digitais.',
+      ],
+      documents: [
+        'Documento oficial com foto em bom estado.',
+        'CPF do titular, quando não constar no documento apresentado.',
+        'Carteira da OAB ou comprovação profissional equivalente, quando exigida.',
+        'E-mail e WhatsApp válidos para contato e confirmação da emissão.',
+      ],
+    },
+    {
+      test: /engenheiro/,
+      title: 'e-Engenheiro',
+      description: [
+        'Certificado digital para engenheiros e profissionais técnicos que precisam assinar projetos, laudos e documentos eletrônicos.',
+        'É indicado para rotinas profissionais que exigem identificação digital e comprovação de autoria em documentos técnicos.',
+      ],
+      benefits: [
+        'Assinar projetos, laudos, relatórios e documentos técnicos digitalmente.',
+        'Acessar plataformas e serviços que exigem certificado digital do profissional.',
+        'Ganhar agilidade na entrega de documentos e aprovações técnicas.',
+        'Reduzir impressões, deslocamentos e etapas manuais no fluxo profissional.',
+      ],
+      documents: [
+        'Documento oficial com foto em bom estado.',
+        'CPF do titular, quando não constar no documento apresentado.',
+        'Carteira profissional ou comprovação de registro no conselho de classe, quando exigida.',
+        'E-mail e WhatsApp válidos para contato e confirmação da emissão.',
+      ],
+    },
+    {
+      test: /saude/,
+      title: 'e-Saúde',
+      description: [
+        'Certificado digital para profissionais e serviços da área da saúde que precisam assinar e acessar sistemas digitais com segurança.',
+        'É indicado para documentos, registros e plataformas que exigem autenticação eletrônica do profissional.',
+      ],
+      benefits: [
+        'Assinar documentos de saúde com segurança e validade jurídica.',
+        'Acessar plataformas e sistemas que exigem autenticação digital.',
+        'Facilitar rotinas clínicas, administrativas e de atendimento.',
+        'Reduzir burocracia em processos digitais aceitos por órgãos e parceiros.',
+      ],
+      documents: [
+        'Documento oficial com foto em bom estado.',
+        'CPF do titular, quando não constar no documento apresentado.',
+        'Carteira profissional ou comprovação de vínculo/registro, quando exigido.',
+        'E-mail e WhatsApp válidos para contato e confirmação da emissão.',
+      ],
+    },
+    {
+      test: /arquiteto/,
+      title: 'e-Arquiteto',
+      description: [
+        'Certificado digital para arquitetos que precisam assinar projetos, documentos técnicos e acessar serviços digitais profissionais.',
+        'É indicado para dar validade jurídica e segurança à assinatura eletrônica de documentos ligados à atividade profissional.',
+      ],
+      benefits: [
+        'Assinar projetos, laudos, propostas e documentos técnicos digitalmente.',
+        'Acessar sistemas e portais que exigem certificado digital do profissional.',
+        'Agilizar aprovações e entregas sem depender de documentos físicos.',
+        'Aumentar a segurança e a rastreabilidade da autoria dos documentos.',
+      ],
+      documents: [
+        'Documento oficial com foto em bom estado.',
+        'CPF do titular, quando não constar no documento apresentado.',
+        'Carteira profissional ou comprovação de registro no conselho de classe, quando exigida.',
+        'E-mail e WhatsApp válidos para contato e confirmação da emissão.',
+      ],
+    },
+  ].find(entry => entry.test.test(productText))
 
-  const benefits = isCompany
-    ? [
-        'Assinar contratos, procurações, propostas e documentos empresariais com validade jurídica.',
-        'Acessar serviços da Receita Federal, e-CAC, eSocial, Conectividade Social e portais públicos vinculados ao CNPJ.',
-        'Emitir notas fiscais, cumprir obrigações fiscais e representar a empresa em processos digitais.',
-        'Reduzir deslocamentos e acelerar aprovações que exigem autenticação da empresa.',
-      ]
-    : [
-        'Assinar documentos digitais com validade jurídica e segurança da identidade.',
-        'Acessar serviços públicos como Receita Federal, e-CAC, INSS, Justiça e portais estaduais ou municipais.',
-        'Realizar declarações, consultas, procurações eletrônicas e transações que exigem identificação segura.',
-        'Usar o certificado em processos bancários, financeiros e administrativos quando solicitado.',
-      ]
+  if (professionalGuidance) return professionalGuidance
 
-  const documents = isCompany
-    ? [
-        'Documento de identificação oficial com foto do representante legal.',
+  if (isSafeId) {
+    return {
+      title: 'SafeID / Nuvem',
+      description: [
+        'Certificado Digital em Nuvem para pessoa física ou jurídica, armazenado em ambiente seguro da Autoridade Certificadora.',
+        'Permite usar o certificado pela internet, sem depender de token, cartão ou leitora física, mediante autenticação do titular.',
+      ],
+      benefits: [
+        'Usar o certificado em computador, celular ou tablet com acesso à internet.',
+        'Evitar perda, dano ou incompatibilidade de mídias físicas como token e cartão.',
+        'Assinar documentos digitais e acessar serviços públicos ou privados com validade jurídica.',
+        'Facilitar rotinas de empresas, profissionais e representantes que precisam mobilidade no uso.',
+      ],
+      documents: [
+        'Documento oficial com foto do titular ou representante legal.',
+        'CPF do titular, quando não constar no documento apresentado.',
+        'E-mail e WhatsApp válidos para vinculação e confirmação do acesso.',
+        'Para pessoa jurídica, apresentar contrato social ou documento empresarial equivalente.',
+      ],
+    }
+  }
+
+  if (isNfe) {
+    return {
+      title: 'e-PJ / NF-e',
+      description: [
+        'Certificado voltado para emissão de Nota Fiscal Eletrônica e rotinas fiscais da pessoa jurídica.',
+        'É indicado para empresas que precisam emitir NF-e, acessar sistemas fiscais e cumprir obrigações digitais vinculadas ao CNPJ.',
+      ],
+      benefits: [
+        'Emitir Nota Fiscal Eletrônica e transmitir obrigações fiscais com segurança.',
+        'Acessar sistemas fiscais, portais governamentais e serviços vinculados à empresa.',
+        'Reduzir retrabalho em processos fiscais e administrativos que exigem identificação digital.',
+        'Representar a empresa em operações digitais com validade jurídica.',
+      ],
+      documents: [
+        'Documento oficial com foto do representante legal.',
         'CPF do representante legal, quando não constar no documento apresentado.',
         'Contrato social, requerimento de empresário, estatuto/ata ou documento equivalente atualizado.',
         'Cartão CNPJ ou dados cadastrais da empresa para conferência.',
-      ]
-    : [
-        'Documento oficial com foto em bom estado.',
-        'RG ou CIN, se contiver as informações necessárias.',
-        'CNH, desde que o CPF esteja impresso no documento.',
-        'Carteira profissional de órgão de classe ou passaporte, quando aplicável.',
-      ]
-
-  if (isSafeId) {
-    benefits.unshift('Usar o certificado em nuvem, sem depender de token, cartão ou leitora física.')
-    documents.push(isCompany
-      ? 'Confirme também os dados de acesso do responsável que usará o certificado em nuvem.'
-      : 'Confirme também o e-mail e telefone que serão vinculados ao uso do certificado em nuvem.')
+      ],
+    }
   }
 
-  return { benefits, documents }
+  if (/\bmei\b/.test(productText)) {
+    return {
+      title: 'e-CNPJ MEI',
+      description: [
+        'Certificado digital vinculado ao CNPJ do Microempreendedor Individual, usado para identificar a empresa no ambiente digital.',
+        'É indicado para o MEI que precisa acessar serviços públicos, assinar documentos e cumprir rotinas digitais vinculadas ao CNPJ.',
+      ],
+      benefits: [
+        'Acessar serviços digitais vinculados ao CNPJ do MEI com mais segurança.',
+        'Assinar contratos, declarações e documentos empresariais com validade jurídica.',
+        'Facilitar rotinas fiscais, bancárias e administrativas quando o certificado for exigido.',
+        'Representar o CNPJ do MEI em processos eletrônicos sem depender de atendimento presencial.',
+      ],
+      documents: [
+        'Documento oficial com foto do titular do MEI.',
+        'CPF do titular, quando não constar no documento apresentado.',
+        'Comprovante ou dados cadastrais do CNPJ/MEI para conferência.',
+        'E-mail e WhatsApp válidos para contato e confirmação da emissão.',
+      ],
+    }
+  }
+
+  if (isCompany) {
+    return {
+      title: 'e-CNPJ',
+      description: [
+        'Identidade eletrônica da pessoa jurídica no meio digital, vinculada ao CNPJ da empresa e ao seu representante legal.',
+        'Permite assinar documentos, acessar serviços fiscais e representar a empresa em transações eletrônicas com segurança.',
+      ],
+      benefits: [
+        'Assinar contratos, procurações, propostas e documentos empresariais com validade jurídica.',
+        'Acessar Receita Federal, e-CAC, eSocial, Conectividade Social e portais públicos vinculados ao CNPJ.',
+        'Cumprir obrigações fiscais e representar a empresa em processos digitais.',
+        'Agilizar aprovações e reduzir deslocamentos em processos que exigem autenticação da empresa.',
+      ],
+      documents: [
+        'Documento oficial com foto do representante legal.',
+        'CPF do representante legal, quando não constar no documento apresentado.',
+        'Contrato social, requerimento de empresário, estatuto/ata ou documento equivalente atualizado.',
+        'Cartão CNPJ ou dados cadastrais da empresa para conferência.',
+      ],
+    }
+  }
+
+  return {
+    title: category === 'e-PF' ? 'e-PF' : 'e-CPF',
+    description: [
+      'Identidade digital da pessoa física, usada para assinar documentos eletrônicos e acessar serviços digitais com segurança.',
+      'Também atende aplicações profissionais, como e-Médico, e-Jurídico, e-Engenheiro, e-Saúde e e-Arquiteto, quando o produto escolhido exigir esse uso.',
+    ],
+    benefits: [
+      'Assinar contratos, petições, laudos, procurações e documentos digitais com validade jurídica.',
+      'Acessar serviços públicos como Receita Federal, e-CAC, INSS, Justiça e portais estaduais ou municipais.',
+      'Realizar declarações, consultas e transações que exigem identificação segura.',
+      'Usar o certificado em processos bancários, financeiros, profissionais e administrativos quando solicitado.',
+    ],
+    documents: [
+      'Documento oficial com foto em bom estado.',
+      'RG ou CIN, se contiver as informações necessárias.',
+      'CNH, desde que o CPF esteja impresso no documento.',
+      'Carteira profissional de órgão de classe ou passaporte, quando aplicável.',
+    ],
+  }
 }
 
 function ProductGuidancePanel({ item }: { item: LojaItemRow }) {
   const guidance = productGuidance(item)
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <div className="rounded-[24px] border border-emerald-100 bg-emerald-50/70 p-5">
+    <div className="grid gap-4 xl:grid-cols-3">
+      <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#0b8fc1]">Descrição</p>
+        <p className="mt-3 text-base font-bold text-slate-950">{guidance.title}</p>
+        <div className="mt-2 space-y-2 text-sm leading-relaxed text-slate-600">
+          {guidance.description.map(item => <p key={item}>{item}</p>)}
+        </div>
+      </div>
+      <div className="rounded-[24px] border border-emerald-100 bg-emerald-50/70 p-5 shadow-sm">
         <p className="text-sm font-bold text-emerald-950">Benefícios deste certificado</p>
         <ul className="mt-3 space-y-2 text-sm leading-relaxed text-emerald-900">
           {guidance.benefits.map(item => (
@@ -408,7 +598,7 @@ function ProductGuidancePanel({ item }: { item: LojaItemRow }) {
           ))}
         </ul>
       </div>
-      <div className="rounded-[24px] border border-sky-100 bg-sky-50/80 p-5">
+      <div className="rounded-[24px] border border-sky-100 bg-sky-50/80 p-5 shadow-sm">
         <p className="text-sm font-bold text-sky-950">Documentos necessários</p>
         <ul className="mt-3 space-y-2 text-sm leading-relaxed text-sky-900">
           {guidance.documents.map(item => (
