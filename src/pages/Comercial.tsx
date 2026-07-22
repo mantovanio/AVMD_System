@@ -3479,6 +3479,14 @@ export default function Comercial() {
     try {
       const rows = await lerPlanilha(file)
       if (!rows.length) { showMsg('Planilha sem dados.'); return }
+      const firstColumns = Object.keys(rows[0] ?? {})
+      const pick = (row: Record<string, string>, aliases: string[]) => {
+        for (const alias of aliases) {
+          const direct = row[alias]
+          if (direct != null && String(direct).trim()) return String(direct)
+        }
+        return ''
+      }
       const parseNum = (v: string) => parseFloat((v ?? '').replace(/[R$\s.]/g, '').replace(',', '.')) || 0
       const cleanDoc = (v: string) => (v ?? '').replace(/\D/g, '')
       // converte DD/MM/YYYY ou DD/MM/YYYY HH:MM:SS → YYYY-MM-DD
@@ -3494,8 +3502,8 @@ export default function Comercial() {
 
       // 1. upsert clientes
       const clientePayloads = rows.map(r => {
-        const doc = cleanDoc(r['documento'] ?? r['cnpj_cpf'] ?? '')
-        const nome = (r['nome'] ?? r['nome_razao_social'] ?? '').trim()
+        const doc = cleanDoc(pick(r, ['documento', 'cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento_cliente', 'cpf_do_titular', 'cnpj_do_cliente']))
+        const nome = pick(r, ['nome', 'nome_razao_social', 'razao_social', 'cliente', 'nome_cliente', 'titular', 'nome_do_titular', 'nome_faturamento']).trim()
         if (!doc || !nome) return null
         const tipo: TipoCliente = doc.length === 11 ? 'pessoa_fisica' : 'pessoa_juridica'
         return {
@@ -3503,8 +3511,8 @@ export default function Comercial() {
           nome,
           tipo_cliente: tipo,
           tipo_cadastro: 'cliente' as const,
-          email:        (r['e_mail_do_titular'] ?? r['email_do_titular'] ?? r['email'] ?? '').trim() || null,
-          telefone:     (r['telefone_do_titular'] ?? r['telefone'] ?? '').trim() || null,
+          email:        pick(r, ['e_mail_do_titular', 'email_do_titular', 'email', 'e_mail', 'email_cliente']).trim() || null,
+          telefone:     pick(r, ['telefone_do_titular', 'telefone', 'celular', 'whatsapp', 'telefone_cliente']).trim() || null,
           iss_retido:   false,
           status:       'ativo' as const,
           metadata:     {} as Record<string, unknown>,
@@ -3525,32 +3533,37 @@ export default function Comercial() {
 
       // 3. monta payloads de venda COM validado_safeweb = true
       const vendasPayloads = rows.map(r => {
-        const protocolo = (r['protocolo'] ?? r['numero_protocolo'] ?? '').trim()
+        const protocolo = pick(r, ['protocolo', 'numero_protocolo', 'n_protocolo', 'num_protocolo', 'protocolo_numero', 'pedido', 'numero_pedido', 'n_pedido', 'pedido_numero', 'id_pedido', 'id_venda', 'codigo_venda']).trim()
         if (!protocolo) return null
-        const doc = cleanDoc(r['documento'] ?? r['cnpj_cpf'] ?? '')
+        const doc = cleanDoc(pick(r, ['documento', 'cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento_cliente', 'cpf_do_titular', 'cnpj_do_cliente']))
         return {
           protocolo_numero:       protocolo,
           cadastro_base_id:       idByDoc.get(doc) ?? null,
-          tipo_produto:           (r['produto'] ?? '').trim() || null,
-          tipo_emissao:           (r['tipo_de_emissao_realizada'] ?? r['tipo_emissao'] ?? '').trim() || null,
-          valor_venda:            parseNum(r['valor_do_boleto'] ?? r['valor_boleto'] ?? r['valor'] ?? '0'),
+          tipo_produto:           pick(r, ['produto', 'certificado', 'tipo_produto', 'produto_nome', 'descricao_produto', 'nome_produto']).trim() || null,
+          tipo_emissao:           pick(r, ['tipo_de_emissao_realizada', 'tipo_emissao', 'emissao', 'forma_emissao', 'modalidade']).trim() || null,
+          valor_venda:            parseNum(pick(r, ['valor_do_boleto', 'valor_boleto', 'valor', 'valor_venda', 'preco', 'preco_venda', 'total', 'valor_total'])),
           status_venda:           'emitido' as StatusVendaCertificado,
           pago:                   true,
           status_pagamento:       'pago' as StatusPagamentoVenda,
           validado_safeweb:       true,
-          data_vencimento:        parseDate(r['data_fim_validade'] ?? r['data_vencimento'] ?? ''),
-          data_inicio_validade:   parseDate(r['data_inicio_validade'] ?? r['data_inicio'] ?? ''),
-          numero_serie:           (r['numero_de_serie'] ?? r['numero_serie'] ?? '').trim() || null,
-          voucher_codigo:         (r['vouchercodigo'] ?? r['voucher_codigo'] ?? r['vouchercod'] ?? '').trim() || null,
-          voucher_percentual:     parseNum(r['voucherpercentual'] ?? r['voucher_percentual'] ?? '0') || null,
-          voucher_valor:          parseNum(r['vouchervalor'] ?? r['voucher_valor'] ?? '0') || null,
-          nome_ar:                (r['nome_da_autoridade_de_registro'] ?? r['nome_ar'] ?? '').trim() || null,
-          nome_local_atendimento: (r['nome_do_local_de_atendimento'] ?? r['nome_local'] ?? '').trim() || null,
-          status_certificado:     (r['status_do_certificado'] ?? r['status_certificado'] ?? '').trim() || null,
-          nome_parceiro_safeweb:  (r['nome_do_parceiro'] ?? r['nome_parceiro'] ?? '').trim() || null,
-          observacoes:            (r['observacao'] ?? r['observacoes'] ?? '').trim() || null,
+          data_vencimento:        parseDate(pick(r, ['data_fim_validade', 'data_vencimento', 'validade', 'fim_validade', 'data_expiracao'])),
+          data_inicio_validade:   parseDate(pick(r, ['data_inicio_validade', 'data_inicio', 'inicio_validade', 'data_emissao'])),
+          numero_serie:           pick(r, ['numero_de_serie', 'numero_serie', 'serie', 'serial']).trim() || null,
+          voucher_codigo:         pick(r, ['vouchercodigo', 'voucher_codigo', 'vouchercod', 'voucher']).trim() || null,
+          voucher_percentual:     parseNum(pick(r, ['voucherpercentual', 'voucher_percentual', 'percentual_voucher', 'desconto_percentual'])) || null,
+          voucher_valor:          parseNum(pick(r, ['vouchervalor', 'voucher_valor', 'valor_voucher', 'desconto_valor'])) || null,
+          nome_ar:                pick(r, ['nome_da_autoridade_de_registro', 'nome_ar', 'ar', 'autoridade_registro']).trim() || null,
+          nome_local_atendimento: pick(r, ['nome_do_local_de_atendimento', 'nome_local', 'local_atendimento', 'posto_atendimento']).trim() || null,
+          status_certificado:     pick(r, ['status_do_certificado', 'status_certificado', 'status']).trim() || null,
+          nome_parceiro_safeweb:  pick(r, ['nome_do_parceiro', 'nome_parceiro', 'parceiro', 'vendedor', 'contador']).trim() || null,
+          observacoes:            pick(r, ['observacao', 'observacoes', 'obs']).trim() || null,
         }
       }).filter((x): x is NonNullable<typeof x> => x !== null)
+
+      if (!vendasPayloads.length) {
+        showMsg(`Arquivo lido com ${rows.length} linha(s), mas nenhuma venda foi reconhecida. O sistema precisa de uma coluna de identificador da venda, como Protocolo, Pedido, ID Venda ou Código Venda. Colunas encontradas: ${firstColumns.slice(0, 12).join(', ') || 'sem cabeçalho detectado'}.`)
+        return
+      }
 
       // 4. separa registros que já existem no CRM dos que são só da Safeweb
       const protocolos = vendasPayloads.map(v => v.protocolo_numero)
