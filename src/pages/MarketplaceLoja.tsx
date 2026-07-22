@@ -341,9 +341,32 @@ function productCertificateClass(item: LojaItemRow) {
   return getProductProfile(item.certificados ?? null).certificateClass
 }
 
+function productCatalogText(item: LojaItemRow) {
+  return normalizedSearch([
+    item.certificados?.tipo,
+    item.certificados?.descricao,
+    item.certificados?.descricao_produto,
+    item.certificados?.categoria,
+    item.certificados?.modelo,
+  ].filter(Boolean).join(' '))
+}
+
+function productMediaSummary(item: LojaItemRow) {
+  const text = productCatalogText(item)
+  if (/safeid|nuvem|cloud/.test(text)) return 'em nuvem'
+  if (/cartao.*leitora|cartão.*leitora|leitora.*cartao|leitora.*cartão/.test(text)) return 'cartão + leitora'
+  if (/token/.test(text)) return 'acompanha token'
+  if (/cartao|cartão|smartcard/.test(text)) return 'acompanha cartão'
+  if (/sem midia|sem mídia/.test(text)) return 'não acompanha mídia'
+  if (/arquivo|instalado|computador|\ba1\b/.test(text)) return 'instalado no computador'
+  if (/renova/.test(text)) return 'renovação'
+  return ''
+}
+
 function productCompactSummary(item: LojaItemRow) {
   const profile = getProductProfile(item.certificados ?? null)
-  return [profile.certificateClass, profile.validity].filter(value => value && value !== 'Não informado' && value !== 'Não informada').join(' · ') || profile.details
+  const media = productMediaSummary(item)
+  return [profile.certificateClass, profile.validity, media].filter(value => value && value !== 'Não informado' && value !== 'Não informada').join(' · ') || profile.details
 }
 
 function productValidity(item: LojaItemRow) {
@@ -356,13 +379,7 @@ function productGuidance(item: LojaItemRow) {
   const isSafeId = profile.kind === 'SafeID'
   const isNfe = /pj/i.test(category)
   const isCompany = /cnpj|pj/i.test(category)
-  const productText = normalizedSearch([
-    item.certificados?.tipo,
-    item.certificados?.descricao,
-    item.certificados?.descricao_produto,
-    item.certificados?.categoria,
-    item.certificados?.modelo,
-  ].filter(Boolean).join(' '))
+  const productText = productCatalogText(item)
   const mediaGuidance = (() => {
     if (/safeid|nuvem|cloud/.test(productText)) {
       return {
@@ -1612,7 +1629,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                     <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-slate-500">Nenhum produto disponível para esta combinação.</div>
                   ) : (
                     <div className="space-y-5">
-                      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,.85fr)]">
+                      <div className="grid gap-6">
                         <div className="space-y-4">
                           <div className="flex items-center justify-between">
                             <div>
@@ -1660,30 +1677,14 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                           </div>
                         </div>
 
-                        <aside className="space-y-3">
-                          <p className="text-base font-bold text-[#17346b]">Resumo da compra</p>
-                          <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white">
-                            {itemSelecionado ? (
-                              <>
-                                <div className="p-5">
-                                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">{productCertificateCategory(itemSelecionado)}</p>
-                                  <p className="mt-1 text-lg font-bold text-slate-900">{getProductProfile(itemSelecionado.certificados).displayName}</p>
-                                  <p className="mt-2 text-sm text-slate-600">{productCompactSummary(itemSelecionado)}</p>
-                                  <ProductTags item={itemSelecionado} compact />
-                                </div>
-                                <div className="border-t border-slate-200 px-5 py-6 text-center text-3xl font-bold text-emerald-600">{formatCurrency(itemSelecionado.valor)}</div>
-                              </>
-                            ) : <div className="p-8 text-center text-sm text-slate-500">Escolha um produto para continuar.</div>}
-                          </div>
-                          <div className="mt-2 grid gap-3">
+                        <div className="ml-auto grid w-full gap-3 sm:max-w-xs">
                             {itemSelecionado && !productConfirmed && (
                               <button type="button" onClick={reopenProductList} className="w-full rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
                                 Voltar
                               </button>
                             )}
                             <button type="button" disabled={!itemSelecionado} onClick={confirmProductSelection} className="w-full rounded-xl bg-[#0b8fc1] px-5 py-4 text-sm font-bold text-white transition hover:bg-[#087ca8] disabled:cursor-not-allowed disabled:bg-slate-300">Próximo</button>
-                          </div>
-                        </aside>
+                        </div>
                       </div>
                       {itemSelecionado && <ProductGuidancePanel item={itemSelecionado} />}
                     </div>
