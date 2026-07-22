@@ -137,13 +137,12 @@ export function getProductProfile(cert: Pick<Certificado, 'tipo' | 'descricao' |
 
   const modelText = normalizeText(cert.modelo ?? '')
   const classText = normalizeText([cert.tipo, cert.modelo, cert.categoria].filter(Boolean).join(' '))
-  const certificateClass = /safeid|nuvem|cloud/.test(classText)
-    ? 'SafeID'
-    : (/\ba3\b/.test(modelText) || (!/\ba1\b/.test(modelText) && /\ba3\b/.test(classText)))
-      ? 'A3'
-      : (/\ba1\b/.test(modelText) || /\ba1\b/.test(classText) ? 'A1' : 'Não informado')
+  const isSafeIdLike = /safeid|nuvem|cloud/.test(classText)
+  const certificateClass = /\ba3\b/.test(modelText) || (!/\ba1\b/.test(modelText) && /\ba3\b/.test(classText)) || isSafeIdLike
+    ? 'A3'
+    : (/\ba1\b/.test(modelText) || /\ba1\b/.test(classText) ? 'A1' : 'Não informado')
 
-  const validitySource = certificateClass === 'SafeID'
+  const validitySource = isSafeIdLike
     ? (cert.periodo_uso?.trim() || cert.validade?.trim() || '')
     : (cert.validade?.trim() || '')
   const validity = validitySource || formatValidityFromText(normalizeText([cert.tipo, cert.descricao_produto, cert.descricao].filter(Boolean).join(' ')))

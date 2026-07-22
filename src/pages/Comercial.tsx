@@ -1011,7 +1011,7 @@ export default function Comercial() {
   )
   const certsDaTabela = certsDaTabelaBruta
   const PRODUCT_KIND_ORDER = ['e-CPF', 'e-CNPJ', 'SafeID', 'NF-e', 'SSL', 'Combo', 'Outros']
-  const PRODUCT_CLASS_ORDER = ['SafeID', 'A3', 'A1']
+  const PRODUCT_CLASS_ORDER = ['A1', 'A3']
   const sortByPriority = (values: string[], priority: string[]) =>
     [...new Set(values)].sort((a, b) => {
       const ai = priority.indexOf(a)
@@ -1040,8 +1040,7 @@ export default function Comercial() {
     const profile = getProductProfile(cert)
     if (profile.certificateClass && profile.certificateClass !== 'Não informado') return profile.certificateClass
     const text = `${cert.tipo ?? ''} ${resolveModelo(cert) ?? ''} ${cert.categoria ?? ''} ${cert.periodo_uso ?? ''}`.toLowerCase()
-    if (/safeid|nuvem|cloud/.test(text)) return 'SafeID'
-    if (/\ba3\b/.test(text) || /cart|token|leitora|midia|mídia|pendrive/.test(text)) return 'A3'
+    if (/\ba3\b/.test(text) || /safeid|nuvem|cloud|cart|token|leitora|midia|mídia|pendrive/.test(text)) return 'A3'
     if (/\ba1\b/.test(text)) return 'A1'
     return '—'
   }
@@ -1062,7 +1061,7 @@ export default function Comercial() {
     const profile = getProductProfile(cert)
     return profile.validity && profile.validity !== 'Não informada'
       ? profile.validity
-      : productClass(cert) === 'SafeID'
+      : productKind(cert) === 'SafeID'
         ? ((cert.periodo_uso ?? '').trim() || (cert.validade ?? '').trim() || 'Não definido')
         : ((cert.validade ?? '').trim() || 'Não definido')
   }
