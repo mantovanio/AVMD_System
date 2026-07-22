@@ -334,6 +334,80 @@ function productValidity(item: LojaItemRow) {
   return getProductProfile(item.certificados ?? null).validity
 }
 
+function productGuidance(item: LojaItemRow) {
+  const profile = getProductProfile(item.certificados ?? null)
+  const category = productCertificateCategory(item)
+  const isCompany = /cnpj|pj/i.test(category)
+  const isSafeId = profile.kind === 'SafeID'
+
+  const benefits = isCompany
+    ? [
+        'Assinar contratos, procurações, propostas e documentos empresariais com validade jurídica.',
+        'Acessar serviços da Receita Federal, e-CAC, eSocial, Conectividade Social e portais públicos vinculados ao CNPJ.',
+        'Emitir notas fiscais, cumprir obrigações fiscais e representar a empresa em processos digitais.',
+        'Reduzir deslocamentos e acelerar aprovações que exigem autenticação da empresa.',
+      ]
+    : [
+        'Assinar documentos digitais com validade jurídica e segurança da identidade.',
+        'Acessar serviços públicos como Receita Federal, e-CAC, INSS, Justiça e portais estaduais ou municipais.',
+        'Realizar declarações, consultas, procurações eletrônicas e transações que exigem identificação segura.',
+        'Usar o certificado em processos bancários, financeiros e administrativos quando solicitado.',
+      ]
+
+  const documents = isCompany
+    ? [
+        'Documento de identificação oficial com foto do representante legal.',
+        'CPF do representante legal, quando não constar no documento apresentado.',
+        'Contrato social, requerimento de empresário, estatuto/ata ou documento equivalente atualizado.',
+        'Cartão CNPJ ou dados cadastrais da empresa para conferência.',
+      ]
+    : [
+        'Documento oficial com foto em bom estado.',
+        'RG ou CIN, se contiver as informações necessárias.',
+        'CNH, desde que o CPF esteja impresso no documento.',
+        'Carteira profissional de órgão de classe ou passaporte, quando aplicável.',
+      ]
+
+  if (isSafeId) {
+    benefits.unshift('Usar o certificado em nuvem, sem depender de token, cartão ou leitora física.')
+    documents.push(isCompany
+      ? 'Confirme também os dados de acesso do responsável que usará o certificado em nuvem.'
+      : 'Confirme também o e-mail e telefone que serão vinculados ao uso do certificado em nuvem.')
+  }
+
+  return { benefits, documents }
+}
+
+function ProductGuidancePanel({ item }: { item: LojaItemRow }) {
+  const guidance = productGuidance(item)
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <div className="rounded-[24px] border border-emerald-100 bg-emerald-50/70 p-5">
+        <p className="text-sm font-bold text-emerald-950">Benefícios deste certificado</p>
+        <ul className="mt-3 space-y-2 text-sm leading-relaxed text-emerald-900">
+          {guidance.benefits.map(item => (
+            <li key={item} className="flex gap-2">
+              <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-600" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="rounded-[24px] border border-sky-100 bg-sky-50/80 p-5">
+        <p className="text-sm font-bold text-sky-950">Documentos necessários</p>
+        <ul className="mt-3 space-y-2 text-sm leading-relaxed text-sky-900">
+          {guidance.documents.map(item => (
+            <li key={item} className="flex gap-2">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
 export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -1287,6 +1361,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                             </>
                           ) : <div className="p-8 text-center text-sm text-slate-500">Escolha um produto para continuar.</div>}
                         </div>
+                        {itemSelecionado && <ProductGuidancePanel item={itemSelecionado} />}
                         <div className="mt-2 grid gap-3">
                           {itemSelecionado && !productConfirmed && (
                             <button type="button" onClick={reopenProductList} className="w-full rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
@@ -1639,6 +1714,9 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
                   <button type="button" onClick={confirmFaturamentoSelection} className="rounded-xl bg-[#17346b] px-6 py-3 text-sm font-semibold text-white hover:bg-[#102654]">
                     Próximo
                   </button>
+                </div>
+                <div className="lg:col-span-2">
+                  <ProductGuidancePanel item={itemSelecionado} />
                 </div>
               </div>
             </SectionCard>
