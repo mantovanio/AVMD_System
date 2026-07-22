@@ -5,7 +5,7 @@ import {
 } from 'recharts'
 import { RefreshCw, TrendingUp, Users, MessageCircle, AlertTriangle } from 'lucide-react'
 import DateFilter, { buildRange } from '@/components/DateFilter'
-import { supabase } from '@/lib/supabase'
+import { getApiUrl } from '@/lib/api'
 import type { DateFilterOption, DateRange, Lead } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -28,15 +28,21 @@ export default function Dashboard() {
 
   const fetchLeads = useCallback(async (r: DateRange) => {
     setLoading(true); setError(null)
-    const { data, error: err } = await supabase
-      .from('leads_contabilidade')
-      .select('*')
-      .gte('created_at', r.from.toISOString())
-      .lt('created_at', r.to.toISOString())
-      .order('created_at', { ascending: false })
-    if (err) { setError(err.message); setLoading(false); return }
-    setLeads(data as Lead[])
-    setLoading(false)
+    try {
+      const params = new URLSearchParams({
+        from: r.from.toISOString(),
+        to: r.to.toISOString(),
+      })
+      const response = await fetch(getApiUrl(`/chat/leads?${params.toString()}`))
+      const payload = await response.json().catch(() => null) as { leads?: Lead[]; error?: string } | null
+      if (!response.ok) throw new Error(payload?.error || 'Não foi possível carregar os leads.')
+      setLeads(payload?.leads ?? [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível carregar os leads.')
+      setLeads([])
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { fetchLeads(range) }, [range, fetchLeads])
@@ -113,7 +119,7 @@ export default function Dashboard() {
       {/* Divisor — Agente IA */}
       <div className="flex items-center gap-3 px-6 pt-5 pb-0">
         <MessageCircle size={16} className="text-blue-500" />
-        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Agente IA — Leads Ápice Contábil</span>
+        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Agente IA — Leads CertiID</span>
         <div className="flex-1 h-px bg-gray-200 dark:bg-gray-800" />
       </div>
 
