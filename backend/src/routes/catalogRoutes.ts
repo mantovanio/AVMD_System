@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { createSecureContext } from 'node:tls'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { extname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -34,6 +34,44 @@ const safewebImportJobs = new Map<string, SafewebImportJob>()
 const ISABELLA_VIDAL_PROFILE_ID = 'ad3436f8-eb15-4fbe-a351-3b6b56d2a17e'
 const execFileAsync = promisify(execFile)
 const NFSE_CERT_STORAGE_DIR = resolve('storage/certificados-digitais')
+
+function isFilled(value: unknown) {
+  return String(value ?? '').trim().length > 0
+}
+
+function extractStringRecord(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
+function buildNfseRequiredChecks(config: Record<string, unknown>) {
+  const payload = extractStringRecord(config.payload_reforma_tributaria)
+  const certPath = String(config.certificado_pfx_path ?? '').trim().replace(/\\/g, '/')
+  return {
+    emitente_vinculado: isFilled(config.cadastro_base_emitente_id) && isFilled(config.cnpj_emitente),
+    inscricao_municipal: isFilled(config.inscricao_municipal),
+    codigo_servico: isFilled(config.codigo_servico_municipio),
+    aliquota_iss: Number(config.aliquota_iss ?? 0) > 0,
+    serie_rps: isFilled(config.serie_rps),
+    certificado_a1: isFilled(certPath) && isFilled(config.certificado_senha),
+    credencial_prefeitura: isFilled(config.usuario_prefeitura) || isFilled(config.chave_autenticacao),
+    wsdl_configurado: isFilled(payload.ginfes_wsdl_homologacao) || isFilled(payload.gissonline_wsdl_url),
+  }
+}
+
+async function certificateFileExists(relativePath: unknown) {
+  const certPath = String(relativePath ?? '').trim().replace(/\\/g, '/')
+  if (!certPath || certPath.includes('..') || certPath.startsWith('/')) return false
+  const absolutePath = resolve(NFSE_CERT_STORAGE_DIR, certPath)
+  if (!absolutePath.startsWith(NFSE_CERT_STORAGE_DIR)) return false
+  try {
+    await access(absolutePath)
+    return true
+  } catch {
+    return false
+  }
+}
 
 async function validatePfxWithOpenSsl(pfx: Buffer, senha: string) {
   const dir = await mkdtemp(join(tmpdir(), 'avmd-pfx-'))
@@ -842,6 +880,62 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   if (method === 'GET' && url === '/api/nfse/configuracao') {
     const configuracao = await repo.getActiveNfseConfiguracao()
     writeJson(res, 200, { ok: true, configuracao }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/nfse/configuracao/testar') {
+    const body = await readJson<{ configuracao_id?: string }>(req)
+    const configuracoes = await repo.listNfseConfiguracoes()
+    const configuracao = (configuracoes as Array<Record<string, unknown>>).find(item => {
+      if (body.configuracao_id) return item.id === body.configuracao_id
+      return item.ativo === true
+    }) ?? null
+
+    if (!configuracao) {
+      writeJson(res, 404, {
+        ok: false,
+        error: 'Nenhuma configuração fiscal foi encontrada para testar.',
+        next_step: 'Salve a configuração fiscal da Certifast antes de testar a NFS-e.',
+      }, corsOrigin)
+      return true
+    }
+
+    const checks = buildNfseRequiredChecks(configuracao)
+    const certExists = await certificateFileExists(configuracao.certificado_pfx_path)
+    checks.certificado_a1 = checks.certificado_a1 && certExists
+
+    const payload = extractStringRecord(configuracao.payload_reforma_tributaria)
+    const wsdl = String(payload.ginfes_wsdl_homologacao ?? payload.gissonline_wsdl_url ?? '').trim()
+    let tlsWarning: string | null = null
+    if (wsdl) {
+      try {
+        const response = await fetch(wsdl, { signal: AbortSignal.timeout(15000) })
+        checks.wsdl_configurado = response.ok || response.status === 400 || response.status === 403
+        if (!response.ok) {
+          tlsWarning = `WSDL respondeu HTTP ${response.status}. Em homologação GINFES, é comum exigir certificado digital cliente para liberar o WSDL.`
+        }
+      } catch (error) {
+        checks.wsdl_configurado = false
+        tlsWarning = error instanceof Error ? error.message : 'Não foi possível acessar o WSDL informado.'
+      }
+    }
+
+    const pendencias = Object.entries(checks)
+      .filter(([, ok]) => !ok)
+      .map(([key]) => key)
+
+    writeJson(res, 200, {
+      ok: pendencias.length === 0,
+      message: pendencias.length === 0
+        ? 'Configuração fiscal pronta para o próximo teste de emissão.'
+        : 'A configuração fiscal ainda possui pendências antes da emissão.',
+      error: pendencias.length === 0 ? undefined : 'Revise os campos obrigatórios destacados no checklist.',
+      next_step: pendencias.length === 0
+        ? 'Próximo passo: emitir uma venda de teste em homologação e acompanhar o retorno do provedor.'
+        : 'Complete os itens pendentes e execute o teste novamente.',
+      tls_warning: tlsWarning,
+      checks,
+    }, corsOrigin)
     return true
   }
 

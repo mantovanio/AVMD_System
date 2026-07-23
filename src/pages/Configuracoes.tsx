@@ -5579,7 +5579,7 @@ function AbaFiscal() {
 
   async function testarConexaoGissOnline() {
     if (!form.id) {
-      setErro('Salve a configuração fiscal antes de testar o GISSONLINE.')
+      setErro(`Salve a configuração fiscal antes de testar o ${NFSE_PROVIDER_LABELS[form.provedor ?? 'gissonline']}.`)
       return
     }
 
@@ -5588,12 +5588,10 @@ function AbaFiscal() {
     setErro(null)
 
     try {
-      const accessToken = await getSupabaseAccessToken()
-      const response = await fetch(getEdgeFunctionUrl('nfse-gissonline-test'), {
+      const response = await fetch(getApiUrl('/nfse/configuracao/testar'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({ configuracao_id: form.id }),
         signal: AbortSignal.timeout(20000),
@@ -5602,11 +5600,13 @@ function AbaFiscal() {
       const data = await response.json() as FiscalProviderTestResult
       setResultadoTesteGissOnline(data)
       if (!response.ok || !data.ok) {
-        setErro(data.error ?? 'Seu teste com o GISSONLINE não foi concluído.')
+        const provedor = NFSE_PROVIDER_LABELS[form.provedor ?? 'gissonline']
+        setErro(data.error ?? `Seu teste com o ${provedor} não foi concluído.`)
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Falha de comunicação.'
-      setErro(`Não foi possível executar o teste com o GISSONLINE: ${message}`)
+      const provedor = NFSE_PROVIDER_LABELS[form.provedor ?? 'gissonline']
+      setErro(`Não foi possível executar o teste com o ${provedor}: ${message}`)
     } finally {
       setTestandoGissOnline(false)
     }
@@ -6084,12 +6084,14 @@ function AbaFiscal() {
             </div>
           )}
 
-          {form.provedor === 'gissonline' && (
+          {(form.provedor === 'gissonline' || form.provedor === 'ginfes') && (
             <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 p-4 space-y-3">
               <div>
-                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Teste técnico do GISSONLINE</p>
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                  Teste técnico do {NFSE_PROVIDER_LABELS[form.provedor ?? 'gissonline']}
+                </p>
                 <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 mt-1">
-                  Esse teste valida a configuração fiscal, a leitura do certificado A1 salvo no bucket e o acesso ao ambiente oficial de homologação do GISSONLINE.
+                  Esse teste valida os dados fiscais salvos, o certificado A1 vinculado no backend e o acesso ao ambiente técnico configurado.
                 </p>
               </div>
               <button
@@ -6099,7 +6101,9 @@ function AbaFiscal() {
                 className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-xs font-medium inline-flex items-center gap-2 transition-colors"
               >
                 {testandoGissOnline ? <Loader2 size={13} className="animate-spin" /> : <Webhook size={13} />}
-                {testandoGissOnline ? 'Testando GISSONLINE...' : 'Testar conexão GISSONLINE'}
+                {testandoGissOnline
+                  ? `Testando ${NFSE_PROVIDER_LABELS[form.provedor ?? 'gissonline']}...`
+                  : `Testar conexão ${NFSE_PROVIDER_LABELS[form.provedor ?? 'gissonline']}`}
               </button>
 
               {resultadoTesteGissOnline && (
@@ -6147,6 +6151,9 @@ function AbaFiscal() {
 
                   {resultadoTesteGissOnline.next_step && (
                     <p className="text-[11px] text-gray-600 dark:text-gray-400">{resultadoTesteGissOnline.next_step}</p>
+                  )}
+                  {resultadoTesteGissOnline.tls_warning && (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-300">{resultadoTesteGissOnline.tls_warning}</p>
                   )}
                 </div>
               )}
