@@ -7959,9 +7959,6 @@ export default function Comercial() {
                 <span className="text-xs text-gray-400">Suporta XLS, XLSX, CSV</span>
               </div>
 
-              <p className="mt-4 text-xs text-amber-600 dark:text-amber-400">
-                Antes de importar, aplique a migration <code className="font-mono bg-amber-50 dark:bg-amber-900/20 px-1 rounded">20260522_vendas_safeweb_campos.sql</code> no Supabase.
-              </p>
             </div>
 
             {/* Importar Clientes (sistema antigo) */}
