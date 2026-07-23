@@ -7726,6 +7726,7 @@ export default function Comercial() {
                       <tr className="bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left">
                         <th className="px-4 py-3">Número</th>
                         <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Prefeitura</th>
                         <th className="px-4 py-3">Emissão</th>
                         <th className="px-4 py-3">Valor</th>
                         <th className="px-4 py-3">Verificação</th>
@@ -7734,25 +7735,31 @@ export default function Comercial() {
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                       {vendaNfseModal.notas.length === 0 ? (
-                        <EmptyRow colSpan={6} label="Nenhuma NFS-e vinculada a esta venda." />
-                      ) : vendaNfseModal.notas.map(nota => (
-                        <tr key={nota.id}>
-                          <td className="px-4 py-3 font-medium">{nota.numero_nf ?? '—'}</td>
-                          <td className="px-4 py-3">
-                            <span className={cn(
-                              'px-2 py-0.5 rounded-full text-xs font-medium',
-                              nota.status_nf === 'emitida' && 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-                              nota.status_nf === 'erro' && 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-                              nota.status_nf === 'cancelada' && 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
-                              nota.status_nf === 'pendente' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-                            )}>
-                              {capitalize(nota.status_nf)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-gray-500">{nota.data_emissao ? new Date(nota.data_emissao).toLocaleString('pt-BR') : '—'}</td>
-                          <td className="px-4 py-3">{formatCurrency(nota.valor_servico ?? 0)}</td>
-                          <td className="px-4 py-3 text-gray-500">{nota.codigo_verificacao ?? '—'}</td>
-                          <td className="px-4 py-3">
+                        <EmptyRow colSpan={7} label="Nenhuma NFS-e vinculada a esta venda." />
+                      ) : vendaNfseModal.notas.map(nota => {
+                        const prefeituraStatus = getNfsePrefeituraStatus(nota)
+                        return (
+                          <tr key={nota.id}>
+                            <td className="px-4 py-3 font-medium">{nota.numero_nf ?? '—'}</td>
+                            <td className="px-4 py-3">
+                              <span className={cn(
+                                'px-2 py-0.5 rounded-full text-xs font-medium',
+                                nota.status_nf === 'emitida' && 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+                                nota.status_nf === 'erro' && 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                                nota.status_nf === 'cancelada' && 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
+                                nota.status_nf === 'pendente' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+                              )}>
+                                {capitalize(nota.status_nf)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 min-w-[220px]">
+                              <div className="text-xs font-semibold text-gray-800 dark:text-gray-100">{prefeituraStatus.status}</div>
+                              <div className="mt-0.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">{prefeituraStatus.detalhes}</div>
+                            </td>
+                            <td className="px-4 py-3 text-gray-500">{nota.data_emissao ? new Date(nota.data_emissao).toLocaleString('pt-BR') : '—'}</td>
+                            <td className="px-4 py-3">{formatCurrency(nota.valor_servico ?? 0)}</td>
+                            <td className="px-4 py-3 text-gray-500">{nota.codigo_verificacao ?? '—'}</td>
+                            <td className="px-4 py-3">
                             <div className="flex flex-wrap items-center justify-end gap-2">
                               <button
                                 type="button"
@@ -7799,9 +7806,10 @@ export default function Comercial() {
                                 Excluir
                               </button>
                             </div>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -9191,6 +9199,53 @@ function formatCurrency(value: number) {
 
 function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
+}
+
+function pickTextFromObject(source: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = source[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  }
+  return ''
+}
+
+function stringifyShort(value: unknown): string {
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (Array.isArray(value)) return value.map(item => stringifyShort(item)).filter(Boolean).join(' | ')
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return pickTextFromObject(record, ['message', 'mensagem', 'erro', 'error', 'descricao', 'description', 'motivo'])
+  }
+  return ''
+}
+
+function getNfsePrefeituraStatus(nota: NfseEmitida) {
+  const retorno = (nota.payload_retorno ?? {}) as Record<string, unknown>
+  const metadata = (nota.metadata ?? {}) as Record<string, unknown>
+  const status = pickTextFromObject(retorno, ['status_prefeitura', 'status', 'situacao', 'situacao_nfse', 'stage'])
+    || pickTextFromObject(metadata, ['status_prefeitura', 'status', 'situacao'])
+    || (nota.status_nf === 'pendente' ? 'Aguardando retorno' : capitalize(nota.status_nf))
+  const protocolo = pickTextFromObject(retorno, ['protocolo', 'numero_protocolo', 'protocolo_nfse'])
+  const lote = pickTextFromObject(retorno, ['numero_lote', 'lote', 'batch_id'])
+  const mensagem = stringifyShort(retorno.message)
+    || stringifyShort(retorno.mensagem)
+    || stringifyShort(retorno.error)
+    || stringifyShort(retorno.erro)
+    || stringifyShort(retorno.response)
+    || stringifyShort(retorno.mensagens)
+    || pickTextFromObject(metadata, ['mensagem_prefeitura', 'message', 'error'])
+  const detalhes = [
+    protocolo ? `Protocolo ${protocolo}` : '',
+    lote ? `Lote ${lote}` : '',
+    mensagem,
+  ].filter(Boolean)
+
+  return {
+    status,
+    detalhes: detalhes.length ? detalhes.join(' · ') : 'Sem mensagem da prefeitura ainda.',
+  }
 }
 
 function VendaActionBtn({ icon: Icon, label, onClick }: {
