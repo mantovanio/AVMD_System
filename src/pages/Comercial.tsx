@@ -3578,7 +3578,7 @@ export default function Comercial() {
         }
         return null
       }
-      const BATCH = 100
+      const BATCH = 25
 
       // 1. upsert clientes
       const clientePayloads = rows.map(r => {
@@ -3605,14 +3605,17 @@ export default function Comercial() {
       }).filter((x): x is NonNullable<typeof x> => x !== null)
 
       const clientesUniq = [...new Map(clientePayloads.map(c => [c.cpf_cnpj, c])).values()]
-      const rBCI = await fetch(getApiUrl('/comercial/clientes/batch-import'), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payloads: clientesUniq }),
-      })
-      if (!rBCI.ok) {
-        const errBody = await rBCI.json().catch(() => null)
-        showMsg(errBody?.error ?? errBody?.message ?? 'Erro ao importar clientes')
-        return
+      for (let i = 0; i < clientesUniq.length; i += BATCH) {
+        const batch = clientesUniq.slice(i, i + BATCH)
+        const rBCI = await fetch(getApiUrl('/comercial/clientes/batch-import'), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payloads: batch }),
+        })
+        const clienteData = await rBCI.json().catch(() => null)
+        if (!rBCI.ok) {
+          showMsg(clienteData?.error ?? clienteData?.message ?? `Erro ao importar clientes no lote ${Math.floor(i / BATCH) + 1}`)
+          return
+        }
       }
 
       // 2. busca IDs de clientes para vincular às vendas
