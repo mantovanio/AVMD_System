@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
+import { createSecureContext } from 'node:tls'
 import { readJson, writeJson } from '../utils/http.js'
 import { CatalogRepository } from '../repositories/catalogRepository.js'
 import { RenovacaoRepository } from '../repositories/renovacaoRepository.js'
@@ -797,6 +798,35 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
     const q = parsedUrl.searchParams.get('q') ?? ''
     const emitentes = await repo.searchNfseEmitentes(q)
     writeJson(res, 200, { ok: true, emitentes }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/nfse/certificado/validar') {
+    const body = await readJson<{ file_base64?: string; senha?: string; filename?: string }>(req)
+    const fileBase64 = String(body.file_base64 ?? '').trim()
+    const senha = String(body.senha ?? '')
+    const filename = String(body.filename ?? 'certificado.pfx')
+    if (!fileBase64 || !senha) {
+      writeJson(res, 400, { ok: false, error: 'Informe o arquivo A1 e a senha do certificado.' }, corsOrigin)
+      return true
+    }
+    try {
+      const pfx = Buffer.from(fileBase64, 'base64')
+      createSecureContext({ pfx, passphrase: senha })
+      writeJson(res, 200, {
+        ok: true,
+        certificado: {
+          filename,
+          tamanho_bytes: pfx.length,
+          senha_validada: true,
+        },
+      }, corsOrigin)
+    } catch {
+      writeJson(res, 400, {
+        ok: false,
+        error: 'A senha não abriu o certificado A1. Confira se o arquivo é .pfx/.p12 e se a senha está correta.',
+      }, corsOrigin)
+    }
     return true
   }
 

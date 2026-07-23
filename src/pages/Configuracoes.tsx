@@ -5261,6 +5261,7 @@ function AbaFiscal() {
   const [showCertSenha, setShowCertSenha] = useState(false)
   const [certFile, setCertFile] = useState<File | null>(null)
   const [uploadingCert, setUploadingCert] = useState(false)
+  const [certificadoValidado, setCertificadoValidado] = useState(false)
   const [configuracoes, setConfiguracoes] = useState<NfseConfiguracao[]>([])
   const [form, setForm] = useState<Partial<NfseConfiguracao>>(createEmptyFiscalForm())
   const [emitenteVinculado, setEmitenteVinculado] = useState<NfseEmitenteCrm | null>(null)
@@ -5344,7 +5345,20 @@ function AbaFiscal() {
   function updateField<K extends keyof NfseConfiguracao>(key: K, value: NfseConfiguracao[K]) {
     setOk(false)
     if (key === 'cnpj_emitente') setEmitenteVinculado(null)
+    if (key === 'certificado_senha' || key === 'certificado_pfx_path') setCertificadoValidado(false)
     setForm(prev => ({ ...prev, [key]: value }))
+  }
+
+  function readFileAsBase64(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const raw = String(reader.result ?? '')
+        resolve(raw.includes(',') ? raw.split(',').pop() ?? '' : raw)
+      }
+      reader.onerror = () => reject(reader.error ?? new Error('Não foi possível ler o arquivo do certificado.'))
+      reader.readAsDataURL(file)
+    })
   }
 
   async function buscarEmitenteFiscal() {
@@ -5388,8 +5402,39 @@ function AbaFiscal() {
       setErro('Selecione um arquivo e certifique-se de que o CNPJ do emitente está preenchido.')
       return
     }
+    if (!form.certificado_senha?.trim()) {
+      setErro('Informe a senha do certificado antes de vincular o arquivo.')
+      return
+    }
     setUploadingCert(true)
     setErro(null)
+    setCertificadoValidado(false)
+    const fileBase64 = await readFileAsBase64(certFile).catch(error => {
+      setUploadingCert(false)
+      setErro(error instanceof Error ? error.message : 'Não foi possível ler o arquivo do certificado.')
+      return null
+    })
+    if (!fileBase64) return
+
+    const validationResponse = await fetch(getApiUrl('/nfse/certificado/validar'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: certFile.name,
+        file_base64: fileBase64,
+        senha: form.certificado_senha,
+      }),
+    }).catch(error => ({
+      ok: false,
+      json: async () => ({ error: error instanceof Error ? error.message : 'Não foi possível validar o certificado.' }),
+    } as Response))
+    const validationPayload = await validationResponse.json().catch(() => null) as { error?: string } | null
+    if (!validationResponse.ok) {
+      setUploadingCert(false)
+      setErro(validationPayload?.error ?? 'A senha não abriu o certificado A1.')
+      return
+    }
+
     const cnpjClean = form.cnpj_emitente.replace(/\D/g, '')
     const ext = certFile.name.split('.').pop()?.toLowerCase() ?? 'pfx'
     const path = `${cnpjClean}/certificado.${ext}`
@@ -5398,8 +5443,11 @@ function AbaFiscal() {
       .upload(path, certFile, { upsert: true, contentType: 'application/x-pkcs12' })
     setUploadingCert(false)
     if (upErr) { setErro('Erro ao enviar certificado: ' + upErr.message); return }
-    updateField('certificado_pfx_path', path)
+    setForm(prev => ({ ...prev, certificado_pfx_path: path, usa_certificado_digital: true }))
+    setCertificadoValidado(true)
+    setShowCertSenha(false)
     setCertFile(null)
+    setOk(true)
   }
 
   async function removerCertificado() {
@@ -5408,6 +5456,7 @@ function AbaFiscal() {
     await supabase.storage.from('certificados-digitais').remove([form.certificado_pfx_path])
     updateField('certificado_pfx_path', null)
     updateField('certificado_senha', null)
+    setCertificadoValidado(false)
   }
 
   async function salvar() {
@@ -6135,20 +6184,24 @@ function AbaFiscal() {
                     type="file"
                     accept=".pfx,.p12"
                     className="sr-only"
-                    onChange={e => setCertFile(e.target.files?.[0] ?? null)}
+                    onChange={e => {
+                      setCertFile(e.target.files?.[0] ?? null)
+                      setCertificadoValidado(false)
+                      setOk(false)
+                    }}
                   />
                 </label>
                 <button
                   type="button"
                   onClick={() => void uploadCertificado()}
-                  disabled={!certFile || uploadingCert}
+                  disabled={!certFile || !form.certificado_senha?.trim() || uploadingCert}
                   className="shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white transition-colors"
                 >
                   {uploadingCert ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-                  {uploadingCert ? 'Enviando…' : 'Vincular'}
+                  {uploadingCert ? 'Validando...' : 'Validar e vincular'}
                 </button>
               </div>
-              <p className="text-[11px] text-gray-400">Arquivo A1 (.pfx ou .p12) da empresa emitente. Armazenado em bucket privado — não fica exposto publicamente.</p>
+              <p className="text-[11px] text-gray-400">Informe a senha antes de vincular. O sistema valida o .pfx/.p12 e só salva se a senha abrir o certificado.</p>
             </div>
           )}
 
@@ -6171,7 +6224,11 @@ function AbaFiscal() {
                 {showCertSenha ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">Salva junto com a configuração ao clicar em "Salvar Configuração Fiscal".</p>
+            <p className="text-[11px] text-gray-400 mt-1">
+              {certificadoValidado
+                ? 'Senha validada com sucesso. Clique em "Salvar Configuração Fiscal" para gravar a configuração.'
+                : 'A senha será testada antes do certificado ser vinculado.'}
+            </p>
           </div>
         </div>
 
