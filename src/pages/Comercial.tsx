@@ -3631,10 +3631,12 @@ export default function Comercial() {
       // 3. monta payloads de venda COM validado_safeweb = true
       setImportStatusSafeweb(`Montando vendas e pedidos da planilha...`)
       const vendasPayloads = rows.map(r => {
-        const protocolo = pick(r, ['protocolo', 'n_protocolo', 'numero_protocolo', 'num_protocolo', 'protocolo_numero', 'n_pedido', 'numero_pedido', 'pedido', 'pedido_numero', 'id_pedido', 'id_venda', 'codigo_venda']).trim()
-        if (!protocolo) return null
+        const protocolo = pick(r, ['protocolo', 'n_protocolo', 'numero_protocolo', 'num_protocolo', 'protocolo_numero']).trim()
+        const protocoloDigits = cleanDoc(protocolo)
+        if (!protocolo || protocoloDigits.length < 6) return null
         const doc = cleanDoc(pick(r, ['doc_cliente', 'documento', 'cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento_cliente', 'documento_do_titular', 'cpf_do_titular', 'cnpj_do_cliente']))
         const produto = pick(r, ['produto', 'nome_do_produto_no_catalogo', 'certificado', 'tipo_produto', 'produto_nome', 'descricao_produto', 'nome_produto']).trim()
+        if (!doc || !produto) return null
         const descricaoProduto = pick(r, ['descricao_do_produto', 'descricao_produto', 'descricao', 'descricao_produto_midia']).trim()
         const produtoBusca = [produto, descricaoProduto, pick(r, ['modelo']).trim()].filter(Boolean).join(' ')
         const cert = findCertificadoByProduto(produtoBusca || produto)
