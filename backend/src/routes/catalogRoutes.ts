@@ -32,6 +32,25 @@ function updateSafewebJob(id: string, patch: Partial<Omit<SafewebImportJob, 'id'
   safewebImportJobs.set(id, { ...current, ...patch, updatedAt: new Date().toISOString() })
 }
 
+function serializeImportJob(row: Record<string, unknown> | null): SafewebImportJob | null {
+  if (!row) return null
+  return {
+    id: String(row.id),
+    status: String(row.status ?? 'queued') as SafewebImportJob['status'],
+    message: String(row.message ?? ''),
+    progress: {
+      current: Number(row.progress_current ?? 0),
+      total: Number(row.progress_total ?? 0),
+    },
+    result: row.result && Object.keys(row.result as Record<string, unknown>).length
+      ? row.result as SafewebImportJob['result']
+      : null,
+    error: row.error ? String(row.error) : null,
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+    updatedAt: String(row.updated_at ?? new Date().toISOString()),
+  }
+}
+
 async function processSafewebImportJob(
   id: string,
   repo: CatalogRepository,
@@ -48,9 +67,22 @@ async function processSafewebImportJob(
   let criados = 0
   let atualizados = 0
   let renovacoesConvertidas = 0
+  const setJob = async (patch: Partial<Omit<SafewebImportJob, 'id' | 'createdAt'>>) => {
+    updateSafewebJob(id, patch)
+    await repo.updateImportJob(id, {
+      status: patch.status,
+      message: patch.message,
+      progressCurrent: patch.progress?.current,
+      progressTotal: patch.progress?.total,
+      result: patch.result,
+      error: patch.error,
+      startedAtNow: patch.status === 'running',
+      finishedAtNow: patch.status === 'done' || patch.status === 'failed',
+    })
+  }
 
   try {
-    updateSafewebJob(id, {
+    await setJob({
       status: 'running',
       message: 'Importando clientes no backend...',
       progress: { current: 0, total: input.clientes.length + input.vendas.length },
@@ -59,7 +91,7 @@ async function processSafewebImportJob(
     for (let i = 0; i < input.clientes.length; i += batchSize) {
       const batch = input.clientes.slice(i, i + batchSize)
       await repo.batchUpsertCadastros(batch)
-      updateSafewebJob(id, {
+      await setJob({
         message: `Clientes importados: ${Math.min(i + batch.length, input.clientes.length)} de ${input.clientes.length}.`,
         progress: { current: Math.min(i + batch.length, input.clientes.length), total: input.clientes.length + input.vendas.length },
       })
@@ -77,7 +109,7 @@ async function processSafewebImportJob(
       }
     })
 
-    updateSafewebJob(id, {
+    await setJob({
       message: 'Verificando protocolos existentes...',
       progress: { current: input.clientes.length, total: input.clientes.length + vendas.length },
     })
@@ -95,7 +127,7 @@ async function processSafewebImportJob(
       const result = await repo.batchUpdateVendasByProtocolo(batch)
       atualizados += result.updated
       precisaConciliarRenovacoes = true
-      updateSafewebJob(id, {
+      await setJob({
         message: `Pedidos atualizados: ${Math.min(i + batch.length, paraAtualizar.length)} de ${paraAtualizar.length}.`,
         progress: { current: input.clientes.length + Math.min(i + batch.length, paraAtualizar.length), total: input.clientes.length + vendas.length },
       })
@@ -118,14 +150,14 @@ async function processSafewebImportJob(
         precisaConciliarRenovacoes = true
       }
 
-      updateSafewebJob(id, {
+      await setJob({
         message: `Pedidos criados: ${criados} de ${paraCriar.length}.`,
         progress: { current: input.clientes.length + paraAtualizar.length + criados, total: input.clientes.length + vendas.length },
       })
     }
 
     if (renovacaoRepo && precisaConciliarRenovacoes) {
-      updateSafewebJob(id, {
+      await setJob({
         message: 'Conciliando renovações com as vendas importadas...',
         progress: { current: input.clientes.length + vendas.length, total: input.clientes.length + vendas.length },
       })
@@ -133,7 +165,7 @@ async function processSafewebImportJob(
     }
 
     const divergentes = await repo.countVendasEmitidosSemValidacao()
-    updateSafewebJob(id, {
+    await setJob({
       status: 'done',
       message: 'Importação concluída.',
       progress: { current: input.clientes.length + vendas.length, total: input.clientes.length + vendas.length },
@@ -149,7 +181,7 @@ async function processSafewebImportJob(
       },
     })
   } catch (error) {
-    updateSafewebJob(id, {
+    await setJob({
       status: 'failed',
       message: 'Importação falhou.',
       error: error instanceof Error ? error.message : String(error),
@@ -471,6 +503,7 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
       currentUserId: string
       pontoPadrao: string
       linhas: number
+      files?: { fileName: string; fileType?: string; rowsCount: number }[]
     }>(req)
 
     if (!body.currentUserId || !body.pontoPadrao) {
@@ -480,17 +513,37 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
 
     const id = randomUUID()
     const now = new Date().toISOString()
+    const totalProgress = (body.clientes ?? []).length + (body.vendas ?? []).length
+    const files = (body.files?.length ? body.files : [{ fileName: 'arquivo_importado', fileType: 'safeweb', rowsCount: Number(body.linhas ?? 0) }])
     const job: SafewebImportJob = {
       id,
       status: 'queued',
       message: 'Importação adicionada à esteira do backend.',
-      progress: { current: 0, total: (body.clientes ?? []).length + (body.vendas ?? []).length },
+      progress: { current: 0, total: totalProgress },
       result: null,
       error: null,
       createdAt: now,
       updatedAt: now,
     }
     safewebImportJobs.set(id, job)
+    await repo.createImportJob({
+      id,
+      tipo: 'safeweb_financeiro',
+      createdBy: body.currentUserId,
+      totalFiles: files.length,
+      totalRows: Number(body.linhas ?? 0),
+      progressTotal: totalProgress,
+      message: 'Importação adicionada à esteira do backend.',
+    })
+    for (const file of files) {
+      await repo.addImportJobFile({
+        jobId: id,
+        fileName: file.fileName,
+        fileType: file.fileType ?? null,
+        rowsCount: Number(file.rowsCount ?? 0),
+        rowsJson: { rowsCount: file.rowsCount },
+      })
+    }
 
     setTimeout(() => {
       void processSafewebImportJob(id, repo, renovacaoRepo, {
@@ -508,7 +561,8 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
 
   const safewebJobMatch = url.match(/^\/api\/comercial\/import-safeweb-jobs\/([^/]+)$/)
   if (method === 'GET' && safewebJobMatch) {
-    const job = safewebImportJobs.get(safewebJobMatch[1])
+    const persisted = await repo.getImportJob(safewebJobMatch[1]).catch(() => null)
+    const job = serializeImportJob(persisted) ?? safewebImportJobs.get(safewebJobMatch[1])
     writeJson(res, job ? 200 : 404, { ok: Boolean(job), job: job ?? null }, corsOrigin)
     return true
   }

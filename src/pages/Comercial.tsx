@@ -3521,14 +3521,22 @@ export default function Comercial() {
   }
 
   // ── importar relatório Safeweb — batimento mensal ────────────
-  async function importarRelatorioSafeweb(file: File) {
+  async function importarRelatorioSafeweb(inputFiles: File | File[]) {
+    const files = Array.isArray(inputFiles) ? inputFiles : [inputFiles]
     setImportandoSafeweb(true)
     setResultSafeweb(null)
-    setImportStatusSafeweb(`Lendo arquivo ${file.name}...`)
+    setImportStatusSafeweb(files.length > 1 ? `Lendo ${files.length} arquivos...` : `Lendo arquivo ${files[0]?.name ?? ''}...`)
     try {
-      const rows = await lerPlanilha(file)
+      const fileSummaries: { fileName: string; fileType: string; rowsCount: number }[] = []
+      const rows: Record<string, string>[] = []
+      for (const file of files) {
+        setImportStatusSafeweb(`Lendo ${file.name}...`)
+        const fileRows = await lerPlanilha(file)
+        fileSummaries.push({ fileName: file.name, fileType: file.name.split('.').pop()?.toLowerCase() || 'arquivo', rowsCount: fileRows.length })
+        rows.push(...fileRows)
+      }
       if (!rows.length) { showMsg('Planilha sem dados.'); return }
-      setImportStatusSafeweb(`Arquivo lido: ${rows.length} linha(s). Preparando clientes...`)
+      setImportStatusSafeweb(`${files.length} arquivo(s) lido(s): ${rows.length} linha(s). Preparando clientes...`)
       const firstColumns = Object.keys(rows[0] ?? {})
       const pick = (row: Record<string, string>, aliases: string[]) => {
         for (const alias of aliases) {
@@ -3794,6 +3802,7 @@ export default function Comercial() {
           currentUserId,
           pontoPadrao,
           linhas: rows.length,
+          files: fileSummaries,
         }),
       })
       const startData = await startResp.json().catch(() => null)
@@ -7946,14 +7955,14 @@ export default function Comercial() {
               )}
 
               <div className="mt-5 flex items-center gap-3">
-                <input ref={importSafewebRef} type="file" accept=".xls,.xlsx,.csv,.tsv" className="hidden"
-                  onChange={e => { const f = e.target.files?.[0]; if (f) void importarRelatorioSafeweb(f); e.target.value = '' }} />
+                <input ref={importSafewebRef} type="file" accept=".xls,.xlsx,.csv,.tsv" multiple className="hidden"
+                  onChange={e => { const files = Array.from(e.target.files ?? []); if (files.length) void importarRelatorioSafeweb(files); e.target.value = '' }} />
                 <button type="button" onClick={() => importSafewebRef.current?.click()} disabled={importandoSafeweb}
                   className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors">
                   {importandoSafeweb ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                  {importandoSafeweb ? 'Importando...' : 'Selecionar arquivo'}
+                  {importandoSafeweb ? 'Importando...' : 'Selecionar arquivos'}
                 </button>
-                <span className="text-xs text-gray-400">Suporta XLS, XLSX, CSV</span>
+                <span className="text-xs text-gray-400">Suporta XLS, XLSX, CSV e seleção de vários arquivos</span>
               </div>
 
               {importandoSafeweb && importStatusSafeweb && (
@@ -7963,7 +7972,7 @@ export default function Comercial() {
                     <p className="font-semibold">Importação em andamento</p>
                     <p className="mt-1 text-xs">{importStatusSafeweb}</p>
                     <p className="mt-2 text-xs text-blue-600 dark:text-blue-300">
-                      Não feche esta aba até aparecer o batimento concluído ou uma mensagem de erro.
+                      Você pode acompanhar o andamento por aqui; o processamento fica registrado no backend.
                     </p>
                   </div>
                 </div>

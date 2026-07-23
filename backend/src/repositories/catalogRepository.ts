@@ -829,6 +829,134 @@ export class CatalogRepository {
     return parseInt(r.rows[0]?.n ?? '0', 10)
   }
 
+  // ── Esteira persistente de importações ────────────────────────────────
+  async ensureImportJobTables() {
+    await this.db.query(`
+      create table if not exists import_jobs (
+        id uuid primary key,
+        tipo text not null default 'safeweb_financeiro',
+        status text not null default 'queued',
+        total_files integer not null default 0,
+        total_rows integer not null default 0,
+        progress_current integer not null default 0,
+        progress_total integer not null default 0,
+        message text,
+        result jsonb not null default '{}'::jsonb,
+        error text,
+        created_by text,
+        started_at timestamptz,
+        finished_at timestamptz,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      )
+    `)
+    await this.db.query(`
+      create table if not exists import_job_files (
+        id uuid primary key,
+        job_id uuid not null references import_jobs(id) on delete cascade,
+        file_name text not null,
+        file_type text,
+        rows_count integer not null default 0,
+        rows_json jsonb not null default '{}'::jsonb,
+        status text not null default 'queued',
+        result jsonb not null default '{}'::jsonb,
+        error text,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      )
+    `)
+  }
+
+  async createImportJob(input: {
+    id?: string
+    tipo: string
+    createdBy?: string | null
+    totalFiles: number
+    totalRows: number
+    progressTotal: number
+    message: string
+  }) {
+    await this.ensureImportJobTables()
+    const id = input.id ?? randomUUID()
+    const r = await this.db.query<Record<string, unknown>>(
+      `insert into import_jobs (
+         id, tipo, status, total_files, total_rows, progress_current, progress_total, message, result, error, created_by
+       ) values ($1::uuid, $2, 'queued', $3, $4, 0, $5, $6, '{}'::jsonb, null, $7)
+       returning *`,
+      [id, input.tipo, input.totalFiles, input.totalRows, input.progressTotal, input.message, input.createdBy ?? null],
+    )
+    return r.rows[0]
+  }
+
+  async addImportJobFile(input: {
+    jobId: string
+    fileName: string
+    fileType?: string | null
+    rowsCount: number
+    rowsJson: unknown
+  }) {
+    await this.ensureImportJobTables()
+    const id = randomUUID()
+    const r = await this.db.query<Record<string, unknown>>(
+      `insert into import_job_files (id, job_id, file_name, file_type, rows_count, rows_json)
+       values ($1::uuid, $2::uuid, $3, $4, $5, $6::jsonb)
+       returning *`,
+      [id, input.jobId, input.fileName, input.fileType ?? null, input.rowsCount, JSON.stringify(input.rowsJson ?? {})],
+    )
+    return r.rows[0]
+  }
+
+  async updateImportJob(id: string, patch: {
+    status?: string
+    message?: string
+    progressCurrent?: number
+    progressTotal?: number
+    result?: unknown
+    error?: string | null
+    startedAtNow?: boolean
+    finishedAtNow?: boolean
+  }) {
+    await this.ensureImportJobTables()
+    await this.db.query(
+      `update import_jobs
+       set status = coalesce($2, status),
+           message = coalesce($3, message),
+           progress_current = coalesce($4, progress_current),
+           progress_total = coalesce($5, progress_total),
+           result = coalesce($6::jsonb, result),
+           error = $7,
+           started_at = case when $8 then now() else started_at end,
+           finished_at = case when $9 then now() else finished_at end,
+           updated_at = now()
+       where id = $1::uuid`,
+      [
+        id,
+        patch.status ?? null,
+        patch.message ?? null,
+        patch.progressCurrent ?? null,
+        patch.progressTotal ?? null,
+        patch.result == null ? null : JSON.stringify(patch.result),
+        patch.error ?? null,
+        Boolean(patch.startedAtNow),
+        Boolean(patch.finishedAtNow),
+      ],
+    )
+  }
+
+  async getImportJob(id: string) {
+    await this.ensureImportJobTables()
+    const job = await this.db.query<Record<string, unknown>>(`select * from import_jobs where id = $1::uuid`, [id])
+    if (!job.rows[0]) return null
+    const files = await this.db.query<Record<string, unknown>>(
+      `select id, file_name, file_type, rows_count, status, result, error, created_at, updated_at
+       from import_job_files
+       where job_id = $1::uuid
+       order by created_at asc`,
+      [id],
+    )
+    return { ...job.rows[0], files: files.rows }
+  }
+
   // ── Bulk catalog GET ──────────────────────────────────────────────────
   async getCatalogAll() {
     const [
