@@ -400,8 +400,8 @@ function productGuidance(item: LojaItemRow) {
   const category = productCertificateCategory(item)
   const productText = productCatalogText(item)
   const isSafeId = /safeid|nuvem|cloud/.test(productText)
-  const isNfe = /pj/i.test(category)
-  const isCompany = /cnpj|pj/i.test(category)
+  const isNfe = category === 'e-PJ' || /\bnf[\s-]?e\b|\bnfe\b|nota fiscal|\be[\s-]?pj\b/.test(productText)
+  const isCompany = category === 'e-CNPJ' || category === 'e-PJ' || /\be[\s-]?cnpj\b|\bmei\b/.test(productText)
   const mediaGuidance = (() => {
     if (/safeid|nuvem|cloud/.test(productText)) {
       return {
