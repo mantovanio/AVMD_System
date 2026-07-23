@@ -390,6 +390,55 @@ export class CatalogRepository {
     return { updated }
   }
 
+  async batchUpdateVendasByIdentity(updates: { protocolo_numero?: string; pedido_numero?: string; [key: string]: unknown }[]) {
+    const fields = ['status_venda','tipo_produto','tipo_venda','tipo_emissao','valor_venda','valor_custo',
+      'pago','status_pagamento','data_pagamento','data_vencimento','agente_registro_id','ponto_atendimento_id',
+      'parceiro_id','vendedor_id','cadastro_base_id','certificado_id','data_inicio_validade','validado_safeweb',
+      'documento_faturamento','nome_faturamento','email_faturamento','telefone_faturamento','numero_serie',
+      'voucher_codigo','voucher_percentual','voucher_valor','nome_ar','nome_local_atendimento',
+      'status_certificado','nome_parceiro_safeweb','observacoes','metadata']
+    let updated = 0
+    for (const u of updates) {
+      const { protocolo_numero, pedido_numero, ...rest } = u
+      const protocolo = String(protocolo_numero ?? '').trim()
+      const pedido = String(pedido_numero ?? '').trim()
+      if (!protocolo && !pedido) continue
+      const setClauses: string[] = []
+      const vals: unknown[] = []
+      for (const f of fields) {
+        if (f in rest) {
+          vals.push(rest[f])
+          setClauses.push(`${f} = $${vals.length}`)
+        }
+      }
+      if (!setClauses.length) continue
+      vals.push(protocolo || null, pedido || null)
+      await this.db.query(
+        `update vendas_certificados
+            set ${setClauses.join(', ')}, updated_at = now()
+          where ($${vals.length - 1}::text is not null and protocolo_numero = $${vals.length - 1})
+             or ($${vals.length}::text is not null and pedido_numero = $${vals.length})`,
+        vals,
+      )
+      updated++
+    }
+    return { updated }
+  }
+
+  async getExistingVendaIdentities(items: { protocolo_numero?: string | null; pedido_numero?: string | null }[]) {
+    const protocolos = [...new Set(items.map(item => String(item.protocolo_numero ?? '').trim()).filter(Boolean))]
+    const pedidos = [...new Set(items.map(item => String(item.pedido_numero ?? '').trim()).filter(Boolean))]
+    if (!protocolos.length && !pedidos.length) return []
+    const r = await this.db.query<{ protocolo_numero: string | null; pedido_numero: string | null }>(
+      `select protocolo_numero, pedido_numero
+         from vendas_certificados
+        where ($1::text[] = '{}'::text[] or protocolo_numero = any($1::text[]))
+           or ($2::text[] = '{}'::text[] or pedido_numero = any($2::text[]))`,
+      [protocolos, pedidos],
+    )
+    return r.rows
+  }
+
   // ── Check which CPF/CNPJs already exist ──────────────────────────────
   async getExistingCpfs(cpfs: string[]) {
     if (!cpfs.length) return []

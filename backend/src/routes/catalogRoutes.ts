@@ -138,17 +138,26 @@ async function processSafewebImportJob(
       progress: { current: input.clientes.length, total: input.clientes.length + vendas.length },
     })
 
-    const protocolos = vendas.map(venda => String(venda.protocolo_numero ?? '')).filter(Boolean)
-    const existentes = await repo.getExistingProtocolos(protocolos)
-    const existSet = new Set(existentes)
-    const paraAtualizar = vendas.filter(venda => existSet.has(String(venda.protocolo_numero ?? '')))
-    const paraCriar = vendas.filter(venda => !existSet.has(String(venda.protocolo_numero ?? '')))
+    const existentes = await repo.getExistingVendaIdentities(vendas.map(venda => ({
+      protocolo_numero: String(venda.protocolo_numero ?? '').trim(),
+      pedido_numero: String(venda.pedido_numero ?? '').trim(),
+    })))
+    const protocoloSet = new Set(existentes.map(item => String(item.protocolo_numero ?? '')).filter(Boolean))
+    const pedidoSet = new Set(existentes.map(item => String(item.pedido_numero ?? '')).filter(Boolean))
+    const paraAtualizar = vendas.filter(venda =>
+      protocoloSet.has(String(venda.protocolo_numero ?? '').trim())
+      || pedidoSet.has(String(venda.pedido_numero ?? '').trim())
+    )
+    const paraCriar = vendas.filter(venda =>
+      !protocoloSet.has(String(venda.protocolo_numero ?? '').trim())
+      && !pedidoSet.has(String(venda.pedido_numero ?? '').trim())
+    )
 
     let precisaConciliarRenovacoes = false
 
     for (let i = 0; i < paraAtualizar.length; i += batchSize) {
       const batch = paraAtualizar.slice(i, i + batchSize) as unknown as { protocolo_numero: string; [key: string]: unknown }[]
-      const result = await repo.batchUpdateVendasByProtocolo(batch)
+      const result = await repo.batchUpdateVendasByIdentity(batch)
       atualizados += result.updated
       precisaConciliarRenovacoes = true
       await setJob({

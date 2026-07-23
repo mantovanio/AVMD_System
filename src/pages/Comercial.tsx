@@ -3602,6 +3602,14 @@ export default function Comercial() {
         }
         return null
       }
+      const isGestaoArRow = (row: Record<string, string>) =>
+        Boolean(
+          pick(row, ['valor_venda']).trim()
+          || pick(row, ['forma_pagamento']).trim()
+          || pick(row, ['status_pagamento']).trim()
+          || pick(row, ['status_nota']).trim()
+          || pick(row, ['token']).trim()
+        )
       // 1. upsert clientes
       const clientePayloads = rows.map(r => {
         const doc = cleanDoc(pick(r, ['doc_cliente', 'documento', 'cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento_cliente', 'documento_do_titular', 'cpf_do_titular', 'cnpj_do_cliente']))
@@ -3650,13 +3658,16 @@ export default function Comercial() {
         const nomeTitular = pick(r, ['nome_do_titular', 'titular']).trim()
         const documentoTitular = cleanDoc(pick(r, ['documento_do_titular', 'cpf_do_titular']))
         const telefonePrincipal = pick(r, ['telefone_da_empresa', 'telefone_do_titular', 'telefone', 'celular', 'whatsapp']).trim()
-        const nomeLocalAtendimento = pick(r, ['nome_do_local_de_atendimento', 'nome_do_local_de_atendimento_agr', 'pa_emissor', 'nome_local', 'local_atendimento', 'posto_atendimento']).trim()
-        const nomeAr = pick(r, ['nome_da_autoridade_de_registro', 'nome_da_autoridade_de_registro_vinculada_a_solicitacao', 'ar_de_solicitacao', 'autoridade_certificadora', 'nome_ar', 'ar', 'autoridade_registro']).trim()
-        const observacao = pick(r, ['observacao', 'observacoes', 'obs', 'verificacao', 'mensagem_sefaz', 'link_videoconferencia_renovacao']).trim()
+        const nomeLocalAtendimento = pick(r, ['local_de_atendimento', 'nome_do_local_de_atendimento', 'nome_do_local_de_atendimento_agr', 'pa_emissor', 'nome_local', 'local_atendimento', 'posto_atendimento']).trim()
+        const nomeAr = pick(r, ['ar_de_solicitacao', 'nome_da_autoridade_de_registro', 'nome_da_autoridade_de_registro_vinculada_a_solicitacao', 'autoridade_certificadora', 'nome_ar', 'ar', 'autoridade_registro']).trim()
+        const observacao = pick(r, ['observacao', 'observacoes', 'obs', 'verificacao', 'mensagem_de_retorno_da_prefeitura', 'mensagem_sefaz', 'link_videoconferencia_renovacao', 'link_videoconferencia_renovacao_on_line']).trim()
         const valorVendaRaw = pick(r, ['valor_venda', 'valor_do_boleto', 'valor_boleto', 'valor', 'preco', 'preco_venda', 'total', 'valor_total'])
         const valorCustoRaw = pick(r, ['valor_custo', 'valor_custo_ac', 'custo_certificado', 'custo_ac', 'valor_repasse', 'valor_custo_certificado'])
-        const valorVenda = parseNum(valorVendaRaw)
+        const gestaoArRow = isGestaoArRow(r)
+        const valorBoletoSafeweb = parseNum(pick(r, ['valor_do_boleto', 'valor_boleto']))
+        const valorVenda = gestaoArRow ? parseNum(valorVendaRaw) : 0
         const valorCusto = parseNum(valorCustoRaw)
+          || valorBoletoSafeweb
           || Number(cert?.valor_custo_ac ?? cert?.valor_custo ?? 0)
         const metadataSafewebFinanceiro = {
           protocolo,
@@ -3696,7 +3707,7 @@ export default function Comercial() {
             cidade: pick(r, ['nome_da_cidade']).trim() || null,
           },
           financeiro: {
-            valor_boleto: parseNum(pick(r, ['valor_do_boleto', 'valor_boleto'])),
+            valor_boleto: valorBoletoSafeweb,
             valor_venda: valorVenda,
             valor_custo_certificado: valorCusto,
             valor_venda_origem: valorVendaRaw || null,
@@ -3705,6 +3716,22 @@ export default function Comercial() {
             voucher_codigo: pick(r, ['vouchercodigo', 'voucher_codigo', 'vouchercod', 'voucher']).trim() || null,
             voucher_percentual: parseNum(pick(r, ['voucherpercentual', 'voucher_percentual', 'percentual_voucher', 'desconto_percentual'])) || null,
             voucher_valor: parseNum(pick(r, ['vouchervalor', 'voucher_valor', 'valor_voucher', 'desconto_valor'])) || null,
+          },
+          gestao_ar: {
+            pedido: pick(r, ['pedido', 'n_pedido', 'numero_pedido', 'pedido_numero', 'id_pedido']).trim() || null,
+            protocolo,
+            valor_venda: valorVenda,
+            forma_pagamento: pick(r, ['forma_pagamento']).trim() || null,
+            status_pagamento: pick(r, ['status_pagamento', 'status_financeiro']).trim() || null,
+            status_nota: pick(r, ['status_nota']).trim() || null,
+            mensagem_prefeitura: pick(r, ['mensagem_de_retorno_da_prefeitura', 'mensagem_sefaz']).trim() || null,
+            vendedor: pick(r, ['vendedor']).trim() || null,
+            local_atendimento: nomeLocalAtendimento || null,
+            agente_agenda: pick(r, ['agente_agenda']).trim() || null,
+            agente_registro: pick(r, ['agente_de_registro']).trim() || null,
+            usuario_criacao_pedido: pick(r, ['usuario_de_criacao_do_pedido']).trim() || null,
+            token: pick(r, ['token']).trim() || null,
+            link_video_renovacao: pick(r, ['link_videoconferencia_renovacao', 'link_videoconferencia_renovacao_on_line']).trim() || null,
           },
           parceiro: {
             nome: pick(r, ['nome_do_parceiro', 'nome_parceiro', 'parceiro', 'vendedor']).trim() || null,
@@ -3756,7 +3783,7 @@ export default function Comercial() {
         }
         return {
           protocolo_numero:       protocolo,
-          pedido_numero:          pick(r, ['n_pedido', 'numero_pedido', 'pedido', 'pedido_numero', 'id_pedido']).trim() || null,
+          pedido_numero:          pick(r, ['pedido', 'n_pedido', 'numero_pedido', 'pedido_numero', 'id_pedido']).trim() || null,
           cadastro_base_id:       null,
           certificado_id:          cert?.id ?? null,
           tipo_produto:           produto || descricaoProduto || null,
@@ -3800,7 +3827,7 @@ export default function Comercial() {
             data_agenda: parseDate(pick(r, ['data_agenda'])),
             data_cadastro_cliente: parseDate(pick(r, ['data_cadastro_cliente'])),
             data_nota: parseDate(pick(r, ['data_nota'])),
-            nf: pick(r, ['nf']).trim() || null,
+            nf: pick(r, ['nf', 'status_nota']).trim() || null,
             safeweb_financeiro: metadataSafewebFinanceiro,
           },
         }
