@@ -2,19 +2,19 @@ with parsed as (
   select
     id,
     case
-      when boleto_clean = '' then 0::numeric
+      when boleto_clean = '' or boleto_clean = '-' then 0::numeric
       when boleto_clean like '%,%' and boleto_clean like '%.%' then replace(replace(boleto_clean, '.', ''), ',', '.')::numeric
       when boleto_clean like '%,%' then replace(boleto_clean, ',', '.')::numeric
       else boleto_clean::numeric
     end as valor_boleto,
     case
-      when voucher_valor_clean = '' then null::numeric
+      when voucher_valor_clean = '' or voucher_valor_clean = '-' then null::numeric
       when voucher_valor_clean like '%,%' and voucher_valor_clean like '%.%' then replace(replace(voucher_valor_clean, '.', ''), ',', '.')::numeric
       when voucher_valor_clean like '%,%' then replace(voucher_valor_clean, ',', '.')::numeric
       else voucher_valor_clean::numeric
     end as voucher_valor,
     case
-      when voucher_percentual_clean = '' then null::numeric
+      when voucher_percentual_clean = '' or voucher_percentual_clean = '-' then null::numeric
       when voucher_percentual_clean like '%,%' and voucher_percentual_clean like '%.%' then replace(replace(voucher_percentual_clean, '.', ''), ',', '.')::numeric
       when voucher_percentual_clean like '%,%' then replace(voucher_percentual_clean, ',', '.')::numeric
       else voucher_percentual_clean::numeric
