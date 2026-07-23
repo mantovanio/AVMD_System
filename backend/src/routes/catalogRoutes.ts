@@ -1,7 +1,165 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { randomUUID } from 'node:crypto'
 import { readJson, writeJson } from '../utils/http.js'
 import { CatalogRepository } from '../repositories/catalogRepository.js'
 import { RenovacaoRepository } from '../repositories/renovacaoRepository.js'
+
+type SafewebImportJob = {
+  id: string
+  status: 'queued' | 'running' | 'done' | 'failed'
+  message: string
+  progress: { current: number; total: number }
+  result: {
+    linhas: number
+    clientes: number
+    vendas: number
+    novos: number
+    criados: number
+    atualizados: number
+    divergentes: number
+    renovacoesConvertidas: number
+  } | null
+  error: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+const safewebImportJobs = new Map<string, SafewebImportJob>()
+
+function updateSafewebJob(id: string, patch: Partial<Omit<SafewebImportJob, 'id' | 'createdAt'>>) {
+  const current = safewebImportJobs.get(id)
+  if (!current) return
+  safewebImportJobs.set(id, { ...current, ...patch, updatedAt: new Date().toISOString() })
+}
+
+async function processSafewebImportJob(
+  id: string,
+  repo: CatalogRepository,
+  renovacaoRepo: RenovacaoRepository | null,
+  input: {
+    clientes: Record<string, unknown>[]
+    vendas: Record<string, unknown>[]
+    currentUserId: string
+    pontoPadrao: string
+    linhas: number
+  },
+) {
+  const batchSize = 50
+  let criados = 0
+  let atualizados = 0
+  let renovacoesConvertidas = 0
+
+  try {
+    updateSafewebJob(id, {
+      status: 'running',
+      message: 'Importando clientes no backend...',
+      progress: { current: 0, total: input.clientes.length + input.vendas.length },
+    })
+
+    for (let i = 0; i < input.clientes.length; i += batchSize) {
+      const batch = input.clientes.slice(i, i + batchSize)
+      await repo.batchUpsertCadastros(batch)
+      updateSafewebJob(id, {
+        message: `Clientes importados: ${Math.min(i + batch.length, input.clientes.length)} de ${input.clientes.length}.`,
+        progress: { current: Math.min(i + batch.length, input.clientes.length), total: input.clientes.length + input.vendas.length },
+      })
+    }
+
+    const docs = input.clientes.map(item => String(item.cpf_cnpj ?? '')).filter(Boolean)
+    const clientes = await repo.getClientesByDocs(docs)
+    const idByDoc = new Map(clientes.map(item => [item.cpf_cnpj, item.id]))
+
+    const vendas: Record<string, unknown>[] = input.vendas.map(venda => {
+      const doc = String(venda.documento_faturamento ?? '').replace(/\D/g, '')
+      return {
+        ...venda,
+        cadastro_base_id: venda.cadastro_base_id ?? idByDoc.get(doc) ?? null,
+      }
+    })
+
+    updateSafewebJob(id, {
+      message: 'Verificando protocolos existentes...',
+      progress: { current: input.clientes.length, total: input.clientes.length + vendas.length },
+    })
+
+    const protocolos = vendas.map(venda => String(venda.protocolo_numero ?? '')).filter(Boolean)
+    const existentes = await repo.getExistingProtocolos(protocolos)
+    const existSet = new Set(existentes)
+    const paraAtualizar = vendas.filter(venda => existSet.has(String(venda.protocolo_numero ?? '')))
+    const paraCriar = vendas.filter(venda => !existSet.has(String(venda.protocolo_numero ?? '')))
+
+    for (let i = 0; i < paraAtualizar.length; i += batchSize) {
+      const batch = paraAtualizar.slice(i, i + batchSize) as unknown as { protocolo_numero: string; [key: string]: unknown }[]
+      const result = await repo.batchUpdateVendasByProtocolo(batch)
+      atualizados += result.updated
+      if (renovacaoRepo) renovacoesConvertidas += await renovacaoRepo.reconcileConvertedFromSales()
+      updateSafewebJob(id, {
+        message: `Pedidos atualizados: ${Math.min(i + batch.length, paraAtualizar.length)} de ${paraAtualizar.length}.`,
+        progress: { current: input.clientes.length + Math.min(i + batch.length, paraAtualizar.length), total: input.clientes.length + vendas.length },
+      })
+    }
+
+    for (const venda of paraCriar) {
+      const created = await repo.createVenda({
+        ...venda,
+        quantidade: 1,
+        vendedor_id: input.currentUserId,
+        ponto_atendimento_id: input.pontoPadrao,
+        pedido_status: venda.pedido_numero ? 'gerado' : 'nao_gerado',
+        protocolo_status: venda.protocolo_numero ? 'gerado' : 'nao_gerado',
+        api_payload_pedido: {},
+        api_payload_protocolo: {},
+      })
+      criados++
+
+      if (renovacaoRepo && created?.id) {
+        const renovacao = await renovacaoRepo.handleSaleRenewal({
+          cadastro_base_id: String(venda.cadastro_base_id ?? ''),
+          tipo_produto: String(venda.tipo_produto ?? ''),
+          certificado_id: venda.certificado_id ? String(venda.certificado_id) : null,
+          cliente_nome: String(venda.nome_faturamento ?? ''),
+          cpf: venda.documento_faturamento ? String(venda.documento_faturamento) : null,
+          cnpj: null,
+          email: String(venda.email_faturamento ?? ''),
+          telefone: String(venda.telefone_faturamento ?? ''),
+          valor_venda: Number(venda.valor_venda ?? 0),
+          venda_id: String(created.id),
+          data_referencia: venda.data_inicio_validade ? String(venda.data_inicio_validade) : null,
+        }).catch(() => null)
+        if (renovacao?.converted) renovacoesConvertidas++
+        await renovacaoRepo.reconcileConvertedFromSales()
+      }
+
+      updateSafewebJob(id, {
+        message: `Pedidos criados: ${criados} de ${paraCriar.length}.`,
+        progress: { current: input.clientes.length + paraAtualizar.length + criados, total: input.clientes.length + vendas.length },
+      })
+    }
+
+    const divergentes = await repo.countVendasEmitidosSemValidacao()
+    updateSafewebJob(id, {
+      status: 'done',
+      message: 'Importação concluída.',
+      progress: { current: input.clientes.length + vendas.length, total: input.clientes.length + vendas.length },
+      result: {
+        linhas: input.linhas,
+        clientes: input.clientes.length,
+        vendas: vendas.length,
+        novos: paraCriar.length,
+        criados,
+        atualizados,
+        divergentes,
+        renovacoesConvertidas,
+      },
+    })
+  } catch (error) {
+    updateSafewebJob(id, {
+      status: 'failed',
+      message: 'Importação falhou.',
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
 
 export async function handleCatalogRoutes(req: IncomingMessage, res: ServerResponse, repo: CatalogRepository, renovacaoRepo: RenovacaoRepository | null, corsOrigin: string): Promise<boolean> {
   const method = req.method ?? ''
@@ -310,6 +468,55 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   }
 
   // ── Batch operations ──────────────────────────────────────────────────
+  if (method === 'POST' && url === '/api/comercial/import-safeweb-jobs') {
+    const body = await readJson<{
+      clientes: Record<string, unknown>[]
+      vendas: Record<string, unknown>[]
+      currentUserId: string
+      pontoPadrao: string
+      linhas: number
+    }>(req)
+
+    if (!body.currentUserId || !body.pontoPadrao) {
+      writeJson(res, 400, { ok: false, error: 'Usuário logado e ponto de atendimento padrão são obrigatórios para importar.' }, corsOrigin)
+      return true
+    }
+
+    const id = randomUUID()
+    const now = new Date().toISOString()
+    const job: SafewebImportJob = {
+      id,
+      status: 'queued',
+      message: 'Importação adicionada à esteira do backend.',
+      progress: { current: 0, total: (body.clientes ?? []).length + (body.vendas ?? []).length },
+      result: null,
+      error: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    safewebImportJobs.set(id, job)
+
+    setTimeout(() => {
+      void processSafewebImportJob(id, repo, renovacaoRepo, {
+        clientes: body.clientes ?? [],
+        vendas: body.vendas ?? [],
+        currentUserId: body.currentUserId,
+        pontoPadrao: body.pontoPadrao,
+        linhas: Number(body.linhas ?? 0),
+      })
+    }, 0)
+
+    writeJson(res, 202, { ok: true, job }, corsOrigin)
+    return true
+  }
+
+  const safewebJobMatch = url.match(/^\/api\/comercial\/import-safeweb-jobs\/([^/]+)$/)
+  if (method === 'GET' && safewebJobMatch) {
+    const job = safewebImportJobs.get(safewebJobMatch[1])
+    writeJson(res, job ? 200 : 404, { ok: Boolean(job), job: job ?? null }, corsOrigin)
+    return true
+  }
+
   if (method === 'POST' && url === '/api/comercial/clientes/batch-import') {
     const body = await readJson<{ payloads: Record<string, unknown>[]; dryRunCheckOnly?: boolean }>(req)
     const payloads = body.payloads ?? []

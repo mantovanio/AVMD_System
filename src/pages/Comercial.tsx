@@ -3581,8 +3581,6 @@ export default function Comercial() {
         }
         return null
       }
-      const BATCH = 25
-
       // 1. upsert clientes
       const clientePayloads = rows.map(r => {
         const doc = cleanDoc(pick(r, ['doc_cliente', 'documento', 'cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento_cliente', 'documento_do_titular', 'cpf_do_titular', 'cnpj_do_cliente']))
@@ -3608,25 +3606,6 @@ export default function Comercial() {
       }).filter((x): x is NonNullable<typeof x> => x !== null)
 
       const clientesUniq = [...new Map(clientePayloads.map(c => [c.cpf_cnpj, c])).values()]
-      for (let i = 0; i < clientesUniq.length; i += BATCH) {
-        const batch = clientesUniq.slice(i, i + BATCH)
-        setImportStatusSafeweb(`Importando clientes ${Math.min(i + batch.length, clientesUniq.length)} de ${clientesUniq.length}...`)
-        const rBCI = await fetch(getApiUrl('/comercial/clientes/batch-import'), {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ payloads: batch }),
-        })
-        const clienteData = await rBCI.json().catch(() => null)
-        if (!rBCI.ok) {
-          showMsg(clienteData?.error ?? clienteData?.message ?? `Erro ao importar clientes no lote ${Math.floor(i / BATCH) + 1}`)
-          return
-        }
-      }
-
-      // 2. busca IDs de clientes para vincular às vendas
-      const allDocs = clientesUniq.map(c => c.cpf_cnpj)
-      setImportStatusSafeweb(`Clientes processados. Vinculando documentos aos cadastros...`)
-      const cadastrosData = await getAivenCommercialClientesByDocs(allDocs)
-      const idByDoc = new Map(cadastrosData.map(c => [c.cpf_cnpj, c.id]))
 
       // 3. monta payloads de venda COM validado_safeweb = true
       setImportStatusSafeweb(`Montando vendas e pedidos da planilha...`)
@@ -3746,7 +3725,7 @@ export default function Comercial() {
         return {
           protocolo_numero:       protocolo,
           pedido_numero:          pick(r, ['n_pedido', 'numero_pedido', 'pedido', 'pedido_numero', 'id_pedido']).trim() || null,
-          cadastro_base_id:       idByDoc.get(doc) ?? null,
+          cadastro_base_id:       null,
           certificado_id:          cert?.id ?? null,
           tipo_produto:           produto || descricaoProduto || null,
           tipo_venda:             pick(r, ['tipo_venda']).trim() || null,
@@ -3799,80 +3778,46 @@ export default function Comercial() {
         return
       }
 
-      // 4. separa registros que já existem no CRM dos que são só da Safeweb
-      const protocolos = vendasPayloads.map(v => v.protocolo_numero)
-      setImportStatusSafeweb(`Verificando ${protocolos.length} protocolo(s) existentes no CRM...`)
-      const existResp3 = await fetch(getApiUrl('/comercial/vendas/protocolos'), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ protocolos }),
-      })
-      const existData3 = await existResp3.json()
-      const existSet = new Set((existData3.protocolos ?? []) as string[])
-      const paraAtualizar = vendasPayloads.filter(v =>  existSet.has(v.protocolo_numero))
-      const paraCriar = vendasPayloads.filter(v => !existSet.has(v.protocolo_numero))
-
-      // 5. atualiza os que já existem e cria pedidos para vendas novas
-      let renovacoesConvertidas = 0
-      for (let i = 0; i < paraAtualizar.length; i += BATCH) {
-        const batch = paraAtualizar.slice(i, i + BATCH)
-        setImportStatusSafeweb(`Atualizando pedidos existentes ${Math.min(i + batch.length, paraAtualizar.length)} de ${paraAtualizar.length}...`)
-        const rBVU = await fetch(getApiUrl('/comercial/vendas/batch-update'), {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ updates: batch }),
-        })
-        const updateData = await rBVU.json().catch(() => null)
-        if (!rBVU.ok) { showMsg(updateData?.error ?? 'Erro ao importar vendas'); return }
-        renovacoesConvertidas += Number(updateData?.renovacoesConvertidas ?? 0)
-      }
-      let criados = 0
       const pontoPadrao = pontosAtivos[0]?.id ?? pontos[0]?.id ?? ''
-      if (paraCriar.length && (!currentUserId || !pontoPadrao)) {
-        showMsg('Clientes importados, mas não foi possível criar os pedidos: usuário logado ou ponto de atendimento padrão não encontrado.')
+      if (!currentUserId || !pontoPadrao) {
+        showMsg('Não foi possível iniciar a importação: usuário logado ou ponto de atendimento padrão não encontrado.')
         return
       }
-      for (const venda of paraCriar) {
-        setImportStatusSafeweb(`Criando pedidos novos ${criados + 1} de ${paraCriar.length}...`)
-        const rCreate = await fetch(getApiUrl('/comercial/vendas/criar'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...venda,
-            quantidade: 1,
-            vendedor_id: currentUserId,
-            ponto_atendimento_id: pontoPadrao,
-            pedido_status: venda.pedido_numero ? 'gerado' : 'nao_gerado',
-            protocolo_status: venda.protocolo_numero ? 'gerado' : 'nao_gerado',
-            api_payload_pedido: {},
-            api_payload_protocolo: {},
-          }),
-        })
-        if (!rCreate.ok) {
-          const errBody = await rCreate.json().catch(() => null)
-          showMsg(errBody?.error ?? `Erro ao criar pedido importado ${venda.protocolo_numero}`)
-          return
-        }
-        const createData = await rCreate.json().catch(() => null)
-        if (createData?.renovacao?.converted) renovacoesConvertidas += 1
-        criados++
+
+      setImportStatusSafeweb(`Enviando importação para a esteira do backend...`)
+      const startResp = await fetch(getApiUrl('/comercial/import-safeweb-jobs'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientes: clientesUniq,
+          vendas: vendasPayloads,
+          currentUserId,
+          pontoPadrao,
+          linhas: rows.length,
+        }),
+      })
+      const startData = await startResp.json().catch(() => null)
+      if (!startResp.ok || !startData?.job?.id) {
+        showMsg(startData?.error ?? 'Não foi possível iniciar a importação no backend.')
+        return
       }
 
-      // 6. conta divergentes: vendas emitidas sem validado_safeweb
-      setImportStatusSafeweb(`Finalizando batimento e atualizando a tela...`)
-      const divResp = await fetch(getApiUrl('/comercial/vendas/count-sem-validacao'))
-      const divData = await divResp.json()
-      const divergentes = divData.count ?? 0
+      const jobId = String(startData.job.id)
+      for (;;) {
+        await new Promise(resolve => setTimeout(resolve, 1500))
+        const statusResp = await fetch(getApiUrl(`/comercial/import-safeweb-jobs/${jobId}`))
+        const statusData = await statusResp.json().catch(() => null)
+        const job = statusData?.job
+        if (!statusResp.ok || !job) throw new Error('Não foi possível consultar o andamento da importação.')
+        setImportStatusSafeweb(String(job.message ?? 'Importação em andamento no backend...'))
+        if (job.status === 'failed') throw new Error(String(job.error ?? 'Importação falhou no backend.'))
+        if (job.status === 'done') {
+          setResultSafeweb(job.result)
+          showMsg(`Importação concluída na esteira: ${job.result?.linhas ?? rows.length} linha(s), ${job.result?.vendas ?? vendasPayloads.length} venda(s), ${job.result?.criados ?? 0} criado(s) e ${job.result?.atualizados ?? 0} atualizado(s).`, 'ok')
+          break
+        }
+      }
 
-      setResultSafeweb({
-        linhas: rows.length,
-        clientes: clientesUniq.length,
-        vendas: vendasPayloads.length,
-        novos: paraCriar.length,
-        criados,
-        atualizados: paraAtualizar.length,
-        divergentes,
-        renovacoesConvertidas,
-      })
-      showMsg(`Importação concluída: ${rows.length} linha(s) lida(s), ${vendasPayloads.length} venda(s) reconhecida(s), ${criados} pedido(s) criado(s) e ${paraAtualizar.length} atualizado(s).`, 'ok')
       await fetchVendasV2()
       await fetchCatalogo()
     } catch (error) {
