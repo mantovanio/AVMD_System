@@ -1,0 +1,70 @@
+create table if not exists nfse_configuracoes (
+  id uuid primary key default gen_random_uuid(),
+  identificador text,
+  municipio_nome text not null,
+  municipio_codigo_ibge text,
+  provedor text not null default 'municipal',
+  ativo boolean not null default true,
+  cadastro_base_emitente_id uuid references cadastros_base(id) on delete set null,
+  cnpj_emitente text not null,
+  inscricao_municipal text,
+  inscricao_estadual text,
+  cnae text,
+  ambiente text not null default 'homologacao',
+  natureza_operacao text,
+  simples_nacional boolean not null default false,
+  regime_especial text,
+  exigibilidade_iss text,
+  incentivo_fiscal boolean not null default false,
+  tipo_rps text,
+  serie_rps text,
+  numero_rps_atual integer not null default 1,
+  codigo_servico_municipio text,
+  codigo_tributacao_municipio text,
+  codigo_cfps text,
+  codigo_cst text,
+  aliquota_iss numeric(8,4),
+  aliquota_pis numeric(8,4),
+  aliquota_cofins numeric(8,4),
+  aliquota_inss numeric(8,4),
+  aliquota_ir numeric(8,4),
+  aliquota_csll numeric(8,4),
+  usuario_prefeitura text,
+  senha_prefeitura text,
+  chave_autenticacao text,
+  usa_certificado_digital boolean not null default false,
+  certificado_pfx_path text,
+  certificado_senha text,
+  observacoes text,
+  robo_ligado boolean not null default false,
+  payload_reforma_tributaria jsonb not null default '{}'::jsonb,
+  updated_by uuid references profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_nfse_configuracoes_ativo on nfse_configuracoes (ativo, created_at desc);
+create index if not exists idx_nfse_configuracoes_cnpj on nfse_configuracoes (regexp_replace(cnpj_emitente, '\D', '', 'g'));
+
+create table if not exists nfse_emitidas (
+  id uuid primary key default gen_random_uuid(),
+  lancamento_financeiro_id uuid,
+  cadastro_base_tomador_id uuid references cadastros_base(id) on delete set null,
+  venda_certificado_id uuid references vendas_certificados(id) on delete cascade,
+  numero_nf text,
+  codigo_verificacao text,
+  status_nf text not null default 'pendente',
+  data_emissao timestamptz,
+  valor_servico numeric(12,2),
+  valor_iss numeric(12,2),
+  xml_url text,
+  pdf_url text,
+  payload_envio jsonb not null default '{}'::jsonb,
+  payload_retorno jsonb not null default '{}'::jsonb,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_nfse_emitidas_venda on nfse_emitidas (venda_certificado_id, created_at desc);
+create index if not exists idx_nfse_emitidas_status on nfse_emitidas (status_nf);

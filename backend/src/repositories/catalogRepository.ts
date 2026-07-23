@@ -4,6 +4,102 @@ import type { AivenSqlClient } from '../db/aivenClient.js'
 export class CatalogRepository {
   constructor(private readonly db: AivenSqlClient) {}
 
+  // ── NFS-e ────────────────────────────────────────────────────────────
+  async listNfseConfiguracoes() {
+    const result = await this.db.query(
+      `select * from nfse_configuracoes
+       order by ativo desc, municipio_nome asc, created_at asc`,
+    )
+    return result.rows
+  }
+
+  async getActiveNfseConfiguracao() {
+    const result = await this.db.query(
+      `select * from nfse_configuracoes
+       where ativo = true
+       order by updated_at desc, created_at desc
+       limit 1`,
+    )
+    return result.rows[0] ?? null
+  }
+
+  async saveNfseConfiguracao(input: Record<string, unknown>) {
+    const id = String(input.id ?? '').trim() || randomUUID()
+    const fields = [
+      'identificador','municipio_nome','municipio_codigo_ibge','provedor','ativo','cadastro_base_emitente_id',
+      'cnpj_emitente','inscricao_municipal','inscricao_estadual','cnae','ambiente','natureza_operacao',
+      'simples_nacional','regime_especial','exigibilidade_iss','incentivo_fiscal','tipo_rps','serie_rps',
+      'numero_rps_atual','codigo_servico_municipio','codigo_tributacao_municipio','codigo_cfps','codigo_cst',
+      'aliquota_iss','aliquota_pis','aliquota_cofins','aliquota_inss','aliquota_ir','aliquota_csll',
+      'usuario_prefeitura','senha_prefeitura','chave_autenticacao','usa_certificado_digital','certificado_pfx_path',
+      'certificado_senha','observacoes','robo_ligado','payload_reforma_tributaria','updated_by',
+    ]
+    const vals = fields.map(field => {
+      const value = input[field] ?? null
+      if (field === 'payload_reforma_tributaria') return JSON.stringify(value && typeof value === 'object' ? value : {})
+      if (['ativo','simples_nacional','incentivo_fiscal','usa_certificado_digital','robo_ligado'].includes(field)) return Boolean(value)
+      if (field === 'cadastro_base_emitente_id' || field === 'updated_by') return String(value ?? '').trim() || null
+      if (field === 'numero_rps_atual') return Number(value ?? 1) || 1
+      if (field.startsWith('aliquota_')) return value === null || value === '' ? null : Number(value)
+      return typeof value === 'string' ? value.trim() || null : value
+    })
+    const cols = fields.join(', ')
+    const phs = fields.map((_, index) => `$${index + 2}`).join(', ')
+    const ups = fields.map(field => `${field} = excluded.${field}`).join(', ')
+    const result = await this.db.query(
+      `insert into nfse_configuracoes (id, ${cols})
+       values ($1, ${phs})
+       on conflict (id) do update set ${ups}, updated_at = now()
+       returning *`,
+      [id, ...vals],
+    )
+    return result.rows[0] ?? null
+  }
+
+  async listNfseByVenda(vendaId: string) {
+    const result = await this.db.query(
+      `select * from nfse_emitidas
+       where venda_certificado_id = $1::uuid
+       order by created_at desc`,
+      [vendaId],
+    )
+    return result.rows
+  }
+
+  async createNfse(input: Record<string, unknown>) {
+    const fields = [
+      'lancamento_financeiro_id','cadastro_base_tomador_id','venda_certificado_id','numero_nf','codigo_verificacao',
+      'status_nf','data_emissao','valor_servico','valor_iss','xml_url','pdf_url','payload_envio','payload_retorno','metadata',
+    ]
+    const vals = fields.map(field => {
+      const value = input[field] ?? null
+      if (['payload_envio','payload_retorno','metadata'].includes(field)) return JSON.stringify(value && typeof value === 'object' ? value : {})
+      if (['lancamento_financeiro_id','cadastro_base_tomador_id','venda_certificado_id'].includes(field)) return String(value ?? '').trim() || null
+      if (['valor_servico','valor_iss'].includes(field)) return value === null || value === '' ? null : Number(value)
+      return value
+    })
+    const cols = fields.join(', ')
+    const phs = fields.map((_, index) => `$${index + 1}`).join(', ')
+    const result = await this.db.query(
+      `insert into nfse_emitidas (${cols})
+       values (${phs})
+       returning *`,
+      vals,
+    )
+    return result.rows[0] ?? null
+  }
+
+  async deleteNfse(id: string) {
+    const result = await this.db.query<{ id: string }>(
+      `delete from nfse_emitidas
+       where id = $1::uuid
+         and status_nf in ('pendente','erro')
+       returning id`,
+      [id],
+    )
+    return result.rows[0] ?? null
+  }
+
   // ── Certificados ─────────────────────────────────────────────────────
   async listCertificados() {
     const r = await this.db.query(`select * from certificados order by tipo asc`)

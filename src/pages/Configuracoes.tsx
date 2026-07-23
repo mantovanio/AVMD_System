@@ -5265,11 +5265,10 @@ function AbaFiscal() {
     setLoading(true)
     setErro(null)
     const [configsRes, modeloRes, automacaoRes] = await Promise.all([
-      supabase
-        .from('nfse_configuracoes')
-        .select('*')
-        .order('municipio_nome', { ascending: true })
-        .order('created_at', { ascending: true }),
+      fetch(getApiUrl('/nfse/configuracoes')).then(async response => ({
+        data: response.ok ? ((await response.json()) as { configuracoes?: NfseConfiguracao[] }).configuracoes ?? [] : null,
+        error: response.ok ? null : { message: ((await response.json().catch(() => null)) as { error?: string } | null)?.error ?? 'Erro ao carregar configurações fiscais.' },
+      })).catch(error => ({ data: null, error: { message: error instanceof Error ? error.message : 'Erro ao carregar configurações fiscais.' } })),
       supabase
         .from('app_settings')
         .select('value')
@@ -5408,11 +5407,13 @@ function AbaFiscal() {
       updated_at: new Date().toISOString(),
     }
 
-    const query = form.id
-      ? supabase.from('nfse_configuracoes').update(payload).eq('id', form.id)
-      : supabase.from('nfse_configuracoes').insert([payload])
-
-    const { error } = await query
+    const saveResponse = await fetch(getApiUrl('/nfse/configuracoes'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(error => ({ ok: false, json: async () => ({ error: error instanceof Error ? error.message : 'Erro ao salvar configuração fiscal.' }) } as Response))
+    const savePayload = await saveResponse.json().catch(() => null) as { error?: string } | null
+    const error = saveResponse.ok ? null : { message: savePayload?.error ?? 'Erro ao salvar configuração fiscal.' }
     setSaving(false)
     if (error) {
       setErro(error.message)

@@ -779,9 +779,48 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
     return true
   }
 
-  // ── NFS-e emitidas (stub — tabela não existe no backend ainda) ─────────
-  if (url.startsWith('/api/nfse/')) {
-    writeJson(res, 501, { ok: false, error: 'NFS-e ainda não migrada para o backend local' }, corsOrigin)
+  // ── NFS-e ─────────────────────────────────────────────────────────────
+  if (method === 'GET' && url === '/api/nfse/configuracoes') {
+    const configuracoes = await repo.listNfseConfiguracoes()
+    writeJson(res, 200, { ok: true, configuracoes }, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && url === '/api/nfse/configuracao') {
+    const configuracao = await repo.getActiveNfseConfiguracao()
+    writeJson(res, 200, { ok: true, configuracao }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/nfse/configuracoes') {
+    const body = await readJson<Record<string, unknown>>(req)
+    const configuracao = await repo.saveNfseConfiguracao(body)
+    writeJson(res, 200, { ok: true, configuracao }, corsOrigin)
+    return true
+  }
+
+  const nfseVendaMatch = url.match(/^\/api\/nfse\/venda\/([^/]+)$/)
+  if (method === 'GET' && nfseVendaMatch) {
+    const notas = await repo.listNfseByVenda(nfseVendaMatch[1])
+    writeJson(res, 200, { ok: true, notas }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/nfse') {
+    const body = await readJson<Record<string, unknown>>(req)
+    const nfse = await repo.createNfse(body)
+    writeJson(res, 201, { ok: true, nfse }, corsOrigin)
+    return true
+  }
+
+  const nfseDeleteMatch = url.match(/^\/api\/nfse\/([^/]+)$/)
+  if (method === 'DELETE' && nfseDeleteMatch) {
+    const deleted = await repo.deleteNfse(nfseDeleteMatch[1])
+    if (!deleted) {
+      writeJson(res, 409, { ok: false, error: 'NFS-e não encontrada ou não pode ser excluída.' }, corsOrigin)
+      return true
+    }
+    writeJson(res, 200, { ok: true, deleted }, corsOrigin)
     return true
   }
 
