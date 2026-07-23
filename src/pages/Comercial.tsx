@@ -793,7 +793,16 @@ export default function Comercial() {
   const vendasRefreshLockRef                    = useRef(false)
   const [importandoSafeweb, setImportandoSafeweb] = useState(false)
   const [importandoClientes, setImportandoClientes] = useState(false)
-  const [resultSafeweb, setResultSafeweb] = useState<{ clientes: number; novos: number; criados: number; atualizados: number; divergentes: number } | null>(null)
+  const [resultSafeweb, setResultSafeweb] = useState<{
+    linhas: number
+    clientes: number
+    vendas: number
+    novos: number
+    criados: number
+    atualizados: number
+    divergentes: number
+    renovacoesConvertidas: number
+  } | null>(null)
   const [resultClientes, setResultClientes] = useState<{ inseridos: number; atualizados: number } | null>(null)
   const [safewebVendas, setSafewebVendas] = useState<VendaRow[]>([])
   const [loadingSafewebVendas, setLoadingSafewebVendas] = useState(false)
@@ -3793,13 +3802,16 @@ export default function Comercial() {
       const paraCriar = vendasPayloads.filter(v => !existSet.has(v.protocolo_numero))
 
       // 5. atualiza os que já existem e cria pedidos para vendas novas
+      let renovacoesConvertidas = 0
       for (let i = 0; i < paraAtualizar.length; i += BATCH) {
         const batch = paraAtualizar.slice(i, i + BATCH)
         const rBVU = await fetch(getApiUrl('/comercial/vendas/batch-update'), {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ updates: batch }),
         })
-        if (!rBVU.ok) { showMsg('Erro ao importar vendas'); return }
+        const updateData = await rBVU.json().catch(() => null)
+        if (!rBVU.ok) { showMsg(updateData?.error ?? 'Erro ao importar vendas'); return }
+        renovacoesConvertidas += Number(updateData?.renovacoesConvertidas ?? 0)
       }
       let criados = 0
       const pontoPadrao = pontosAtivos[0]?.id ?? pontos[0]?.id ?? ''
@@ -3827,6 +3839,8 @@ export default function Comercial() {
           showMsg(errBody?.error ?? `Erro ao criar pedido importado ${venda.protocolo_numero}`)
           return
         }
+        const createData = await rCreate.json().catch(() => null)
+        if (createData?.renovacao?.converted) renovacoesConvertidas += 1
         criados++
       }
 
@@ -3835,9 +3849,21 @@ export default function Comercial() {
       const divData = await divResp.json()
       const divergentes = divData.count ?? 0
 
-      setResultSafeweb({ clientes: clientesUniq.length, novos: paraCriar.length, criados, atualizados: paraAtualizar.length, divergentes })
+      setResultSafeweb({
+        linhas: rows.length,
+        clientes: clientesUniq.length,
+        vendas: vendasPayloads.length,
+        novos: paraCriar.length,
+        criados,
+        atualizados: paraAtualizar.length,
+        divergentes,
+        renovacoesConvertidas,
+      })
+      showMsg(`Importação concluída: ${rows.length} linha(s) lida(s), ${vendasPayloads.length} venda(s) reconhecida(s), ${criados} pedido(s) criado(s) e ${paraAtualizar.length} atualizado(s).`, 'ok')
       await fetchVendasV2()
       await fetchCatalogo()
+    } catch (error) {
+      showMsg(error instanceof Error ? `Erro ao importar arquivo: ${error.message}` : 'Erro ao importar arquivo.')
     } finally {
       setImportandoSafeweb(false)
     }
@@ -7921,10 +7947,18 @@ export default function Comercial() {
                       Concluir
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 text-center">
+                      <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">{resultSafeweb.linhas}</p>
+                      <p className="text-xs text-gray-500 mt-1">Linhas lidas</p>
+                    </div>
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 text-center">
                       <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">{resultSafeweb.clientes}</p>
                       <p className="text-xs text-gray-500 mt-1">Clientes processados</p>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 text-center">
+                      <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">{resultSafeweb.vendas}</p>
+                      <p className="text-xs text-gray-500 mt-1">Vendas reconhecidas</p>
                     </div>
                     <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 text-center">
                       <p className="text-2xl font-bold text-green-700 dark:text-green-400">{resultSafeweb.criados}</p>
@@ -7937,6 +7971,10 @@ export default function Comercial() {
                     <div className={cn('rounded-xl p-3 text-center', resultSafeweb.divergentes > 0 ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-gray-50 dark:bg-gray-800')}>
                       <p className={cn('text-2xl font-bold', resultSafeweb.divergentes > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-gray-400')}>{resultSafeweb.divergentes}</p>
                       <p className="text-xs text-gray-500 mt-1">No CRM sem validação</p>
+                    </div>
+                    <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-3 text-center">
+                      <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{resultSafeweb.renovacoesConvertidas}</p>
+                      <p className="text-xs text-gray-500 mt-1">Renovações baixadas</p>
                     </div>
                   </div>
                   {resultSafeweb.divergentes > 0 && (
