@@ -88,6 +88,33 @@ export class RenovacaoRepository {
               SELECT 1
                 FROM vendas_certificados v
                 LEFT JOIN cadastros_base cb ON cb.id = v.cadastro_base_id
+                CROSS JOIN LATERAL (
+                  SELECT
+                    regexp_replace(lower(coalesce(r.tipo_certificado, '')), '[^a-z0-9]+', '', 'g') as renovacao_tipo,
+                    regexp_replace(lower(coalesce(v.tipo_produto, '')), '[^a-z0-9]+', '', 'g') as venda_tipo,
+                    nullif(regexp_replace(coalesce(r.protocolo, ''), '\\D', '', 'g'), '') as renovacao_protocolo,
+                    case
+                      when length(regexp_replace(coalesce(r.cpf, ''), '\\D', '', 'g')) = 11
+                      then regexp_replace(coalesce(r.cpf, ''), '\\D', '', 'g')
+                      else null
+                    end as renovacao_cpf,
+                    coalesce(
+                      case
+                        when length(regexp_replace(coalesce(r.cnpj, ''), '\\D', '', 'g')) = 14
+                        then regexp_replace(coalesce(r.cnpj, ''), '\\D', '', 'g')
+                        else null
+                      end,
+                      case
+                        when length(regexp_replace(coalesce(r.cpf, ''), '\\D', '', 'g')) = 14
+                        then regexp_replace(coalesce(r.cpf, ''), '\\D', '', 'g')
+                        else null
+                      end
+                    ) as renovacao_cnpj,
+                    nullif(regexp_replace(coalesce(v.protocolo_numero, ''), '\\D', '', 'g'), '') as venda_protocolo,
+                    nullif(regexp_replace(coalesce(v.metadata->'safeweb_financeiro'->'emissao'->>'protocolo_renovacao', ''), '\\D', '', 'g'), '') as venda_protocolo_renovacao,
+                    nullif(regexp_replace(coalesce(v.documento_faturamento, cb.cpf_cnpj, v.metadata->'safeweb_financeiro'->>'documento', ''), '\\D', '', 'g'), '') as venda_documento,
+                    nullif(regexp_replace(coalesce(v.metadata->'safeweb_financeiro'->>'documento_titular', ''), '\\D', '', 'g'), '') as venda_documento_titular
+                ) match_keys
                WHERE coalesce(v.status_venda, '') <> 'cancelado'
                  AND (
                    coalesce(v.pago, false) = true
@@ -96,31 +123,34 @@ export class RenovacaoRepository {
                  )
                  AND coalesce(v.data_inicio_validade::date, v.created_at::date) >= (r.data_vencimento::date - INTERVAL '180 days')
                  AND (
-                   (nullif(regexp_replace(coalesce(r.protocolo, ''), '\\D', '', 'g'), '') IS NOT NULL
-                    AND nullif(regexp_replace(coalesce(r.protocolo, ''), '\\D', '', 'g'), '') IN (
-                      nullif(regexp_replace(coalesce(v.protocolo_numero, ''), '\\D', '', 'g'), ''),
-                      nullif(regexp_replace(coalesce(v.metadata->'safeweb_financeiro'->'emissao'->>'protocolo_renovacao', ''), '\\D', '', 'g'), '')
-                    ))
-                   OR (r.cadastro_base_id IS NOT NULL AND v.cadastro_base_id = r.cadastro_base_id)
-                   OR nullif(regexp_replace(coalesce(v.documento_faturamento, cb.cpf_cnpj, v.metadata->'safeweb_financeiro'->>'documento', ''), '\\D', '', 'g'), '') IN (
-                     nullif(regexp_replace(coalesce(r.cpf, ''), '\\D', '', 'g'), ''),
-                     nullif(regexp_replace(coalesce(r.cnpj, ''), '\\D', '', 'g'), '')
+                   (match_keys.renovacao_protocolo IS NOT NULL
+                    AND match_keys.renovacao_protocolo IN (match_keys.venda_protocolo, match_keys.venda_protocolo_renovacao))
+                   OR (
+                     match_keys.renovacao_tipo ~ '(cnpj|epj|nfe|notafiscal|mei)'
+                     AND match_keys.renovacao_cnpj IS NOT NULL
+                     AND length(match_keys.renovacao_cnpj) = 14
+                     AND match_keys.renovacao_cnpj = match_keys.venda_documento
                    )
-                   OR nullif(regexp_replace(coalesce(v.metadata->'safeweb_financeiro'->>'documento_titular', ''), '\\D', '', 'g'), '') IN (
-                     nullif(regexp_replace(coalesce(r.cpf, ''), '\\D', '', 'g'), ''),
-                     nullif(regexp_replace(coalesce(r.cnpj, ''), '\\D', '', 'g'), '')
+                   OR (
+                     match_keys.renovacao_tipo !~ '(cnpj|epj|nfe|notafiscal|mei)'
+                     AND match_keys.renovacao_cpf IS NOT NULL
+                     AND length(match_keys.renovacao_cpf) = 11
+                     AND (
+                       match_keys.renovacao_cpf IN (match_keys.venda_documento, match_keys.venda_documento_titular)
+                       OR (r.cadastro_base_id IS NOT NULL AND v.cadastro_base_id = r.cadastro_base_id)
+                     )
                    )
                  )
                  AND (
-                   regexp_replace(lower(coalesce(r.tipo_certificado, '')), '[^a-z0-9]+', '', 'g') = ''
-                   OR regexp_replace(lower(coalesce(v.tipo_produto, '')), '[^a-z0-9]+', '', 'g') = ''
+                   match_keys.renovacao_tipo = ''
+                   OR match_keys.venda_tipo = ''
                    OR position(
-                     regexp_replace(lower(coalesce(r.tipo_certificado, '')), '[^a-z0-9]+', '', 'g')
-                     in regexp_replace(lower(coalesce(v.tipo_produto, '')), '[^a-z0-9]+', '', 'g')
+                     match_keys.renovacao_tipo
+                     in match_keys.venda_tipo
                    ) > 0
                    OR position(
-                     regexp_replace(lower(coalesce(v.tipo_produto, '')), '[^a-z0-9]+', '', 'g')
-                     in regexp_replace(lower(coalesce(r.tipo_certificado, '')), '[^a-z0-9]+', '', 'g')
+                     match_keys.venda_tipo
+                     in match_keys.renovacao_tipo
                    ) > 0
                  )
             )
