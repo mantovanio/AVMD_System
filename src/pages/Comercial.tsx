@@ -3547,7 +3547,18 @@ export default function Comercial() {
         }
         return ''
       }
-      const parseNum = (v: string) => parseFloat((v ?? '').replace(/[R$\s.]/g, '').replace(',', '.')) || 0
+      const parseNum = (v: string) => {
+        const raw = String(v ?? '').replace(/[R$\s]/g, '').trim()
+        if (!raw) return 0
+        const hasComma = raw.includes(',')
+        const hasDot = raw.includes('.')
+        const normalized = hasComma && hasDot
+          ? raw.replace(/\./g, '').replace(',', '.')
+          : hasComma
+            ? raw.replace(',', '.')
+            : raw
+        return parseFloat(normalized) || 0
+      }
       const cleanDoc = (v: string) => (v ?? '').replace(/\D/g, '')
       const norm = (v: string) => String(v ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()
       const isPago = (v: string) => /pago|aprovado|liquidado|quitado|compensado|recebido/.test(norm(v))
