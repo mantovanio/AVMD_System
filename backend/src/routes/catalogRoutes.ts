@@ -2,9 +2,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { createSecureContext } from 'node:tls'
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { extname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { readJson, writeJson } from '../utils/http.js'
 import { CatalogRepository } from '../repositories/catalogRepository.js'
@@ -33,6 +33,7 @@ type SafewebImportJob = {
 const safewebImportJobs = new Map<string, SafewebImportJob>()
 const ISABELLA_VIDAL_PROFILE_ID = 'ad3436f8-eb15-4fbe-a351-3b6b56d2a17e'
 const execFileAsync = promisify(execFile)
+const NFSE_CERT_STORAGE_DIR = resolve('storage/certificados-digitais')
 
 async function validatePfxWithOpenSsl(pfx: Buffer, senha: string) {
   const dir = await mkdtemp(join(tmpdir(), 'avmd-pfx-'))
@@ -57,6 +58,26 @@ async function validatePfxWithOpenSsl(pfx: Buffer, senha: string) {
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined)
   }
+}
+
+async function validatePfx(pfx: Buffer, senha: string) {
+  try {
+    createSecureContext({ pfx, passphrase: senha })
+    return { metodo_validacao: 'node_tls', aviso: null as string | null }
+  } catch {
+    const opensslResult = await validatePfxWithOpenSsl(pfx, senha)
+    return {
+      metodo_validacao: opensslResult.legacy ? 'openssl_legacy' : 'openssl',
+      aviso: opensslResult.legacy
+        ? 'Certificado validado em modo compatível. Isso é comum em A1 emitido com algoritmo legado.'
+        : null,
+    }
+  }
+}
+
+function normalizeCertExtension(filename: string) {
+  const ext = extname(filename).toLowerCase()
+  return ext === '.p12' ? '.p12' : '.pfx'
 }
 
 function updateSafewebJob(id: string, patch: Partial<Omit<SafewebImportJob, 'id' | 'createdAt'>>) {
@@ -843,38 +864,78 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
     }
     const pfx = Buffer.from(fileBase64, 'base64')
     try {
-      createSecureContext({ pfx, passphrase: senha })
+      const validation = await validatePfx(pfx, senha)
       writeJson(res, 200, {
         ok: true,
         certificado: {
           filename,
           tamanho_bytes: pfx.length,
           senha_validada: true,
-          metodo_validacao: 'node_tls',
+          ...validation,
         },
       }, corsOrigin)
     } catch {
-      try {
-        const opensslResult = await validatePfxWithOpenSsl(pfx, senha)
-        writeJson(res, 200, {
-          ok: true,
-          certificado: {
-            filename,
-            tamanho_bytes: pfx.length,
-            senha_validada: true,
-            metodo_validacao: opensslResult.legacy ? 'openssl_legacy' : 'openssl',
-            aviso: opensslResult.legacy
-              ? 'Certificado validado em modo compatível. Isso é comum em A1 emitido com algoritmo legado.'
-              : null,
-          },
-        }, corsOrigin)
-      } catch {
-        writeJson(res, 400, {
-          ok: false,
-          error: 'Não foi possível abrir o certificado A1 com esta senha neste servidor. Se a senha abre no Windows, o arquivo pode estar em formato legado ou incompatível; reexporte o A1 em .pfx/.p12 marcando a chave privada e tente novamente.',
-        }, corsOrigin)
-      }
+      writeJson(res, 400, {
+        ok: false,
+        error: 'Não foi possível abrir o certificado A1 com esta senha neste servidor. Se a senha abre no Windows, o arquivo pode estar em formato legado ou incompatível; reexporte o A1 em .pfx/.p12 marcando a chave privada e tente novamente.',
+      }, corsOrigin)
     }
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/nfse/certificado/vincular') {
+    const body = await readJson<{ file_base64?: string; senha?: string; filename?: string; cnpj_emitente?: string }>(req)
+    const fileBase64 = String(body.file_base64 ?? '').trim()
+    const senha = String(body.senha ?? '')
+    const filename = String(body.filename ?? 'certificado.pfx')
+    const cnpj = String(body.cnpj_emitente ?? '').replace(/\D/g, '')
+    if (!fileBase64 || !senha || !cnpj) {
+      writeJson(res, 400, { ok: false, error: 'Informe CNPJ do emitente, arquivo A1 e senha do certificado.' }, corsOrigin)
+      return true
+    }
+    const pfx = Buffer.from(fileBase64, 'base64')
+    try {
+      const validation = await validatePfx(pfx, senha)
+      const ext = normalizeCertExtension(filename)
+      const relativePath = `${cnpj}/certificado${ext}`
+      const dir = join(NFSE_CERT_STORAGE_DIR, cnpj)
+      const absolutePath = join(dir, `certificado${ext}`)
+      await mkdir(dir, { recursive: true })
+      await writeFile(absolutePath, pfx, { mode: 0o600 })
+      writeJson(res, 200, {
+        ok: true,
+        certificado: {
+          filename,
+          path: relativePath,
+          storage: 'backend',
+          tamanho_bytes: pfx.length,
+          senha_validada: true,
+          ...validation,
+        },
+      }, corsOrigin)
+    } catch {
+      writeJson(res, 400, {
+        ok: false,
+        error: 'Não foi possível validar e vincular o certificado. Confira o arquivo exportado com chave privada e a senha informada.',
+      }, corsOrigin)
+    }
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/nfse/certificado/remover') {
+    const body = await readJson<{ path?: string }>(req)
+    const relativePath = String(body.path ?? '').trim().replace(/\\/g, '/')
+    if (!relativePath || relativePath.includes('..') || relativePath.startsWith('/')) {
+      writeJson(res, 400, { ok: false, error: 'Caminho do certificado inválido.' }, corsOrigin)
+      return true
+    }
+    const absolutePath = resolve(NFSE_CERT_STORAGE_DIR, relativePath)
+    if (!absolutePath.startsWith(NFSE_CERT_STORAGE_DIR)) {
+      writeJson(res, 400, { ok: false, error: 'Caminho do certificado inválido.' }, corsOrigin)
+      return true
+    }
+    await rm(absolutePath, { force: true }).catch(() => undefined)
+    writeJson(res, 200, { ok: true }, corsOrigin)
     return true
   }
 

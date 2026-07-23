@@ -5421,10 +5421,10 @@ function AbaFiscal() {
     })
     if (!fileBase64) return
 
-    setCertificadoStatus({ tipo: 'info', mensagem: 'Validando a senha do certificado...' })
+    setCertificadoStatus({ tipo: 'info', mensagem: 'Validando a senha e vinculando o certificado...' })
     const controller = new AbortController()
-    const timeoutId = window.setTimeout(() => controller.abort(), 30000)
-    const validationResponse = await fetch(getApiUrl('/nfse/certificado/validar'), {
+    const timeoutId = window.setTimeout(() => controller.abort(), 45000)
+    const validationResponse = await fetch(getApiUrl('/nfse/certificado/vincular'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
@@ -5432,35 +5432,27 @@ function AbaFiscal() {
         filename: certFile.name,
         file_base64: fileBase64,
         senha: form.certificado_senha,
+        cnpj_emitente: form.cnpj_emitente,
       }),
     }).catch(error => ({
       ok: false,
       json: async () => ({
         error: error instanceof DOMException && error.name === 'AbortError'
-          ? 'A validação demorou demais. Tente novamente ou verifique o tamanho do arquivo.'
-          : error instanceof Error ? error.message : 'Não foi possível validar o certificado.',
+          ? 'A validação e o vínculo demoraram demais. Tente novamente ou verifique o tamanho do arquivo.'
+          : error instanceof Error ? error.message : 'Não foi possível validar e vincular o certificado.',
       }),
     } as Response))
     window.clearTimeout(timeoutId)
-    const validationPayload = await validationResponse.json().catch(() => null) as { error?: string } | null
+    const validationPayload = await validationResponse.json().catch(() => null) as { certificado?: { path?: string }; error?: string } | null
     if (!validationResponse.ok) {
       setUploadingCert(false)
       setCertificadoStatus({ tipo: 'erro', mensagem: validationPayload?.error ?? 'A senha não abriu o certificado A1.' })
       return
     }
 
-    setCertificadoStatus({ tipo: 'info', mensagem: 'Senha validada. Enviando o certificado para o armazenamento seguro...' })
-    const cnpjClean = form.cnpj_emitente.replace(/\D/g, '')
-    const ext = certFile.name.split('.').pop()?.toLowerCase() ?? 'pfx'
-    const path = `${cnpjClean}/certificado.${ext}`
-    const { error: upErr } = await supabase.storage
-      .from('certificados-digitais')
-      .upload(path, certFile, { upsert: true, contentType: 'application/x-pkcs12' })
     setUploadingCert(false)
-    if (upErr) {
-      setCertificadoStatus({ tipo: 'erro', mensagem: 'Erro ao enviar certificado: ' + upErr.message })
-      return
-    }
+    const path = validationPayload?.certificado?.path
+    if (!path) { setCertificadoStatus({ tipo: 'erro', mensagem: 'O certificado foi validado, mas o backend não retornou o caminho do arquivo.' }); return }
     setForm(prev => ({ ...prev, certificado_pfx_path: path, usa_certificado_digital: true }))
     setCertificadoValidado(true)
     setCertificadoStatus({ tipo: 'ok', mensagem: 'Certificado validado e vinculado. Agora salve a configuração fiscal.' })
@@ -5472,7 +5464,11 @@ function AbaFiscal() {
   async function removerCertificado() {
     if (!form.certificado_pfx_path) return
     if (!confirm('Remover o certificado digital vinculado?')) return
-    await supabase.storage.from('certificados-digitais').remove([form.certificado_pfx_path])
+    await fetch(getApiUrl('/nfse/certificado/remover'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: form.certificado_pfx_path }),
+    }).catch(() => null)
     updateField('certificado_pfx_path', null)
     updateField('certificado_senha', null)
     setCertificadoValidado(false)
