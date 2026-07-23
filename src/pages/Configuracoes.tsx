@@ -25,6 +25,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import type {
   AmbienteNfse,
   AutomationRule,
+  CadastroBase,
   CommunicationOutbox,
   ExternalIntegration,
   IntegrationProvider,
@@ -44,6 +45,7 @@ import type {
 } from '@/types'
 
 type Tab = 'geral' | 'integracoes' | 'automacoes' | 'usuarios' | 'permissoes' | 'pontos' | 'pagamentos' | 'fiscal' | 'privacidade'
+type NfseEmitenteCrm = Pick<CadastroBase, 'id' | 'cpf_cnpj' | 'nome' | 'nome_fantasia' | 'email' | 'telefone' | 'cidade' | 'uf' | 'inscricao_municipal' | 'inscricao_estadual' | 'status'>
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'geral',        label: 'Geral'                  },
@@ -5256,6 +5258,8 @@ function AbaFiscal() {
   const [uploadingCert, setUploadingCert] = useState(false)
   const [configuracoes, setConfiguracoes] = useState<NfseConfiguracao[]>([])
   const [form, setForm] = useState<Partial<NfseConfiguracao>>(createEmptyFiscalForm())
+  const [emitenteVinculado, setEmitenteVinculado] = useState<NfseEmitenteCrm | null>(null)
+  const [buscandoEmitente, setBuscandoEmitente] = useState(false)
   const [modeloNota, setModeloNota] = useState<NfseModeloLayout>(DEFAULT_NFSE_MODELO)
   const [automacaoNfse, setAutomacaoNfse] = useState<NfseAutomationSettings>(DEFAULT_NFSE_AUTOMATION_SETTINGS)
   const [salvandoAutomacaoNfse, setSalvandoAutomacaoNfse] = useState(false)
@@ -5319,6 +5323,7 @@ function AbaFiscal() {
   function selecionarConfiguracao(config: NfseConfiguracao) {
     setOk(false)
     setErro(null)
+    setEmitenteVinculado(null)
     setShowSenhaPrefeitura(false)
     setForm(config)
   }
@@ -5326,13 +5331,51 @@ function AbaFiscal() {
   function novaConfiguracao(preset?: typeof NFSE_PRESETS[number]) {
     setOk(false)
     setErro(null)
+    setEmitenteVinculado(null)
     setShowSenhaPrefeitura(false)
     setForm(createEmptyFiscalForm(preset))
   }
 
   function updateField<K extends keyof NfseConfiguracao>(key: K, value: NfseConfiguracao[K]) {
     setOk(false)
+    if (key === 'cnpj_emitente') setEmitenteVinculado(null)
     setForm(prev => ({ ...prev, [key]: value }))
+  }
+
+  async function buscarEmitenteFiscal() {
+    const termo = form.cnpj_emitente?.trim() || form.identificador?.trim() || ''
+    if (!termo) {
+      setErro('Informe o CNPJ do emitente antes de buscar no CRM.')
+      return
+    }
+    setBuscandoEmitente(true)
+    setErro(null)
+    const response = await fetch(getApiUrl(`/nfse/emitentes?q=${encodeURIComponent(termo)}`)).catch(error => ({
+      ok: false,
+      json: async () => ({ error: error instanceof Error ? error.message : 'Erro ao buscar emitente no CRM.' }),
+    } as Response))
+    const payload = await response.json().catch(() => null) as { emitentes?: NfseEmitenteCrm[]; error?: string } | null
+    setBuscandoEmitente(false)
+    if (!response.ok) {
+      setErro(payload?.error ?? 'Erro ao buscar emitente no CRM.')
+      return
+    }
+    const emitente = payload?.emitentes?.[0] ?? null
+    if (!emitente) {
+      setEmitenteVinculado(null)
+      updateField('cadastro_base_emitente_id', null)
+      setErro('Não encontrei esse emitente no CRM. Cadastre a Certifast em Clientes/Cadastros e tente vincular novamente.')
+      return
+    }
+    setEmitenteVinculado(emitente)
+    setForm(prev => ({
+      ...prev,
+      cadastro_base_emitente_id: emitente.id,
+      cnpj_emitente: prev.cnpj_emitente?.trim() || emitente.cpf_cnpj,
+      inscricao_municipal: prev.inscricao_municipal?.trim() || emitente.inscricao_municipal,
+      inscricao_estadual: prev.inscricao_estadual?.trim() || emitente.inscricao_estadual,
+    }))
+    setOk(false)
   }
 
   async function uploadCertificado() {
@@ -5652,6 +5695,31 @@ function AbaFiscal() {
             <ConfigInput label="Inscrição Municipal" value={form.inscricao_municipal || ''} onChange={v => updateField('inscricao_municipal', v)} placeholder="Insira a IM" />
             <ConfigInput label="Inscrição Estadual" value={form.inscricao_estadual || ''} onChange={v => updateField('inscricao_estadual', v)} placeholder="Insira a IE" />
             <ConfigInput label="CNAE Principal" value={form.cnae || ''} onChange={v => updateField('cnae', v)} placeholder="ex: 6202-3/00" />
+          </div>
+          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-950/20 p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-semibold text-blue-900 dark:text-blue-200">Vínculo do emitente no CRM</p>
+              <p className="text-[11px] text-blue-800/80 dark:text-blue-300/80 mt-1">
+                {form.cadastro_base_emitente_id
+                  ? `Configuração vinculada ao cadastro ${emitenteVinculado?.nome ?? form.cadastro_base_emitente_id}.`
+                  : 'Vincule a Certifast cadastrada no CRM para que as notas usem o prestador correto.'}
+              </p>
+              {emitenteVinculado && (
+                <p className="text-[11px] text-blue-900 dark:text-blue-200 mt-1">
+                  {emitenteVinculado.nome} • {emitenteVinculado.cpf_cnpj}
+                  {emitenteVinculado.cidade ? ` • ${emitenteVinculado.cidade}${emitenteVinculado.uf ? `/${emitenteVinculado.uf}` : ''}` : ''}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => void buscarEmitenteFiscal()}
+              disabled={!isAdmin || buscandoEmitente}
+              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-medium inline-flex items-center justify-center gap-2 transition-colors"
+            >
+              {buscandoEmitente ? <Loader2 size={13} className="animate-spin" /> : <Link size={13} />}
+              {buscandoEmitente ? 'Buscando...' : 'Vincular pelo CNPJ'}
+            </button>
           </div>
         </div>
 

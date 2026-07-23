@@ -792,6 +792,14 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
     return true
   }
 
+  if (method === 'GET' && url.startsWith('/api/nfse/emitentes')) {
+    const parsedUrl = new URL(req.url ?? url, 'http://localhost')
+    const q = parsedUrl.searchParams.get('q') ?? ''
+    const emitentes = await repo.searchNfseEmitentes(q)
+    writeJson(res, 200, { ok: true, emitentes }, corsOrigin)
+    return true
+  }
+
   if (method === 'POST' && url === '/api/nfse/configuracoes') {
     const body = await readJson<Record<string, unknown>>(req)
     const configuracao = await repo.saveNfseConfiguracao(body)

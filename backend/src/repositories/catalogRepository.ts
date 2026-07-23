@@ -56,6 +56,31 @@ export class CatalogRepository {
     return result.rows[0] ?? null
   }
 
+  async searchNfseEmitentes(term: string) {
+    const query = String(term ?? '').trim()
+    const digits = query.replace(/\D/g, '')
+    if (!query && !digits) return []
+
+    const result = await this.db.query(
+      `select id, cpf_cnpj, nome, nome_fantasia, email, telefone, cidade, uf,
+              inscricao_municipal, inscricao_estadual, status
+         from cadastros_base
+        where ($1::text <> '' and regexp_replace(coalesce(cpf_cnpj, ''), '\\D', '', 'g') = $1)
+           or ($2::text <> '' and (
+                coalesce(nome, '') ilike '%' || $2 || '%'
+             or coalesce(nome_fantasia, '') ilike '%' || $2 || '%'
+             or coalesce(email, '') ilike '%' || $2 || '%'
+           ))
+        order by
+          case when $1::text <> '' and regexp_replace(coalesce(cpf_cnpj, ''), '\\D', '', 'g') = $1 then 0 else 1 end,
+          updated_at desc nulls last,
+          created_at desc nulls last
+        limit 10`,
+      [digits, query],
+    )
+    return result.rows
+  }
+
   async listNfseByVenda(vendaId: string) {
     const result = await this.db.query(
       `select * from nfse_emitidas
