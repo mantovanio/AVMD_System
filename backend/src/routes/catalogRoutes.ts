@@ -161,7 +161,15 @@ async function processSafewebImportJob(
         message: 'Conciliando renovações com as vendas importadas...',
         progress: { current: input.clientes.length + vendas.length, total: input.clientes.length + vendas.length },
       })
-      renovacoesConvertidas += await renovacaoRepo.reconcileConvertedFromSales()
+      try {
+        renovacoesConvertidas += await renovacaoRepo.reconcileConvertedFromSales()
+      } catch (error) {
+        console.error('[catalog] reconcileConvertedFromSales import job skipped:', error)
+        await setJob({
+          message: 'Vendas importadas. A conciliação de renovações demorou demais e será reprocessada depois.',
+          progress: { current: input.clientes.length + vendas.length, total: input.clientes.length + vendas.length },
+        })
+      }
     }
 
     const divergentes = await repo.countVendasEmitidosSemValidacao()

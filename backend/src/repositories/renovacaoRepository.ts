@@ -75,7 +75,9 @@ export class RenovacaoRepository {
   ].join(', ')
 
   async reconcileConvertedFromSales(): Promise<number> {
-    const result = await this.db.query<{ id: string }>(
+    return this.db.transaction(async trx => {
+      await trx.query(`set local statement_timeout = '15s'`)
+      const result = await trx.query<{ id: string }>(
       `WITH matched AS (
          SELECT r.id
            FROM renovacoes r
@@ -141,8 +143,9 @@ export class RenovacaoRepository {
           RETURNING o.id
        )
        SELECT id FROM updated`,
-    )
-    return result.rows.length
+      )
+      return result.rows.length
+    })
   }
 
   async findAll(limit = 500, offset = 0): Promise<RenovacaoRow[]> {
