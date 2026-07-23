@@ -793,6 +793,7 @@ export default function Comercial() {
   const vendasRefreshLockRef                    = useRef(false)
   const [importandoSafeweb, setImportandoSafeweb] = useState(false)
   const [importandoClientes, setImportandoClientes] = useState(false)
+  const [importStatusSafeweb, setImportStatusSafeweb] = useState<string | null>(null)
   const [resultSafeweb, setResultSafeweb] = useState<{
     linhas: number
     clientes: number
@@ -3523,9 +3524,11 @@ export default function Comercial() {
   async function importarRelatorioSafeweb(file: File) {
     setImportandoSafeweb(true)
     setResultSafeweb(null)
+    setImportStatusSafeweb(`Lendo arquivo ${file.name}...`)
     try {
       const rows = await lerPlanilha(file)
       if (!rows.length) { showMsg('Planilha sem dados.'); return }
+      setImportStatusSafeweb(`Arquivo lido: ${rows.length} linha(s). Preparando clientes...`)
       const firstColumns = Object.keys(rows[0] ?? {})
       const pick = (row: Record<string, string>, aliases: string[]) => {
         for (const alias of aliases) {
@@ -3607,6 +3610,7 @@ export default function Comercial() {
       const clientesUniq = [...new Map(clientePayloads.map(c => [c.cpf_cnpj, c])).values()]
       for (let i = 0; i < clientesUniq.length; i += BATCH) {
         const batch = clientesUniq.slice(i, i + BATCH)
+        setImportStatusSafeweb(`Importando clientes ${Math.min(i + batch.length, clientesUniq.length)} de ${clientesUniq.length}...`)
         const rBCI = await fetch(getApiUrl('/comercial/clientes/batch-import'), {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ payloads: batch }),
@@ -3620,10 +3624,12 @@ export default function Comercial() {
 
       // 2. busca IDs de clientes para vincular às vendas
       const allDocs = clientesUniq.map(c => c.cpf_cnpj)
+      setImportStatusSafeweb(`Clientes processados. Vinculando documentos aos cadastros...`)
       const cadastrosData = await getAivenCommercialClientesByDocs(allDocs)
       const idByDoc = new Map(cadastrosData.map(c => [c.cpf_cnpj, c.id]))
 
       // 3. monta payloads de venda COM validado_safeweb = true
+      setImportStatusSafeweb(`Montando vendas e pedidos da planilha...`)
       const vendasPayloads = rows.map(r => {
         const protocolo = pick(r, ['protocolo', 'n_protocolo', 'numero_protocolo', 'num_protocolo', 'protocolo_numero', 'n_pedido', 'numero_pedido', 'pedido', 'pedido_numero', 'id_pedido', 'id_venda', 'codigo_venda']).trim()
         if (!protocolo) return null
@@ -3795,6 +3801,7 @@ export default function Comercial() {
 
       // 4. separa registros que já existem no CRM dos que são só da Safeweb
       const protocolos = vendasPayloads.map(v => v.protocolo_numero)
+      setImportStatusSafeweb(`Verificando ${protocolos.length} protocolo(s) existentes no CRM...`)
       const existResp3 = await fetch(getApiUrl('/comercial/vendas/protocolos'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ protocolos }),
@@ -3808,6 +3815,7 @@ export default function Comercial() {
       let renovacoesConvertidas = 0
       for (let i = 0; i < paraAtualizar.length; i += BATCH) {
         const batch = paraAtualizar.slice(i, i + BATCH)
+        setImportStatusSafeweb(`Atualizando pedidos existentes ${Math.min(i + batch.length, paraAtualizar.length)} de ${paraAtualizar.length}...`)
         const rBVU = await fetch(getApiUrl('/comercial/vendas/batch-update'), {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ updates: batch }),
@@ -3823,6 +3831,7 @@ export default function Comercial() {
         return
       }
       for (const venda of paraCriar) {
+        setImportStatusSafeweb(`Criando pedidos novos ${criados + 1} de ${paraCriar.length}...`)
         const rCreate = await fetch(getApiUrl('/comercial/vendas/criar'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -3848,6 +3857,7 @@ export default function Comercial() {
       }
 
       // 6. conta divergentes: vendas emitidas sem validado_safeweb
+      setImportStatusSafeweb(`Finalizando batimento e atualizando a tela...`)
       const divResp = await fetch(getApiUrl('/comercial/vendas/count-sem-validacao'))
       const divData = await divResp.json()
       const divergentes = divData.count ?? 0
@@ -3869,6 +3879,7 @@ export default function Comercial() {
       showMsg(error instanceof Error ? `Erro ao importar arquivo: ${error.message}` : 'Erro ao importar arquivo.')
     } finally {
       setImportandoSafeweb(false)
+      setImportStatusSafeweb(null)
     }
   }
 
@@ -7999,6 +8010,19 @@ export default function Comercial() {
                 </button>
                 <span className="text-xs text-gray-400">Suporta XLS, XLSX, CSV</span>
               </div>
+
+              {importandoSafeweb && importStatusSafeweb && (
+                <div className="mt-4 flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+                  <Loader2 size={18} className="mt-0.5 animate-spin shrink-0" />
+                  <div>
+                    <p className="font-semibold">Importação em andamento</p>
+                    <p className="mt-1 text-xs">{importStatusSafeweb}</p>
+                    <p className="mt-2 text-xs text-blue-600 dark:text-blue-300">
+                      Não feche esta aba até aparecer o batimento concluído ou uma mensagem de erro.
+                    </p>
+                  </div>
+                </div>
+              )}
 
             </div>
 
