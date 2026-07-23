@@ -42,11 +42,11 @@ update vendas_certificados vc
              true
            ),
            '{safeweb_financeiro,financeiro,voucher_valor}',
-           to_jsonb(p.voucher_valor),
+           to_jsonb(coalesce(p.voucher_valor, 0)),
            true
          ),
          '{safeweb_financeiro,financeiro,voucher_percentual}',
-         to_jsonb(p.voucher_percentual),
+         to_jsonb(coalesce(p.voucher_percentual, 0)),
          true
        ),
        updated_at = now()
