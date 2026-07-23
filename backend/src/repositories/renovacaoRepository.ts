@@ -227,7 +227,7 @@ export class RenovacaoRepository {
       `SELECT *
          FROM renovacoes
         WHERE deleted_at IS NULL
-          AND regexp_replace(coalesce(telefone, ''), '\\D', '', 'g') = $1
+          AND fn_normalize_phone_br(telefone) = $1
         ORDER BY
           CASE
             WHEN renovado = false AND status IN ('pendente', 'contatado') THEN 0
@@ -393,6 +393,7 @@ export class RenovacaoRepository {
     telefone: string | null
     valor_venda: number | null
     venda_id: string
+    data_referencia?: string | null
   }): Promise<{ converted: boolean; newRenewalId: string | null }> {
     let converted = false
 
@@ -424,7 +425,10 @@ export class RenovacaoRepository {
       }
     }
 
-    const dataVencimento = new Date()
+    const dataVencimento = input.data_referencia ? new Date(input.data_referencia) : new Date()
+    if (Number.isNaN(dataVencimento.getTime())) {
+      dataVencimento.setTime(Date.now())
+    }
     dataVencimento.setMonth(dataVencimento.getMonth() + validadeMeses)
 
     const result = await this.db.query<{ id: string }>(

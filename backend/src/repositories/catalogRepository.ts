@@ -365,7 +365,10 @@ export class CatalogRepository {
   async batchUpdateVendasByProtocolo(updates: { protocolo_numero: string; [key: string]: unknown }[]) {
     const fields = ['status_venda','tipo_produto','tipo_venda','tipo_emissao','valor_venda','valor_custo',
       'pago','status_pagamento','data_pagamento','data_vencimento','agente_registro_id','ponto_atendimento_id',
-      'parceiro_id','vendedor_id']
+      'parceiro_id','vendedor_id','cadastro_base_id','certificado_id','data_inicio_validade','validado_safeweb',
+      'documento_faturamento','nome_faturamento','email_faturamento','telefone_faturamento','numero_serie',
+      'voucher_codigo','voucher_percentual','voucher_valor','nome_ar','nome_local_atendimento',
+      'status_certificado','nome_parceiro_safeweb','observacoes','metadata']
     let updated = 0
     for (const u of updates) {
       const { protocolo_numero, ...rest } = u
@@ -594,11 +597,13 @@ export class CatalogRepository {
       'ponto_atendimento_id','tabela_preco_id','tabela_preco_item_id','tipo_produto',
       'certificado_id','quantidade','tipo_venda','tipo_emissao','tabela_preco',
       'valor_venda','desconto','status_venda','pago','data_pagamento','data_vencimento',
+      'data_inicio_validade','validado_safeweb','status_pagamento',
       'forma_pagamento_id','nome_faturamento','documento_faturamento','email_faturamento',
       'telefone_faturamento','logradouro','numero','complemento','bairro','cidade','uf','cep',
       'inscricao_municipal','inscricao_estadual','iss_retido','contador_id',
       'pedido_numero','pedido_status','protocolo_numero','protocolo_status','certificadora',
       'voucher_codigo','voucher_percentual','voucher_valor',
+      'numero_serie','nome_ar','nome_local_atendimento','status_certificado','nome_parceiro_safeweb',
       'api_payload_pedido','api_payload_protocolo',
       'comissao_vendedor_tipo','comissao_vendedor_valor','comissao_agente_tipo','comissao_agente_valor',
       'observacoes','metadata']

@@ -401,6 +401,7 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
         telefone: String(body.telefone_faturamento ?? ''),
         valor_venda: Number(body.valor_venda ?? 0),
         venda_id: String(venda.id),
+        data_referencia: body.data_inicio_validade ? String(body.data_inicio_validade) : null,
       }).catch(err => console.error('[catalog] handleSaleRenewal failed', err))
     }
 

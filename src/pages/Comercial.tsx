@@ -3600,6 +3600,8 @@ export default function Comercial() {
         const produto = pick(r, ['produto', 'certificado', 'tipo_produto', 'produto_nome', 'descricao_produto', 'nome_produto']).trim()
         const cert = findCertificadoByProduto(produto)
         const statusFinanceiro = pick(r, ['status_financeiro', 'status_pagamento'])
+        const statusVenda = normalizeStatusVendaImport(pick(r, ['status_venda', 'status_do_certificado', 'status_certificado', 'status']))
+        const dataStatus = parseDate(pick(r, ['data_status']))
         const pago = isPago(statusFinanceiro)
         const dataPagamento = parseDate(pick(r, ['data_pagto', 'data_pagamento', 'data_pagto_', 'data_pago']))
         return {
@@ -3613,13 +3615,15 @@ export default function Comercial() {
           tabela_preco:           pick(r, ['tabela_de_venda', 'tabela_preco']).trim() || null,
           valor_venda:            parseNum(pick(r, ['valor_venda', 'valor_do_boleto', 'valor_boleto', 'valor', 'preco', 'preco_venda', 'total', 'valor_total'])),
           desconto:               parseNum(pick(r, ['valor_desconto', 'desconto'])),
-          status_venda:           normalizeStatusVendaImport(pick(r, ['status_venda'])),
+          status_venda:           statusVenda,
           pago,
           status_pagamento:       (pago ? 'pago' : 'em_aberto') as StatusPagamentoVenda,
           data_pagamento:         dataPagamento,
           validado_safeweb:       true,
           data_vencimento:        parseDate(pick(r, ['data_vencimento', 'data_fim_validade', 'validade', 'fim_validade', 'data_expiracao'])),
-          data_inicio_validade:   parseDate(pick(r, ['data_venda', 'data_inicio_validade', 'data_inicio', 'inicio_validade', 'data_emissao'])),
+          data_inicio_validade:   statusVenda === 'emitido'
+            ? (dataStatus ?? parseDate(pick(r, ['data_emissao', 'data_inicio_validade', 'data_inicio', 'inicio_validade', 'data_venda'])))
+            : parseDate(pick(r, ['data_venda', 'data_inicio_validade', 'data_inicio', 'inicio_validade', 'data_emissao'])),
           documento_faturamento:   doc || null,
           nome_faturamento:        pick(r, ['cliente', 'nome', 'nome_cliente']).trim() || null,
           email_faturamento:       pick(r, ['e_mail', 'email', 'email_cliente']).trim() || null,
@@ -3640,7 +3644,7 @@ export default function Comercial() {
             vendedor_importado: pick(r, ['vendedor']).trim() || null,
             agente_registro_importado: pick(r, ['agente_de_registro']).trim() || null,
             ar_solicitacao: pick(r, ['ar_de_solicitacao']).trim() || null,
-            data_status: parseDate(pick(r, ['data_status'])),
+            data_status: dataStatus,
             data_agenda: parseDate(pick(r, ['data_agenda'])),
             data_cadastro_cliente: parseDate(pick(r, ['data_cadastro_cliente'])),
             data_nota: parseDate(pick(r, ['data_nota'])),
