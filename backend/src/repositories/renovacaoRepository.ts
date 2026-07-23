@@ -124,7 +124,8 @@ export class RenovacaoRepository {
                  AND coalesce(v.data_inicio_validade::date, v.created_at::date) >= (r.data_vencimento::date - INTERVAL '180 days')
                  AND (
                    (match_keys.renovacao_protocolo IS NOT NULL
-                    AND match_keys.renovacao_protocolo IN (match_keys.venda_protocolo, match_keys.venda_protocolo_renovacao))
+                    AND match_keys.venda_protocolo_renovacao IS NOT NULL
+                    AND match_keys.renovacao_protocolo = match_keys.venda_protocolo_renovacao)
                    OR (
                      match_keys.renovacao_tipo ~ '(cnpj|epj|nfe|notafiscal|mei)'
                      AND match_keys.renovacao_cnpj IS NOT NULL
