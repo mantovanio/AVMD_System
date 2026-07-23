@@ -3249,6 +3249,52 @@ function ConfigInput({ label, value, onChange, placeholder, type = 'text' }: { l
   )
 }
 
+function ConfigSelectWithManual({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder = 'Selecione',
+  manualPlaceholder = 'Informe o valor',
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  options: Array<{ value: string; label: string }>
+  placeholder?: string
+  manualPlaceholder?: string
+}) {
+  const optionValues = new Set(options.map(option => option.value))
+  const selectedValue = value && optionValues.has(value) ? value : value ? '__manual__' : ''
+  const showManual = selectedValue === '__manual__'
+
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
+      <select
+        value={selectedValue}
+        onChange={event => onChange(event.target.value === '__manual__' ? '' : event.target.value)}
+        className="border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <option value="">{placeholder}</option>
+        {options.map(option => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+        <option value="__manual__">Outro / informar manualmente</option>
+      </select>
+      {showManual && (
+        <input
+          type="text"
+          value={value}
+          onChange={event => onChange(event.target.value)}
+          placeholder={manualPlaceholder}
+          className="border border-blue-200 dark:border-blue-800 rounded-xl px-3 py-2.5 text-sm bg-blue-50/50 dark:bg-blue-950/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      )}
+    </label>
+  )
+}
+
 function SummaryChip({ label, value, tone }: { label: string; value: number; tone: 'green' | 'yellow' | 'blue' }) {
   const toneClass: Record<'green' | 'yellow' | 'blue', string> = {
     green: 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400',
@@ -5143,6 +5189,62 @@ const NFSE_AMBIENTE_LABELS: Record<AmbienteNfse, string> = {
   producao: 'Produção real',
 }
 
+const NFSE_CODIGO_SERVICO_OPTIONS = [
+  { value: '1.03', label: '1.03 - Processamento, armazenamento ou hospedagem de dados' },
+  { value: '1.04', label: '1.04 - Elaboração de programas de computadores' },
+  { value: '1.05', label: '1.05 - Licenciamento ou cessão de direito de uso de software' },
+  { value: '1.07', label: '1.07 - Suporte técnico, manutenção e serviços em tecnologia' },
+  { value: '17.01', label: '17.01 - Assessoria ou consultoria' },
+  { value: '17.03', label: '17.03 - Planejamento, coordenação e organização administrativa' },
+]
+
+const NFSE_CODIGO_TRIBUTACAO_OPTIONS = [
+  { value: '102307', label: '102307 - Certificação digital / serviços de tecnologia' },
+  { value: '620230000', label: '620230000 - Desenvolvimento e licenciamento de software' },
+  { value: '631190000', label: '631190000 - Tratamento, provedores e hospedagem de dados' },
+  { value: '821999900', label: '821999900 - Preparação de documentos e apoio administrativo' },
+]
+
+const NFSE_CFPS_OPTIONS = [
+  { value: '9201', label: '9201 - Prestação de serviço no município' },
+  { value: '9202', label: '9202 - Prestação de serviço fora do município' },
+]
+
+const NFSE_CST_OPTIONS = [
+  { value: '101', label: '101 - Simples Nacional com permissão de crédito' },
+  { value: '102', label: '102 - Simples Nacional sem permissão de crédito' },
+  { value: '201', label: '201 - Simples Nacional com ST e crédito' },
+  { value: '900', label: '900 - Outros' },
+]
+
+const NFSE_NATUREZA_OPTIONS = [
+  { value: 'Tributação no município', label: 'Tributação no município' },
+  { value: 'Tributação fora do município', label: 'Tributação fora do município' },
+  { value: 'Isenção', label: 'Isenção' },
+  { value: 'Imune', label: 'Imune' },
+  { value: 'Exigibilidade suspensa', label: 'Exigibilidade suspensa' },
+]
+
+const NFSE_REGIME_OPTIONS = [
+  { value: 'Nenhum', label: 'Nenhum regime especial' },
+  { value: 'Microempresa municipal', label: 'Microempresa municipal' },
+  { value: 'Estimativa', label: 'Estimativa' },
+  { value: 'Sociedade de profissionais', label: 'Sociedade de profissionais' },
+  { value: 'Cooperativa', label: 'Cooperativa' },
+  { value: 'MEI', label: 'MEI' },
+  { value: 'ME/EPP Simples Nacional', label: 'ME/EPP Simples Nacional' },
+]
+
+const NFSE_EXIGIBILIDADE_OPTIONS = [
+  { value: 'Exigível', label: 'Exigível' },
+  { value: 'Não incidência', label: 'Não incidência' },
+  { value: 'Isenção', label: 'Isenção' },
+  { value: 'Exportação', label: 'Exportação' },
+  { value: 'Imunidade', label: 'Imunidade' },
+  { value: 'Suspensa por decisão judicial', label: 'Suspensa por decisão judicial' },
+  { value: 'Suspensa por processo administrativo', label: 'Suspensa por processo administrativo' },
+]
+
 type NfsePreset = {
   id: string
   label: string
@@ -5828,13 +5930,52 @@ function AbaFiscal() {
             <Webhook size={16} className="text-purple-500" /> Serviços e Enquadramentos
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <ConfigInput label="Código do Serviço" value={form.codigo_servico_municipio || ''} onChange={v => updateField('codigo_servico_municipio', v)} placeholder="ex: 1.05" />
-            <ConfigInput label="Código de Tributação" value={form.codigo_tributacao_municipio || ''} onChange={v => updateField('codigo_tributacao_municipio', v)} placeholder="ex: 620230000" />
-            <ConfigInput label="Código CFPS" value={form.codigo_cfps || ''} onChange={v => updateField('codigo_cfps', v)} placeholder="ex: 9201" />
-            <ConfigInput label="Código CST / CSOSN" value={form.codigo_cst || ''} onChange={v => updateField('codigo_cst', v)} placeholder="ex: 101" />
-            <ConfigInput label="Natureza da Operação" value={form.natureza_operacao || ''} onChange={v => updateField('natureza_operacao', v)} placeholder="ex: Tributação no município" />
-            <ConfigInput label="Regime Especial" value={form.regime_especial || ''} onChange={v => updateField('regime_especial', v)} placeholder="ex: Microempresa municipal" />
-            <ConfigInput label="Exigibilidade do ISS" value={form.exigibilidade_iss || ''} onChange={v => updateField('exigibilidade_iss', v)} placeholder="ex: Exigível" />
+            <ConfigSelectWithManual
+              label="Código do Serviço"
+              value={form.codigo_servico_municipio || ''}
+              onChange={v => updateField('codigo_servico_municipio', v)}
+              options={NFSE_CODIGO_SERVICO_OPTIONS}
+              manualPlaceholder="Ex: 1.05"
+            />
+            <ConfigSelectWithManual
+              label="Código de Tributação"
+              value={form.codigo_tributacao_municipio || ''}
+              onChange={v => updateField('codigo_tributacao_municipio', v)}
+              options={NFSE_CODIGO_TRIBUTACAO_OPTIONS}
+              manualPlaceholder="Ex: 102307"
+            />
+            <ConfigSelectWithManual
+              label="Código CFPS"
+              value={form.codigo_cfps || ''}
+              onChange={v => updateField('codigo_cfps', v)}
+              options={NFSE_CFPS_OPTIONS}
+              manualPlaceholder="Ex: 9201"
+            />
+            <ConfigSelectWithManual
+              label="Código CST / CSOSN"
+              value={form.codigo_cst || ''}
+              onChange={v => updateField('codigo_cst', v)}
+              options={NFSE_CST_OPTIONS}
+              manualPlaceholder="Ex: 101"
+            />
+            <ConfigSelectWithManual
+              label="Natureza da Operação"
+              value={form.natureza_operacao || ''}
+              onChange={v => updateField('natureza_operacao', v)}
+              options={NFSE_NATUREZA_OPTIONS}
+            />
+            <ConfigSelectWithManual
+              label="Regime Especial"
+              value={form.regime_especial || ''}
+              onChange={v => updateField('regime_especial', v)}
+              options={NFSE_REGIME_OPTIONS}
+            />
+            <ConfigSelectWithManual
+              label="Exigibilidade do ISS"
+              value={form.exigibilidade_iss || ''}
+              onChange={v => updateField('exigibilidade_iss', v)}
+              options={NFSE_EXIGIBILIDADE_OPTIONS}
+            />
           </div>
         </div>
 
