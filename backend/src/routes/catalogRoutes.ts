@@ -88,11 +88,13 @@ async function processSafewebImportJob(
     const paraAtualizar = vendas.filter(venda => existSet.has(String(venda.protocolo_numero ?? '')))
     const paraCriar = vendas.filter(venda => !existSet.has(String(venda.protocolo_numero ?? '')))
 
+    let precisaConciliarRenovacoes = false
+
     for (let i = 0; i < paraAtualizar.length; i += batchSize) {
       const batch = paraAtualizar.slice(i, i + batchSize) as unknown as { protocolo_numero: string; [key: string]: unknown }[]
       const result = await repo.batchUpdateVendasByProtocolo(batch)
       atualizados += result.updated
-      if (renovacaoRepo) renovacoesConvertidas += await renovacaoRepo.reconcileConvertedFromSales()
+      precisaConciliarRenovacoes = true
       updateSafewebJob(id, {
         message: `Pedidos atualizados: ${Math.min(i + batch.length, paraAtualizar.length)} de ${paraAtualizar.length}.`,
         progress: { current: input.clientes.length + Math.min(i + batch.length, paraAtualizar.length), total: input.clientes.length + vendas.length },
@@ -113,27 +115,21 @@ async function processSafewebImportJob(
       criados++
 
       if (renovacaoRepo && created?.id) {
-        const renovacao = await renovacaoRepo.handleSaleRenewal({
-          cadastro_base_id: String(venda.cadastro_base_id ?? ''),
-          tipo_produto: String(venda.tipo_produto ?? ''),
-          certificado_id: venda.certificado_id ? String(venda.certificado_id) : null,
-          cliente_nome: String(venda.nome_faturamento ?? ''),
-          cpf: venda.documento_faturamento ? String(venda.documento_faturamento) : null,
-          cnpj: null,
-          email: String(venda.email_faturamento ?? ''),
-          telefone: String(venda.telefone_faturamento ?? ''),
-          valor_venda: Number(venda.valor_venda ?? 0),
-          venda_id: String(created.id),
-          data_referencia: venda.data_inicio_validade ? String(venda.data_inicio_validade) : null,
-        }).catch(() => null)
-        if (renovacao?.converted) renovacoesConvertidas++
-        await renovacaoRepo.reconcileConvertedFromSales()
+        precisaConciliarRenovacoes = true
       }
 
       updateSafewebJob(id, {
         message: `Pedidos criados: ${criados} de ${paraCriar.length}.`,
         progress: { current: input.clientes.length + paraAtualizar.length + criados, total: input.clientes.length + vendas.length },
       })
+    }
+
+    if (renovacaoRepo && precisaConciliarRenovacoes) {
+      updateSafewebJob(id, {
+        message: 'Conciliando renovações com as vendas importadas...',
+        progress: { current: input.clientes.length + vendas.length, total: input.clientes.length + vendas.length },
+      })
+      renovacoesConvertidas += await renovacaoRepo.reconcileConvertedFromSales()
     }
 
     const divergentes = await repo.countVendasEmitidosSemValidacao()
