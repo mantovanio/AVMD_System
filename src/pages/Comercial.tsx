@@ -3651,6 +3651,11 @@ export default function Comercial() {
         const nomeLocalAtendimento = pick(r, ['nome_do_local_de_atendimento', 'nome_do_local_de_atendimento_agr', 'pa_emissor', 'nome_local', 'local_atendimento', 'posto_atendimento']).trim()
         const nomeAr = pick(r, ['nome_da_autoridade_de_registro', 'nome_da_autoridade_de_registro_vinculada_a_solicitacao', 'ar_de_solicitacao', 'autoridade_certificadora', 'nome_ar', 'ar', 'autoridade_registro']).trim()
         const observacao = pick(r, ['observacao', 'observacoes', 'obs', 'verificacao', 'mensagem_sefaz', 'link_videoconferencia_renovacao']).trim()
+        const valorVendaRaw = pick(r, ['valor_venda', 'valor_do_boleto', 'valor_boleto', 'valor', 'preco', 'preco_venda', 'total', 'valor_total'])
+        const valorCustoRaw = pick(r, ['valor_custo', 'valor_custo_ac', 'custo_certificado', 'custo_ac', 'valor_repasse', 'valor_custo_certificado'])
+        const valorVenda = parseNum(valorVendaRaw)
+        const valorCusto = parseNum(valorCustoRaw)
+          || Number(cert?.valor_custo_ac ?? cert?.valor_custo ?? 0)
         const metadataSafewebFinanceiro = {
           protocolo,
           nome: pick(r, ['nome', 'cliente']).trim() || null,
@@ -3690,6 +3695,10 @@ export default function Comercial() {
           },
           financeiro: {
             valor_boleto: parseNum(pick(r, ['valor_do_boleto', 'valor_boleto'])),
+            valor_venda: valorVenda,
+            valor_custo_certificado: valorCusto,
+            valor_venda_origem: valorVendaRaw || null,
+            valor_custo_origem: valorCustoRaw || null,
             nfe: pick(r, ['nfe', 'nf']).trim() || null,
             voucher_codigo: pick(r, ['vouchercodigo', 'voucher_codigo', 'vouchercod', 'voucher']).trim() || null,
             voucher_percentual: parseNum(pick(r, ['voucherpercentual', 'voucher_percentual', 'percentual_voucher', 'desconto_percentual'])) || null,
@@ -3752,7 +3761,8 @@ export default function Comercial() {
           tipo_venda:             pick(r, ['tipo_venda']).trim() || null,
           tipo_emissao:           pick(r, ['tipo_emissao', 'tipo_de_emissao_realizada', 'emissao', 'forma_emissao', 'modalidade']).trim() || null,
           tabela_preco:           pick(r, ['tabela_de_venda', 'tabela_preco']).trim() || null,
-          valor_venda:            parseNum(pick(r, ['valor_venda', 'valor_do_boleto', 'valor_boleto', 'valor', 'preco', 'preco_venda', 'total', 'valor_total'])),
+          valor_venda:            valorVenda,
+          valor_custo:            valorCusto,
           desconto:               parseNum(pick(r, ['valor_desconto', 'desconto'])),
           status_venda:           statusVenda,
           pago,
