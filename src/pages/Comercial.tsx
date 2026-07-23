@@ -3550,10 +3550,17 @@ export default function Comercial() {
       const parseDate = (v: string): string | null => {
         const s = (v ?? '').trim()
         if (!s) return null
+        if (/^\d{1,2}$/.test(s)) return null
         const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
         if (m) return `${m[3]}-${m[2]}-${m[1]}`
-        // já está em ISO ou outro formato que o postgres aceita
-        return s.split(' ')[0] || null
+        const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+        if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+        const serial = Number(s.replace(',', '.'))
+        if (Number.isFinite(serial) && serial > 20000 && serial < 80000) {
+          const date = new Date(Math.round((serial - 25569) * 86400 * 1000))
+          return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10)
+        }
+        return null
       }
       const BATCH = 100
 
@@ -3620,7 +3627,7 @@ export default function Comercial() {
           status_pagamento:       (pago ? 'pago' : 'em_aberto') as StatusPagamentoVenda,
           data_pagamento:         dataPagamento,
           validado_safeweb:       true,
-          data_vencimento:        parseDate(pick(r, ['data_vencimento', 'data_fim_validade', 'validade', 'fim_validade', 'data_expiracao'])),
+          data_vencimento:        parseDate(pick(r, ['data_vencimento', 'data_fim_validade', 'fim_validade', 'data_expiracao'])),
           data_inicio_validade:   statusVenda === 'emitido'
             ? (dataStatus ?? parseDate(pick(r, ['data_emissao', 'data_inicio_validade', 'data_inicio', 'inicio_validade', 'data_venda'])))
             : parseDate(pick(r, ['data_venda', 'data_inicio_validade', 'data_inicio', 'inicio_validade', 'data_emissao'])),
