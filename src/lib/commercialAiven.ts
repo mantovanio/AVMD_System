@@ -64,7 +64,7 @@ export async function updateAivenCommercialSaleStatus(id: string, status: string
   return response.venda ?? null
 }
 
-export async function updateAivenCommercialSalePaymentStatus(id: string, status: 'em_aberto' | 'pago' | 'recusado') {
+export async function updateAivenCommercialSalePaymentStatus(id: string, status: 'em_aberto' | 'pago' | 'recusado' | 'estornado' | 'cortesia') {
   const response = await postJson<ApiResponse<'venda', { id: string; status_pagamento: string }>>(getApiUrl('/comercial/vendas/pagamento'), { id, status })
   return response.venda ?? null
 }

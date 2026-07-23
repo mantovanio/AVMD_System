@@ -131,7 +131,7 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
 
   if (req.method === 'POST' && req.url === '/api/comercial/vendas/pagamento') {
     const body = await readJson<SalePaymentStatusRequest>(req)
-    const venda = await repository.updateSalePaymentStatus(body as { id: string; status: 'em_aberto' | 'pago' | 'recusado' })
+    const venda = await repository.updateSalePaymentStatus(body as { id: string; status: 'em_aberto' | 'pago' | 'recusado' | 'estornado' | 'cortesia' })
     writeJson(res, 200, { ok: true, venda }, corsOrigin)
     return true
   }

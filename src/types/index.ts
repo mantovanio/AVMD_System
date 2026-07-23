@@ -712,7 +712,7 @@ export type NovaLojaMarketplace = Omit<LojaMarketplace, 'id' | 'created_at' | 'u
 
 // ── vendas_certificados ───────────────────────────────────────
 export type StatusVendaCertificado = 'rascunho' | 'vendido' | 'agendado' | 'em_validacao' | 'emitido' | 'cancelado'
-export type StatusPagamentoVenda = 'em_aberto' | 'pago' | 'recusado'
+export type StatusPagamentoVenda = 'em_aberto' | 'pago' | 'recusado' | 'estornado' | 'cortesia'
 export type StatusPedidoProtocolo  = 'nao_gerado' | 'pendente' | 'gerado' | 'erro' | 'cancelado'
 export type TipoComissao           = 'fixa' | 'percentual'
 export type TipoParceiro = 'ar' | 'pa_controle_total' | 'pa_emissor' | 'contador' | 'vendedor' | 'gestor' | 'ecommerce'

@@ -20,7 +20,7 @@ export type UpdateCommercialSaleStatusInput = {
 
 export type UpdateCommercialSalePaymentStatusInput = {
   id: string
-  status: 'em_aberto' | 'pago' | 'recusado'
+  status: 'em_aberto' | 'pago' | 'recusado' | 'estornado' | 'cortesia'
 }
 
 export type UpdateCommercialSalePaymentMethodInput = {
