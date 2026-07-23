@@ -639,11 +639,14 @@ export async function handleChatRoutes(
          SELECT conv.*,
                 EXISTS (SELECT 1 FROM crm_chat_messages WHERE conversation_id = conv.id AND direction = 'outgoing') AS tem_resposta,
                  ROW_NUMBER() OVER (
-                   PARTITION BY CASE WHEN conv.document_key ~ '^[0-9]+$' THEN
-                     CASE WHEN length(conv.document_key) IN (10, 11) AND NOT conv.document_key LIKE '55%' THEN '55' || conv.document_key
-                          WHEN length(conv.document_key) > 11 AND conv.document_key LIKE '55%' THEN conv.document_key
-                          ELSE conv.document_key END
-                   ELSE conv.id::text END
+                   PARTITION BY conv.fila,
+                     CASE
+                       WHEN right(regexp_replace(coalesce(conv.telefone, conv.document_key, ''), '\\D', '', 'g'), 11) <> ''
+                         THEN right(regexp_replace(coalesce(conv.telefone, conv.document_key, ''), '\\D', '', 'g'), 11)
+                       WHEN lower(coalesce(conv.email_principal, conv.document_key, '')) LIKE '%@%'
+                         THEN lower(coalesce(conv.email_principal, conv.document_key, ''))
+                       ELSE conv.id::text
+                     END
                   ORDER BY conv.ultima_interacao_em DESC NULLS LAST
                 ) AS rn
          FROM crm_chat_admin_view conv
