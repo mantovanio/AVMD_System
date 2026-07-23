@@ -285,8 +285,19 @@ export class OutboxProcessor {
                 AND (
                   (r.cadastro_base_id IS NOT NULL AND v.cadastro_base_id = r.cadastro_base_id)
                   OR (r.venda_certificado_id IS NOT NULL AND v.id = r.venda_certificado_id)
-                  OR regexp_replace(coalesce(v.documento_faturamento, cb.cpf_cnpj, ''), '\\D', '', 'g')
-                     = regexp_replace(coalesce(r.cpf, r.cnpj, ''), '\\D', '', 'g')
+                  OR (nullif(regexp_replace(coalesce(r.protocolo, ''), '\\D', '', 'g'), '') IS NOT NULL
+                    AND nullif(regexp_replace(coalesce(r.protocolo, ''), '\\D', '', 'g'), '') IN (
+                      nullif(regexp_replace(coalesce(v.protocolo_numero, ''), '\\D', '', 'g'), ''),
+                      nullif(regexp_replace(coalesce(v.metadata->'safeweb_financeiro'->'emissao'->>'protocolo_renovacao', ''), '\\D', '', 'g'), '')
+                    ))
+                  OR nullif(regexp_replace(coalesce(v.documento_faturamento, cb.cpf_cnpj, v.metadata->'safeweb_financeiro'->>'documento', ''), '\\D', '', 'g'), '') IN (
+                    nullif(regexp_replace(coalesce(r.cpf, ''), '\\D', '', 'g'), ''),
+                    nullif(regexp_replace(coalesce(r.cnpj, ''), '\\D', '', 'g'), '')
+                  )
+                  OR nullif(regexp_replace(coalesce(v.metadata->'safeweb_financeiro'->>'documento_titular', ''), '\\D', '', 'g'), '') IN (
+                    nullif(regexp_replace(coalesce(r.cpf, ''), '\\D', '', 'g'), ''),
+                    nullif(regexp_replace(coalesce(r.cnpj, ''), '\\D', '', 'g'), '')
+                  )
                   OR ($2::text IS NOT NULL AND (fn_normalize_phone_br(v.telefone_faturamento) = $2 OR fn_normalize_phone_br(cb.telefone) = $2))
                 )
            )

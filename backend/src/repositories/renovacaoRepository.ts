@@ -74,7 +74,7 @@ export class RenovacaoRepository {
     'updated_at',
   ].join(', ')
 
-  private async reconcileConvertedFromSales(): Promise<number> {
+  async reconcileConvertedFromSales(): Promise<number> {
     const result = await this.db.query<{ id: string }>(
       `WITH matched AS (
          SELECT r.id
@@ -94,9 +94,20 @@ export class RenovacaoRepository {
                  )
                  AND coalesce(v.data_inicio_validade::date, v.created_at::date) >= (r.data_vencimento::date - INTERVAL '180 days')
                  AND (
-                   (r.cadastro_base_id IS NOT NULL AND v.cadastro_base_id = r.cadastro_base_id)
-                   OR regexp_replace(coalesce(v.documento_faturamento, cb.cpf_cnpj, ''), '\\D', '', 'g')
-                      = regexp_replace(coalesce(r.cpf, r.cnpj, ''), '\\D', '', 'g')
+                   (nullif(regexp_replace(coalesce(r.protocolo, ''), '\\D', '', 'g'), '') IS NOT NULL
+                    AND nullif(regexp_replace(coalesce(r.protocolo, ''), '\\D', '', 'g'), '') IN (
+                      nullif(regexp_replace(coalesce(v.protocolo_numero, ''), '\\D', '', 'g'), ''),
+                      nullif(regexp_replace(coalesce(v.metadata->'safeweb_financeiro'->'emissao'->>'protocolo_renovacao', ''), '\\D', '', 'g'), '')
+                    ))
+                   OR (r.cadastro_base_id IS NOT NULL AND v.cadastro_base_id = r.cadastro_base_id)
+                   OR nullif(regexp_replace(coalesce(v.documento_faturamento, cb.cpf_cnpj, v.metadata->'safeweb_financeiro'->>'documento', ''), '\\D', '', 'g'), '') IN (
+                     nullif(regexp_replace(coalesce(r.cpf, ''), '\\D', '', 'g'), ''),
+                     nullif(regexp_replace(coalesce(r.cnpj, ''), '\\D', '', 'g'), '')
+                   )
+                   OR nullif(regexp_replace(coalesce(v.metadata->'safeweb_financeiro'->>'documento_titular', ''), '\\D', '', 'g'), '') IN (
+                     nullif(regexp_replace(coalesce(r.cpf, ''), '\\D', '', 'g'), ''),
+                     nullif(regexp_replace(coalesce(r.cnpj, ''), '\\D', '', 'g'), '')
+                   )
                  )
                  AND (
                    regexp_replace(lower(coalesce(r.tipo_certificado, '')), '[^a-z0-9]+', '', 'g') = ''
@@ -201,9 +212,20 @@ export class RenovacaoRepository {
               )
               AND coalesce(v.data_inicio_validade::date, v.created_at::date) >= (renovacoes.data_vencimento::date - INTERVAL '180 days')
               AND (
-                (renovacoes.cadastro_base_id IS NOT NULL AND v.cadastro_base_id = renovacoes.cadastro_base_id)
-                OR regexp_replace(coalesce(v.documento_faturamento, cb.cpf_cnpj, ''), '\\D', '', 'g')
-                   = regexp_replace(coalesce(renovacoes.cpf, renovacoes.cnpj, ''), '\\D', '', 'g')
+                (nullif(regexp_replace(coalesce(renovacoes.protocolo, ''), '\\D', '', 'g'), '') IS NOT NULL
+                 AND nullif(regexp_replace(coalesce(renovacoes.protocolo, ''), '\\D', '', 'g'), '') IN (
+                   nullif(regexp_replace(coalesce(v.protocolo_numero, ''), '\\D', '', 'g'), ''),
+                   nullif(regexp_replace(coalesce(v.metadata->'safeweb_financeiro'->'emissao'->>'protocolo_renovacao', ''), '\\D', '', 'g'), '')
+                 ))
+                OR (renovacoes.cadastro_base_id IS NOT NULL AND v.cadastro_base_id = renovacoes.cadastro_base_id)
+                OR nullif(regexp_replace(coalesce(v.documento_faturamento, cb.cpf_cnpj, v.metadata->'safeweb_financeiro'->>'documento', ''), '\\D', '', 'g'), '') IN (
+                  nullif(regexp_replace(coalesce(renovacoes.cpf, ''), '\\D', '', 'g'), ''),
+                  nullif(regexp_replace(coalesce(renovacoes.cnpj, ''), '\\D', '', 'g'), '')
+                )
+                OR nullif(regexp_replace(coalesce(v.metadata->'safeweb_financeiro'->>'documento_titular', ''), '\\D', '', 'g'), '') IN (
+                  nullif(regexp_replace(coalesce(renovacoes.cpf, ''), '\\D', '', 'g'), ''),
+                  nullif(regexp_replace(coalesce(renovacoes.cnpj, ''), '\\D', '', 'g'), '')
+                )
               )
          )
        ORDER BY data_vencimento ASC`,

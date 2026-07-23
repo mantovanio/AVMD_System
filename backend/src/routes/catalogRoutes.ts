@@ -327,7 +327,13 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   if (method === 'POST' && url === '/api/comercial/vendas/batch-update') {
     const body = await readJson<{ updates: { protocolo_numero: string; [key: string]: unknown }[] }>(req)
     const result = await repo.batchUpdateVendasByProtocolo(body.updates ?? [])
-    writeJson(res, 200, { ok: true, ...result }, corsOrigin)
+    const renovacoesConvertidas = renovacaoRepo
+      ? await renovacaoRepo.reconcileConvertedFromSales().catch(err => {
+          console.error('[catalog] reconcileConvertedFromSales failed', err)
+          return 0
+        })
+      : 0
+    writeJson(res, 200, { ok: true, ...result, renovacoesConvertidas }, corsOrigin)
     return true
   }
 
@@ -389,8 +395,9 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
     const body = await readJson<Record<string, unknown>>(req)
     const venda = await repo.createVenda(body)
 
+    let renovacaoResult: Awaited<ReturnType<NonNullable<typeof renovacaoRepo>['handleSaleRenewal']>> | null = null
     if (renovacaoRepo && venda?.id) {
-      void renovacaoRepo.handleSaleRenewal({
+      renovacaoResult = await renovacaoRepo.handleSaleRenewal({
         cadastro_base_id: String(body.cadastro_base_id ?? ''),
         tipo_produto: String(body.tipo_produto ?? ''),
         certificado_id: body.certificado_id ? String(body.certificado_id) : null,
@@ -402,10 +409,17 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
         valor_venda: Number(body.valor_venda ?? 0),
         venda_id: String(venda.id),
         data_referencia: body.data_inicio_validade ? String(body.data_inicio_validade) : null,
-      }).catch(err => console.error('[catalog] handleSaleRenewal failed', err))
+      }).catch(err => {
+        console.error('[catalog] handleSaleRenewal failed', err)
+        return null
+      })
+      await renovacaoRepo.reconcileConvertedFromSales().catch(err => {
+        console.error('[catalog] reconcileConvertedFromSales after create failed', err)
+        return 0
+      })
     }
 
-    writeJson(res, 200, { ok: true, venda }, corsOrigin)
+    writeJson(res, 200, { ok: true, venda, renovacao: renovacaoResult }, corsOrigin)
     return true
   }
 
