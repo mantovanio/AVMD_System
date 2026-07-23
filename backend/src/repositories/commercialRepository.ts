@@ -3,6 +3,8 @@ import type { AivenSqlClient } from '../db/aivenClient.js'
 
 export type CommercialSalesInput = {
   limit?: number
+  dateFrom?: string | null
+  dateTo?: string | null
 }
 
 export type CommercialAgendaInput = {
@@ -79,6 +81,17 @@ export class CommercialRepository {
 
   async listSales(input: CommercialSalesInput = {}) {
     const limit = Math.min(Math.max(Number(input.limit || 2000), 1), 5000)
+    const params: unknown[] = []
+    const where: string[] = []
+    if (input.dateFrom) {
+      params.push(input.dateFrom)
+      where.push(`coalesce(v.data_inicio_validade::date, v.created_at::date) >= $${params.length}::date`)
+    }
+    if (input.dateTo) {
+      params.push(input.dateTo)
+      where.push(`coalesce(v.data_inicio_validade::date, v.created_at::date) <= $${params.length}::date`)
+    }
+    params.push(limit)
     const result = await this.db.query(`
       select
         v.*,
@@ -87,9 +100,10 @@ export class CommercialRepository {
       from vendas_certificados v
       left join cadastros_base cb on cb.id = v.cadastro_base_id
       left join pontos_atendimento pa on pa.id = v.ponto_atendimento_id
+      ${where.length ? `where ${where.join(' and ')}` : ''}
       order by coalesce(v.data_inicio_validade::date, v.created_at::date) desc, v.created_at desc
-      limit $1
-    `, [limit])
+      limit $${params.length}
+    `, params)
     return result.rows
   }
 

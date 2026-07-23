@@ -3,7 +3,7 @@ import { readJson, writeJson } from '../utils/http.js'
 import { CommercialRepository } from '../repositories/commercialRepository.js'
 import type { CheckoutPaymentService } from '../services/checkoutPaymentService.js'
 
-type SalesRequest = { limit?: number }
+type SalesRequest = { limit?: number; dateFrom?: string | null; dateTo?: string | null }
 type SaleStatusRequest = { id: string; status: string }
 type SalePaymentStatusRequest = { id: string; status: string }
 type SalePaymentMethodRequest = { id: string; forma_pagamento_id: string; admin_profile_id: string; payment_installments?: number | null }

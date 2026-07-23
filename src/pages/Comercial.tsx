@@ -274,6 +274,9 @@ type NfseOverrideModal = {
   lote: boolean
 } | null
 
+const VENDAS_LISTA_LIMITE_INICIAL = 500
+const VENDAS_REFRESH_PAGAMENTO_MS = 60_000
+
 type CobrancaModal = {
   vendaId: string
   clienteNome: string
@@ -654,10 +657,26 @@ const EMPTY_CERT_FILTERS: CertFilters = {
   hash: '',
 }
 
+function formatDateInput(date: Date) {
+  return date.toISOString().split('T')[0]
+}
+
+function defaultVendasDateRange() {
+  const hoje = new Date()
+  const inicio = new Date(hoje)
+  inicio.setDate(hoje.getDate() - 30)
+  return {
+    dataInicial: formatDateInput(inicio),
+    dataFinal: formatDateInput(hoje),
+  }
+}
+
+const DEFAULT_VENDAS_DATE_RANGE = defaultVendasDateRange()
+
 const EMPTY_VENDA_FILTERS: VendaFilters = {
-  filtroData:   'geral',
-  dataInicial:  '',
-  dataFinal:    '',
+  filtroData:   '30dias',
+  dataInicial:  DEFAULT_VENDAS_DATE_RANGE.dataInicial,
+  dataFinal:    DEFAULT_VENDAS_DATE_RANGE.dataFinal,
   pedido:       '',
   protocolo:    '',
   cliente:      '',
@@ -705,6 +724,7 @@ export default function Comercial() {
   const [salvandoV, setSalvandoV]       = useState(false)
   const [salvandoCliente, setSalvandoCliente] = useState(false)
   const [vendaFilters, setVendaFilters] = useState<VendaFilters>(EMPTY_VENDA_FILTERS)
+  const vendaFiltersRef = useRef<VendaFilters>(EMPTY_VENDA_FILTERS)
   const [showVendaFiltrosExtras, setShowVendaFiltrosExtras] = useState(false)
   const [showVendaAcoesExtras, setShowVendaAcoesExtras] = useState(false)
   const [selectedIds, setSelectedIds]           = useState<Set<string>>(new Set())
@@ -1644,24 +1664,32 @@ export default function Comercial() {
   const fetchVendasV2 = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoadingV(true)
     try {
-      const rows = await fetchAivenCommercialSales(5000) as VendaRow[]
+      const filtrosAtuais = vendaFiltersRef.current
+      const rows = await fetchAivenCommercialSales(VENDAS_LISTA_LIMITE_INICIAL, {
+        dateFrom: filtrosAtuais.dataInicial || null,
+        dateTo: filtrosAtuais.dataFinal || null,
+      }) as VendaRow[]
       setVendasV2(rows)
-      const vendaIds = rows.map(v => v.id)
-      if (vendaIds.length > 0) {
-        const agendaRows = await fetchAivenCommercialSchedule({ dataBase: null })
-        const statusMap: Record<string, StatusAgendamentoValidacao | null> = {}
-        for (const item of agendaRows) {
-          if (!item.venda_certificado_id || !vendaIds.includes(item.venda_certificado_id)) continue
-          if (!(item.venda_certificado_id in statusMap)) {
-            statusMap[item.venda_certificado_id] = item.status_agendamento
+      if (!options?.silent) setLoadingV(false)
+
+      void (async () => {
+        const vendaIds = new Set(rows.map(v => v.id))
+        if (vendaIds.size > 0) {
+          const agendaRows = await fetchAivenCommercialSchedule({ dataBase: null })
+          const statusMap: Record<string, StatusAgendamentoValidacao | null> = {}
+          for (const item of agendaRows) {
+            if (!item.venda_certificado_id || !vendaIds.has(item.venda_certificado_id)) continue
+            if (!(item.venda_certificado_id in statusMap)) {
+              statusMap[item.venda_certificado_id] = item.status_agendamento
+            }
           }
+          setAgendamentoStatusPorVenda(statusMap)
+        } else {
+          setAgendamentoStatusPorVenda({})
         }
-        setAgendamentoStatusPorVenda(statusMap)
-      } else {
-        setAgendamentoStatusPorVenda({})
-      }
-      const perfis = await fetchAivenCommercialSaleProfiles()
-      setVendedorNomes(new Map(perfis.map(p => [p.id, p.nome])))
+        const perfis = await fetchAivenCommercialSaleProfiles()
+        setVendedorNomes(new Map(perfis.map(p => [p.id, p.nome])))
+      })()
     } finally {
       if (!options?.silent) setLoadingV(false)
     }
@@ -1790,6 +1818,7 @@ export default function Comercial() {
   }, [])
 
   // ── effects ──────────────────────────────────────────────────
+  useEffect(() => { vendaFiltersRef.current = vendaFilters }, [vendaFilters])
   useEffect(() => { void fetchVendasV2() }, [fetchVendasV2])
   useEffect(() => { void fetchClientes()  }, [fetchClientes])
   useEffect(() => { void fetchPontos()    }, [fetchPontos])
@@ -1823,8 +1852,7 @@ export default function Comercial() {
       }
     }
 
-    const interval = setInterval(() => { void refresh() }, 15_000)
-    void refresh()
+    const interval = setInterval(() => { void refresh() }, VENDAS_REFRESH_PAGAMENTO_MS)
     return () => clearInterval(interval)
   }, [tab, vendasComPagamentoPendente, fetchVendasV2])
 
@@ -4824,6 +4852,9 @@ export default function Comercial() {
     } else if (preset === 'mes') {
       const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
       setVendaFilters(p => ({ ...p, filtroData: preset, dataInicial: fmt(ini), dataFinal: fmt(hoje) }))
+    } else if (preset === '30dias') {
+      const ini = new Date(hoje); ini.setDate(hoje.getDate() - 30)
+      setVendaFilters(p => ({ ...p, filtroData: preset, dataInicial: fmt(ini), dataFinal: fmt(hoje) }))
     } else {
       setVendaFilters(p => ({ ...p, filtroData: 'geral', dataInicial: '', dataFinal: '' }))
     }
@@ -5730,6 +5761,7 @@ export default function Comercial() {
                   <span className="text-xs text-gray-500">Período</span>
                   <select value={vendaFilters.filtroData} onChange={e => aplicarPresetData(e.target.value)}
                     className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0 w-full sm:w-auto">
+                    <option value="30dias">Últimos 30 dias</option>
                     <option value="geral">Geral</option>
                     <option value="hoje">Hoje</option>
                     <option value="semana">Esta semana</option>

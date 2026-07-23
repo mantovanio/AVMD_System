@@ -19,8 +19,12 @@ type ApiResponse<Key extends string, Value> = {
   ok: boolean
 } & Record<Key, Value>
 
-export async function fetchAivenCommercialSales(limit = 50) {
-  const response = await postJson<ApiResponse<'vendas', AivenVendaRow[]>>(getApiUrl('/comercial/vendas'), { limit })
+export async function fetchAivenCommercialSales(limit = 50, filters?: { dateFrom?: string | null; dateTo?: string | null }) {
+  const response = await postJson<ApiResponse<'vendas', AivenVendaRow[]>>(getApiUrl('/comercial/vendas'), {
+    limit,
+    dateFrom: filters?.dateFrom ?? null,
+    dateTo: filters?.dateTo ?? null,
+  })
   return response.vendas ?? []
 }
 
