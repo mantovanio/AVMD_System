@@ -5650,7 +5650,7 @@ function AbaFiscal() {
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 size={24} className="animate-spin text-gray-400" /></div>
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="w-full max-w-none space-y-4 pb-8">
       <div>
         <h2 className="font-semibold text-gray-800 dark:text-gray-200">Configurações Fiscais por Prefeitura</h2>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -5681,7 +5681,7 @@ function AbaFiscal() {
 
       {subtab === 'configuracoes' && (
       <>
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
         <div className="flex flex-wrap gap-2">
           {NFSE_PRESETS.map(preset => (
             <button
@@ -5732,8 +5732,8 @@ function AbaFiscal() {
         )}
       </div>
 
-      <div className="space-y-6">
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
+      <div className="grid gap-4 xl:grid-cols-2 items-start">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-800 pb-2 flex items-center gap-2">
             <MapPin size={16} className="text-blue-500" /> Perfil da Prefeitura
           </h3>
@@ -5757,7 +5757,7 @@ function AbaFiscal() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-800 pb-2 flex items-center gap-2">
             <FileText size={16} className="text-blue-500" /> Dados do Emitente
           </h3>
@@ -5794,7 +5794,7 @@ function AbaFiscal() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-800 pb-2 flex items-center gap-2">
             <CreditCard size={16} className="text-green-500" /> Impostos e Alíquotas (%)
           </h3>
@@ -5823,7 +5823,7 @@ function AbaFiscal() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-800 pb-2 flex items-center gap-2">
             <Webhook size={16} className="text-purple-500" /> Serviços e Enquadramentos
           </h3>
@@ -5838,7 +5838,7 @@ function AbaFiscal() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3 xl:col-span-2">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-800 pb-2 flex items-center gap-2">
             <KeyRound size={16} className="text-amber-500" /> RPS, acesso e autenticação
           </h3>
@@ -6166,7 +6166,7 @@ function AbaFiscal() {
           )}
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-800 pb-2 flex items-center gap-2">
             <ShieldCheck size={16} className="text-emerald-500" /> Certificado Digital A1
           </h3>
@@ -6262,7 +6262,7 @@ function AbaFiscal() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-800 pb-2 flex items-center gap-2">
             <Save size={16} className="text-blue-500" /> Operação automática
           </h3>
@@ -6324,7 +6324,7 @@ function AbaFiscal() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3 xl:col-span-2">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-800 pb-2 flex items-center gap-2">
             <FileText size={16} className="text-indigo-500" /> Regra de emissão da NFS-e
           </h3>
