@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
 import * as XLSX from 'xlsx'
@@ -103,6 +103,156 @@ import type {
 type VendaRow = VendaCertificado & {
   cadastros_base: { nome: string; cpf_cnpj: string } | null
   pontos_atendimento: { nome: string } | null
+}
+
+type VendaColumnKey =
+  | 'select'
+  | 'pedido'
+  | 'protocolo'
+  | 'link_atendimento'
+  | 'tipo_emissao'
+  | 'tipo_venda'
+  | 'status_venda'
+  | 'status_pagamento'
+  | 'data_status'
+  | 'forma_pagamento'
+  | 'valor'
+  | 'produto'
+  | 'doc_cliente'
+  | 'cliente'
+  | 'telefone'
+  | 'email'
+  | 'pa'
+  | 'local_atendimento'
+  | 'data_venda'
+  | 'data_vencimento_pagamento'
+  | 'data_pagamento'
+  | 'data_nota'
+  | 'status_nota'
+  | 'vendedor'
+  | 'agente_validador'
+  | 'usuario_criacao'
+  | 'tabela'
+  | 'token'
+  | 'observacoes'
+
+type VendaColumn = {
+  key: VendaColumnKey
+  label: string
+  width: number
+  align?: 'left' | 'right' | 'center'
+}
+
+const DEFAULT_VENDA_COLUMNS: VendaColumn[] = [
+  { key: 'select', label: '', width: 46, align: 'center' },
+  { key: 'pedido', label: 'Pedido', width: 100 },
+  { key: 'protocolo', label: 'Protocolo', width: 120 },
+  { key: 'link_atendimento', label: 'Link emissão', width: 160 },
+  { key: 'tipo_emissao', label: 'Emissão', width: 150 },
+  { key: 'tipo_venda', label: 'Tipo Venda', width: 110 },
+  { key: 'status_venda', label: 'Status', width: 150 },
+  { key: 'status_pagamento', label: 'Pagamento', width: 130 },
+  { key: 'data_status', label: 'Data Status', width: 150 },
+  { key: 'forma_pagamento', label: 'Forma Pagamento', width: 230 },
+  { key: 'valor', label: 'Valor', width: 110, align: 'right' },
+  { key: 'produto', label: 'Produto', width: 230 },
+  { key: 'doc_cliente', label: 'Doc. Cliente', width: 140 },
+  { key: 'cliente', label: 'Cliente', width: 220 },
+  { key: 'telefone', label: 'Telefone', width: 140 },
+  { key: 'email', label: 'E-mail', width: 220 },
+  { key: 'pa', label: 'PA', width: 140 },
+  { key: 'local_atendimento', label: 'Local Atendimento', width: 190 },
+  { key: 'data_venda', label: 'Data Venda', width: 120 },
+  { key: 'data_vencimento_pagamento', label: 'Venc. Pagto', width: 130 },
+  { key: 'data_pagamento', label: 'Data Pagto', width: 130 },
+  { key: 'data_nota', label: 'Data Nota', width: 120 },
+  { key: 'status_nota', label: 'Status Nota', width: 140 },
+  { key: 'vendedor', label: 'Vendedor', width: 190 },
+  { key: 'agente_validador', label: 'Agente Validador', width: 190 },
+  { key: 'usuario_criacao', label: 'Usuário Criação', width: 190 },
+  { key: 'tabela', label: 'Tabela', width: 150 },
+  { key: 'token', label: 'Token', width: 170 },
+  { key: 'observacoes', label: 'Observações', width: 240 },
+]
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function textValue(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return ''
+}
+
+function pickNestedText(source: unknown, paths: string[][]): string {
+  const root = asRecord(source)
+  if (!root) return ''
+  for (const path of paths) {
+    let current: unknown = root
+    for (const segment of path) {
+      current = asRecord(current)?.[segment]
+    }
+    const value = textValue(current)
+    if (value) return value
+  }
+  return ''
+}
+
+function vendaMetadata(venda: VendaRow): Record<string, unknown> {
+  return asRecord(venda.metadata) ?? {}
+}
+
+function getVendaExtra(venda: VendaRow, key: VendaColumnKey): string {
+  const metadata = vendaMetadata(venda)
+  const safeweb = asRecord(metadata.safeweb_financeiro) ?? {}
+  const gestaoAr = asRecord(safeweb.gestao_ar) ?? {}
+  const atendimento = asRecord(safeweb.atendimento) ?? {}
+  const financeiro = asRecord(safeweb.financeiro) ?? {}
+
+  if (key === 'link_atendimento') {
+    return pickNestedText(metadata, [
+      ['link_video_renovacao'],
+      ['link_videoconferencia_renovacao'],
+      ['safeweb_financeiro', 'gestao_ar', 'link_video_renovacao'],
+      ['safeweb_financeiro', 'emissao', 'link_video_renovacao'],
+      ['safeweb_financeiro', 'linha_original', 'link_videoconferencia_renovacao'],
+      ['safeweb_financeiro', 'linha_original', 'link_videoconferencia_renovacao_on_line'],
+    ])
+  }
+  if (key === 'usuario_criacao') {
+    return textValue(gestaoAr.usuario_criacao_pedido)
+      || pickNestedText(metadata, [['usuario_criacao_pedido'], ['usuario_criacao'], ['linha_original', 'usuario_de_criacao_do_pedido']])
+  }
+  if (key === 'agente_validador') {
+    return textValue(gestaoAr.agente_registro)
+      || textValue(metadata.agente_registro_importado)
+      || pickNestedText(metadata, [['agente_validador'], ['linha_original', 'agente_de_registro'], ['safeweb_financeiro', 'emissao', 'agente_registro']])
+  }
+  if (key === 'local_atendimento') {
+    return venda.nome_local_atendimento
+      || textValue(gestaoAr.local_atendimento)
+      || textValue(atendimento.nome_local)
+      || pickNestedText(metadata, [['local_atendimento'], ['linha_original', 'local_de_atendimento']])
+  }
+  if (key === 'token') {
+    return textValue(gestaoAr.token) || textValue(metadata.token) || pickNestedText(metadata, [['linha_original', 'token']])
+  }
+  if (key === 'data_nota') {
+    return textValue(metadata.data_nota) || pickNestedText(metadata, [['linha_original', 'data_nota']])
+  }
+  if (key === 'status_nota') {
+    return textValue(gestaoAr.status_nota)
+      || textValue(metadata.status_nota)
+      || textValue(metadata.nf)
+      || textValue(financeiro.nfe)
+      || pickNestedText(metadata, [['linha_original', 'status_nota'], ['linha_original', 'nf']])
+  }
+  if (key === 'tabela') {
+    return venda.tabela_preco || pickNestedText(metadata, [['tabela_preco'], ['linha_original', 'tabela_de_venda']])
+  }
+  return ''
 }
 
 type NfseValidationResult =
@@ -739,6 +889,8 @@ export default function Comercial() {
   const [emitindoNfseLote, setEmitindoNfseLote] = useState(false)
   const [itensPorPagina, setItensPorPagina]     = useState(50)
   const [paginaAtual, setPaginaAtual]           = useState(1)
+  const [vendaColumns, setVendaColumns] = useState<VendaColumn[]>(DEFAULT_VENDA_COLUMNS)
+  const resizingVendaColumnRef = useRef<{ key: VendaColumnKey; startX: number; startWidth: number } | null>(null)
 
   // ── cancelamento state ────────────────────────────────────────
   const [cancelandoVenda, setCancelandoVenda] = useState<VendaRow | null>(null)
@@ -1661,6 +1813,27 @@ export default function Comercial() {
     const { paymentCharge } = getPaymentChargeInfo(v)
     return Boolean(paymentCharge && paymentCharge.status !== 'paid' && v.status_pagamento !== 'pago')
   }), [vendasV2])
+  const vendaTableWidth = useMemo(() => vendaColumns.reduce((sum, column) => sum + column.width, 0), [vendaColumns])
+
+  useEffect(() => {
+    function handleMouseMove(event: MouseEvent) {
+      const resizing = resizingVendaColumnRef.current
+      if (!resizing) return
+      const nextWidth = Math.max(70, resizing.startWidth + event.clientX - resizing.startX)
+      setVendaColumns(prev => prev.map(column => column.key === resizing.key ? { ...column, width: nextWidth } : column))
+    }
+    function handleMouseUp() {
+      resizingVendaColumnRef.current = null
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
 
   // ── fetch V2 ─────────────────────────────────────────────────
   const fetchVendasV2 = useCallback(async (options?: { silent?: boolean }) => {
@@ -4863,20 +5036,34 @@ export default function Comercial() {
   }
 
   function exportarCSV() {
-    const header = ['Pedido', 'Protocolo', 'Cliente', 'Documento', 'Produto', 'Emissão', 'Tipo Venda', 'PA', 'Valor', 'Status', 'Forma Pgto', 'Data Venda', 'Observação']
+    const header = ['Pedido', 'Protocolo', 'Link Emissão', 'Cliente', 'Documento', 'Telefone', 'E-mail', 'Produto', 'Emissão', 'Tipo Venda', 'PA', 'Local Atendimento', 'Valor', 'Status', 'Forma Pgto', 'Status Pgto', 'Data Venda', 'Venc. Pgto', 'Data Pgto', 'Data Nota', 'Status Nota', 'Vendedor', 'Agente Validador', 'Usuário Criação', 'Tabela', 'Token', 'Observação']
     const rows = vendasFiltradas.map(v => [
       v.pedido_numero ?? '',
       v.protocolo_numero ?? '',
+      getVendaExtra(v, 'link_atendimento'),
       ((v.cadastros_base as { nome?: string } | null)?.nome ?? v.nome_faturamento ?? ''),
       ((v.cadastros_base as { cpf_cnpj?: string } | null)?.cpf_cnpj ?? v.documento_faturamento ?? ''),
+      v.telefone_faturamento ?? '',
+      v.email_faturamento ?? '',
       v.tipo_produto,
       v.tipo_emissao ?? '',
       v.tipo_venda ?? '',
       ((v.pontos_atendimento as { nome?: string } | null)?.nome ?? ''),
+      getVendaExtra(v, 'local_atendimento'),
       String(v.valor_venda ?? 0),
       STATUS_VENDA_LABEL[v.status_venda],
       ((v.metadata as { forma_pagamento?: string })?.forma_pagamento ?? ''),
+      STATUS_PAGAMENTO_LABEL[v.status_pagamento],
       new Date(v.data_inicio_validade || v.created_at).toLocaleDateString('pt-BR'),
+      v.data_vencimento ? new Date(v.data_vencimento).toLocaleDateString('pt-BR') : '',
+      v.data_pagamento ? new Date(v.data_pagamento).toLocaleDateString('pt-BR') : '',
+      getVendaExtra(v, 'data_nota'),
+      getVendaExtra(v, 'status_nota'),
+      v.vendedor_id ? (vendedorNomes.get(v.vendedor_id) ?? '') : '',
+      getVendaExtra(v, 'agente_validador'),
+      getVendaExtra(v, 'usuario_criacao'),
+      getVendaExtra(v, 'tabela'),
+      getVendaExtra(v, 'token'),
       (v.observacoes ?? ''),
     ])
     const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -4885,6 +5072,240 @@ export default function Comercial() {
     const a    = document.createElement('a')
     a.href = url; a.download = `vendas_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`; a.click()
     URL.revokeObjectURL(url)
+  }
+
+  function startResizeVendaColumn(event: React.MouseEvent, column: VendaColumn) {
+    event.preventDefault()
+    event.stopPropagation()
+    resizingVendaColumnRef.current = { key: column.key, startX: event.clientX, startWidth: column.width }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
+
+  function moveVendaColumn(sourceKey: VendaColumnKey, targetKey: VendaColumnKey) {
+    if (sourceKey === 'select' || targetKey === 'select' || sourceKey === targetKey) return
+    setVendaColumns(prev => {
+      const sourceIndex = prev.findIndex(column => column.key === sourceKey)
+      const targetIndex = prev.findIndex(column => column.key === targetKey)
+      if (sourceIndex < 0 || targetIndex < 0) return prev
+      const next = [...prev]
+      const [moved] = next.splice(sourceIndex, 1)
+      next.splice(targetIndex, 0, moved)
+      return next
+    })
+  }
+
+  function formatVendaDate(value: string | null | undefined, withTime = false) {
+    if (!value) return '—'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return value
+    return date.toLocaleDateString('pt-BR', withTime ? { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' } : undefined)
+  }
+
+  function renderVendaCell(v: VendaRow, column: VendaColumn) {
+    const cellBase = cn(
+      'px-3 py-2 align-middle',
+      column.align === 'right' && 'text-right',
+      column.align === 'center' && 'text-center',
+    )
+    if (column.key === 'select') {
+      return (
+        <td key={column.key} className={cellBase} onClick={(e) => e.stopPropagation()}>
+          <input type="checkbox" checked={selectedIds.has(v.id)}
+            onChange={() => toggleSelected(v.id)} className="rounded cursor-pointer" />
+        </td>
+      )
+    }
+    if (column.key === 'status_venda') {
+      return (
+        <td key={column.key} className={cellBase}>
+          <select
+            title="Status da venda"
+            value={v.status_venda}
+            onChange={e => atualizarStatusVendaV2(v.id, e.target.value as StatusVendaCertificado)}
+            className={cn('px-2 py-0.5 rounded-full text-xs font-medium border-0 cursor-pointer focus:outline-none whitespace-nowrap', statusVendaV2Cls(v.status_venda))}>
+            {STATUS_VENDA_V2_OPTIONS.map(s => (
+              <option key={s} value={s}>{STATUS_VENDA_LABEL[s]}</option>
+            ))}
+          </select>
+        </td>
+      )
+    }
+    if (column.key === 'status_pagamento') {
+      return (
+        <td key={column.key} className={cellBase}>
+          <select
+            title="Status do pagamento"
+            value={v.status_pagamento}
+            onChange={e => void atualizarStatusPagamentoV2(v.id, e.target.value as StatusPagamentoVenda)}
+            className={cn('px-2 py-0.5 rounded-full text-xs font-medium border-0 cursor-pointer focus:outline-none whitespace-nowrap', statusPagamentoCls(v.status_pagamento))}>
+            {STATUS_PAGAMENTO_OPTIONS.map(s => (
+              <option key={s} value={s}>{STATUS_PAGAMENTO_LABEL[s]}</option>
+            ))}
+          </select>
+        </td>
+      )
+    }
+    if (column.key === 'forma_pagamento') {
+      return (
+        <td key={column.key} className={cn(cellBase, 'text-gray-500')}>
+          {canChangePayment(profile, v) ? (
+            <select
+              title={isAdmin ? 'Alterar forma de pagamento (somente administrador)' : 'Alterar forma de pagamento'}
+              value={v.forma_pagamento_id ?? ''}
+              disabled={updatingPaymentVendaId === v.id}
+              onChange={e => void alterarFormaPagamentoVenda(v, e.target.value)}
+              className="max-w-[190px] rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
+            >
+              <option value="">Selecione</option>
+              {pagamentosDoGatewayAtual.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+          ) : (
+            (v.metadata as { forma_pagamento?: string })?.forma_pagamento ?? '—'
+          )}
+          {(() => {
+            const { paymentCharge, chargeUrl, paymentKind } = getPaymentChargeInfo(v)
+            if (!paymentCharge) return null
+            const isPix = paymentKind === 'pix'
+            return (
+              <span className="ml-2 inline-flex items-center gap-2">
+                {chargeUrl ? (
+                  <a href={chargeUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 underline">
+                    Abrir
+                  </a>
+                ) : (
+                  <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">Cobrança ativa</span>
+                )}
+                {paymentCharge?.status !== 'paid' && (
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); void reenviarCobrancaVenda(v) }}
+                    disabled={reenviandoCobrancaVendaId === v.id}
+                    className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300"
+                    title={isPix ? 'Reenviar QR Pix ao cliente' : 'Reenviar link de pagamento ao cliente'}
+                  >
+                    <RefreshCcw size={11} className={reenviandoCobrancaVendaId === v.id ? 'animate-spin' : ''} />
+                    {reenviandoCobrancaVendaId === v.id ? 'Reenviando...' : (isPix ? 'Reenviar QR' : 'Reenviar')}
+                  </button>
+                )}
+              </span>
+            )
+          })()}
+        </td>
+      )
+    }
+
+    const cliente = (v.cadastros_base as { nome?: string } | null)?.nome ?? v.nome_faturamento ?? '—'
+    const documento = (v.cadastros_base as { cpf_cnpj?: string } | null)?.cpf_cnpj ?? v.documento_faturamento ?? '—'
+    const linkAtendimento = getVendaExtra(v, 'link_atendimento')
+    const values: Record<VendaColumnKey, string> = {
+      select: '',
+      pedido: v.pedido_numero ?? '—',
+      protocolo: v.protocolo_numero ?? '—',
+      link_atendimento: linkAtendimento,
+      tipo_emissao: v.tipo_emissao ? capitalize(v.tipo_emissao.replace(/_/g, ' ')) : '—',
+      tipo_venda: v.tipo_venda ? capitalize(v.tipo_venda) : '—',
+      status_venda: STATUS_VENDA_LABEL[v.status_venda],
+      status_pagamento: STATUS_PAGAMENTO_LABEL[v.status_pagamento],
+      data_status: formatVendaDate(v.updated_at, true),
+      forma_pagamento: (v.metadata as { forma_pagamento?: string })?.forma_pagamento ?? '—',
+      valor: formatCurrency(v.valor_venda ?? 0),
+      produto: descricaoProdutoVenda(v),
+      doc_cliente: documento,
+      cliente,
+      telefone: v.telefone_faturamento ?? '—',
+      email: v.email_faturamento ?? '—',
+      pa: (v.pontos_atendimento as { nome?: string } | null)?.nome ?? '—',
+      local_atendimento: getVendaExtra(v, 'local_atendimento') || '—',
+      data_venda: formatVendaDate(v.data_inicio_validade || v.created_at),
+      data_vencimento_pagamento: formatVendaDate(v.data_vencimento),
+      data_pagamento: formatVendaDate(v.data_pagamento),
+      data_nota: formatVendaDate(getVendaExtra(v, 'data_nota')),
+      status_nota: getVendaExtra(v, 'status_nota') || '—',
+      vendedor: v.vendedor_id ? (vendedorNomes.get(v.vendedor_id) ?? '—') : (v.nome_parceiro_safeweb || '—'),
+      agente_validador: getVendaExtra(v, 'agente_validador') || (v.agente_registro_id ? agentesRegistro.find(a => a.id === v.agente_registro_id)?.nome ?? '—' : '—'),
+      usuario_criacao: getVendaExtra(v, 'usuario_criacao') || '—',
+      tabela: getVendaExtra(v, 'tabela') || '—',
+      token: getVendaExtra(v, 'token') || v.numero_serie || '—',
+      observacoes: v.observacoes ?? '—',
+    }
+
+    if (column.key === 'link_atendimento') {
+      return (
+        <td key={column.key} className={cellBase}>
+          {linkAtendimento ? (
+            <a href={linkAtendimento} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 underline" onClick={e => e.stopPropagation()}>
+              Abrir link
+              <ExternalLink size={11} />
+            </a>
+          ) : '—'}
+        </td>
+      )
+    }
+
+    return (
+      <td key={column.key} className={cn(cellBase, column.key === 'valor' ? 'font-semibold text-green-600 dark:text-green-400' : 'text-gray-500')}>
+        <span className={cn('block truncate', ['cliente', 'produto', 'email', 'observacoes', 'local_atendimento'].includes(column.key) && 'max-w-full')} title={values[column.key]}>
+          {values[column.key]}
+        </span>
+      </td>
+    )
+  }
+
+  function renderVendaDetalhes(v: VendaRow) {
+    const detalhes = [
+      ['Pedido', v.pedido_numero ?? '—'],
+      ['Protocolo', v.protocolo_numero ?? '—'],
+      ['Cliente', (v.cadastros_base as { nome?: string } | null)?.nome ?? v.nome_faturamento ?? '—'],
+      ['Documento', (v.cadastros_base as { cpf_cnpj?: string } | null)?.cpf_cnpj ?? v.documento_faturamento ?? '—'],
+      ['Telefone', v.telefone_faturamento ?? '—'],
+      ['E-mail', v.email_faturamento ?? '—'],
+      ['Produto', descricaoProdutoVenda(v)],
+      ['Link emissão', getVendaExtra(v, 'link_atendimento') || '—'],
+      ['Vendedor', v.vendedor_id ? (vendedorNomes.get(v.vendedor_id) ?? '—') : (v.nome_parceiro_safeweb || '—')],
+      ['Agente validador', getVendaExtra(v, 'agente_validador') || (v.agente_registro_id ? agentesRegistro.find(a => a.id === v.agente_registro_id)?.nome ?? '—' : '—')],
+      ['Usuário criação', getVendaExtra(v, 'usuario_criacao') || '—'],
+      ['Local atendimento', getVendaExtra(v, 'local_atendimento') || '—'],
+      ['Tabela usada', getVendaExtra(v, 'tabela') || '—'],
+      ['Token', getVendaExtra(v, 'token') || v.numero_serie || '—'],
+      ['Data venda', formatVendaDate(v.data_inicio_validade || v.created_at)],
+      ['Venc. pagamento', formatVendaDate(v.data_vencimento)],
+      ['Data pagamento', formatVendaDate(v.data_pagamento)],
+      ['Data nota', formatVendaDate(getVendaExtra(v, 'data_nota'))],
+      ['Status nota', getVendaExtra(v, 'status_nota') || '—'],
+      ['Observações', v.observacoes ?? '—'],
+    ]
+    const link = getVendaExtra(v, 'link_atendimento')
+    return (
+      <tr className="bg-blue-50/60 dark:bg-blue-950/20">
+        <td colSpan={vendaColumns.length} className="px-4 py-4">
+          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white dark:bg-gray-900 p-4 shadow-sm">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-blue-500">Detalhe completo da venda</p>
+                <p className="font-semibold text-gray-900 dark:text-gray-100">
+                  {(v.cadastros_base as { nome?: string } | null)?.nome ?? v.nome_faturamento ?? 'Cliente não informado'}
+                </p>
+              </div>
+              {link && (
+                <a href={link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700" onClick={e => e.stopPropagation()}>
+                  Abrir link de emissão
+                  <ExternalLink size={12} />
+                </a>
+              )}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {detalhes.map(([label, value]) => (
+                <div key={label} className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-950/40 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">{label}</p>
+                  <p className="mt-1 break-words text-sm font-medium text-gray-800 dark:text-gray-100">{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </td>
+      </tr>
+    )
   }
 
   async function excluirVenda(id: string) {
@@ -5936,144 +6357,65 @@ export default function Comercial() {
             {/* ── TABELA ───────────────────────────────────────── */}
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden flex flex-col max-h-[calc(100vh-260px)] min-h-[360px]">
               <div className="flex-1 min-h-0 overflow-auto">
-                <table className="w-full min-w-[1500px] text-sm">
+                <table className="text-sm table-fixed" style={{ width: vendaTableWidth, minWidth: vendaTableWidth }}>
+                  <colgroup>
+                    {vendaColumns.map(column => <col key={column.key} style={{ width: column.width }} />)}
+                  </colgroup>
                   <thead className="sticky top-0 z-20">
                     <tr className="bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left border-b border-gray-200 dark:border-gray-800">
-                      <th className="px-3 py-3 w-8 bg-gray-50 dark:bg-gray-800/95">
-                        <input type="checkbox"
-                          checked={selectedIds.size > 0 && selectedIds.size === vendasPaginadas.length}
-                          onChange={toggleAll}
-                          className="rounded cursor-pointer" />
-                      </th>
-                      <th className="px-3 py-3 whitespace-nowrap bg-gray-50 dark:bg-gray-800/95">Pedido</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden lg:table-cell bg-gray-50 dark:bg-gray-800/95">Protocolo</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell bg-gray-50 dark:bg-gray-800/95">Tipo Emissão</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell bg-gray-50 dark:bg-gray-800/95">Tipo Venda</th>
-                      <th className="px-3 py-3 whitespace-nowrap bg-gray-50 dark:bg-gray-800/95">Status</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden md:table-cell bg-gray-50 dark:bg-gray-800/95">Pagamento</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell bg-gray-50 dark:bg-gray-800/95">Data Status</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden lg:table-cell bg-gray-50 dark:bg-gray-800/95">Forma Pagamento</th>
-                      <th className="px-3 py-3 whitespace-nowrap text-right bg-gray-50 dark:bg-gray-800/95">Valor</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden md:table-cell bg-gray-50 dark:bg-gray-800/95">Produto</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden lg:table-cell bg-gray-50 dark:bg-gray-800/95">Doc. Cliente</th>
-                      <th className="px-3 py-3 whitespace-nowrap bg-gray-50 dark:bg-gray-800/95">Cliente</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell bg-gray-50 dark:bg-gray-800/95">PA</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden sm:table-cell bg-gray-50 dark:bg-gray-800/95">Data Venda</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell bg-gray-50 dark:bg-gray-800/95">Vendedor</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden 2xl:table-cell bg-gray-50 dark:bg-gray-800/95">Observação</th>
+                      {vendaColumns.map(column => (
+                        <th
+                          key={column.key}
+                          draggable={column.key !== 'select'}
+                          onDragStart={event => event.dataTransfer.setData('text/plain', column.key)}
+                          onDragOver={event => column.key !== 'select' && event.preventDefault()}
+                          onDrop={event => {
+                            event.preventDefault()
+                            moveVendaColumn(event.dataTransfer.getData('text/plain') as VendaColumnKey, column.key)
+                          }}
+                          className={cn(
+                            'relative px-3 py-3 whitespace-nowrap bg-gray-50 dark:bg-gray-800/95 select-none group',
+                            column.align === 'right' && 'text-right',
+                            column.align === 'center' && 'text-center',
+                            column.key !== 'select' && 'cursor-grab active:cursor-grabbing',
+                          )}
+                          title={column.key === 'select' ? 'Selecionar todos' : 'Arraste para mudar a coluna de lugar. Use a borda direita para ajustar a largura.'}
+                        >
+                          {column.key === 'select' ? (
+                            <input type="checkbox"
+                              checked={selectedIds.size > 0 && selectedIds.size === vendasPaginadas.length}
+                              onChange={toggleAll}
+                              className="rounded cursor-pointer" />
+                          ) : column.label}
+                          {column.key !== 'select' && (
+                            <button
+                              type="button"
+                              aria-label={`Ajustar largura da coluna ${column.label}`}
+                              onMouseDown={event => startResizeVendaColumn(event, column)}
+                              className="absolute right-0 top-1/2 h-6 w-2 -translate-y-1/2 cursor-col-resize rounded bg-transparent hover:bg-blue-300/70 group-hover:bg-gray-300/70 dark:group-hover:bg-gray-600"
+                            />
+                          )}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                     {loadingV ? (
-                      <LoadingRow colSpan={17} />
+                      <LoadingRow colSpan={vendaColumns.length} />
                     ) : vendasPaginadas.length === 0 ? (
-                      <EmptyRow colSpan={17} label="Nenhuma venda encontrada com esses filtros." />
+                      <EmptyRow colSpan={vendaColumns.length} label="Nenhuma venda encontrada com esses filtros." />
                     ) : vendasPaginadas.map(v => (
-                      <tr key={v.id}
-                        onClick={() => setSelectedRowId(prev => prev === v.id ? null : v.id)}
-                        className={cn(
-                          'hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer',
-                          selectedRowId === v.id && 'bg-blue-50 dark:bg-blue-900/20 ring-1 ring-inset ring-blue-300 dark:ring-blue-700',
-                        )}>
-                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                          <input type="checkbox" checked={selectedIds.has(v.id)}
-                            onChange={() => toggleSelected(v.id)} className="rounded cursor-pointer" />
-                        </td>
-                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{v.pedido_numero ?? '—'}</td>
-                        <td className="px-3 py-2 text-blue-600 dark:text-blue-400 whitespace-nowrap hidden lg:table-cell">{v.protocolo_numero ?? '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap hidden xl:table-cell">{v.tipo_emissao ? capitalize(v.tipo_emissao.replace(/_/g, ' ')) : '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap hidden xl:table-cell">{v.tipo_venda ? capitalize(v.tipo_venda) : '—'}</td>
-                        <td className="px-3 py-2">
-                          <select
-                            title="Status da venda"
-                            value={v.status_venda}
-                            onChange={e => atualizarStatusVendaV2(v.id, e.target.value as StatusVendaCertificado)}
-                            className={cn('px-2 py-0.5 rounded-full text-xs font-medium border-0 cursor-pointer focus:outline-none whitespace-nowrap', statusVendaV2Cls(v.status_venda))}>
-                            {STATUS_VENDA_V2_OPTIONS.map(s => (
-                              <option key={s} value={s}>{STATUS_VENDA_LABEL[s]}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-3 py-2 hidden md:table-cell">
-                          <select
-                            title="Status do pagamento"
-                            value={v.status_pagamento}
-                            onChange={e => void atualizarStatusPagamentoV2(v.id, e.target.value as StatusPagamentoVenda)}
-                            className={cn('px-2 py-0.5 rounded-full text-xs font-medium border-0 cursor-pointer focus:outline-none whitespace-nowrap', statusPagamentoCls(v.status_pagamento))}>
-                            {STATUS_PAGAMENTO_OPTIONS.map(s => (
-                              <option key={s} value={s}>{STATUS_PAGAMENTO_LABEL[s]}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap hidden xl:table-cell">
-                          {new Date(v.updated_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}
-                        </td>
-                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap hidden lg:table-cell">
-                          {canChangePayment(profile, v) ? (
-                            <select
-                              title={isAdmin ? 'Alterar forma de pagamento (somente administrador)' : 'Alterar forma de pagamento'}
-                              value={v.forma_pagamento_id ?? ''}
-                              disabled={updatingPaymentVendaId === v.id}
-                              onChange={e => void alterarFormaPagamentoVenda(v, e.target.value)}
-                              className="max-w-[190px] rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
-                            >
-                              <option value="">Selecione</option>
-                              {pagamentosDoGatewayAtual.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                            </select>
-                          ) : (
-                            (v.metadata as { forma_pagamento?: string })?.forma_pagamento ?? '—'
-                          )}
-                          {(() => {
-                            const { paymentCharge, chargeUrl, paymentKind } = getPaymentChargeInfo(v)
-                            if (!paymentCharge) return null
-                            const isPix = paymentKind === 'pix'
-                            return (
-                              <span className="ml-2 inline-flex items-center gap-2">
-                                {chargeUrl ? (
-                                  <a href={chargeUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 underline">
-                                    Abrir
-                                  </a>
-                                ) : (
-                                  <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">Cobrança ativa</span>
-                                )}
-                                {paymentCharge?.status !== 'paid' && (
-                                  <button
-                                    type="button"
-                                    onClick={e => { e.stopPropagation(); void reenviarCobrancaVenda(v) }}
-                                    disabled={reenviandoCobrancaVendaId === v.id}
-                                    className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300"
-                                    title={isPix ? 'Reenviar QR Pix ao cliente' : 'Reenviar link de pagamento ao cliente'}
-                                  >
-                                    <RefreshCcw size={11} className={reenviandoCobrancaVendaId === v.id ? 'animate-spin' : ''} />
-                                    {reenviandoCobrancaVendaId === v.id ? 'Reenviando...' : (isPix ? 'Reenviar QR' : 'Reenviar')}
-                                  </button>
-                                )}
-                              </span>
-                            )
-                          })()}
-                        </td>
-                        <td className="px-3 py-2 text-right font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">
-                          {formatCurrency(v.valor_venda ?? 0)}
-                        </td>
-                        <td className="px-3 py-2 text-gray-500 max-w-[180px] truncate hidden md:table-cell" title={descricaoProdutoVenda(v)}>{descricaoProdutoVenda(v)}</td>
-                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap hidden lg:table-cell">
-                          {(v.cadastros_base as { cpf_cnpj?: string } | null)?.cpf_cnpj ?? v.documento_faturamento ?? '—'}
-                        </td>
-                        <td className="px-3 py-2 font-medium max-w-[160px] truncate cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-                          onClick={() => setSelectedRowId(selectedRowId === v.id ? null : v.id)}>
-                          {(v.cadastros_base as { nome?: string } | null)?.nome ?? v.nome_faturamento ?? '—'}
-                        </td>
-                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap hidden xl:table-cell">
-                          {(v.pontos_atendimento as { nome?: string } | null)?.nome ?? '—'}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap hidden sm:table-cell">
-                          {new Date(v.data_inicio_validade || v.created_at).toLocaleDateString('pt-BR')}
-                        </td>
-                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap hidden xl:table-cell">
-                          {v.vendedor_id ? (vendedorNomes.get(v.vendedor_id) ?? '—') : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-gray-500 max-w-[120px] truncate hidden 2xl:table-cell">{v.observacoes ?? '—'}</td>
-                      </tr>
+                      <Fragment key={v.id}>
+                        <tr
+                          onClick={() => setSelectedRowId(prev => prev === v.id ? null : v.id)}
+                          className={cn(
+                            'hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer',
+                            selectedRowId === v.id && 'bg-blue-50 dark:bg-blue-900/20 ring-1 ring-inset ring-blue-300 dark:ring-blue-700',
+                          )}>
+                          {vendaColumns.map(column => renderVendaCell(v, column))}
+                        </tr>
+                        {selectedRowId === v.id && renderVendaDetalhes(v)}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
