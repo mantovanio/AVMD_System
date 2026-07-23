@@ -159,7 +159,6 @@ export class RenovacaoRepository {
     return result.rows
   }
   async findOperacionais(janelaDias = 30, limit = 500, offset = 0): Promise<RenovacaoRow[]> {
-    await this.reconcileConvertedFromSales()
     const result = await this.db.query<RenovacaoRow>(
       `SELECT ${this.listColumns} FROM renovacoes
        WHERE deleted_at IS NULL
@@ -196,7 +195,6 @@ export class RenovacaoRepository {
   }
 
   async findPendentesN8n(): Promise<RenovacaoRow[]> {
-    await this.reconcileConvertedFromSales()
     const result = await this.db.query<RenovacaoRow>(
       `SELECT * FROM renovacoes
        WHERE deleted_at IS NULL
