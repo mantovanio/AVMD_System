@@ -3562,12 +3562,19 @@ export default function Comercial() {
         }
         return null
       }
+      const pickFirstDate = (row: Record<string, string>, aliases: string[]) => {
+        for (const alias of aliases) {
+          const parsed = parseDate(pick(row, [alias]))
+          if (parsed) return parsed
+        }
+        return null
+      }
       const BATCH = 100
 
       // 1. upsert clientes
       const clientePayloads = rows.map(r => {
-        const doc = cleanDoc(pick(r, ['doc_cliente', 'documento', 'cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento_cliente', 'cpf_do_titular', 'cnpj_do_cliente']))
-        const nome = pick(r, ['cliente', 'nome', 'nome_razao_social', 'razao_social', 'nome_cliente', 'titular', 'nome_do_titular', 'nome_faturamento']).trim()
+        const doc = cleanDoc(pick(r, ['doc_cliente', 'documento', 'cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento_cliente', 'documento_do_titular', 'cpf_do_titular', 'cnpj_do_cliente']))
+        const nome = pick(r, ['cliente', 'nome', 'nome_razao_social', 'razao_social', 'nome_cliente', 'nome_do_titular', 'titular', 'nome_faturamento']).trim()
         if (!doc || !nome) return null
         const tipo: TipoCliente = doc.length === 11 ? 'pessoa_fisica' : 'pessoa_juridica'
         return {
@@ -3576,10 +3583,15 @@ export default function Comercial() {
           tipo_cliente: tipo,
           tipo_cadastro: 'cliente' as const,
           email:        pick(r, ['e_mail', 'email', 'e_mail_do_titular', 'email_do_titular', 'email_cliente']).trim() || null,
-          telefone:     pick(r, ['telefone_do_titular', 'telefone', 'celular', 'whatsapp', 'telefone_cliente']).trim() || null,
+          telefone:     pick(r, ['telefone_da_empresa', 'telefone_do_titular', 'telefone', 'celular', 'whatsapp', 'telefone_cliente']).trim() || null,
           iss_retido:   false,
           status:       'ativo' as const,
-          metadata:     {} as Record<string, unknown>,
+          metadata:     {
+            origem_importacao: 'safeweb_financeiro',
+            documento_titular: cleanDoc(pick(r, ['documento_do_titular', 'cpf_do_titular'])),
+            nome_titular: pick(r, ['nome_do_titular', 'titular']).trim() || null,
+            data_nascimento_titular: pickFirstDate(r, ['data_de_nascimento_do_titular', 'data_nascimento_titular']),
+          } as Record<string, unknown>,
         }
       }).filter((x): x is NonNullable<typeof x> => x !== null)
 
@@ -3601,22 +3613,124 @@ export default function Comercial() {
 
       // 3. monta payloads de venda COM validado_safeweb = true
       const vendasPayloads = rows.map(r => {
-        const protocolo = pick(r, ['n_protocolo', 'numero_protocolo', 'protocolo', 'num_protocolo', 'protocolo_numero', 'n_pedido', 'numero_pedido', 'pedido', 'pedido_numero', 'id_pedido', 'id_venda', 'codigo_venda']).trim()
+        const protocolo = pick(r, ['protocolo', 'n_protocolo', 'numero_protocolo', 'num_protocolo', 'protocolo_numero', 'n_pedido', 'numero_pedido', 'pedido', 'pedido_numero', 'id_pedido', 'id_venda', 'codigo_venda']).trim()
         if (!protocolo) return null
-        const doc = cleanDoc(pick(r, ['doc_cliente', 'documento', 'cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento_cliente', 'cpf_do_titular', 'cnpj_do_cliente']))
-        const produto = pick(r, ['produto', 'certificado', 'tipo_produto', 'produto_nome', 'descricao_produto', 'nome_produto']).trim()
-        const cert = findCertificadoByProduto(produto)
-        const statusFinanceiro = pick(r, ['status_financeiro', 'status_pagamento'])
+        const doc = cleanDoc(pick(r, ['doc_cliente', 'documento', 'cnpj_cpf', 'cpf_cnpj', 'cpf', 'cnpj', 'documento_cliente', 'documento_do_titular', 'cpf_do_titular', 'cnpj_do_cliente']))
+        const produto = pick(r, ['produto', 'nome_do_produto_no_catalogo', 'certificado', 'tipo_produto', 'produto_nome', 'descricao_produto', 'nome_produto']).trim()
+        const descricaoProduto = pick(r, ['descricao_do_produto', 'descricao_produto', 'descricao', 'descricao_produto_midia']).trim()
+        const produtoBusca = [produto, descricaoProduto, pick(r, ['modelo']).trim()].filter(Boolean).join(' ')
+        const cert = findCertificadoByProduto(produtoBusca || produto)
+        const statusFinanceiro = pick(r, ['status_financeiro', 'status_pagamento', 'liberado'])
         const statusVenda = normalizeStatusVendaImport(pick(r, ['status_venda', 'status_do_certificado', 'status_certificado', 'status']))
-        const dataStatus = parseDate(pick(r, ['data_status']))
+        const dataStatus = pickFirstDate(r, ['data_status'])
+        const dataInicioValidade = pickFirstDate(r, ['data_inicio_validade', 'inicio_validade', 'data_emissao'])
+        const dataFimValidade = pickFirstDate(r, ['data_fim_validade', 'fim_validade', 'data_vencimento', 'data_expiracao'])
         const pago = isPago(statusFinanceiro)
-        const dataPagamento = parseDate(pick(r, ['data_pagto', 'data_pagamento', 'data_pagto_', 'data_pago']))
+        const dataPagamento = pickFirstDate(r, ['data_pagto', 'data_pagamento', 'data_pagto_', 'data_pago'])
+        const nomeTitular = pick(r, ['nome_do_titular', 'titular']).trim()
+        const documentoTitular = cleanDoc(pick(r, ['documento_do_titular', 'cpf_do_titular']))
+        const telefonePrincipal = pick(r, ['telefone_da_empresa', 'telefone_do_titular', 'telefone', 'celular', 'whatsapp']).trim()
+        const nomeLocalAtendimento = pick(r, ['nome_do_local_de_atendimento', 'nome_do_local_de_atendimento_agr', 'pa_emissor', 'nome_local', 'local_atendimento', 'posto_atendimento']).trim()
+        const nomeAr = pick(r, ['nome_da_autoridade_de_registro', 'nome_da_autoridade_de_registro_vinculada_a_solicitacao', 'ar_de_solicitacao', 'autoridade_certificadora', 'nome_ar', 'ar', 'autoridade_registro']).trim()
+        const observacao = pick(r, ['observacao', 'observacoes', 'obs', 'verificacao', 'mensagem_sefaz', 'link_videoconferencia_renovacao']).trim()
+        const metadataSafewebFinanceiro = {
+          protocolo,
+          nome: pick(r, ['nome', 'cliente']).trim() || null,
+          documento: doc || null,
+          nome_titular: nomeTitular || null,
+          documento_titular: documentoTitular || null,
+          data_nascimento_titular: pickFirstDate(r, ['data_de_nascimento_do_titular', 'data_nascimento_titular']),
+          produto,
+          descricao_produto: descricaoProduto || null,
+          validade: pick(r, ['validade']).trim() || null,
+          descricao_produto_midia: pick(r, ['descricao_produto_midia']).trim() || null,
+          numero_serie: pick(r, ['numero_de_serie', 'numero_serie', 'serie', 'serial']).trim() || null,
+          avp: {
+            nome: pick(r, ['nome_do_avp']).trim() || null,
+            cpf: cleanDoc(pick(r, ['cpf_do_avp'])) || null,
+            data: pickFirstDate(r, ['data_avp']),
+          },
+          aci: {
+            nome: pick(r, ['nome_do_aci']).trim() || null,
+            cpf: cleanDoc(pick(r, ['cpf_do_aci'])) || null,
+            data: pickFirstDate(r, ['data_aci']),
+            data_limite: pickFirstDate(r, ['data_limite_do_aci']),
+          },
+          revogacao: {
+            data: pickFirstDate(r, ['data_de_revogacao', 'data_revogacao']),
+            revogado_por: pick(r, ['revogado_por']).trim() || null,
+            codigo: pick(r, ['codigo_revogacao']).trim() || null,
+            descricao: pick(r, ['descricao_revogacao']).trim() || null,
+          },
+          atendimento: {
+            nome_local: nomeLocalAtendimento || null,
+            apelido_local: pick(r, ['apelido_do_local_de_atendimento']).trim() || null,
+            nome_ar: nomeAr || null,
+            endereco_local: pick(r, ['endereco_do_local']).trim() || null,
+            local_habilitado: pick(r, ['local_habilitado']).trim() || null,
+            cidade: pick(r, ['nome_da_cidade']).trim() || null,
+          },
+          financeiro: {
+            valor_boleto: parseNum(pick(r, ['valor_do_boleto', 'valor_boleto'])),
+            nfe: pick(r, ['nfe', 'nf']).trim() || null,
+            voucher_codigo: pick(r, ['vouchercodigo', 'voucher_codigo', 'vouchercod', 'voucher']).trim() || null,
+            voucher_percentual: parseNum(pick(r, ['voucherpercentual', 'voucher_percentual', 'percentual_voucher', 'desconto_percentual'])) || null,
+            voucher_valor: parseNum(pick(r, ['vouchervalor', 'voucher_valor', 'valor_voucher', 'desconto_valor'])) || null,
+          },
+          parceiro: {
+            nome: pick(r, ['nome_do_parceiro', 'nome_parceiro', 'parceiro', 'vendedor']).trim() || null,
+            contador: pick(r, ['nome_contador_parceiro']).trim() || null,
+            contador_mais: pick(r, ['nome_contador_parceiro_mais']).trim() || null,
+            contato_comercial: pick(r, ['nome_contato_comercial']).trim() || null,
+            catalogo_contador: pick(r, ['catalogo_do_contador_parceiro']).trim() || null,
+            nome_catalogo: pick(r, ['nome_do_catalogo']).trim() || null,
+            valor_produto_catalogo: parseNum(pick(r, ['valor_do_produto_no_catalogo'])),
+          },
+          ids_safeweb: {
+            id_certificado: pick(r, ['idcertificado']).trim() || null,
+            id_certificado_agente: pick(r, ['idcertificadoagente']).trim() || null,
+            id_certificado_status: pick(r, ['idcertificadostatus']).trim() || null,
+          },
+          localizacao: {
+            endereco_validacao_externa: pick(r, ['endereco_da_validacao_externa']).trim() || null,
+            latitude_emissao: pick(r, ['latitude_da_emissao']).trim() || null,
+            longitude_emissao: pick(r, ['longitude_da_emissao']).trim() || null,
+            latitude_local_atendimento: pick(r, ['latitude_do_local_de_atendimento']).trim() || null,
+            longitude_local_atendimento: pick(r, ['longitude_do_local_de_atendimento']).trim() || null,
+          },
+          equipamento: {
+            nome: pick(r, ['nome_do_equipamento']).trim() || null,
+            dna: pick(r, ['dna_do_equipamento']).trim() || null,
+          },
+          emissao: {
+            tipo_realizada: pick(r, ['tipo_de_emissao_realizada']).trim() || null,
+            tipo_solicitada: pick(r, ['tipo_de_emissao_solicitada']).trim() || null,
+            protocolo_renovacao: pick(r, ['protocolo_renovacao']).trim() || null,
+            autoridade_certificadora_renovacao: pick(r, ['nome_da_autoridade_certificadora_renovacao']).trim() || null,
+            periodo_uso: pick(r, ['periodo_de_uso']).trim() || null,
+            modelo: pick(r, ['modelo']).trim() || null,
+            grupo: pick(r, ['grupo']).trim() || null,
+          },
+          videoconferencia: {
+            inicio: pickFirstDate(r, ['inicio_da_videoconferencia']),
+            inicio_gravacao: pickFirstDate(r, ['inicio_da_gravacao']),
+            fim_gravacao: pickFirstDate(r, ['fim_da_gravacao']),
+          },
+          empresa: {
+            telefone: pick(r, ['telefone_da_empresa']).trim() || null,
+            cei_caepf: pick(r, ['cei_caepf']).trim() || null,
+            codigo_natureza_juridica: pick(r, ['codigo_natureza_juridica']).trim() || null,
+            consulta_qsa: pick(r, ['consulta_qsa']).trim() || null,
+            tipo_match: pick(r, ['tipo_de_match']).trim() || null,
+          },
+          linha_original: r,
+        }
         return {
           protocolo_numero:       protocolo,
           pedido_numero:          pick(r, ['n_pedido', 'numero_pedido', 'pedido', 'pedido_numero', 'id_pedido']).trim() || null,
           cadastro_base_id:       idByDoc.get(doc) ?? null,
           certificado_id:          cert?.id ?? null,
-          tipo_produto:           produto || null,
+          tipo_produto:           produto || descricaoProduto || null,
           tipo_venda:             pick(r, ['tipo_venda']).trim() || null,
           tipo_emissao:           pick(r, ['tipo_emissao', 'tipo_de_emissao_realizada', 'emissao', 'forma_emissao', 'modalidade']).trim() || null,
           tabela_preco:           pick(r, ['tabela_de_venda', 'tabela_preco']).trim() || null,
@@ -3627,25 +3741,26 @@ export default function Comercial() {
           status_pagamento:       (pago ? 'pago' : 'em_aberto') as StatusPagamentoVenda,
           data_pagamento:         dataPagamento,
           validado_safeweb:       true,
-          data_vencimento:        parseDate(pick(r, ['data_vencimento', 'data_fim_validade', 'fim_validade', 'data_expiracao'])),
+          data_vencimento:        dataFimValidade,
           data_inicio_validade:   statusVenda === 'emitido'
-            ? (dataStatus ?? parseDate(pick(r, ['data_emissao', 'data_inicio_validade', 'data_inicio', 'inicio_validade', 'data_venda'])))
-            : parseDate(pick(r, ['data_venda', 'data_inicio_validade', 'data_inicio', 'inicio_validade', 'data_emissao'])),
+            ? (dataStatus ?? dataInicioValidade ?? pickFirstDate(r, ['data_venda']))
+            : (pickFirstDate(r, ['data_venda']) ?? dataInicioValidade),
           documento_faturamento:   doc || null,
-          nome_faturamento:        pick(r, ['cliente', 'nome', 'nome_cliente']).trim() || null,
-          email_faturamento:       pick(r, ['e_mail', 'email', 'email_cliente']).trim() || null,
-          telefone_faturamento:    pick(r, ['telefone', 'celular', 'whatsapp']).trim() || null,
+          nome_faturamento:        pick(r, ['nome', 'cliente', 'nome_cliente']).trim() || nomeTitular || null,
+          email_faturamento:       pick(r, ['e_mail_do_titular', 'email_do_titular', 'e_mail', 'email', 'email_cliente']).trim() || null,
+          telefone_faturamento:    telefonePrincipal || null,
           numero_serie:           pick(r, ['numero_de_serie', 'numero_serie', 'serie', 'serial']).trim() || null,
           voucher_codigo:         pick(r, ['vouchercodigo', 'voucher_codigo', 'vouchercod', 'voucher']).trim() || null,
           voucher_percentual:     parseNum(pick(r, ['voucherpercentual', 'voucher_percentual', 'percentual_voucher', 'desconto_percentual'])) || null,
           voucher_valor:          parseNum(pick(r, ['vouchervalor', 'voucher_valor', 'valor_voucher', 'desconto_valor'])) || null,
-          nome_ar:                pick(r, ['ar_de_solicitacao', 'autoridade_certificadora', 'nome_da_autoridade_de_registro', 'nome_ar', 'ar', 'autoridade_registro']).trim() || null,
-          nome_local_atendimento: pick(r, ['pa_emissor', 'nome_do_local_de_atendimento', 'nome_local', 'local_atendimento', 'posto_atendimento']).trim() || null,
+          nome_ar:                nomeAr || null,
+          nome_local_atendimento: nomeLocalAtendimento || null,
           status_certificado:     pick(r, ['status_venda', 'status_do_certificado', 'status_certificado', 'status']).trim() || null,
           nome_parceiro_safeweb:  pick(r, ['vendedor', 'nome_do_parceiro', 'nome_parceiro', 'parceiro', 'contador']).trim() || null,
-          observacoes:            pick(r, ['observacao', 'observacoes', 'obs', 'mensagem_sefaz', 'link_videoconferencia_renovacao']).trim() || null,
+          observacoes:            observacao || null,
           metadata:               {
             origem_importacao: 'comercial_arquivo_externo',
+            origem_layout: 'safeweb_financeiro',
             forma_pagamento: pick(r, ['forma_pagamento']).trim() || null,
             autoridade_certificadora: pick(r, ['autoridade_certificadora']).trim() || null,
             vendedor_importado: pick(r, ['vendedor']).trim() || null,
@@ -3656,6 +3771,7 @@ export default function Comercial() {
             data_cadastro_cliente: parseDate(pick(r, ['data_cadastro_cliente'])),
             data_nota: parseDate(pick(r, ['data_nota'])),
             nf: pick(r, ['nf']).trim() || null,
+            safeweb_financeiro: metadataSafewebFinanceiro,
           },
         }
       }).filter((x): x is NonNullable<typeof x> => x !== null)
