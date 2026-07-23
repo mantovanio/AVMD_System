@@ -4254,7 +4254,7 @@ export default function Comercial() {
       faltantes.push('valor do serviço da venda')
     }
 
-    if (configuracaoFiscal.provedor === 'gissonline') {
+    if (configuracaoFiscal.provedor === 'gissonline' || configuracaoFiscal.provedor === 'ginfes') {
       registrarFalta('usuário da prefeitura', configuracaoFiscal.usuario_prefeitura)
       registrarFalta('senha da prefeitura', configuracaoFiscal.senha_prefeitura)
       registrarFalta('certificado A1', configuracaoFiscal.certificado_pfx_path)
@@ -4681,7 +4681,7 @@ export default function Comercial() {
         return
       }
 
-      if (configuracaoFiscal.provedor === 'gissonline') {
+      if (configuracaoFiscal.provedor === 'gissonline' || configuracaoFiscal.provedor === 'ginfes') {
         const result = await emitirNfseViaGissOnline({
           ...venda,
           metadata: {
@@ -4690,7 +4690,8 @@ export default function Comercial() {
           },
         } as VendaRow)
         if (!options?.silent) {
-          showMsg(result.message ?? `NFS-e enviada ao GISSONLINE. Protocolo ${result.protocolo ?? result.numero_lote ?? 'em processamento'}.`, 'ok')
+          const provedorLabel = configuracaoFiscal.provedor === 'ginfes' ? 'GINFES' : 'GISSONLINE'
+          showMsg(result.message ?? `NFS-e enviada ao ${provedorLabel}. Protocolo ${result.protocolo ?? result.numero_lote ?? 'em processamento'}.`, 'ok')
         }
         await abrirNfseVenda(venda)
         return

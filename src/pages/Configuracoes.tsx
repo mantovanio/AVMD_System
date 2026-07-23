@@ -5133,6 +5133,7 @@ const NFSE_GATILHO_LABELS: Record<NfseEmissionTrigger, string> = {
 const NFSE_PROVIDER_LABELS: Record<ProvedorNfse, string> = {
   nacional: 'Emissor Nacional',
   gissonline: 'GISSONLINE',
+  ginfes: 'GINFES',
   municipal: 'Portal Municipal',
 }
 
@@ -5188,8 +5189,12 @@ const NFSE_PRESETS: NfsePreset[] = [
     label: 'São Bernardo do Campo',
     municipio_nome: 'São Bernardo do Campo',
     municipio_codigo_ibge: '3548708',
-    provedor: 'gissonline',
-    observacoes: 'Município opera com fluxo orientado por GISSONLINE e portal NFS-e local.',
+    provedor: 'ginfes',
+    observacoes: 'Município opera com NFS-e via GINFES. A homologação exige certificado digital cliente para abrir o WSDL.',
+    payload_reforma_tributaria: {
+      ginfes_wsdl_homologacao: 'https://homologacao.ginfes.com.br/ServiceGinfesImpl?WSDL',
+      ginfes_requires_client_certificate: true,
+    },
   },
 ]
 
@@ -5680,6 +5685,7 @@ function AbaFiscal() {
               >
                 <option value="nacional">Emissor Nacional</option>
                 <option value="gissonline">GISSONLINE</option>
+                <option value="ginfes">GINFES</option>
                 <option value="municipal">Portal Municipal</option>
               </select>
             </label>
@@ -5853,6 +5859,18 @@ function AbaFiscal() {
                   gissonline_ws_host: v,
                 } as NfseConfiguracao['payload_reforma_tributaria'])}
                 placeholder="Ex: ws-seumunicipio.giss.com.br ou URL completa"
+              />
+            )}
+            {form.provedor === 'ginfes' && (
+              <ConfigInput
+                label="WSDL de homologação GINFES"
+                value={String(payloadFiscal.ginfes_wsdl_homologacao ?? '')}
+                onChange={v => updateField('payload_reforma_tributaria', {
+                  ...payloadFiscal,
+                  ginfes_wsdl_homologacao: v,
+                  ginfes_requires_client_certificate: true,
+                } as NfseConfiguracao['payload_reforma_tributaria'])}
+                placeholder="https://homologacao.ginfes.com.br/ServiceGinfesImpl?WSDL"
               />
             )}
           </div>
@@ -6067,6 +6085,18 @@ function AbaFiscal() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {form.provedor === 'ginfes' && (
+            <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 p-4 space-y-2">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Integração GINFES para São Bernardo do Campo</p>
+              <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
+                O WSDL de homologação foi configurado. O acesso técnico exige certificado digital cliente, então o teste completo só será aprovado depois que o A1/PFX da Certifast e a senha estiverem salvos nesta configuração.
+              </p>
+              <p className="text-[11px] text-amber-800 dark:text-amber-200 break-all">
+                WSDL: {String(payloadFiscal.ginfes_wsdl_homologacao ?? '') || 'Não informado'}
+              </p>
             </div>
           )}
         </div>

@@ -15,6 +15,10 @@ export type BackendConfig = {
   n8nEmailSendUrl: string
   clerkSecretKey: string
   publicApiBaseUrl: string
+  telegramBotToken: string
+  telegramAdminChatIds: string[]
+  telegramWebhookUrl: string
+  telegramWebhookSecret: string
   // Canal de atendimento humano (dia a dia, sem IA)
   evolutionAtendimento: EvolutionInstanceConfig
   // Canal CertiID — renovações de certificados (com IA)
@@ -36,9 +40,18 @@ function env(name: string, fallback = '') {
   return String(process.env[name] || fallback).trim()
 }
 
+function parseCsvList(value: string) {
+  return value
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
 export function loadConfig(): BackendConfig {
   const baseUrl = env('EVOLUTION_BASE_URL')
   const defaultToken = env('EVOLUTION_API_TOKEN')
+  const publicApiBaseUrl = env('PUBLIC_API_BASE_URL', 'https://api.certiid.mantovan.com.br')
+  const telegramWebhookUrl = env('TELEGRAM_WEBHOOK_URL', `${publicApiBaseUrl.replace(/\/$/, '')}/api/webhooks/telegram`)
   const defaultEmailSendUrl = 'https://auto.mantovan.com.br/webhook/avmd-email-send'
   return {
     port: Number(env('PORT', '8787')),
@@ -47,7 +60,11 @@ export function loadConfig(): BackendConfig {
     n8nWebhookUrl: env('N8N_WEBHOOK_URL'),
     n8nEmailSendUrl: env('N8N_EMAIL_SEND_URL', defaultEmailSendUrl),
     clerkSecretKey: env('CLERK_SECRET_KEY'),
-    publicApiBaseUrl: env('PUBLIC_API_BASE_URL', 'https://api.certiid.mantovan.com.br'),
+    publicApiBaseUrl,
+    telegramBotToken: env('TELEGRAM_BOT_TOKEN'),
+    telegramAdminChatIds: parseCsvList(env('TELEGRAM_ADMIN_CHAT_IDS')),
+    telegramWebhookUrl,
+    telegramWebhookSecret: env('TELEGRAM_WEBHOOK_SECRET'),
     evolutionAtendimento: {
       baseUrl,
       apiToken: env('EVOLUTION_ATENDIMENTO_API_TOKEN') || defaultToken,

@@ -46,11 +46,23 @@ type ChargeResult = {
 
 type PaymentFlowKind = 'pix' | 'boleto' | 'card' | 'link'
 
+type PaymentOpsNotifier = {
+  notifyPaymentUpdate(input: {
+    vendaId: string | null
+    externalId: string | null
+    gateway: string
+    status: string
+    paid: boolean
+    payload: Record<string, unknown>
+  }): Promise<void>
+}
+
 export class CheckoutPaymentService {
   constructor(
     private readonly repository: Pick<CheckoutRepository, 'getCheckoutPaymentMethodConfig' | 'getCheckoutPaymentMethodConfigByGateway' | 'findCommercialSalePaymentData' | 'attachPaymentChargeToSale' | 'getPaymentChargeBySaleId' | 'applyPaymentWebhook'>,
     private readonly outboxRepository?: CommunicationOutboxRepository,
     private readonly fetchImpl: FetchLike = fetch,
+    private readonly opsNotifier?: PaymentOpsNotifier,
   ) {}
 
   private async fetchWithTimeout(input: Parameters<FetchLike>[0], init: Parameters<FetchLike>[1] = {}) {
@@ -61,9 +73,12 @@ export class CheckoutPaymentService {
       return await this.fetchImpl(input, { ...init, signal })
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
-        throw new Error('Timeout ao comunicar com o gateway de pagamento.')
+        throw new Error('Timeout ao comunicar com o gateway de pagamento.', { cause: error })
       }
-      throw error
+      if (error instanceof Error) {
+        throw new Error(error.message, { cause: error })
+      }
+      throw new Error('Erro desconhecido ao comunicar com o gateway de pagamento.', { cause: error })
     }
   }
 
@@ -169,6 +184,20 @@ export class CheckoutPaymentService {
       paid: normalized.paid,
       payload: input.payload,
     })
+    if (this.opsNotifier) {
+      try {
+        await this.opsNotifier.notifyPaymentUpdate({
+          vendaId: normalized.vendaId,
+          externalId: normalized.externalId,
+          gateway: input.gateway,
+          status: normalized.status,
+          paid: normalized.paid,
+          payload: input.payload,
+        })
+      } catch (error) {
+        console.error('[CheckoutPaymentService] Falha ao notificar operacao por Telegram:', error)
+      }
+    }
     return normalized
   }
 
@@ -707,7 +736,6 @@ export class CheckoutPaymentService {
     }
 
     const pointOfInteraction = this.asObject(payload.point_of_interaction)
-    const transactionData = this.asObject(pointOfInteraction.application_data)
     const transactionDetails = this.asObject(payload.transaction_details)
     const paymentMethodResponse = this.asObject(pointOfInteraction.transaction_data || payload.transaction_data)
     const qrCode = this.pickString(paymentMethodResponse, ['qr_code'])

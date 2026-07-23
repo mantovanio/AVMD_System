@@ -996,7 +996,7 @@ export async function handleChatRoutes(
         return true
       }
       const mime = fileRecord.mime_type || 'application/octet-stream'
-      const isInline = mime.startsWith('image/') || mime.startsWith('audio/') || mime.startsWith('video/')
+      const isInline = mime.startsWith('image/') || mime.startsWith('audio/') || mime.startsWith('video/') || mime === 'application/pdf'
       const disposition = isInline
         ? `inline; filename="${fileRecord.original_name}"`
         : `attachment; filename="${fileRecord.original_name}"`

@@ -51,6 +51,8 @@ import { PermissoesRepository } from './repositories/permissoesRepository.js'
 import { handlePermissoesRoutes } from './routes/permissoesRoutes.js'
 import { CancelamentoRepository } from './repositories/cancelamentoRepository.js'
 import { handleCancelamentoRoutes } from './routes/cancelamentoRoutes.js'
+import { TelegramNotifier } from './services/telegramNotifier.js'
+import { handleTelegramWebhookRoutes } from './routes/telegramWebhookRoutes.js'
 import { writeJson } from './utils/http.js'
 
 const config = loadConfig()
@@ -78,7 +80,13 @@ const integrationEventProcessor = new IntegrationEventProcessor(integrationEvent
 const outboxProcessor = new OutboxProcessor(communicationOutboxRepository, config, db)
 const renewalReminderService = new RenewalReminderService(db, communicationOutboxRepository)
 const renewalReconciliationService = new RenewalReconciliationService(renovacaoRepository)
-const checkoutPaymentService = new CheckoutPaymentService(checkoutRepository, communicationOutboxRepository)
+const telegramNotifier = new TelegramNotifier({
+  botToken: config.telegramBotToken,
+  adminChatIds: config.telegramAdminChatIds,
+  webhookUrl: config.telegramWebhookUrl,
+  webhookSecret: config.telegramWebhookSecret,
+})
+const checkoutPaymentService = new CheckoutPaymentService(checkoutRepository, communicationOutboxRepository, fetch, telegramNotifier)
 const portalRepository = new PortalRepository(db, checkoutRepository, commercialRepository)
 const service = new CheckoutService(checkoutRepository, checkoutPaymentService, communicationOutboxRepository, profileRepository, config.clerkSecretKey)
 
@@ -176,6 +184,15 @@ const server = createServer(async (req, res) => {
     )
     if (handledClaraAutomation) return
 
+    const handledTelegramWebhook = await handleTelegramWebhookRoutes(
+      req,
+      res,
+      telegramNotifier,
+      db,
+      config.corsOrigin,
+    )
+    if (handledTelegramWebhook) return
+
     const handledPermissoes = await handlePermissoesRoutes(req, res, permissoesRepository, config.corsOrigin)
     if (handledPermissoes) return
 
@@ -226,6 +243,23 @@ renewalReconciliationService.start()
 
 server.listen(config.port, () => {
   process.stdout.write(`Backend Aiven do checkout escutando na porta ${config.port}\n`)
+})
+
+void (async () => {
+  if (!telegramNotifier.isConfigured()) {
+    console.error('[TelegramNotifier] Telegram nao configurado. Defina TELEGRAM_BOT_TOKEN e TELEGRAM_ADMIN_CHAT_IDS.')
+    return
+  }
+
+  const result = await telegramNotifier.ensureWebhookConfigured()
+  if (!result.ok) {
+    console.error('[TelegramNotifier] Falha ao configurar webhook:', result.error)
+    return
+  }
+
+  console.error('[TelegramNotifier] Webhook configurado com sucesso.')
+})().catch(error => {
+  console.error('[TelegramNotifier] Erro inesperado ao inicializar:', error)
 })
 
 

@@ -388,9 +388,17 @@ function normalizeDisplaySenderName(value: string | null | undefined) {
   if (!text) return null
   const normalized = text
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/̀-ͯ/g, '')
     .toLowerCase()
   if (normalized === 'voce' || normalized === 'you' || normalized === 'me') return null
+  return text
+}
+
+function stripOutgoingSignature(text: string | null | undefined, senderName?: string | null): string {
+  if (!text || !senderName) return text ?? ''
+  const trimmed = text.trimEnd()
+  const suffix = `\n\n— ${senderName}`
+  if (trimmed.endsWith(suffix)) return trimmed.slice(0, -suffix.length).trimEnd()
   return text
 }
 
@@ -3530,7 +3538,7 @@ function MessageRow({
               Arquivo: {mediaLabel}
             </a>
           ) : (
-            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{normalizeStructuredMessage(message.mensagem) || mediaLabel || 'Mensagem sem texto'}</p>
+            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{normalizeStructuredMessage(isOutgoing ? stripOutgoingSignature(message.mensagem, message.sender_name) : message.mensagem) || mediaLabel || 'Mensagem sem texto'}</p>
           )}
           <div className={`mt-2 flex items-center justify-end gap-1 text-[11px] ${isOutgoing ? 'text-emerald-800/80' : 'text-slate-400'}`}>
             <span>{formatDateTime(message.created_at)}</span>
