@@ -1644,7 +1644,7 @@ export default function Comercial() {
   const fetchVendasV2 = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoadingV(true)
     try {
-      const rows = await fetchAivenCommercialSales(2000) as VendaRow[]
+      const rows = await fetchAivenCommercialSales(5000) as VendaRow[]
       setVendasV2(rows)
       const vendaIds = rows.map(v => v.id)
       if (vendaIds.length > 0) {
