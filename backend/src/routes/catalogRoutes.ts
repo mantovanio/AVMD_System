@@ -1,6 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { createSecureContext } from 'node:tls'
+import { execFile } from 'node:child_process'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
 import { readJson, writeJson } from '../utils/http.js'
 import { CatalogRepository } from '../repositories/catalogRepository.js'
 import { RenovacaoRepository } from '../repositories/renovacaoRepository.js'
@@ -27,6 +32,32 @@ type SafewebImportJob = {
 
 const safewebImportJobs = new Map<string, SafewebImportJob>()
 const ISABELLA_VIDAL_PROFILE_ID = 'ad3436f8-eb15-4fbe-a351-3b6b56d2a17e'
+const execFileAsync = promisify(execFile)
+
+async function validatePfxWithOpenSsl(pfx: Buffer, senha: string) {
+  const dir = await mkdtemp(join(tmpdir(), 'avmd-pfx-'))
+  const file = join(dir, 'certificado.pfx')
+  try {
+    await writeFile(file, pfx)
+    const baseOptions = {
+      timeout: 20000,
+      env: { ...process.env, AVMD_PFX_PASS: senha },
+    }
+    try {
+      await execFileAsync('openssl', ['pkcs12', '-in', file, '-noout', '-passin', 'env:AVMD_PFX_PASS'], baseOptions)
+      return { ok: true, legacy: false }
+    } catch (firstError) {
+      await execFileAsync('openssl', ['pkcs12', '-legacy', '-in', file, '-noout', '-passin', 'env:AVMD_PFX_PASS'], baseOptions)
+      return {
+        ok: true,
+        legacy: true,
+        warning: firstError instanceof Error ? firstError.message : null,
+      }
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
 
 function updateSafewebJob(id: string, patch: Partial<Omit<SafewebImportJob, 'id' | 'createdAt'>>) {
   const current = safewebImportJobs.get(id)
@@ -810,8 +841,8 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
       writeJson(res, 400, { ok: false, error: 'Informe o arquivo A1 e a senha do certificado.' }, corsOrigin)
       return true
     }
+    const pfx = Buffer.from(fileBase64, 'base64')
     try {
-      const pfx = Buffer.from(fileBase64, 'base64')
       createSecureContext({ pfx, passphrase: senha })
       writeJson(res, 200, {
         ok: true,
@@ -819,13 +850,30 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
           filename,
           tamanho_bytes: pfx.length,
           senha_validada: true,
+          metodo_validacao: 'node_tls',
         },
       }, corsOrigin)
     } catch {
-      writeJson(res, 400, {
-        ok: false,
-        error: 'A senha não abriu o certificado A1. Confira se o arquivo é .pfx/.p12 e se a senha está correta.',
-      }, corsOrigin)
+      try {
+        const opensslResult = await validatePfxWithOpenSsl(pfx, senha)
+        writeJson(res, 200, {
+          ok: true,
+          certificado: {
+            filename,
+            tamanho_bytes: pfx.length,
+            senha_validada: true,
+            metodo_validacao: opensslResult.legacy ? 'openssl_legacy' : 'openssl',
+            aviso: opensslResult.legacy
+              ? 'Certificado validado em modo compatível. Isso é comum em A1 emitido com algoritmo legado.'
+              : null,
+          },
+        }, corsOrigin)
+      } catch {
+        writeJson(res, 400, {
+          ok: false,
+          error: 'Não foi possível abrir o certificado A1 com esta senha neste servidor. Se a senha abre no Windows, o arquivo pode estar em formato legado ou incompatível; reexporte o A1 em .pfx/.p12 marcando a chave privada e tente novamente.',
+        }, corsOrigin)
+      }
     }
     return true
   }
