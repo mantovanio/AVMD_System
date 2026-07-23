@@ -595,7 +595,7 @@ export class CatalogRepository {
 
     const fields = ['cadastro_base_id','empresa_id','vendedor_id','agente_registro_id',
       'ponto_atendimento_id','tabela_preco_id','tabela_preco_item_id','tipo_produto',
-      'certificado_id','quantidade','tipo_venda','tipo_emissao','tabela_preco',
+      'certificado_id','tipo_venda','tipo_emissao','tabela_preco',
       'valor_venda','desconto','status_venda','pago','data_pagamento','data_vencimento',
       'data_inicio_validade','validado_safeweb','status_pagamento',
       'forma_pagamento_id','nome_faturamento','documento_faturamento','email_faturamento',

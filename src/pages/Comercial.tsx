@@ -7776,15 +7776,15 @@ export default function Comercial() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-800 dark:text-gray-100">Importar Vendas e Pedidos</h3>
-                  <p className="text-xs text-gray-500">Importa clientes, pedidos, protocolos e certificados vendidos de CSV/XLS/XLSX externo.</p>
+                  <p className="text-xs text-gray-500">Importa planilhas de pedidos e planilhas de vendas/fechamento Safeweb em CSV/XLS/XLSX.</p>
                 </div>
               </div>
 
               <div className="mt-4 bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-xs text-gray-500 dark:text-gray-400 space-y-1">
-                <p className="font-medium text-gray-700 dark:text-gray-300">Colunas esperadas:</p>
-                <p>Doc. Cliente · Cliente · E-mail · Telefone · Nº Pedido · Nº Protocolo · Tipo Emissão · Tipo Venda · Status Venda</p>
-                <p>Produto · Data Venda · Valor Desconto · Valor Venda · Forma Pagamento · Status Financeiro · Data Vencimento · Data Pagto</p>
-                <p>PA/Emissor · Agente de Registro · AR de Solicitação · Vendedor · Tabela de Venda · Observação</p>
+                <p className="font-medium text-gray-700 dark:text-gray-300">Formatos aceitos:</p>
+                <p><strong>Pedidos:</strong> Doc. Cliente · Cliente · Nº Pedido · Nº Protocolo · Produto · Tipo Emissão · Status Venda · Data Venda</p>
+                <p><strong>Vendas/Fechamento Safeweb:</strong> Produto · Status Certificado · Data Status · Data Vencimento · Valor Venda · Status Financeiro</p>
+                <p>Também cruza E-mail, Telefone, PA/Emissor, Agente, AR, Vendedor, Tabela de Venda e Observação quando existirem.</p>
               </div>
 
               {resultSafeweb && (
