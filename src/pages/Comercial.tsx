@@ -395,12 +395,14 @@ const STATUS_VENDA_LABEL: Record<StatusVendaCertificado, string> = {
   cancelado:    'Cancelada',
 }
 
-const STATUS_PAGAMENTO_OPTIONS: StatusPagamentoVenda[] = ['em_aberto', 'pago', 'recusado']
+const STATUS_PAGAMENTO_OPTIONS: StatusPagamentoVenda[] = ['em_aberto', 'pago', 'recusado', 'estornado', 'cortesia']
 
 const STATUS_PAGAMENTO_LABEL: Record<StatusPagamentoVenda, string> = {
   em_aberto: 'Em Aberto',
   pago:      'Pago',
   recusado:  'Recusado',
+  estornado: 'Estornado',
+  cortesia:  'Cortesia',
 }
 
 const TIPO_VENDA_OPTIONS = [
@@ -2559,7 +2561,7 @@ export default function Comercial() {
     const updated = await updateAivenCommercialSalePaymentStatus(id, status)
     if (updated) {
       setVendasV2(prev => prev.map(v => v.id === id
-        ? { ...v, status_pagamento: status, pago: status === 'pago' }
+        ? { ...v, status_pagamento: status, pago: status === 'pago' || status === 'cortesia' }
         : v))
     }
   }
@@ -5932,33 +5934,33 @@ export default function Comercial() {
             })()}
 
             {/* ── TABELA ───────────────────────────────────────── */}
-            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden flex flex-col max-h-[calc(100vh-260px)] min-h-[360px]">
+              <div className="flex-1 min-h-0 overflow-auto">
+                <table className="w-full min-w-[1500px] text-sm">
+                  <thead className="sticky top-0 z-20">
                     <tr className="bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left border-b border-gray-200 dark:border-gray-800">
-                      <th className="px-3 py-3 w-8">
+                      <th className="px-3 py-3 w-8 bg-gray-50 dark:bg-gray-800/95">
                         <input type="checkbox"
                           checked={selectedIds.size > 0 && selectedIds.size === vendasPaginadas.length}
                           onChange={toggleAll}
                           className="rounded cursor-pointer" />
                       </th>
-                      <th className="px-3 py-3 whitespace-nowrap">Pedido</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden lg:table-cell">Protocolo</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell">Tipo Emissão</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell">Tipo Venda</th>
-                      <th className="px-3 py-3 whitespace-nowrap">Status</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden md:table-cell">Pagamento</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell">Data Status</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden lg:table-cell">Forma Pagamento</th>
-                      <th className="px-3 py-3 whitespace-nowrap text-right">Valor</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden md:table-cell">Produto</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden lg:table-cell">Doc. Cliente</th>
-                      <th className="px-3 py-3 whitespace-nowrap">Cliente</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell">PA</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden sm:table-cell">Data Venda</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell">Vendedor</th>
-                      <th className="px-3 py-3 whitespace-nowrap hidden 2xl:table-cell">Observação</th>
+                      <th className="px-3 py-3 whitespace-nowrap bg-gray-50 dark:bg-gray-800/95">Pedido</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden lg:table-cell bg-gray-50 dark:bg-gray-800/95">Protocolo</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell bg-gray-50 dark:bg-gray-800/95">Tipo Emissão</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell bg-gray-50 dark:bg-gray-800/95">Tipo Venda</th>
+                      <th className="px-3 py-3 whitespace-nowrap bg-gray-50 dark:bg-gray-800/95">Status</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden md:table-cell bg-gray-50 dark:bg-gray-800/95">Pagamento</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell bg-gray-50 dark:bg-gray-800/95">Data Status</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden lg:table-cell bg-gray-50 dark:bg-gray-800/95">Forma Pagamento</th>
+                      <th className="px-3 py-3 whitespace-nowrap text-right bg-gray-50 dark:bg-gray-800/95">Valor</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden md:table-cell bg-gray-50 dark:bg-gray-800/95">Produto</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden lg:table-cell bg-gray-50 dark:bg-gray-800/95">Doc. Cliente</th>
+                      <th className="px-3 py-3 whitespace-nowrap bg-gray-50 dark:bg-gray-800/95">Cliente</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell bg-gray-50 dark:bg-gray-800/95">PA</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden sm:table-cell bg-gray-50 dark:bg-gray-800/95">Data Venda</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden xl:table-cell bg-gray-50 dark:bg-gray-800/95">Vendedor</th>
+                      <th className="px-3 py-3 whitespace-nowrap hidden 2xl:table-cell bg-gray-50 dark:bg-gray-800/95">Observação</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -6078,7 +6080,7 @@ export default function Comercial() {
               </div>
 
               {/* ── RODAPÉ: totalizador + paginação ── */}
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30">
+              <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30">
                 <div className="flex items-center gap-4">
                   <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
                     Total: {formatCurrency(totalFiltrado)}
@@ -9116,15 +9118,15 @@ function DataTable({ headers, children, initialWidths }: { headers: string[]; ch
   }, [])
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-auto max-h-[70vh]">
-      <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-auto max-h-[calc(100vh-260px)] min-h-[320px]">
+      <table className="w-full min-w-[1100px] text-sm" style={{ tableLayout: 'fixed' }}>
         <colgroup>
           {headers.map((_, i) => <col key={i} style={{ width: widths[i] }} />)}
         </colgroup>
-        <thead className="sticky top-0 z-10">
+        <thead className="sticky top-0 z-20">
           <tr className="bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left">
             {headers.map((h, i) => (
-              <th key={h} className="px-5 py-3 relative select-none group bg-gray-50 dark:bg-gray-800/50" style={{ width: widths[i] }}>
+              <th key={h} className="px-5 py-3 relative select-none group bg-gray-50 dark:bg-gray-800/95" style={{ width: widths[i] }}>
                 {h}
                 {i < headers.length - 1 && (
                   <div
@@ -9211,6 +9213,8 @@ function statusPagamentoCls(s: StatusPagamentoVenda) {
     em_aberto: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
     pago:      'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
     recusado:  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    estornado: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+    cortesia:  'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
   }
   return m[s]
 }

@@ -1354,20 +1354,20 @@ export default function Clientes() {
             {search && <p className="text-sm mt-1">Tente uma busca diferente.</p>}
           </div>
         ) : (
-            <div className="flex-1 overflow-auto min-w-0">
-              <table className="w-full text-sm">
+            <div className="flex-1 min-h-0 overflow-auto min-w-0 max-h-[calc(100vh-260px)]">
+              <table className="w-full min-w-[1200px] text-sm">
             <thead className="sticky top-0 z-10">
               <tr className="bg-gray-50 dark:bg-gray-800/80 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left">
-                <th className="px-4 py-3 font-medium"></th>
-                <th className="px-4 py-3 font-medium">Nome</th>
-                <th className="px-4 py-3 font-medium">CPF / CNPJ</th>
-                <th className="px-4 py-3 font-medium hidden md:table-cell">Cidade/UF</th>
-                <th className="px-4 py-3 font-medium hidden lg:table-cell">Contato</th>
-                <th className="px-4 py-3 font-medium text-center">Vendas</th>
-                <th className="px-4 py-3 font-medium hidden md:table-cell">Último produto</th>
-                <th className="px-4 py-3 font-medium hidden xl:table-cell">Último atendimento</th>
-                <th className="px-4 py-3 font-medium text-right hidden lg:table-cell">Valor total</th>
-                <th className="px-4 py-3 font-medium text-center">Status</th>
+                <th className="px-4 py-3 font-medium bg-gray-50 dark:bg-gray-800/95"></th>
+                <th className="px-4 py-3 font-medium bg-gray-50 dark:bg-gray-800/95">Nome</th>
+                <th className="px-4 py-3 font-medium bg-gray-50 dark:bg-gray-800/95">CPF / CNPJ</th>
+                <th className="px-4 py-3 font-medium hidden md:table-cell bg-gray-50 dark:bg-gray-800/95">Cidade/UF</th>
+                <th className="px-4 py-3 font-medium hidden lg:table-cell bg-gray-50 dark:bg-gray-800/95">Contato</th>
+                <th className="px-4 py-3 font-medium text-center bg-gray-50 dark:bg-gray-800/95">Vendas</th>
+                <th className="px-4 py-3 font-medium hidden md:table-cell bg-gray-50 dark:bg-gray-800/95">Último produto</th>
+                <th className="px-4 py-3 font-medium hidden xl:table-cell bg-gray-50 dark:bg-gray-800/95">Último atendimento</th>
+                <th className="px-4 py-3 font-medium text-right hidden lg:table-cell bg-gray-50 dark:bg-gray-800/95">Valor total</th>
+                <th className="px-4 py-3 font-medium text-center bg-gray-50 dark:bg-gray-800/95">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">

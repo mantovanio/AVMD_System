@@ -2594,8 +2594,8 @@ export default function Renovacoes() {
         )}
 
         {/* ── Wide Table ───────────────────────────────────────── */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden flex flex-col max-h-[calc(100vh-250px)] min-h-[360px]">
+          <div className="flex-1 min-h-0 overflow-auto">
             <table className="w-full table-fixed text-sm" style={{ minWidth: `${tableMinWidth}px` }}>
               <colgroup>
                 <col style={{ width: '52px' }} />
@@ -2603,10 +2603,10 @@ export default function Renovacoes() {
                   <col key={column.key} style={{ width: `${columnWidths[column.key]}px` }} />
                 ))}
               </colgroup>
-              <thead>
+              <thead className="sticky top-0 z-20">
                 <tr className="bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left">
                   {/* Checkbox all */}
-                  <th className="px-3 py-3 w-10">
+                  <th className="px-3 py-3 w-10 bg-gray-50 dark:bg-gray-800/95">
                     <input type="checkbox"
                       checked={allSelected}
                       ref={el => { if (el) el.indeterminate = someSelected }}
@@ -2615,7 +2615,7 @@ export default function Renovacoes() {
                       className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
                   </th>
                   {RENOVACOES_COLUMNS.map(column => (
-                    <th key={column.key} className="group relative px-3 py-3 whitespace-nowrap font-semibold select-none">
+                    <th key={column.key} className="group relative px-3 py-3 whitespace-nowrap font-semibold select-none bg-gray-50 dark:bg-gray-800/95">
                       <span>{column.label}</span>
                       <span
                         role="separator"
@@ -2757,7 +2757,7 @@ export default function Renovacoes() {
             </table>
           </div>
 
-          <div className="sticky bottom-0 z-10 px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur flex flex-wrap items-center justify-between gap-3">
+          <div className="shrink-0 px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-gray-600 dark:text-gray-300">
               Mostrando {listagem.length} registro(s) nesta visão{hasMore ? ' (carregamento em lotes)' : ' (fim da lista atual)'}.
             </p>
