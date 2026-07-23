@@ -25,6 +25,7 @@ type SafewebImportJob = {
 }
 
 const safewebImportJobs = new Map<string, SafewebImportJob>()
+const ISABELLA_VIDAL_PROFILE_ID = 'ad3436f8-eb15-4fbe-a351-3b6b56d2a17e'
 
 function updateSafewebJob(id: string, patch: Partial<Omit<SafewebImportJob, 'id' | 'createdAt'>>) {
   const current = safewebImportJobs.get(id)
@@ -48,6 +49,29 @@ function serializeImportJob(row: Record<string, unknown> | null): SafewebImportJ
     error: row.error ? String(row.error) : null,
     createdAt: String(row.created_at ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? new Date().toISOString()),
+  }
+}
+
+function isSafewebBhSale(venda: Record<string, unknown>) {
+  const metadata = venda.metadata as Record<string, unknown> | null
+  const safeweb = metadata?.safeweb_financeiro as Record<string, unknown> | undefined
+  const atendimento = safeweb?.atendimento as Record<string, unknown> | undefined
+  const cidade = String(atendimento?.cidade ?? '').toLowerCase()
+  const local = String(atendimento?.nome_local ?? '').toLowerCase()
+  const apelido = String(atendimento?.apelido_local ?? '').toLowerCase()
+  return cidade.includes('belo horizonte')
+    || local.includes('belo horizonte')
+    || apelido.includes('belo horizonte')
+    || local.includes('prado - calcedonia')
+    || apelido.includes('prado - calcedonia')
+}
+
+function applySafewebCommercialOwnership(venda: Record<string, unknown>) {
+  if (!isSafewebBhSale(venda)) return venda
+  return {
+    ...venda,
+    vendedor_id: ISABELLA_VIDAL_PROFILE_ID,
+    agente_registro_id: ISABELLA_VIDAL_PROFILE_ID,
   }
 }
 
@@ -103,10 +127,10 @@ async function processSafewebImportJob(
 
     const vendas: Record<string, unknown>[] = input.vendas.map(venda => {
       const doc = String(venda.documento_faturamento ?? '').replace(/\D/g, '')
-      return {
+      return applySafewebCommercialOwnership({
         ...venda,
         cadastro_base_id: venda.cadastro_base_id ?? idByDoc.get(doc) ?? null,
-      }
+      })
     })
 
     await setJob({
@@ -137,7 +161,8 @@ async function processSafewebImportJob(
       const created = await repo.createVenda({
         ...venda,
         quantidade: 1,
-        vendedor_id: input.currentUserId,
+        vendedor_id: venda.vendedor_id ?? input.currentUserId,
+        agente_registro_id: venda.agente_registro_id ?? null,
         ponto_atendimento_id: input.pontoPadrao,
         pedido_status: venda.pedido_numero ? 'gerado' : 'nao_gerado',
         protocolo_status: venda.protocolo_numero ? 'gerado' : 'nao_gerado',
