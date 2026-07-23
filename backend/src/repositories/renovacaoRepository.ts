@@ -74,9 +74,9 @@ export class RenovacaoRepository {
     'updated_at',
   ].join(', ')
 
-  async reconcileConvertedFromSales(): Promise<number> {
+  async reconcileConvertedFromSales(timeout = '15s'): Promise<number> {
     return this.db.transaction(async trx => {
-      await trx.query(`set local statement_timeout = '15s'`)
+      await trx.query(`select set_config('statement_timeout', $1, true)`, [timeout])
       const result = await trx.query<{ id: string }>(
       `WITH matched AS (
          SELECT r.id
