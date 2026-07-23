@@ -432,8 +432,8 @@ export class CatalogRepository {
     const r = await this.db.query<{ protocolo_numero: string | null; pedido_numero: string | null }>(
       `select protocolo_numero, pedido_numero
          from vendas_certificados
-        where ($1::text[] = '{}'::text[] or protocolo_numero = any($1::text[]))
-           or ($2::text[] = '{}'::text[] or pedido_numero = any($2::text[]))`,
+        where (coalesce(array_length($1::text[], 1), 0) > 0 and protocolo_numero = any($1::text[]))
+           or (coalesce(array_length($2::text[], 1), 0) > 0 and pedido_numero = any($2::text[]))`,
       [protocolos, pedidos],
     )
     return r.rows
