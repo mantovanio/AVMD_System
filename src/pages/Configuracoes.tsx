@@ -5262,6 +5262,7 @@ function AbaFiscal() {
   const [certFile, setCertFile] = useState<File | null>(null)
   const [uploadingCert, setUploadingCert] = useState(false)
   const [certificadoValidado, setCertificadoValidado] = useState(false)
+  const [certificadoStatus, setCertificadoStatus] = useState<{ tipo: 'info' | 'ok' | 'erro'; mensagem: string } | null>(null)
   const [configuracoes, setConfiguracoes] = useState<NfseConfiguracao[]>([])
   const [form, setForm] = useState<Partial<NfseConfiguracao>>(createEmptyFiscalForm())
   const [emitenteVinculado, setEmitenteVinculado] = useState<NfseEmitenteCrm | null>(null)
@@ -5345,7 +5346,10 @@ function AbaFiscal() {
   function updateField<K extends keyof NfseConfiguracao>(key: K, value: NfseConfiguracao[K]) {
     setOk(false)
     if (key === 'cnpj_emitente') setEmitenteVinculado(null)
-    if (key === 'certificado_senha' || key === 'certificado_pfx_path') setCertificadoValidado(false)
+    if (key === 'certificado_senha' || key === 'certificado_pfx_path') {
+      setCertificadoValidado(false)
+      setCertificadoStatus(null)
+    }
     setForm(prev => ({ ...prev, [key]: value }))
   }
 
@@ -5399,26 +5403,31 @@ function AbaFiscal() {
 
   async function uploadCertificado() {
     if (!certFile || !form.cnpj_emitente?.trim()) {
-      setErro('Selecione um arquivo e certifique-se de que o CNPJ do emitente está preenchido.')
+      setCertificadoStatus({ tipo: 'erro', mensagem: 'Selecione o arquivo A1 e confirme que o CNPJ do emitente está preenchido.' })
       return
     }
     if (!form.certificado_senha?.trim()) {
-      setErro('Informe a senha do certificado antes de vincular o arquivo.')
+      setCertificadoStatus({ tipo: 'erro', mensagem: 'Informe a senha do certificado antes de validar e vincular.' })
       return
     }
     setUploadingCert(true)
     setErro(null)
     setCertificadoValidado(false)
+    setCertificadoStatus({ tipo: 'info', mensagem: 'Lendo o arquivo do certificado...' })
     const fileBase64 = await readFileAsBase64(certFile).catch(error => {
       setUploadingCert(false)
-      setErro(error instanceof Error ? error.message : 'Não foi possível ler o arquivo do certificado.')
+      setCertificadoStatus({ tipo: 'erro', mensagem: error instanceof Error ? error.message : 'Não foi possível ler o arquivo do certificado.' })
       return null
     })
     if (!fileBase64) return
 
+    setCertificadoStatus({ tipo: 'info', mensagem: 'Validando a senha do certificado...' })
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), 30000)
     const validationResponse = await fetch(getApiUrl('/nfse/certificado/validar'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
         filename: certFile.name,
         file_base64: fileBase64,
@@ -5426,15 +5435,21 @@ function AbaFiscal() {
       }),
     }).catch(error => ({
       ok: false,
-      json: async () => ({ error: error instanceof Error ? error.message : 'Não foi possível validar o certificado.' }),
+      json: async () => ({
+        error: error instanceof DOMException && error.name === 'AbortError'
+          ? 'A validação demorou demais. Tente novamente ou verifique o tamanho do arquivo.'
+          : error instanceof Error ? error.message : 'Não foi possível validar o certificado.',
+      }),
     } as Response))
+    window.clearTimeout(timeoutId)
     const validationPayload = await validationResponse.json().catch(() => null) as { error?: string } | null
     if (!validationResponse.ok) {
       setUploadingCert(false)
-      setErro(validationPayload?.error ?? 'A senha não abriu o certificado A1.')
+      setCertificadoStatus({ tipo: 'erro', mensagem: validationPayload?.error ?? 'A senha não abriu o certificado A1.' })
       return
     }
 
+    setCertificadoStatus({ tipo: 'info', mensagem: 'Senha validada. Enviando o certificado para o armazenamento seguro...' })
     const cnpjClean = form.cnpj_emitente.replace(/\D/g, '')
     const ext = certFile.name.split('.').pop()?.toLowerCase() ?? 'pfx'
     const path = `${cnpjClean}/certificado.${ext}`
@@ -5442,9 +5457,13 @@ function AbaFiscal() {
       .from('certificados-digitais')
       .upload(path, certFile, { upsert: true, contentType: 'application/x-pkcs12' })
     setUploadingCert(false)
-    if (upErr) { setErro('Erro ao enviar certificado: ' + upErr.message); return }
+    if (upErr) {
+      setCertificadoStatus({ tipo: 'erro', mensagem: 'Erro ao enviar certificado: ' + upErr.message })
+      return
+    }
     setForm(prev => ({ ...prev, certificado_pfx_path: path, usa_certificado_digital: true }))
     setCertificadoValidado(true)
+    setCertificadoStatus({ tipo: 'ok', mensagem: 'Certificado validado e vinculado. Agora salve a configuração fiscal.' })
     setShowCertSenha(false)
     setCertFile(null)
     setOk(true)
@@ -5457,6 +5476,7 @@ function AbaFiscal() {
     updateField('certificado_pfx_path', null)
     updateField('certificado_senha', null)
     setCertificadoValidado(false)
+    setCertificadoStatus(null)
   }
 
   async function salvar() {
@@ -6187,6 +6207,7 @@ function AbaFiscal() {
                     onChange={e => {
                       setCertFile(e.target.files?.[0] ?? null)
                       setCertificadoValidado(false)
+                      setCertificadoStatus(e.target.files?.[0] ? { tipo: 'info', mensagem: 'Arquivo selecionado. Informe a senha e clique em validar.' } : null)
                       setOk(false)
                     }}
                   />
@@ -6194,7 +6215,7 @@ function AbaFiscal() {
                 <button
                   type="button"
                   onClick={() => void uploadCertificado()}
-                  disabled={!certFile || !form.certificado_senha?.trim() || uploadingCert}
+                  disabled={uploadingCert}
                   className="shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white transition-colors"
                 >
                   {uploadingCert ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
@@ -6202,6 +6223,19 @@ function AbaFiscal() {
                 </button>
               </div>
               <p className="text-[11px] text-gray-400">Informe a senha antes de vincular. O sistema valida o .pfx/.p12 e só salva se a senha abrir o certificado.</p>
+            </div>
+          )}
+
+          {certificadoStatus && (
+            <div className={cn(
+              'rounded-xl border px-3 py-2 text-xs',
+              certificadoStatus.tipo === 'ok'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300'
+                : certificadoStatus.tipo === 'erro'
+                  ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300'
+                  : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300'
+            )}>
+              {certificadoStatus.mensagem}
             </div>
           )}
 
