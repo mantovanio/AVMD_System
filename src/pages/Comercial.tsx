@@ -794,6 +794,7 @@ export default function Comercial() {
   const [importandoSafeweb, setImportandoSafeweb] = useState(false)
   const [importandoClientes, setImportandoClientes] = useState(false)
   const [importStatusSafeweb, setImportStatusSafeweb] = useState<string | null>(null)
+  const [queuedSafewebJob, setQueuedSafewebJob] = useState<{ id: string; files: number; linhas: number; vendas: number; clientes: number } | null>(null)
   const [resultSafeweb, setResultSafeweb] = useState<{
     linhas: number
     clientes: number
@@ -3525,6 +3526,7 @@ export default function Comercial() {
     const files = Array.isArray(inputFiles) ? inputFiles : [inputFiles]
     setImportandoSafeweb(true)
     setResultSafeweb(null)
+    setQueuedSafewebJob(null)
     setImportStatusSafeweb(files.length > 1 ? `Lendo ${files.length} arquivos...` : `Lendo arquivo ${files[0]?.name ?? ''}...`)
     try {
       const fileSummaries: { fileName: string; fileType: string; rowsCount: number }[] = []
@@ -3812,23 +3814,14 @@ export default function Comercial() {
       }
 
       const jobId = String(startData.job.id)
-      for (;;) {
-        await new Promise(resolve => setTimeout(resolve, 1500))
-        const statusResp = await fetch(getApiUrl(`/comercial/import-safeweb-jobs/${jobId}`))
-        const statusData = await statusResp.json().catch(() => null)
-        const job = statusData?.job
-        if (!statusResp.ok || !job) throw new Error('Não foi possível consultar o andamento da importação.')
-        setImportStatusSafeweb(String(job.message ?? 'Importação em andamento no backend...'))
-        if (job.status === 'failed') throw new Error(String(job.error ?? 'Importação falhou no backend.'))
-        if (job.status === 'done') {
-          setResultSafeweb(job.result)
-          showMsg(`Importação concluída na esteira: ${job.result?.linhas ?? rows.length} linha(s), ${job.result?.vendas ?? vendasPayloads.length} venda(s), ${job.result?.criados ?? 0} criado(s) e ${job.result?.atualizados ?? 0} atualizado(s).`, 'ok')
-          break
-        }
-      }
-
-      await fetchVendasV2()
-      await fetchCatalogo()
+      setQueuedSafewebJob({
+        id: jobId,
+        files: fileSummaries.length,
+        linhas: rows.length,
+        vendas: vendasPayloads.length,
+        clientes: clientesUniq.length,
+      })
+      showMsg(`Importação enviada para a esteira: ${fileSummaries.length} arquivo(s), ${rows.length} linha(s) e ${vendasPayloads.length} venda(s). Você pode continuar usando o sistema.`, 'ok')
     } catch (error) {
       showMsg(error instanceof Error ? `Erro ao importar arquivo: ${error.message}` : 'Erro ao importar arquivo.')
     } finally {
@@ -7969,12 +7962,24 @@ export default function Comercial() {
                 <div className="mt-4 flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
                   <Loader2 size={18} className="mt-0.5 animate-spin shrink-0" />
                   <div>
-                    <p className="font-semibold">Importação em andamento</p>
+                    <p className="font-semibold">Preparando envio para a esteira</p>
                     <p className="mt-1 text-xs">{importStatusSafeweb}</p>
                     <p className="mt-2 text-xs text-blue-600 dark:text-blue-300">
-                      Você pode acompanhar o andamento por aqui; o processamento fica registrado no backend.
+                      Assim que o backend aceitar o lote, esta tela será liberada.
                     </p>
                   </div>
+                </div>
+              )}
+
+              {queuedSafewebJob && !importandoSafeweb && (
+                <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200">
+                  <p className="font-semibold">Importação enviada para processamento</p>
+                  <p className="mt-1 text-xs">
+                    Job {queuedSafewebJob.id.slice(0, 8)} · {queuedSafewebJob.files} arquivo(s) · {queuedSafewebJob.linhas} linha(s) · {queuedSafewebJob.vendas} venda(s) · {queuedSafewebJob.clientes} cliente(s).
+                  </p>
+                  <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">
+                    Você já pode continuar trabalhando. O backend vai concluir a carga em segundo plano.
+                  </p>
                 </div>
               )}
 
