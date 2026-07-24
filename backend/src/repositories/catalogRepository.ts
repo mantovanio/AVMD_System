@@ -33,6 +33,7 @@ export class CatalogRepository {
       'aliquota_iss','aliquota_pis','aliquota_cofins','aliquota_inss','aliquota_ir','aliquota_csll',
       'usuario_prefeitura','senha_prefeitura','chave_autenticacao','usa_certificado_digital','certificado_pfx_path',
       'certificado_senha','observacoes','robo_ligado','payload_reforma_tributaria','updated_by',
+      'razao_social_emitente','nome_fantasia_emitente','telefone_emitente','email_emitente','endereco_emitente','complemento_emitente',
     ]
     const vals = fields.map(field => {
       const value = input[field] ?? null

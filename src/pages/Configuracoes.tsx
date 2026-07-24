@@ -5341,6 +5341,12 @@ function createEmptyFiscalForm(preset?: typeof NFSE_PRESETS[number]): Partial<Nf
     observacoes: preset?.observacoes ?? '',
     robo_ligado: false,
     payload_reforma_tributaria: preset?.payload_reforma_tributaria ?? {},
+    razao_social_emitente: '',
+    nome_fantasia_emitente: '',
+    telefone_emitente: '',
+    email_emitente: '',
+    endereco_emitente: '',
+    complemento_emitente: '',
   }
 }
 
@@ -5499,6 +5505,10 @@ function AbaFiscal() {
       cnpj_emitente: prev.cnpj_emitente?.trim() || emitente.cpf_cnpj,
       inscricao_municipal: prev.inscricao_municipal?.trim() || emitente.inscricao_municipal,
       inscricao_estadual: prev.inscricao_estadual?.trim() || emitente.inscricao_estadual,
+      razao_social_emitente: prev.razao_social_emitente?.trim() || emitente.nome || '',
+      nome_fantasia_emitente: prev.nome_fantasia_emitente?.trim() || emitente.nome_fantasia || '',
+      telefone_emitente: prev.telefone_emitente?.trim() || emitente.telefone || '',
+      email_emitente: prev.email_emitente?.trim() || emitente.email || '',
     }))
     setOk(false)
   }
@@ -5868,6 +5878,16 @@ function AbaFiscal() {
             <ConfigInput label="Inscrição Municipal" value={form.inscricao_municipal || ''} onChange={v => updateField('inscricao_municipal', v)} placeholder="Insira a IM" />
             <ConfigInput label="Inscrição Estadual" value={form.inscricao_estadual || ''} onChange={v => updateField('inscricao_estadual', v)} placeholder="Insira a IE" />
             <ConfigInput label="CNAE Principal" value={form.cnae || ''} onChange={v => updateField('cnae', v)} placeholder="ex: 6202-3/00" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <ConfigInput label="Razão Social / Nome" value={form.razao_social_emitente || ''} onChange={v => updateField('razao_social_emitente', v)} placeholder="Razão social do emitente" />
+            <ConfigInput label="Nome Fantasia" value={form.nome_fantasia_emitente || ''} onChange={v => updateField('nome_fantasia_emitente', v)} placeholder="Nome fantasia" />
+            <ConfigInput label="Telefone" value={form.telefone_emitente || ''} onChange={v => updateField('telefone_emitente', v)} placeholder="(00) 00000-0000" />
+            <ConfigInput label="E-mail" value={form.email_emitente || ''} onChange={v => updateField('email_emitente', v)} placeholder="email@empresa.com" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <ConfigInput label="Endereço" value={form.endereco_emitente || ''} onChange={v => updateField('endereco_emitente', v)} placeholder="Rua, número, bairro, CEP" />
+            <ConfigInput label="Complemento" value={form.complemento_emitente || ''} onChange={v => updateField('complemento_emitente', v)} placeholder="Complemento do endereço" />
           </div>
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-950/20 p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>

@@ -1123,6 +1123,12 @@ export interface NfseConfiguracao {
   usa_certificado_digital: boolean
   certificado_pfx_path: string | null
   certificado_senha: string | null
+  nome_fantasia_emitente: string | null
+  razao_social_emitente: string | null
+  telefone_emitente: string | null
+  email_emitente: string | null
+  endereco_emitente: string | null
+  complemento_emitente: string | null
   observacoes: string | null
   robo_ligado: boolean
   payload_reforma_tributaria: Record<string, unknown>

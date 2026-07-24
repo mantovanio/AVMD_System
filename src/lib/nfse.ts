@@ -192,13 +192,13 @@ function buildPreviewPartyFromVenda(venda: Partial<VendaCertificado> | null | un
 function buildPreviewPartyFromConfig(configuracao: Partial<NfseConfiguracao> | null | undefined): PreviewParty {
   const metadata = ((configuracao?.payload_reforma_tributaria ?? {}) as Record<string, unknown>)
   return {
-    nome: String(metadata.razao_social ?? metadata.nome_emitente ?? configuracao?.identificador ?? 'Emitente nao configurado'),
+    nome: configuracao?.razao_social_emitente?.trim() || String(metadata.razao_social ?? metadata.nome_emitente ?? configuracao?.identificador ?? 'Emitente nao configurado'),
     documento: formatDocument(configuracao?.cnpj_emitente),
     inscricaoMunicipal: configuracao?.inscricao_municipal?.trim() || '',
-    telefone: String(metadata.telefone ?? ''),
-    email: String(metadata.email ?? ''),
-    endereco: String(metadata.endereco ?? ''),
-    complemento: String(metadata.complemento ?? ''),
+    telefone: configuracao?.telefone_emitente?.trim() || String(metadata.telefone ?? ''),
+    email: configuracao?.email_emitente?.trim() || String(metadata.email ?? ''),
+    endereco: configuracao?.endereco_emitente?.trim() || String(metadata.endereco ?? ''),
+    complemento: configuracao?.complemento_emitente?.trim() || String(metadata.complemento ?? ''),
     municipio: configuracao?.municipio_nome?.trim() || '',
   }
 }

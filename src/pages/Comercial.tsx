@@ -4393,7 +4393,8 @@ export default function Comercial() {
 
   function buildEmitenteSnapshot(config: Partial<NfseConfiguracao> | null | undefined) {
     const payload = (config?.payload_reforma_tributaria ?? {}) as Record<string, unknown>
-    const nomeEmitente = String(payload.razao_social ?? payload.nome_emitente ?? '').trim()
+    const nomeEmitente = config?.razao_social_emitente?.trim()
+      || String(payload.razao_social ?? payload.nome_emitente ?? '').trim()
       || agencyConfig.nome_agencia
       || config?.identificador
       || 'Emitente nao configurado'
@@ -4405,10 +4406,10 @@ export default function Comercial() {
       nome: nomeEmitente,
       documento: config?.cnpj_emitente?.trim() || '',
       inscricao_municipal: config?.inscricao_municipal?.trim() || '',
-      telefone: String(payload.telefone ?? agencyConfig.telefone ?? ''),
-      email: String(payload.email ?? ''),
-      endereco: String(payload.endereco ?? ''),
-      complemento: String(payload.complemento ?? ''),
+      telefone: config?.telefone_emitente?.trim() || String(payload.telefone ?? agencyConfig.telefone ?? ''),
+      email: config?.email_emitente?.trim() || String(payload.email ?? ''),
+      endereco: config?.endereco_emitente?.trim() || String(payload.endereco ?? ''),
+      complemento: config?.complemento_emitente?.trim() || String(payload.complemento ?? ''),
       municipio: municipioEmitente,
     }
   }
