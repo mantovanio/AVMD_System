@@ -812,7 +812,7 @@ function AbaUsuarios() {
   async function salvarSenha() {
     if (!modalSenha) return
     setSenhaErro(null)
-    if (novaSenha.length < 8) { setSenhaErro('A senha deve ter pelo menos 8 caracteres.'); return }
+    if (!novaSenha.trim()) { setSenhaErro('Informe uma senha para continuar.'); return }
     if (novaSenha !== confirmSenha) { setSenhaErro('As senhas não coincidem.'); return }
     if (senhaCheck !== 'verificado') { setSenhaErro('Não foi possível confirmar o vínculo do Clerk. Reabra a tela e tente novamente.'); return }
     setSalvandoSenha(true)
@@ -833,8 +833,8 @@ function AbaUsuarios() {
   async function vincularContaLogin() {
     if (!modalVincularConta) return
     setSenhaErro(null)
-    if (senhaVinculo.length < 8) {
-      setSenhaErro('A senha precisa ter pelo menos 8 caracteres para criar a conta de login.')
+    if (!senhaVinculo.trim()) {
+      setSenhaErro('Informe uma senha para criar a conta de login.')
       return
     }
     setVinculandoConta(true)
@@ -907,8 +907,7 @@ function AbaUsuarios() {
   async function criarUsuario(e: React.FormEvent) {
     e.preventDefault()
     setCriadoErro(null)
-    const passwordError = validateStrongPassword(novoSenhaU)
-    if (passwordError) { setCriadoErro(passwordError); return }
+    if (!novoSenhaU.trim()) { setCriadoErro('Informe uma senha para continuar.'); return }
     setCriandoUser(true)
     try {
       const result = await createAdminManagedUser({

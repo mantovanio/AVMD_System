@@ -3,6 +3,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ProfileRepository } from '../repositories/profileRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
 
+function buildTemporaryStrongPassword() {
+  const stamp = Date.now().toString(36)
+  return `Tmp#${stamp}aA1!`
+}
+
 type CreateUserBody = {
   action: 'create_user'
   payload: {
@@ -131,9 +136,15 @@ export async function handleAdminUsersRoutes(
       const clerkUser = await clerkClient.users.createUser({
         emailAddress: [email],
         username,
-        password: senha,
+        password: buildTemporaryStrongPassword(),
         firstName,
         lastName,
+      })
+
+      await clerkClient.users.updateUser(clerkUser.id, {
+        password: senha,
+        skipPasswordChecks: true,
+        signOutOfOtherSessions: true,
       })
 
       await profileRepository.createProfile({
@@ -215,9 +226,15 @@ export async function handleAdminUsersRoutes(
       const clerkUser = await clerkClient.users.createUser({
         emailAddress: [profile.email],
         username,
-        password,
+        password: buildTemporaryStrongPassword(),
         firstName,
         lastName,
+      })
+
+      await clerkClient.users.updateUser(clerkUser.id, {
+        password,
+        skipPasswordChecks: true,
+        signOutOfOtherSessions: true,
       })
 
       await profileRepository.update(profile.id, { clerk_user_id: clerkUser.id })
