@@ -572,7 +572,7 @@ export default function Renovacoes() {
   const fetchRenovacoes = useCallback(async () => {
     setLoading(true)
     try {
-      const rows = await apiFetchRenovacoes(visao, 30, RENOVACOES_PAGE_SIZE, 0)
+      const rows = await apiFetchRenovacoes(visao, 30, RENOVACOES_PAGE_SIZE, 0, profile?.id ?? null, profile?.perfil ?? null)
       setLista(rows.map(enrichRenovacao))
       setHasMore(rows.length >= RENOVACOES_PAGE_SIZE)
       setSelectedIds(new Set())
@@ -588,7 +588,7 @@ export default function Renovacoes() {
     if (loading || loadingMore || !hasMore) return
     setLoadingMore(true)
     try {
-      const rows = await apiFetchRenovacoes(visao, 30, RENOVACOES_PAGE_SIZE, lista.length)
+      const rows = await apiFetchRenovacoes(visao, 30, RENOVACOES_PAGE_SIZE, lista.length, profile?.id ?? null, profile?.perfil ?? null)
       const enriched = rows.map(enrichRenovacao)
       setLista(prev => [...prev, ...enriched])
       if (rows.length < RENOVACOES_PAGE_SIZE) setHasMore(false)

@@ -3,11 +3,11 @@ import { readJson, writeJson } from '../utils/http.js'
 import { CommercialRepository } from '../repositories/commercialRepository.js'
 import type { CheckoutPaymentService } from '../services/checkoutPaymentService.js'
 
-type SalesRequest = { limit?: number; dateFrom?: string | null; dateTo?: string | null }
+type SalesRequest = { limit?: number; dateFrom?: string | null; dateTo?: string | null; viewer_profile_id?: string | null; viewer_perfil?: string | null }
 type SaleStatusRequest = { id: string; status: string }
 type SalePaymentStatusRequest = { id: string; status: string }
 type SalePaymentMethodRequest = { id: string; forma_pagamento_id: string; admin_profile_id: string; payment_installments?: number | null }
-type ScheduleRequest = { dataBase?: string | null; status?: string | null; agenteId?: string | null }
+type ScheduleRequest = { dataBase?: string | null; status?: string | null; agenteId?: string | null; viewer_profile_id?: string | null; viewer_perfil?: string | null }
 type UpdateVendaRequest = {
   id: string
   tipo_produto?: string
@@ -213,6 +213,8 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
       search?: string
       filterTipo?: string
       filterStatus?: string
+      viewer_profile_id?: string
+      viewer_perfil?: string
     }>(req)
     const result = await repository.listCustomers(body)
     writeJson(res, 200, { ok: true, ...result }, corsOrigin)
@@ -234,9 +236,9 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
   }
 
   if (req.method === 'POST' && req.url === '/api/comercial/clientes/buscar') {
-    const body = await readJson<SearchCustomerRequest>(req)
+    const body = await readJson<SearchCustomerRequest & { viewer_profile_id?: string; viewer_perfil?: string }>(req)
     const term = body.term?.trim() ?? ''
-    const clientes = term.length >= 3 ? await repository.searchCustomers(term) : []
+    const clientes = term.length >= 3 ? await repository.searchCustomers(term, body.viewer_profile_id, body.viewer_perfil) : []
     writeJson(res, 200, { ok: true, clientes }, corsOrigin)
     return true
   }

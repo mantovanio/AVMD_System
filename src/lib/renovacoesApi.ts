@@ -23,6 +23,8 @@ export async function fetchRenovacoes(
   days = 30,
   limit = 500,
   offset = 0,
+  viewerProfileId?: string | null,
+  viewerPerfil?: string | null,
 ): Promise<RenovacaoV2[]> {
   const params = new URLSearchParams({
     scope,
@@ -30,6 +32,8 @@ export async function fetchRenovacoes(
     limit: String(limit),
     offset: String(offset),
   })
+  if (viewerProfileId) params.set('viewer_profile_id', viewerProfileId)
+  if (viewerPerfil) params.set('viewer_perfil', viewerPerfil)
   const data = await apiFetch<{ ok: boolean; renovacoes: RenovacaoV2[] }>(`/renovacoes?${params.toString()}`)
   return data.renovacoes ?? []
 }

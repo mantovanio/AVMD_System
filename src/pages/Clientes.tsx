@@ -829,6 +829,8 @@ export default function Clientes() {
           search: effectiveSearch,
           filterTipo: effectiveFilterTipo,
           filterStatus: effectiveFilterStatus,
+          viewer_profile_id: profile?.id ?? null,
+          viewer_perfil: profile?.perfil ?? null,
         }),
       })
       const payload = await response.json().catch(() => null) as {

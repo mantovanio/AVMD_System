@@ -19,27 +19,32 @@ type ApiResponse<Key extends string, Value> = {
   ok: boolean
 } & Record<Key, Value>
 
-export async function fetchAivenCommercialSales(limit = 50, filters?: { dateFrom?: string | null; dateTo?: string | null }) {
+export async function fetchAivenCommercialSales(limit = 50, filters?: { dateFrom?: string | null; dateTo?: string | null; viewer_profile_id?: string | null; viewer_perfil?: string | null }) {
   const response = await postJson<ApiResponse<'vendas', AivenVendaRow[]>>(getApiUrl('/comercial/vendas'), {
     limit,
     dateFrom: filters?.dateFrom ?? null,
     dateTo: filters?.dateTo ?? null,
+    viewer_profile_id: filters?.viewer_profile_id ?? null,
+    viewer_perfil: filters?.viewer_perfil ?? null,
   })
   return response.vendas ?? []
 }
 
-export async function fetchAivenCommercialSchedule(input: { dataBase?: string | null; status?: string | null; agenteId?: string | null }) {
+export async function fetchAivenCommercialSchedule(input: { dataBase?: string | null; status?: string | null; agenteId?: string | null; viewer_profile_id?: string | null; viewer_perfil?: string | null }) {
   const response = await postJson<ApiResponse<'agenda', AivenAgendaRow[]>>(getApiUrl('/comercial/agenda'), input)
   return response.agenda ?? []
 }
 
-export async function fetchAivenCommercialCustomers() {
-  const response = await postJson<ApiResponse<'clientes', CadastroBase[]>>(getApiUrl('/comercial/clientes'), {})
+export async function fetchAivenCommercialCustomers(filters?: { viewer_profile_id?: string | null; viewer_perfil?: string | null }) {
+  const response = await postJson<ApiResponse<'clientes', CadastroBase[]>>(getApiUrl('/comercial/clientes'), {
+    viewer_profile_id: filters?.viewer_profile_id ?? null,
+    viewer_perfil: filters?.viewer_perfil ?? null,
+  })
   return response.clientes ?? []
 }
 
-export async function searchAivenCommercialCustomers(term: string) {
-  const response = await postJson<ApiResponse<'clientes', CadastroBase[]>>(getApiUrl('/comercial/clientes/buscar'), { term })
+export async function searchAivenCommercialCustomers(term: string, viewer_profile_id?: string | null, viewer_perfil?: string | null) {
+  const response = await postJson<ApiResponse<'clientes', CadastroBase[]>>(getApiUrl('/comercial/clientes/buscar'), { term, viewer_profile_id, viewer_perfil })
   return response.clientes ?? []
 }
 

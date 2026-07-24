@@ -179,38 +179,62 @@ export class RenovacaoRepository {
     })
   }
 
-  async findAll(limit = 500, offset = 0): Promise<RenovacaoRow[]> {
+  async findAll(limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
+    const params: unknown[] = []
+    let viewerFilter = ''
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin'].includes(viewerPerfil)) {
+      params.push(viewerProfileId)
+      viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
+    }
+    params.push(limit, offset)
     const result = await this.db.query<RenovacaoRow>(
-      `SELECT ${this.listColumns} FROM renovacoes
-       WHERE deleted_at IS NULL
-       ORDER BY data_vencimento ASC
-       LIMIT $1 OFFSET $2`,
-      [limit, offset],
+      `SELECT ${this.listColumns} FROM renovacoes r
+       WHERE r.deleted_at IS NULL
+       ${viewerFilter}
+       ORDER BY r.data_vencimento ASC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
     )
     return result.rows
   }
-  async findOperacionais(janelaDias = 30, limit = 500, offset = 0): Promise<RenovacaoRow[]> {
+  async findOperacionais(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
+    const params: unknown[] = []
+    let viewerFilter = ''
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin'].includes(viewerPerfil)) {
+      params.push(viewerProfileId)
+      viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
+    }
+    params.push(janelaDias, limit, offset)
     const result = await this.db.query<RenovacaoRow>(
-      `SELECT ${this.listColumns} FROM renovacoes
-       WHERE deleted_at IS NULL
-         AND coalesce(renovado, false) = false
-         AND status NOT IN ('convertido', 'perdido')
-         AND data_vencimento >= (CURRENT_DATE - ($1 || ' days')::interval)
-       ORDER BY data_vencimento ASC
-       LIMIT $2 OFFSET $3`,
-      [janelaDias, limit, offset],
+      `SELECT ${this.listColumns} FROM renovacoes r
+       WHERE r.deleted_at IS NULL
+         AND coalesce(r.renovado, false) = false
+         AND r.status NOT IN ('convertido', 'perdido')
+         AND r.data_vencimento >= (CURRENT_DATE - ($${params.length - 2} || ' days')::interval)
+       ${viewerFilter}
+       ORDER BY r.data_vencimento ASC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
     )
     return result.rows
   }
 
-  async findHistorico(janelaDias = 30, limit = 500, offset = 0): Promise<RenovacaoRow[]> {
+  async findHistorico(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
+    const params: unknown[] = []
+    let viewerFilter = ''
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin'].includes(viewerPerfil)) {
+      params.push(viewerProfileId)
+      viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
+    }
+    params.push(janelaDias, limit, offset)
     const result = await this.db.query<RenovacaoRow>(
-      `SELECT ${this.listColumns} FROM renovacoes
-       WHERE deleted_at IS NULL
-         AND data_vencimento < (CURRENT_DATE - ($1 || ' days')::interval)
-       ORDER BY data_vencimento DESC
-       LIMIT $2 OFFSET $3`,
-      [janelaDias, limit, offset],
+      `SELECT ${this.listColumns} FROM renovacoes r
+       WHERE r.deleted_at IS NULL
+         AND r.data_vencimento < (CURRENT_DATE - ($${params.length - 2} || ' days')::interval)
+       ${viewerFilter}
+       ORDER BY r.data_vencimento DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
     )
     return result.rows
   }

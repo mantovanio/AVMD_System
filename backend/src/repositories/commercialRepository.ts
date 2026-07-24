@@ -5,12 +5,16 @@ export type CommercialSalesInput = {
   limit?: number
   dateFrom?: string | null
   dateTo?: string | null
+  viewer_profile_id?: string | null
+  viewer_perfil?: string | null
 }
 
 export type CommercialAgendaInput = {
   dataBase?: string | null
   status?: string | null
   agenteId?: string | null
+  viewer_profile_id?: string | null
+  viewer_perfil?: string | null
 }
 
 export type UpdateCommercialSaleStatusInput = {
@@ -90,6 +94,12 @@ export class CommercialRepository {
     if (input.dateTo) {
       params.push(input.dateTo)
       where.push(`coalesce(v.data_inicio_validade::date, v.created_at::date) <= $${params.length}::date`)
+    }
+    const viewerId = input.viewer_profile_id
+    const viewerPerfil = input.viewer_perfil
+    if (viewerId && viewerPerfil && !['admin', 'superadmin'].includes(viewerPerfil)) {
+      params.push(viewerId)
+      where.push(`(v.vendedor_id::text = $${params.length} OR v.agente_registro_id::text = $${params.length})`)
     }
     params.push(limit)
     const result = await this.db.query(`
@@ -287,6 +297,13 @@ export class CommercialRepository {
       filters.push(`a.agente_registro_id = $${params.length}::uuid`)
     }
 
+    const viewerId = input.viewer_profile_id
+    const viewerPerfil = input.viewer_perfil
+    if (viewerId && viewerPerfil && !['admin', 'superadmin'].includes(viewerPerfil)) {
+      params.push(viewerId)
+      filters.push(`a.agente_registro_id::text = $${params.length}`)
+    }
+
     const result = await this.db.query(`
       select
         a.id,
@@ -365,6 +382,8 @@ export class CommercialRepository {
     search?: string
     filterTipo?: string | null
     filterStatus?: string | null
+    viewer_profile_id?: string | null
+    viewer_perfil?: string | null
   }) {
     const page = Math.max(0, Number(input?.page ?? 0) || 0)
     const rawPageSize = Number(input?.pageSize ?? 50) || 50
@@ -377,31 +396,43 @@ export class CommercialRepository {
     const where: string[] = []
     const params: unknown[] = []
 
+    const viewerId = input?.viewer_profile_id
+    const viewerPerfil = input?.viewer_perfil
+    if (viewerId && viewerPerfil && !['admin', 'superadmin'].includes(viewerPerfil)) {
+      params.push(viewerId)
+      where.push(`cb_sub.id IN (
+        SELECT DISTINCT vc.cadastro_base_id
+        FROM vendas_certificados vc
+        WHERE vc.cadastro_base_id IS NOT NULL
+          AND (vc.vendedor_id::text = $${params.length} OR vc.agente_registro_id::text = $${params.length})
+      )`)
+    }
+
     if (search) {
       params.push(`%${search}%`)
       const p = `$${params.length}`
       where.push(`(
-        lower(coalesce(nome, '')) like ${p}
-        or lower(coalesce(cpf_cnpj, '')) like ${p}
-        or lower(coalesce(nome_fantasia, '')) like ${p}
+        lower(coalesce(cb_sub.nome, '')) like ${p}
+        or lower(coalesce(cb_sub.cpf_cnpj, '')) like ${p}
+        or lower(coalesce(cb_sub.nome_fantasia, '')) like ${p}
       )`)
     }
 
     if (filterTipo) {
       params.push(filterTipo)
-      where.push(`tipo_cliente = $${params.length}`)
+      where.push(`cb_sub.tipo_cliente = $${params.length}`)
     }
 
     if (filterStatus) {
       params.push(filterStatus)
-      where.push(`status = $${params.length}`)
+      where.push(`cb_sub.status = $${params.length}`)
     }
 
     const whereSql = where.length ? `where ${where.join(' and ')}` : ''
 
     const countResult = await this.db.query<{ total: string }>(
       `select count(*)::text as total
-       from cadastros_base
+       from cadastros_base cb_sub
        ${whereSql}`,
       params,
     )
@@ -410,10 +441,10 @@ export class CommercialRepository {
     const limitPlaceholder = `$${listParams.length - 1}`
     const offsetPlaceholder = `$${listParams.length}`
     const result = await this.db.query(
-      `select *
-       from cadastros_base
+      `select cb_sub.*
+       from cadastros_base cb_sub
        ${whereSql}
-       order by nome asc
+       order by cb_sub.nome asc
        limit ${limitPlaceholder}
        offset ${offsetPlaceholder}`,
       listParams,
@@ -1125,18 +1156,30 @@ export class CommercialRepository {
     return result.rows[0] ?? null
   }
 
-  async searchCustomers(term: string) {
+  async searchCustomers(term: string, viewerProfileId?: string | null, viewerPerfil?: string | null) {
     const like = `%${term.trim().toLowerCase()}%`
+    const params: unknown[] = [like]
+    let accessFilter = ''
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin'].includes(viewerPerfil)) {
+      params.push(viewerProfileId)
+      accessFilter = `AND cb.id IN (
+        SELECT DISTINCT vc.cadastro_base_id
+        FROM vendas_certificados vc
+        WHERE vc.cadastro_base_id IS NOT NULL
+          AND (vc.vendedor_id::text = $2 OR vc.agente_registro_id::text = $2)
+      )`
+    }
     const result = await this.db.query(`
-      select id, nome, nome_fantasia, cpf_cnpj, telefone, cidade, uf, status
-      from cadastros_base
-      where lower(coalesce(nome, '')) like $1
-         or lower(coalesce(nome_fantasia, '')) like $1
-         or lower(coalesce(cpf_cnpj, '')) like $1
-         or lower(coalesce(telefone, '')) like $1
-      order by nome asc
+      select cb.id, cb.nome, cb.nome_fantasia, cb.cpf_cnpj, cb.telefone, cb.cidade, cb.uf, cb.status
+      from cadastros_base cb
+      where (lower(coalesce(cb.nome, '')) like $1
+         or lower(coalesce(cb.nome_fantasia, '')) like $1
+         or lower(coalesce(cb.cpf_cnpj, '')) like $1
+         or lower(coalesce(cb.telefone, '')) like $1)
+        ${accessFilter}
+      order by cb.nome asc
       limit 10
-    `, [like])
+    `, params)
     return result.rows
   }
 

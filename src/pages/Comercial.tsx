@@ -1844,6 +1844,8 @@ export default function Comercial() {
       const rows = await fetchAivenCommercialSales(VENDAS_LISTA_LIMITE_INICIAL, {
         dateFrom: filtrosAtuais.dataInicial || null,
         dateTo: filtrosAtuais.dataFinal || null,
+        viewer_profile_id: profile?.id ?? null,
+        viewer_perfil: profile?.perfil ?? null,
       }) as VendaRow[]
       setVendasV2(rows)
       if (!options?.silent) setLoadingV(false)
@@ -1851,7 +1853,7 @@ export default function Comercial() {
       void (async () => {
         const vendaIds = new Set(rows.map(v => v.id))
         if (vendaIds.size > 0) {
-          const agendaRows = await fetchAivenCommercialSchedule({ dataBase: null })
+          const agendaRows = await fetchAivenCommercialSchedule({ dataBase: null, viewer_profile_id: profile?.id ?? null, viewer_perfil: profile?.perfil ?? null })
           const statusMap: Record<string, StatusAgendamentoValidacao | null> = {}
           for (const item of agendaRows) {
             if (!item.venda_certificado_id || !vendaIds.has(item.venda_certificado_id)) continue
@@ -1872,7 +1874,7 @@ export default function Comercial() {
   }, [])
 
   const fetchClientes = useCallback(async () => {
-    const data = await fetchAivenCommercialCustomers()
+    const data = await fetchAivenCommercialCustomers({ viewer_profile_id: profile?.id ?? null, viewer_perfil: profile?.perfil ?? null })
     setClientes(data as CadastroBase[])
   }, [])
 
@@ -1894,7 +1896,7 @@ export default function Comercial() {
     const t = term.trim()
     if (t.length < 3) { setClienteResultados([]); setClienteDropdownOpen(false); return }
     setClienteBuscando(true)
-    const data = await searchAivenCommercialCustomers(t)
+    const data = await searchAivenCommercialCustomers(t, profile?.id ?? null, profile?.perfil ?? null)
     setClienteResultados(data as CadastroBase[])
     setClienteDropdownOpen(data.length > 0)
     setClienteBuscando(false)
@@ -1906,7 +1908,7 @@ export default function Comercial() {
     const isAgente = profile?.perfil === 'agente_registro'
     const agenteId = isAgente ? profile?.id ?? null : null
     const statusV2 = filtroStatusAgenda === 'aguardando' ? 'pendente' : (filtroStatusAgenda || null)
-    const agendaV2 = await fetchAivenCommercialSchedule({ dataBase, status: statusV2, agenteId })
+    const agendaV2 = await fetchAivenCommercialSchedule({ dataBase, status: statusV2, agenteId, viewer_profile_id: profile?.id ?? null, viewer_perfil: profile?.perfil ?? null })
 
     const agendaNormalizada: AgendaItem[] = (agendaV2 as AgendamentoValidacaoRow[]).map(item => {
       const venda = item.vendas_certificados?.[0] ?? null
@@ -9394,6 +9396,7 @@ function ClienteSearchInput({ value, onChange, onSelect, className }: {
   onSelect: (nome: string, telefone: string | null) => void
   className?: string
 }) {
+  const { profile } = useAuth()
   const [resultados, setResultados] = useState<Pick<CadastroBase, 'id' | 'nome' | 'cpf_cnpj' | 'telefone'>[]>([])
   const [buscando, setBuscando] = useState(false)
   const [aberto, setAberto] = useState(false)
@@ -9404,7 +9407,7 @@ function ClienteSearchInput({ value, onChange, onSelect, className }: {
     if (value.length < 3) { setResultados([]); setAberto(false); return }
     const t = setTimeout(async () => {
       setBuscando(true)
-      const data = await searchAivenCommercialCustomers(value)
+      const data = await searchAivenCommercialCustomers(value, profile?.id ?? null, profile?.perfil ?? null)
       setBuscando(false)
       setResultados(data as Pick<CadastroBase, 'id' | 'nome' | 'cpf_cnpj' | 'telefone'>[])
       setAberto(data.length > 0)

@@ -141,7 +141,7 @@ function formatDate(isoDate: string): string {
 }
 
 function buildCabecalhoXml(): string {
-  return `<Cabecalho xmlns="http://www.ginfes.com.br/servico_enviar_lote_rps_envio_v03.xsd"><versaoDados>3</versaoDados></Cabecalho>`
+  return `<Cabecalho versaoDados="3"></Cabecalho>`
 }
 
 function buildEnviarLoteRpsInnerXml(config: GinfesConfig, rps: GinfesRps): string {
@@ -152,13 +152,14 @@ function buildEnviarLoteRpsInnerXml(config: GinfesConfig, rps: GinfesRps): strin
 }
 
 function buildEnviarLoteRpsXml(config: GinfesConfig, rps: GinfesRps): string {
-  const envioXml = escapeXmlForParam(buildEnviarLoteRpsInnerXml(config, rps))
+  const cabecalhoXml = buildCabecalhoXml()
+  const envioXml = buildEnviarLoteRpsInnerXml(config, rps)
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://homologacao.ginfes.com.br">
   <soap:Body>
     <ns1:RecepcionarLoteRpsV3>
-      <arg0>3</arg0>
+      <arg0>${cabecalhoXml}</arg0>
       <arg1>${envioXml}</arg1>
     </ns1:RecepcionarLoteRpsV3>
   </soap:Body>

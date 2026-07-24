@@ -27,14 +27,16 @@ export async function handleRenovacaoRoutes(
   const offset = Number(parsedUrl.searchParams.get('offset') ?? '0')
   const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 2000) : 200
   const safeOffset = Number.isFinite(offset) && offset >= 0 ? offset : 0
+  const viewerProfileId = parsedUrl.searchParams.get('viewer_profile_id')
+  const viewerPerfil = parsedUrl.searchParams.get('viewer_perfil')
 
   // GET /api/renovacoes — lista todos (ativos)
   if (method === 'GET' && parsedUrl.pathname === '/api/renovacoes') {
     const rows = scope === 'historico'
-      ? await renovacaoRepo.findHistorico(safeDays, safeLimit, safeOffset)
+      ? await renovacaoRepo.findHistorico(safeDays, safeLimit, safeOffset, viewerProfileId, viewerPerfil)
       : scope === 'todos'
-        ? await renovacaoRepo.findAll(safeLimit, safeOffset)
-        : await renovacaoRepo.findOperacionais(safeDays, safeLimit, safeOffset)
+        ? await renovacaoRepo.findAll(safeLimit, safeOffset, viewerProfileId, viewerPerfil)
+        : await renovacaoRepo.findOperacionais(safeDays, safeLimit, safeOffset, viewerProfileId, viewerPerfil)
     writeJson(res, 200, { ok: true, renovacoes: rows }, corsOrigin)
     return true
   }
