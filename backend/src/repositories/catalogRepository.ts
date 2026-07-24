@@ -796,8 +796,8 @@ export class CatalogRepository {
   }
 
   async deleteVenda(id: string) {
-    const venda = await this.db.query<{ id: string; pago: boolean; status_venda: string | null }>(
-      `select id, pago, status_venda
+    const venda = await this.db.query<{ id: string; pago: boolean; status_venda: string | null; cadastro_base_id: string | null; nome_faturamento: string | null; documento_faturamento: string | null; pedido_numero: string | null; protocolo_numero: string | null }>(
+      `select id, pago, status_venda, cadastro_base_id, nome_faturamento, documento_faturamento, pedido_numero, protocolo_numero
        from vendas_certificados
        where id = $1::uuid
        limit 1`,
@@ -805,9 +805,30 @@ export class CatalogRepository {
     )
     const row = venda.rows[0]
     if (!row) throw new Error('Venda nao encontrada.')
+    if (row.cadastro_base_id || String(row.nome_faturamento ?? '').trim() || String(row.documento_faturamento ?? '').trim()) {
+      throw new Error('Venda com cliente vinculado nao pode ser excluida definitivamente. Use cancelamento ou auditoria administrativa.')
+    }
     if (row.pago || row.status_venda === 'vendido' || row.status_venda === 'emitido') {
       throw new Error('Venda paga ou emitida nao pode ser excluida. Use cancelamento ou ajuste de protocolo.')
     }
+    await this.db.query(
+      `insert into vendas_auditoria_operacional (
+        acao, venda_id, pedido_numero, protocolo_numero, cliente_nome, documento,
+        status_venda, motivo, payload
+      ) values (
+        'exclusao', $1::uuid, $2, $3, $4, $5, $6, $7, $8::jsonb
+      )`,
+      [
+        row.id,
+        row.pedido_numero ?? null,
+        row.protocolo_numero ?? null,
+        row.nome_faturamento ?? null,
+        row.documento_faturamento ?? null,
+        row.status_venda ?? null,
+        'Exclusão definitiva permitida porque a venda não tinha vínculo de cliente.',
+        JSON.stringify({ pago: row.pago }),
+      ],
+    )
     await this.db.query(`delete from vendas_certificados where id = $1::uuid`, [id])
   }
 

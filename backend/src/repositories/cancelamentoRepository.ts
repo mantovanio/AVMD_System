@@ -16,6 +16,23 @@ export type CancelamentoRow = {
   created_at: string
 }
 
+export type VendaAuditoriaRow = {
+  id: string
+  acao: 'cancelamento' | 'exclusao'
+  venda_id: string
+  pedido_numero: string | null
+  protocolo_numero: string | null
+  cliente_nome: string | null
+  documento: string | null
+  status_venda: string | null
+  motivo: string | null
+  cancelamento_id: string | null
+  actor_id: string | null
+  actor_nome: string | null
+  payload: Record<string, unknown>
+  created_at: string
+}
+
 export type CreateCancelamentoInput = {
   venda_id: string
   motivo: string
@@ -32,6 +49,45 @@ export type CreateCancelamentoInput = {
 
 export class CancelamentoRepository {
   constructor(private readonly db: AivenSqlClient) {}
+
+  async recordVendaAudit(input: {
+    acao: 'cancelamento' | 'exclusao'
+    venda_id: string
+    pedido_numero?: string | null
+    protocolo_numero?: string | null
+    cliente_nome?: string | null
+    documento?: string | null
+    status_venda?: string | null
+    motivo?: string | null
+    cancelamento_id?: string | null
+    actor_id?: string | null
+    actor_nome?: string | null
+    payload?: Record<string, unknown>
+  }) {
+    const result = await this.db.query<VendaAuditoriaRow>(`
+      insert into vendas_auditoria_operacional (
+        acao, venda_id, pedido_numero, protocolo_numero, cliente_nome, documento,
+        status_venda, motivo, cancelamento_id, actor_id, actor_nome, payload
+      ) values (
+        $1, $2::uuid, $3, $4, $5, $6, $7, $8, $9::uuid, $10::uuid, $11, $12::jsonb
+      )
+      returning *
+    `, [
+      input.acao,
+      input.venda_id,
+      input.pedido_numero ?? null,
+      input.protocolo_numero ?? null,
+      input.cliente_nome ?? null,
+      input.documento ?? null,
+      input.status_venda ?? null,
+      input.motivo ?? null,
+      input.cancelamento_id ?? null,
+      input.actor_id ?? null,
+      input.actor_nome ?? null,
+      JSON.stringify(input.payload ?? {}),
+    ])
+    return result.rows[0] ?? null
+  }
 
   async create(input: CreateCancelamentoInput): Promise<CancelamentoRow> {
     const result = await this.db.query<CancelamentoRow>(
@@ -107,6 +163,53 @@ export class CancelamentoRepository {
         [input.venda_id, input.cancelado_por, input.motivo],
       )
 
+      await trx.query(
+        `insert into vendas_auditoria_operacional (
+          acao, venda_id, pedido_numero, protocolo_numero, cliente_nome, documento,
+          status_venda, motivo, cancelamento_id, actor_id, actor_nome, payload
+        )
+        select
+          'cancelamento',
+          v.id,
+          v.pedido_numero,
+          v.protocolo_numero,
+          coalesce(cb.nome, v.nome_faturamento),
+          coalesce(v.documento_faturamento, cb.cpf_cnpj),
+          v.status_venda,
+          $2::text,
+          $3::uuid,
+          $4::uuid,
+          p.nome,
+          jsonb_build_object(
+            'dentro_prazo_30d', $5::boolean,
+            'valor_reembolsado', $6::numeric,
+            'custo_operacional', $7::numeric,
+            'comissao_vendedor_revertida', $8::numeric,
+            'comissao_agente_revertida', $9::numeric,
+            'estorno_gateway_ref', $10::text,
+            'estorno_realizado', $11::boolean,
+            'observacoes', $12::text
+          )
+        from vendas_certificados v
+        left join cadastros_base cb on cb.id = v.cadastro_base_id
+        left join profiles p on p.id = $4::uuid
+        where v.id = $1::uuid`,
+        [
+          input.venda_id,
+          input.motivo,
+          inserted.rows[0].id,
+          input.cancelado_por,
+          input.dentro_prazo_30d,
+          input.valor_reembolsado ?? null,
+          input.custo_operacional ?? 0,
+          input.comissao_vendedor_revertida,
+          input.comissao_agente_revertida,
+          input.estorno_gateway_ref ?? null,
+          input.estorno_realizado ?? false,
+          input.observacoes ?? null,
+        ],
+      )
+
       return inserted.rows[0]
     })
   }
@@ -122,6 +225,17 @@ export class CancelamentoRepository {
   async list(limit = 50, offset = 0): Promise<CancelamentoRow[]> {
     const result = await this.db.query<CancelamentoRow>(
       'select * from cancelamentos_venda order by created_at desc limit $1 offset $2',
+      [limit, offset],
+    )
+    return result.rows
+  }
+
+  async listAuditoria(limit = 50, offset = 0): Promise<VendaAuditoriaRow[]> {
+    const result = await this.db.query<VendaAuditoriaRow>(
+      `select *
+       from vendas_auditoria_operacional
+       order by created_at desc
+       limit $1 offset $2`,
       [limit, offset],
     )
     return result.rows

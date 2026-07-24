@@ -105,6 +105,20 @@ type VendaRow = VendaCertificado & {
   pontos_atendimento: { nome: string } | null
 }
 
+type VendaAuditoriaRow = {
+  id: string
+  acao: 'cancelamento' | 'exclusao'
+  venda_id: string
+  pedido_numero: string | null
+  protocolo_numero: string | null
+  cliente_nome: string | null
+  documento: string | null
+  status_venda: string | null
+  motivo: string | null
+  actor_nome: string | null
+  created_at: string
+}
+
 type VendaColumnKey =
   | 'select'
   | 'pedido'
@@ -984,6 +998,9 @@ export default function Comercial() {
   const [loadingSafewebVendas, setLoadingSafewebVendas] = useState(false)
   const [safewebViewerOpen, setSafewebViewerOpen] = useState(false)
   const [safewebDocumentoFiltro, setSafewebDocumentoFiltro] = useState('')
+  const [vendaAuditoria, setVendaAuditoria] = useState<VendaAuditoriaRow[]>([])
+  const [loadingVendaAuditoria, setLoadingVendaAuditoria] = useState(false)
+  const [vendaAuditoriaAberta, setVendaAuditoriaAberta] = useState(false)
   // tabelas form
   const [selectedTabelaId, setSelectedTabelaId]   = useState<string | null>(null)
   const [showFormTabela, setShowFormTabela]         = useState(false)
@@ -4190,6 +4207,18 @@ export default function Comercial() {
       : await getAivenCommercialSafewebVendas()
     setSafewebVendas(data as VendaRow[])
     setLoadingSafewebVendas(false)
+  }
+
+  async function carregarAuditoriaVendas() {
+    setLoadingVendaAuditoria(true)
+    const response = await fetch(getApiUrl('/cancelamentos/auditoria'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limit: 200, offset: 0 }),
+    }).catch(() => null)
+    const data = response ? await response.json().catch(() => null) : null
+    setVendaAuditoria((data?.auditoria ?? []) as VendaAuditoriaRow[])
+    setLoadingVendaAuditoria(false)
   }
 
   // tabela participantes
@@ -8598,6 +8627,89 @@ export default function Comercial() {
                 </div>
               )}
             </div>
+
+            {isAdminProfile(profile) && (
+              <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 mt-6">
+                <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                      <ClipboardList size={18} className="text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-800 dark:text-gray-100">Auditoria de vendas excluídas / canceladas</h3>
+                      <p className="text-xs text-gray-500">Rastro operacional para validar cancelamentos e exclusões com o administrador.</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !vendaAuditoriaAberta
+                      setVendaAuditoriaAberta(next)
+                      if (next) void carregarAuditoriaVendas()
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-xl transition-colors"
+                  >
+                    {vendaAuditoriaAberta ? 'Fechar' : 'Ver auditoria'}
+                  </button>
+                </div>
+
+                {vendaAuditoriaAberta && (
+                  <div className="mt-4">
+                    <div className="flex justify-end mb-3">
+                      <button
+                        type="button"
+                        onClick={() => void carregarAuditoriaVendas()}
+                        className="px-4 py-2 rounded-xl border border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/30 text-sm"
+                      >
+                        Atualizar auditoria
+                      </button>
+                    </div>
+                    {loadingVendaAuditoria ? (
+                      <div className="flex items-center gap-2 text-gray-400 text-sm py-4">
+                        <Loader2 size={16} className="animate-spin" /> Carregando...
+                      </div>
+                    ) : vendaAuditoria.length === 0 ? (
+                      <p className="text-sm text-gray-400 py-4">Nenhum registro de auditoria encontrado.</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+                        <table className="w-full text-xs min-w-[1100px]">
+                          <thead>
+                            <tr className="bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left border-b border-gray-200 dark:border-gray-800">
+                              {['Ação', 'Pedido', 'Cliente', 'Documento', 'Status', 'Motivo', 'Responsável', 'Data'].map(h => (
+                                <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {vendaAuditoria.map(item => (
+                              <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                <td className="px-3 py-2 whitespace-nowrap">
+                                  <span className={cn(
+                                    'px-2 py-1 rounded-full text-[11px] font-semibold',
+                                    item.acao === 'cancelamento'
+                                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                                      : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+                                  )}>
+                                    {item.acao === 'cancelamento' ? 'Cancelamento' : 'Exclusão'}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{item.pedido_numero ?? '—'}</td>
+                                <td className="px-3 py-2 text-gray-700 dark:text-gray-200 max-w-[240px] truncate">{item.cliente_nome ?? '—'}</td>
+                                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{item.documento ?? '—'}</td>
+                                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{item.status_venda ?? '—'}</td>
+                                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 max-w-[260px] truncate">{item.motivo ?? '—'}</td>
+                                <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{item.actor_nome ?? '—'}</td>
+                                <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{new Date(item.created_at).toLocaleString('pt-BR')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
           </div>
         )}

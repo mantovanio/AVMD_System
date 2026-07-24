@@ -78,6 +78,13 @@ export async function handleCancelamentoRoutes(
     return true
   }
 
+  if (method === 'POST' && url === '/api/cancelamentos/auditoria') {
+    const body = await readJson<{ limit?: number; offset?: number }>(req)
+    const auditoria = await cancelamentoRepo.listAuditoria(body.limit, body.offset)
+    writeJson(res, 200, { ok: true, auditoria }, corsOrigin)
+    return true
+  }
+
   if (method === 'POST' && url.startsWith('/api/cancelamentos/')) {
     const vendaId = url.replace('/api/cancelamentos/', '')
     if (vendaId) {
