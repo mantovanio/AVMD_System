@@ -65,6 +65,8 @@ interface ConversationRow {
   cpf: string | null
   cnpj: string | null
   observacoes: string | null
+  produto: string | null
+  data_vencimento: string | null
   contato_status: string | null
   agente_atual: string | null
   agente_desde: string | null
@@ -140,6 +142,8 @@ interface ContactEditForm {
   company: string
   phone: string
   email: string
+  product: string
+  expiration: string
   status: string
   observations: string
 }
@@ -724,6 +728,8 @@ export default function ChatInboxCRM() {
     company: '',
     phone: '',
     email: '',
+    product: '',
+    expiration: '',
     status: '',
     observations: '',
   })
@@ -938,6 +944,8 @@ export default function ChatInboxCRM() {
         company: '',
         phone: '',
         email: '',
+        product: '',
+        expiration: '',
         status: '',
         observations: '',
       })
@@ -964,6 +972,8 @@ export default function ChatInboxCRM() {
       company: selectedConversation.empresa_nome || '',
       phone: selectedConversation.fila === 'email' ? '' : (selectedConversation.telefone || selectedConversation.document_key || ''),
       email: selectedConversation.email_principal || (selectedConversation.fila === 'email' ? selectedConversation.document_key : ''),
+      product: selectedConversation.produto || '',
+      expiration: selectedConversation.data_vencimento ? selectedConversation.data_vencimento.slice(0, 10) : '',
       status: selectedConversation.contato_status || '',
       observations: selectedConversation.observacoes || '',
     })
@@ -976,6 +986,8 @@ export default function ChatInboxCRM() {
     selectedConversation?.document_key,
     selectedConversation?.email_principal,
     selectedConversation?.nome_crm,
+    selectedConversation?.produto,
+    selectedConversation?.data_vencimento,
     selectedConversation?.observacoes,
     selectedConversation?.telefone,
   ])
@@ -1691,12 +1703,16 @@ export default function ChatInboxCRM() {
     const cleanedCompany = contactEdit.company.trim()
     const cleanedPhone = contactEdit.phone.trim()
     const cleanedEmail = contactEdit.email.trim()
+    const cleanedProduct = contactEdit.product.trim()
+    const cleanedExpiration = contactEdit.expiration.trim()
     const cleanedStatus = contactEdit.status.trim()
     const cleanedObs = contactEdit.observations.trim()
     const resolvedName = cleanedName || selectedConversation.cliente_nome || selectedConversation.nome_crm || null
     const resolvedCompany = cleanedCompany || selectedConversation.empresa_nome || null
     const resolvedPhone = cleanedPhone || selectedConversation.telefone || selectedConversation.document_key || null
     const resolvedEmail = cleanedEmail || null
+    const resolvedProduct = cleanedProduct || null
+    const resolvedExpiration = cleanedExpiration || null
     const resolvedStatus = cleanedStatus || null
     const resolvedObs = cleanedObs || null
 
@@ -1724,6 +1740,8 @@ export default function ChatInboxCRM() {
             empresa_nome: resolvedCompany,
             telefone: resolvedPhone,
             email: resolvedEmail,
+            produto: resolvedProduct,
+            data_vencimento: resolvedExpiration,
             contato_status: resolvedStatus,
             observacoes: resolvedObs,
           }),
@@ -1739,6 +1757,8 @@ export default function ChatInboxCRM() {
             empresa_nome: resolvedCompany,
             telefone: resolvedPhone,
             email: resolvedEmail,
+            produto: resolvedProduct,
+            data_vencimento: resolvedExpiration,
             observacoes: resolvedObs,
             conversation_id: selectedConversation.id,
           }),
@@ -1763,6 +1783,8 @@ export default function ChatInboxCRM() {
               telefone: resolvedPhone,
               crm_customer_id: nextCustomerId ?? item.crm_customer_id,
               nome_crm: resolvedName,
+              produto: resolvedProduct,
+              data_vencimento: resolvedExpiration,
             }
           : item
       )))
@@ -1772,6 +1794,8 @@ export default function ChatInboxCRM() {
         company: resolvedCompany ?? prev.company,
         phone: resolvedPhone ?? prev.phone,
         email: resolvedEmail ?? prev.email,
+        product: resolvedProduct ?? prev.product,
+        expiration: resolvedExpiration ?? prev.expiration,
         status: resolvedStatus ?? prev.status,
         observations: resolvedObs ?? prev.observations,
       }))
@@ -1782,6 +1806,8 @@ export default function ChatInboxCRM() {
         resolvedCompany ? `Empresa: ${resolvedCompany}` : null,
         resolvedPhone ? `Telefone: ${resolvedPhone}` : null,
         resolvedEmail ? `Email: ${resolvedEmail}` : null,
+        resolvedProduct ? `Produto: ${resolvedProduct}` : null,
+        resolvedExpiration ? `Vencimento: ${new Date(resolvedExpiration).toLocaleDateString('pt-BR')}` : null,
         resolvedStatus ? `Status CRM: ${resolvedStatus}` : null,
         resolvedObs ? `Observacoes: ${resolvedObs}` : null,
       ].filter(Boolean).join(' | ')
@@ -1813,6 +1839,8 @@ export default function ChatInboxCRM() {
             customer_id: nextCustomerId,
             nome: resolvedName,
             email: resolvedEmail,
+            produto: resolvedProduct,
+            data_vencimento: resolvedExpiration,
             status: resolvedStatus,
             observacoes: resolvedObs,
             historico: historyText,
@@ -1827,6 +1855,8 @@ export default function ChatInboxCRM() {
         company: resolvedCompany || '',
         phone: resolvedPhone || '',
         email: resolvedEmail || '',
+        product: resolvedProduct || '',
+        expiration: resolvedExpiration || '',
         status: resolvedStatus || '',
         observations: resolvedObs || '',
       }))
@@ -2902,6 +2932,26 @@ export default function ChatInboxCRM() {
                             onChange={event => setContactEdit(prev => ({ ...prev, email: event.target.value }))}
                             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
                             placeholder="Opcional"
+                          />
+                        </label>
+
+                        <label className="block space-y-1">
+                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Produto</span>
+                          <input
+                            value={contactEdit.product}
+                            onChange={event => setContactEdit(prev => ({ ...prev, product: event.target.value }))}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                            placeholder="Ex.: e-CPF A1"
+                          />
+                        </label>
+
+                        <label className="block space-y-1">
+                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Vencimento</span>
+                          <input
+                            type="date"
+                            value={contactEdit.expiration}
+                            onChange={event => setContactEdit(prev => ({ ...prev, expiration: event.target.value }))}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
                           />
                         </label>
 

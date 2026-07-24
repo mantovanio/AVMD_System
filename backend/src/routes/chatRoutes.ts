@@ -1364,8 +1364,10 @@ export async function handleChatRoutes(
       email: string | null
       cpf: string | null
       cnpj: string | null
+      produto: string | null
+      data_vencimento: string | null
     }>(
-      `SELECT nome, empresa_nome, telefone, email, cpf, cnpj
+      `SELECT nome, empresa_nome, telefone, email, cpf, cnpj, produto, data_vencimento
          FROM crm_customers
         WHERE id = $1::uuid
         LIMIT 1`,
@@ -1375,7 +1377,7 @@ export async function handleChatRoutes(
       writeJson(res, 404, { ok: false, error: 'Cliente CRM nao encontrado.' }, corsOrigin)
       return true
     }
-    const allowedFields = ['nome', 'empresa_nome', 'telefone', 'email', 'contato_status', 'observacoes']
+    const allowedFields = ['nome', 'empresa_nome', 'telefone', 'email', 'produto', 'data_vencimento', 'contato_status', 'observacoes']
     const updates: string[] = []
     const values: unknown[] = []
     let idx = 1
@@ -1466,10 +1468,13 @@ export async function handleChatRoutes(
   if (method === 'POST' && url === '/api/chat/crm/customers') {
     const body = await readJson<JsonRecord>(req)
     const nome = asString(body.nome) || 'Contato sem nome'
+    const empresaNome = asString(body.empresa_nome)
     const telefone = asString(body.telefone)
     const email = asString(body.email)
     const cpf = asString(body.cpf)
     const cnpj = asString(body.cnpj)
+    const produto = asString(body.produto)
+    const dataVencimento = asString(body.data_vencimento)
     const observacoes = asString(body.observacoes)
     if (!telefone && !email && !cpf && !cnpj) {
       writeJson(res, 400, { ok: false, error: 'telefone, email, cpf ou cnpj obrigatorio.' }, corsOrigin)
@@ -1516,19 +1521,21 @@ export async function handleChatRoutes(
                 email = coalesce($5, email),
                 cpf = coalesce($6, cpf),
                 cnpj = coalesce($7, cnpj),
-                observacoes = coalesce($8, observacoes),
-                cadastro_base_id = coalesce($9::uuid, cadastro_base_id),
+                produto = coalesce($8, produto),
+                data_vencimento = coalesce($9::date, data_vencimento),
+                observacoes = coalesce($10, observacoes),
+                cadastro_base_id = coalesce($11::uuid, cadastro_base_id),
                 updated_at = now()
           WHERE id = $1::uuid`,
-        [customerId, nome || null, asString(body.empresa_nome) || null, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
+        [customerId, nome || null, empresaNome || null, telefone || null, email || null, cleanCpf, cleanCnpj, produto || null, dataVencimento || null, observacoes || null, resolvedCadastro?.id ?? null],
       )
     } else {
       try {
         const result = await db.query<{ id: string }>(
-          `INSERT INTO crm_customers (nome, empresa_nome, telefone, email, cpf, cnpj, observacoes, cadastro_base_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid)
+          `INSERT INTO crm_customers (nome, empresa_nome, telefone, email, cpf, cnpj, produto, data_vencimento, observacoes, cadastro_base_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9, $10::uuid)
            RETURNING id`,
-          [nome, asString(body.empresa_nome) || null, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
+          [nome, empresaNome || null, telefone || null, email || null, cleanCpf, cleanCnpj, produto || null, dataVencimento || null, observacoes || null, resolvedCadastro?.id ?? null],
         )
         customerId = result.rows[0]?.id ?? null
       } catch (error) {
@@ -1554,11 +1561,13 @@ export async function handleChatRoutes(
                   email = coalesce($4, email),
                   cpf = coalesce($5, cpf),
                   cnpj = coalesce($6, cnpj),
-                  observacoes = coalesce($7, observacoes),
-                  cadastro_base_id = coalesce($8::uuid, cadastro_base_id),
+                  produto = coalesce($7, produto),
+                  data_vencimento = coalesce($8::date, data_vencimento),
+                  observacoes = coalesce($9, observacoes),
+                  cadastro_base_id = coalesce($10::uuid, cadastro_base_id),
                   updated_at = now()
             WHERE id = $1::uuid`,
-          [customerId, nome || null, asString(body.empresa_nome) || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
+          [customerId, nome || null, empresaNome || null, email || null, cleanCpf, cleanCnpj, produto || null, dataVencimento || null, observacoes || null, resolvedCadastro?.id ?? null],
         )
       }
     }
