@@ -34,6 +34,7 @@ const safewebImportJobs = new Map<string, SafewebImportJob>()
 const ISABELLA_VIDAL_PROFILE_ID = 'ad3436f8-eb15-4fbe-a351-3b6b56d2a17e'
 const execFileAsync = promisify(execFile)
 const NFSE_CERT_STORAGE_DIR = resolve('storage/certificados-digitais')
+const NFSE_STORAGE_ROOT = resolve('storage')
 
 function isFilled(value: unknown) {
   return String(value ?? '').trim().length > 0
@@ -63,11 +64,23 @@ function buildNfseRequiredChecks(config: Record<string, unknown>) {
 async function certificateFileExists(relativePath: unknown) {
   const certPath = String(relativePath ?? '').trim().replace(/\\/g, '/')
   if (!certPath || certPath.includes('..') || certPath.startsWith('/')) return false
-  const absolutePath = resolve(NFSE_CERT_STORAGE_DIR, certPath)
-  if (!absolutePath.startsWith(NFSE_CERT_STORAGE_DIR)) return false
+  const candidates = [
+    resolve(NFSE_CERT_STORAGE_DIR, certPath),
+    certPath.startsWith('certificados-digitais/')
+      ? resolve(NFSE_STORAGE_ROOT, certPath)
+      : null,
+    certPath.startsWith('storage/certificados-digitais/')
+      ? resolve(certPath)
+      : null,
+  ].filter((value): value is string => Boolean(value))
+
   try {
-    await access(absolutePath)
-    return true
+    for (const absolutePath of candidates) {
+      if (!absolutePath.startsWith(NFSE_STORAGE_ROOT)) continue
+      await access(absolutePath)
+      return true
+    }
+    return false
   } catch {
     return false
   }
