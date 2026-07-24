@@ -1715,6 +1715,7 @@ export default function Comercial() {
           venda_id: input.vendaId,
           tipo: 'venda_pos_compra',
           payment_flow: paymentFlow,
+          obrigatorio: true,
         },
       }))
     }
@@ -2235,6 +2236,19 @@ export default function Comercial() {
     if (paymentFlow === 'boleto' && !formV2.data_vencimento) { showMsg('Selecione o vencimento do boleto.'); return }
     if (paymentFlow === 'cartao' && Number(formV2.payment_installments || 0) < 1) { showMsg('Selecione a quantidade de parcelas do cartão.'); return }
     if (!currentUserId) { showMsg('Usuário não autenticado.'); return }
+
+    const cli = clienteSelecionadoObj
+    const emailCliente = cli?.email?.trim() || ''
+    const telefoneCliente = cli?.telefone?.trim() || ''
+    if (!emailCliente) {
+      showMsg('O e-mail do cliente é obrigatório para concluir a venda. Atualize o cadastro do cliente antes de prosseguir.', 'err')
+      return
+    }
+    if (!telefoneCliente) {
+      showMsg('O telefone do cliente é obrigatório para concluir a venda. Atualize o cadastro do cliente antes de prosseguir.', 'err')
+      return
+    }
+
     setSalvandoV(true)
 
     try {
@@ -4445,12 +4459,27 @@ export default function Comercial() {
     registrarFalta('CPF/CNPJ do tomador', tomador.documento)
     registrarFalta('e-mail do tomador', tomador.email)
     registrarFalta('telefone do tomador', tomador.telefone)
-    registrarFalta('logradouro do tomador', venda.logradouro)
-    registrarFalta('número do tomador', venda.numero)
-    registrarFalta('bairro do tomador', venda.bairro)
-    registrarFalta('cidade do tomador', venda.cidade)
-    registrarFalta('UF do tomador', venda.uf)
-    registrarFalta('CEP do tomador', venda.cep)
+
+    const docTomador = String(tomador.documento ?? '').replace(/\D/g, '')
+    const isCnpjTomador = docTomador.length === 14
+
+    if (isCnpjTomador) {
+      registrarFalta('razão social do tomador (CNPJ)', tomador.nome)
+      registrarFalta('endereço do tomador (CNPJ)', tomador.endereco)
+      registrarFalta('número do tomador', venda.numero)
+      registrarFalta('bairro do tomador', venda.bairro)
+      registrarFalta('cidade do tomador', venda.cidade)
+      registrarFalta('UF do tomador', venda.uf)
+      registrarFalta('CEP do tomador', venda.cep)
+      registrarFalta('inscrição estadual do tomador (CNPJ)', venda.inscricao_estadual)
+    } else {
+      registrarFalta('logradouro do tomador (CPF)', venda.logradouro)
+      registrarFalta('número do tomador', venda.numero)
+      registrarFalta('bairro do tomador', venda.bairro)
+      registrarFalta('cidade do tomador', venda.cidade)
+      registrarFalta('UF do tomador', venda.uf)
+      registrarFalta('CEP do tomador', venda.cep)
+    }
     registrarFalta('tipo de emissão da venda', produtoResumo.tipoEmissao)
     registrarFalta('código do serviço', configuracaoFiscal.codigo_servico_municipio)
 
