@@ -48,18 +48,18 @@ type ClerkErrorLike = {
   status?: number
 }
 
-type ClerkResetPasswordFlow = {
-  resetPasswordEmailCode: {
-    sendCode: () => Promise<{ error: unknown }>
-    verifyCode: (params: { code: string }) => Promise<{ error: unknown }>
-    submitPassword: (params: { password: string; signOutOfOtherSessions?: boolean }) => Promise<{ error: unknown }>
-  }
-}
-
 type ClerkEmailSecondFactor = {
   strategy?: string
   emailAddressId?: string
   safeIdentifier?: string
+}
+
+type ClerkPasswordResetSignIn = {
+  create: (params: { strategy: 'reset_password_email_code'; identifier: string }) => Promise<unknown>
+  resetPasswordEmailCode: {
+    sendCode: () => Promise<{ error: unknown }>
+  }
+  attemptFirstFactor: (params: { strategy: 'reset_password_email_code'; code: string; password: string }) => Promise<{ error?: unknown; status?: string }>
 }
 
 type ClerkSignInAttempt = {
@@ -438,9 +438,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const recoverySignIn = signIn as typeof signIn & ClerkResetPasswordFlow
+        const recoverySignIn = signIn as typeof signIn & ClerkPasswordResetSignIn
+
+        await withTimeout(
+          recoverySignIn.create({
+            strategy: 'reset_password_email_code',
+            identifier: normalizedEmail,
+          }),
+          15000,
+          'O Clerk não respondeu ao preparar a recuperação de senha.',
+        )
+
         const sendCodeResult = await withTimeout(
-          recoverySignIn.resetPasswordEmailCode.sendCode(),
+          recoverySignIn.resetPasswordEmailCode.sendCode() as Promise<{ error?: unknown }>,
           15000,
           'O Clerk não respondeu ao enviar o código de recuperação.',
         )
@@ -475,7 +485,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function confirmPasswordReset(code: string, newPassword: string) {
     try {
-      const recoverySignIn = signIn as typeof signIn & ClerkResetPasswordFlow
+      const recoverySignIn = signIn as typeof signIn & ClerkPasswordResetSignIn
       if (!signInLoaded || !signIn) {
         const clerkReady = await waitForClerkBootstrap()
         if (clerkReady && signIn) {
@@ -490,26 +500,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const verifyResult = await withTimeout(
-        recoverySignIn.resetPasswordEmailCode.verifyCode({ code: normalizedCode }),
+        recoverySignIn.attemptFirstFactor({
+          strategy: 'reset_password_email_code',
+          code: normalizedCode,
+          password: newPassword,
+        }) as Promise<{ error?: unknown; status?: string }>,
         15000,
         'O Clerk não respondeu ao validar o código de recuperação.',
       )
 
       if (verifyResult.error) {
         return { error: getClerkErrorMessage(verifyResult.error, 'Código inválido ou expirado. Solicite um novo código.') }
-      }
-
-      const submitResult = await withTimeout(
-        recoverySignIn.resetPasswordEmailCode.submitPassword({
-          password: newPassword,
-          signOutOfOtherSessions: true,
-        }),
-        15000,
-        'O Clerk não respondeu ao atualizar a senha.',
-      )
-
-      if (submitResult.error) {
-        return { error: getClerkErrorMessage(submitResult.error, 'Falha ao atualizar a senha. Tente novamente.') }
       }
 
       return { error: null }
