@@ -152,10 +152,13 @@ function extractCertifastFields(body: ScheduleEmailWebhookBody): ExtractedSchedu
   const content = `${subject}\n${bodyText}`
   const subjectLower = subject.toLowerCase()
   const bodyLower = bodyText.toLowerCase()
-
-  const date = matchFirst(content, [/Data:\s*(.+)/i])
-  const hour = matchFirst(content, [/Hora:\s*(.+)/i])
-  const dateTime = parsePtBrDateTime(date && hour ? `${date} ${hour}` : subject)
+  const dateTimeText =
+    matchFirst(content, [/Data e horário\s*:?\s*(.+?)(?:\s*(?:Nome completo|CNPJ \/ CPF|Telefone|E-?mail|Pedido|Código|Produto|Posto|$))/i])
+    || matchFirst(content, [/Data e horário\s*(.+)/i])
+    || null
+  const date = matchFirst(content, [/Data:\s*(.+?)(?:\s*(?:Hora|Posto|Produto|Pedido|Código|$))/i])
+  const hour = matchFirst(content, [/Hora:\s*(.+?)(?:\s*(?:Posto|Produto|Pedido|Código|$))/i])
+  const dateTime = parsePtBrDateTime(dateTimeText ?? (date && hour ? `${date} ${hour}` : subject))
   const eventType = subjectLower.includes('cancel') || bodyLower.includes('cancel')
     ? 'cancelamento'
     : subjectLower.includes('reag') || bodyLower.includes('reag')
@@ -164,18 +167,20 @@ function extractCertifastFields(body: ScheduleEmailWebhookBody): ExtractedSchedu
 
   return {
     event_type: eventType,
-    customer_name: matchFirst(content, [/Cliente:\s*(.+)/i]),
+    customer_name:
+      matchFirst(content, [/Cliente:\s*(.+?)(?:\s*(?:CPF\/CNPJ|CNPJ\/CPF|Telefone|E-?mail|Pedido|Código|Produto|Posto|$))/i])
+      || matchFirst(content, [/Nome completo\s*:?\s*(.+?)(?:\s*(?:CNPJ \/ CPF|Telefone|E-?mail|$))/i]),
     customer_document: matchFirst(content, [/(?:CPF\/CNPJ|CNPJ\/CPF):\s*(.+)/i]),
-    customer_phone: matchFirst(content, [/Telefone(?:\s*Celular)?:\s*(.+)/i]),
-    customer_email: matchFirst(content, [/Email:\s*(.+)/i]),
-    pedido_numero: matchFirst(content, [/Pedido:\s*(.+)/i, /pedido código\s*(\d+)/i]),
-    protocolo_numero: matchFirst(content, [/Código:\s*(.+)/i]),
-    product_name: matchFirst(content, [/Produto:\s*(.+)/i]),
-    location_name: matchFirst(content, [/Posto:\s*(.+)/i]),
+    customer_phone: matchFirst(content, [/Telefone(?:\s*Celular)?:\s*(.+?)(?:\s*(?:E-?mail|Email|Pedido|Código|Produto|Posto|$))/i]),
+    customer_email: matchFirst(content, [/(?:E-?mail|Email):\s*([^\s]+@[^\s]+)/i]),
+    pedido_numero: matchFirst(content, [/Pedido:\s*(.+?)(?:\s*(?:Código|Produto|Posto|Data|Hora|$))/i, /pedido código\s*(\d+)/i]),
+    protocolo_numero: matchFirst(content, [/Código:\s*(.+?)(?:\s*(?:Produto|Posto|Data|Hora|$))/i]),
+    product_name: matchFirst(content, [/Produto:\s*(.+?)(?:\s*(?:Data|Hora|Nome completo|CNPJ|CPF|Telefone|E-?mail|$))/i]),
+    location_name: matchFirst(content, [/Posto:\s*(.+?)(?:\s*(?:Data|Hora|Nome completo|CNPJ|CPF|Telefone|E-?mail|$))/i]),
     data_agendada: dateTime,
     observacoes: compactSpaces([
-      matchFirst(content, [/Produto:\s*(.+)/i]),
-      matchFirst(content, [/Posto:\s*(.+)/i]),
+      matchFirst(content, [/Produto:\s*(.+?)(?:\s*(?:Data|Hora|Nome completo|CNPJ|CPF|Telefone|E-?mail|$))/i]),
+      matchFirst(content, [/Posto:\s*(.+?)(?:\s*(?:Data|Hora|Nome completo|CNPJ|CPF|Telefone|E-?mail|$))/i]),
     ].filter(Boolean).join(' | ')) || null,
     source_sender: normalizeText(body.from),
   }
