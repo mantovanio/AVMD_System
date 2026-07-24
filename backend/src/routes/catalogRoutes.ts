@@ -74,16 +74,17 @@ async function certificateFileExists(relativePath: unknown) {
       : null,
   ].filter((value): value is string => Boolean(value))
 
-  try {
-    for (const absolutePath of candidates) {
+  for (const absolutePath of candidates) {
+    try {
       if (!absolutePath.startsWith(NFSE_STORAGE_ROOT)) continue
       await access(absolutePath)
       return true
+    } catch {
+      continue
     }
-    return false
-  } catch {
-    return false
   }
+
+  return false
 }
 
 async function validatePfxWithOpenSsl(pfx: Buffer, senha: string) {
