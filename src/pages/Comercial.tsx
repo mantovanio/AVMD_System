@@ -5692,10 +5692,28 @@ export default function Comercial() {
                         </div>
                         {formV2.cadastro_base_id && clienteSelecionadoObj && (
                           <div className="mt-3 rounded-lg border border-green-200 dark:border-green-800/40 bg-green-50 dark:bg-green-950/20 px-3 py-2">
-                            <p className="text-xs text-green-700 dark:text-green-300">
-                              <Check size={12} className="inline mr-1" />
-                              Cliente selecionado: <strong>{clienteSelecionadoObj.nome}</strong> ({clienteSelecionadoObj.cpf_cnpj})
-                            </p>
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="text-xs text-green-700 dark:text-green-300">
+                                <Check size={12} className="inline mr-1" />
+                                Cliente selecionado: <strong>{clienteSelecionadoObj.nome}</strong> ({clienteSelecionadoObj.cpf_cnpj})
+                                <br />
+                                <span className="text-[11px] text-green-600/90 dark:text-green-400/90">
+                                  E-mail: {clienteSelecionadoObj.email?.trim() || 'não informado'} · Telefone: {clienteSelecionadoObj.telefone?.trim() || 'não informado'}
+                                </span>
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => abrirEditarCliente(formV2.cadastro_base_id)}
+                                className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg border border-green-300 text-green-700 hover:bg-green-100 dark:border-green-700 dark:text-green-300 dark:hover:bg-green-900/30"
+                              >
+                                Editar cadastro
+                              </button>
+                            </div>
+                            {(!clienteSelecionadoObj.email?.trim() || !clienteSelecionadoObj.telefone?.trim()) && (
+                              <div className="mt-2 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/25 border border-amber-200 dark:border-amber-800/40 rounded-lg px-2.5 py-2">
+                                Este cadastro ainda está incompleto. Use o botão “Editar cadastro” para preencher e-mail e telefone antes de concluir a venda.
+                              </div>
+                            )}
                           </div>
                         )}
                         <button type="button" onClick={() => {
