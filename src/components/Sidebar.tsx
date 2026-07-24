@@ -102,7 +102,7 @@ function IconRail({
 }) {
   return (
     <div className={cn(
-      'flex flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0 transition-[width] duration-200',
+      'relative flex flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0 transition-[width] duration-200',
       expanded ? 'w-64' : 'w-16',
     )}>
       <div className={cn('flex items-center mb-4 px-2', expanded ? 'justify-between' : 'justify-center')}>
