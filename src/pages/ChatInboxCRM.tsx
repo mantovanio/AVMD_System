@@ -767,9 +767,9 @@ export default function ChatInboxCRM() {
     return false
   }, [humanOverrideIds, selectedConversation])
 
-  const currentHumanAgentName = selectedConversation?.agente_atual
+  const currentHumanAgentName = profile?.nome
+    || selectedConversation?.agente_atual
     || selectedConversation?.agente_nome
-    || profile?.nome
     || 'Humano'
 
   const displayMessages = useMemo(() => {
@@ -1429,7 +1429,7 @@ export default function ChatInboxCRM() {
 
     try {
       const payload = nextValue
-        ? { atendimento_humano: true, agente_nome: selectedConversation.agente_atual ?? profile?.nome ?? selectedConversation.agente_nome }
+        ? { atendimento_humano: true, agente_nome: profile?.nome ?? selectedConversation.agente_atual ?? selectedConversation.agente_nome }
         : { atendimento_humano: false, agente_nome: null }
 
       await fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}`), {
