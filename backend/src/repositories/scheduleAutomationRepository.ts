@@ -26,6 +26,8 @@ function buildScheduleInboxMessage(input: {
   customerPhone?: string | null
   customerDocument?: string | null
   productName?: string | null
+  productBrand?: string | null
+  operationBrand?: string | null
   pedidoNumero?: string | null
   protocoloNumero?: string | null
   dataAgendada?: string | null
@@ -46,6 +48,8 @@ function buildScheduleInboxMessage(input: {
     input.customerDocument ? `CPF/CNPJ: ${input.customerDocument}` : null,
     input.customerEmail ? `E-mail: ${input.customerEmail}` : null,
     input.productName ? `Produto: ${input.productName}` : null,
+    input.productBrand ? `Marca do produto: ${input.productBrand}` : null,
+    input.operationBrand ? `Operacao: ${input.operationBrand}` : null,
     input.pedidoNumero ? `Pedido: ${input.pedidoNumero}` : null,
     input.protocoloNumero ? `Protocolo: ${input.protocoloNumero}` : null,
     input.dataAgendada ? `Data agendada: ${formatDateTimeBr(input.dataAgendada)}` : null,
@@ -323,6 +327,8 @@ export class ScheduleAutomationRepository {
     customerPhone?: string | null
     customerDocument?: string | null
     productName?: string | null
+    productBrand?: string | null
+    operationBrand?: string | null
     pedidoNumero?: string | null
     protocoloNumero?: string | null
     dataAgendada?: string | null
@@ -338,6 +344,30 @@ export class ScheduleAutomationRepository {
     const normalizedCustomerPhone = normalizeText(input.customerPhone)
     const normalizedFrom = normalizeText(input.from)
     const normalizedMailbox = normalizeText(input.mailbox)
+    const normalizedProductName = normalizeText(input.productName)
+    const normalizedProductBrand = normalizeText(input.productBrand)
+    const normalizedOperationBrand = normalizeText(input.operationBrand)
+    const normalizedPedidoNumero = normalizeText(input.pedidoNumero)
+    const normalizedProtocoloNumero = normalizeText(input.protocoloNumero)
+    const normalizedDataAgendada = normalizeText(input.dataAgendada)
+    const normalizedLocationName = normalizeText(input.locationName)
+    const normalizedSourceSender = normalizeText(input.sourceSender)
+    const customerContextNotes = [
+      `Origem: ${input.source}`,
+      normalizedProductBrand ? `Marca do produto: ${normalizedProductBrand}` : null,
+      normalizedOperationBrand ? `Operacao: ${normalizedOperationBrand}` : null,
+      normalizedProductName ? `Produto: ${normalizedProductName}` : null,
+      normalizedPedidoNumero ? `Pedido: ${normalizedPedidoNumero}` : null,
+      normalizedProtocoloNumero ? `Protocolo: ${normalizedProtocoloNumero}` : null,
+      normalizedDataAgendada ? `Data agendada: ${formatDateTimeBr(normalizedDataAgendada)}` : null,
+      normalizedLocationName ? `Posto: ${normalizedLocationName}` : null,
+      normalizedSourceSender ? `Remetente: ${normalizedSourceSender}` : null,
+      normalizedCustomerName ? `Cliente: ${normalizedCustomerName}` : null,
+      normalizedCustomerPhone ? `Telefone: ${normalizedCustomerPhone}` : null,
+      normalizedCustomerEmail ? `E-mail: ${normalizedCustomerEmail}` : null,
+      document.cpf ? `CPF: ${document.cpf}` : null,
+      document.cnpj ? `CNPJ: ${document.cnpj}` : null,
+    ].filter(Boolean).join(' | ')
     const body = buildScheduleInboxMessage({
       eventType: input.eventType,
       customerName: input.customerName,
@@ -345,6 +375,8 @@ export class ScheduleAutomationRepository {
       customerPhone: input.customerPhone,
       customerDocument: input.customerDocument,
       productName: input.productName,
+      productBrand: input.productBrand,
+      operationBrand: input.operationBrand,
       pedidoNumero: input.pedidoNumero,
       protocoloNumero: input.protocoloNumero,
       dataAgendada: input.dataAgendada,
@@ -352,6 +384,7 @@ export class ScheduleAutomationRepository {
       sourceSender: input.sourceSender,
       subject: input.subject,
     })
+    const customerObservacoes = [body, customerContextNotes].filter(Boolean).join('\n\n')
 
     let customerId: string | null = null
     const resolvedCadastro = await resolveCadastroBaseByIdentity(this.db, {
@@ -382,7 +415,7 @@ export class ScheduleAutomationRepository {
               email = coalesce($4, email),
               cpf = coalesce($5, cpf),
               cnpj = coalesce($6, cnpj),
-              observacoes = concat_ws(E'\n', nullif(observacoes, ''), $7),
+              observacoes = concat_ws(E'\n\n', nullif(observacoes, ''), $7),
               cadastro_base_id = coalesce($8::uuid, cadastro_base_id),
               updated_at = now()
           where id = $1::uuid
@@ -393,7 +426,7 @@ export class ScheduleAutomationRepository {
           normalizedCustomerEmail,
           document.cpf,
           document.cnpj,
-          body,
+          customerObservacoes,
           resolvedCadastro?.id ?? null,
         ])
       } else {
@@ -407,7 +440,7 @@ export class ScheduleAutomationRepository {
           normalizedCustomerEmail,
           document.cpf,
           document.cnpj,
-          body,
+          customerObservacoes,
           resolvedCadastro?.id ?? null,
         ])
         customerId = created.rows[0]?.id ?? null
@@ -455,29 +488,33 @@ export class ScheduleAutomationRepository {
       'email_received',
       conversationKey,
       phoneDigits ?? normalizedCustomerEmail ?? conversationKey,
-      JSON.stringify({
-        source: input.source,
-        from: normalizedCustomerEmail ?? normalizedFrom ?? conversationKey,
-        to: normalizedMailbox ?? null,
-        subject: input.subject ?? null,
-        body,
-        content: body,
-        body_text: input.bodyText ?? null,
-        body_html: input.bodyHtml ?? null,
-        from_name: normalizedCustomerName ?? input.subject ?? conversationKey,
-        cliente_nome: normalizedCustomerName ?? input.subject ?? conversationKey,
-        sender_name: normalizedCustomerName ?? input.subject ?? conversationKey,
-        telefone: normalizedCustomerPhone,
-        customer_email: normalizedCustomerEmail,
-        customer_document: documentDigits,
-        product_name: normalizeText(input.productName),
-        pedido_numero: normalizeText(input.pedidoNumero),
-        protocolo_numero: normalizeText(input.protocoloNumero),
-        data_agendada: normalizeText(input.dataAgendada),
-        kanban_status: input.eventType === 'cancelamento' ? 'cancelou_agendamento' : 'agendado',
-        raw: input.raw ?? null,
-      }),
-    ])
+        JSON.stringify({
+          source: input.source,
+          from: normalizedCustomerEmail ?? normalizedFrom ?? conversationKey,
+          to: normalizedMailbox ?? null,
+          subject: input.subject ?? null,
+          body,
+          content: body,
+          body_text: input.bodyText ?? null,
+          body_html: input.bodyHtml ?? null,
+          from_name: normalizedCustomerName ?? input.subject ?? conversationKey,
+          cliente_nome: normalizedCustomerName ?? input.subject ?? conversationKey,
+          sender_name: normalizedCustomerName ?? input.subject ?? conversationKey,
+          telefone: normalizedCustomerPhone,
+          customer_email: normalizedCustomerEmail,
+          customer_document: documentDigits,
+          product_name: normalizedProductName,
+          product_brand: normalizedProductBrand,
+          operation_brand: normalizedOperationBrand,
+          pedido_numero: normalizedPedidoNumero,
+          protocolo_numero: normalizedProtocoloNumero,
+          data_agendada: normalizedDataAgendada,
+          location_name: normalizedLocationName,
+          source_sender: normalizedSourceSender,
+          kanban_status: input.eventType === 'cancelamento' ? 'cancelou_agendamento' : 'agendado',
+          raw: input.raw ?? null,
+        }),
+      ])
 
     const conversationResult = existingConversation.rows[0]?.id
       ? await this.db.query<{ id: string }>(`

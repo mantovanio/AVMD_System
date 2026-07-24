@@ -44,6 +44,8 @@ type ExtractedScheduleFields = {
   product_name?: string | null
   location_name?: string | null
   source_sender?: string | null
+  product_brand?: string | null
+  operation_brand?: string | null
 }
 
 const SOURCE_REPLY_MAP: Record<string, { brand: string; emailSubject: string }> = {
@@ -51,6 +53,21 @@ const SOURCE_REPLY_MAP: Record<string, { brand: string; emailSubject: string }> 
   certifast: { brand: 'Certifast', emailSubject: 'Agendamento recebido - Certifast' },
   certisign: { brand: 'Certifast', emailSubject: 'Agendamento recebido - Certifast' },
   unknown: { brand: 'Equipe de Validacao', emailSubject: 'Agendamento recebido' },
+}
+
+function inferProductBrand(source: string, productName?: string | null) {
+  const text = `${source} ${productName ?? ''}`.toLowerCase()
+  if (text.includes('certisign')) return 'Certisign'
+  if (text.includes('safeweb')) return 'Safeweb'
+  if (text.includes('certifast')) return 'Certisign'
+  if (text.includes('certiid')) return 'Safeweb'
+  return null
+}
+
+function inferOperationBrand(source: string) {
+  if (source === 'certifast' || source === 'certisign') return 'Certifast'
+  if (source === 'certiid') return 'CertiID'
+  return null
 }
 
 function normalizeText(value: unknown) {
@@ -183,6 +200,8 @@ function extractCertifastFields(body: ScheduleEmailWebhookBody): ExtractedSchedu
       matchFirst(content, [/Posto:\s*(.+?)(?:\s*(?:Data|Hora|Nome completo|CNPJ|CPF|Telefone|E-?mail|$))/i]),
     ].filter(Boolean).join(' | ')) || null,
     source_sender: normalizeText(body.from),
+    product_brand: inferProductBrand('certifast', matchFirst(content, [/Produto:\s*(.+?)(?:\s*(?:Data|Hora|Nome completo|CNPJ|CPF|Telefone|E-?mail|$))/i])),
+    operation_brand: inferOperationBrand('certifast'),
   }
 }
 
@@ -206,6 +225,8 @@ function extractCertiidFields(body: ScheduleEmailWebhookBody): ExtractedSchedule
       matchFirst(joined, [/Produto\s*:?\s*(.+?)\s*(?:Nome completo|CNPJ \/ CPF|Telefone|E-mail|$)/i]),
     ].filter(Boolean).join(' | ')) || null,
     source_sender: normalizeText(body.from),
+    product_brand: inferProductBrand('certiid', matchFirst(joined, [/Produto\s*:?\s*(.+?)\s*(?:Nome completo|CNPJ \/ CPF|Telefone|E-mail|$)/i])),
+    operation_brand: inferOperationBrand('certiid'),
   }
 }
 
@@ -230,6 +251,8 @@ function mergeParsed(body: ScheduleEmailWebhookBody, extracted: ExtractedSchedul
     product_name: normalizeText(body.parsed?.product_name) ?? extracted.product_name ?? null,
     location_name: normalizeText(body.parsed?.location_name) ?? extracted.location_name ?? null,
     source_sender: normalizeText(body.parsed?.source_sender) ?? extracted.source_sender ?? null,
+    product_brand: normalizeText((body.parsed as Record<string, unknown> | null | undefined)?.product_brand) ?? extracted.product_brand ?? null,
+    operation_brand: normalizeText((body.parsed as Record<string, unknown> | null | undefined)?.operation_brand) ?? extracted.operation_brand ?? null,
   }
 }
 
@@ -282,6 +305,8 @@ export async function handleScheduleAutomationRoutes(
   const parsed = mergeParsed(body, extracted)
   const eventType = inferEventType(body, extracted)
   const replyProfile = SOURCE_REPLY_MAP[source] ?? SOURCE_REPLY_MAP.unknown
+  const productBrand = parsed.product_brand ?? (source === 'certisign' ? 'Certisign' : source === 'certifast' ? 'Certisign' : source === 'certiid' ? 'Safeweb' : null)
+  const operationBrand = parsed.operation_brand ?? replyProfile.brand
   const existing = await scheduleRepository.findExistingEvent({
     externalId: normalizeText(body.external_id),
     messageId: normalizeText(body.message_id),
@@ -350,6 +375,8 @@ export async function handleScheduleAutomationRoutes(
     customerPhone: parsed.customer_phone ?? match?.titular_telefone ?? match?.cadastro_telefone,
     customerDocument: parsed.customer_document ?? match?.titular_documento ?? match?.cadastro_documento,
     productName: parsed.product_name,
+    productBrand,
+    operationBrand,
     pedidoNumero: parsed.pedido_numero ?? match?.pedido_numero,
     protocoloNumero: parsed.protocolo_numero ?? match?.protocolo_numero,
     dataAgendada: parsed.data_agendada ?? match?.agenda_data_agendada,
