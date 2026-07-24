@@ -1359,12 +1359,13 @@ export async function handleChatRoutes(
     const body = await readJson<JsonRecord>(req)
     const existingCustomer = await db.query<{
       nome: string | null
+      empresa_nome: string | null
       telefone: string | null
       email: string | null
       cpf: string | null
       cnpj: string | null
     }>(
-      `SELECT nome, telefone, email, cpf, cnpj
+      `SELECT nome, empresa_nome, telefone, email, cpf, cnpj
          FROM crm_customers
         WHERE id = $1::uuid
         LIMIT 1`,
@@ -1374,7 +1375,7 @@ export async function handleChatRoutes(
       writeJson(res, 404, { ok: false, error: 'Cliente CRM nao encontrado.' }, corsOrigin)
       return true
     }
-    const allowedFields = ['nome', 'telefone', 'email', 'contato_status', 'observacoes']
+    const allowedFields = ['nome', 'empresa_nome', 'telefone', 'email', 'contato_status', 'observacoes']
     const updates: string[] = []
     const values: unknown[] = []
     let idx = 1
@@ -1510,23 +1511,24 @@ export async function handleChatRoutes(
       await db.query(
         `UPDATE crm_customers
             SET nome = coalesce($2, nome),
-                telefone = coalesce($3, telefone),
-                email = coalesce($4, email),
-                cpf = coalesce($5, cpf),
-                cnpj = coalesce($6, cnpj),
-                observacoes = coalesce($7, observacoes),
-                cadastro_base_id = coalesce($8::uuid, cadastro_base_id),
+                empresa_nome = coalesce($3, empresa_nome),
+                telefone = coalesce($4, telefone),
+                email = coalesce($5, email),
+                cpf = coalesce($6, cpf),
+                cnpj = coalesce($7, cnpj),
+                observacoes = coalesce($8, observacoes),
+                cadastro_base_id = coalesce($9::uuid, cadastro_base_id),
                 updated_at = now()
           WHERE id = $1::uuid`,
-        [customerId, nome || null, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
+        [customerId, nome || null, asString(body.empresa_nome) || null, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
       )
     } else {
       try {
         const result = await db.query<{ id: string }>(
-          `INSERT INTO crm_customers (nome, telefone, email, cpf, cnpj, observacoes, cadastro_base_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7::uuid)
+          `INSERT INTO crm_customers (nome, empresa_nome, telefone, email, cpf, cnpj, observacoes, cadastro_base_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid)
            RETURNING id`,
-          [nome, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
+          [nome, asString(body.empresa_nome) || null, telefone || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
         )
         customerId = result.rows[0]?.id ?? null
       } catch (error) {
@@ -1548,14 +1550,15 @@ export async function handleChatRoutes(
         await db.query(
           `UPDATE crm_customers
               SET nome = coalesce($2, nome),
-                  email = coalesce($3, email),
-                  cpf = coalesce($4, cpf),
-                  cnpj = coalesce($5, cnpj),
-                  observacoes = coalesce($6, observacoes),
-                  cadastro_base_id = coalesce($7::uuid, cadastro_base_id),
+                  empresa_nome = coalesce($3, empresa_nome),
+                  email = coalesce($4, email),
+                  cpf = coalesce($5, cpf),
+                  cnpj = coalesce($6, cnpj),
+                  observacoes = coalesce($7, observacoes),
+                  cadastro_base_id = coalesce($8::uuid, cadastro_base_id),
                   updated_at = now()
             WHERE id = $1::uuid`,
-          [customerId, nome || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
+          [customerId, nome || null, asString(body.empresa_nome) || null, email || null, cleanCpf, cleanCnpj, observacoes || null, resolvedCadastro?.id ?? null],
         )
       }
     }

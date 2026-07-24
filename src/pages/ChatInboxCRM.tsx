@@ -47,6 +47,7 @@ interface ConversationRow {
   document_key: string
   telefone: string | null
   cliente_nome: string | null
+  empresa_nome: string | null
   whatsapp_instance: string | null
   numero_receptor: string | null
   fila: string
@@ -136,6 +137,7 @@ interface ManualConversationForm {
 
 interface ContactEditForm {
   name: string
+  company: string
   phone: string
   email: string
   status: string
@@ -711,6 +713,7 @@ export default function ChatInboxCRM() {
   const [recSecs, setRecSecs] = useState(0)
   const [contactEdit, setContactEdit] = useState<ContactEditForm>({
     name: '',
+    company: '',
     phone: '',
     email: '',
     status: '',
@@ -924,6 +927,7 @@ export default function ChatInboxCRM() {
       setSelectedReplyIntegrationConversationId(null)
       setContactEdit({
         name: '',
+        company: '',
         phone: '',
         email: '',
         status: '',
@@ -949,6 +953,7 @@ export default function ChatInboxCRM() {
     if (!selectedConversation) return
     setContactEdit({
       name: selectedConversation.nome_crm || selectedConversation.cliente_nome || '',
+      company: selectedConversation.empresa_nome || '',
       phone: selectedConversation.fila === 'email' ? '' : (selectedConversation.telefone || selectedConversation.document_key || ''),
       email: selectedConversation.email_principal || (selectedConversation.fila === 'email' ? selectedConversation.document_key : ''),
       status: selectedConversation.contato_status || '',
@@ -958,6 +963,7 @@ export default function ChatInboxCRM() {
   }, [
     selectedConversation?.id,
     selectedConversation?.cliente_nome,
+    selectedConversation?.empresa_nome,
     selectedConversation?.contato_status,
     selectedConversation?.document_key,
     selectedConversation?.email_principal,
@@ -1672,11 +1678,13 @@ export default function ChatInboxCRM() {
     setContactEditError(null)
 
     const cleanedName = contactEdit.name.trim()
+    const cleanedCompany = contactEdit.company.trim()
     const cleanedPhone = contactEdit.phone.trim()
     const cleanedEmail = contactEdit.email.trim()
     const cleanedStatus = contactEdit.status.trim()
     const cleanedObs = contactEdit.observations.trim()
     const resolvedName = cleanedName || selectedConversation.cliente_nome || selectedConversation.nome_crm || null
+    const resolvedCompany = cleanedCompany || selectedConversation.empresa_nome || null
     const resolvedPhone = cleanedPhone || selectedConversation.telefone || selectedConversation.document_key || null
     const resolvedEmail = cleanedEmail || null
     const resolvedStatus = cleanedStatus || null
@@ -1703,6 +1711,7 @@ export default function ChatInboxCRM() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             nome: resolvedName,
+            empresa_nome: resolvedCompany,
             telefone: resolvedPhone,
             email: resolvedEmail,
             contato_status: resolvedStatus,
@@ -1717,6 +1726,7 @@ export default function ChatInboxCRM() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             nome: resolvedName,
+            empresa_nome: resolvedCompany,
             telefone: resolvedPhone,
             email: resolvedEmail,
             observacoes: resolvedObs,
@@ -1739,6 +1749,7 @@ export default function ChatInboxCRM() {
           ? {
               ...item,
               cliente_nome: resolvedName,
+              empresa_nome: resolvedCompany,
               telefone: resolvedPhone,
               crm_customer_id: nextCustomerId ?? item.crm_customer_id,
               nome_crm: resolvedName,
@@ -1748,6 +1759,7 @@ export default function ChatInboxCRM() {
       setContactEdit(prev => ({
         ...prev,
         name: resolvedName ?? prev.name,
+        company: resolvedCompany ?? prev.company,
         phone: resolvedPhone ?? prev.phone,
         email: resolvedEmail ?? prev.email,
         status: resolvedStatus ?? prev.status,
@@ -1757,6 +1769,7 @@ export default function ChatInboxCRM() {
       const historyText = [
         'Dados do contato atualizados no painel',
         resolvedName ? `Nome: ${resolvedName}` : null,
+        resolvedCompany ? `Empresa: ${resolvedCompany}` : null,
         resolvedPhone ? `Telefone: ${resolvedPhone}` : null,
         resolvedEmail ? `Email: ${resolvedEmail}` : null,
         resolvedStatus ? `Status CRM: ${resolvedStatus}` : null,
@@ -1774,6 +1787,7 @@ export default function ChatInboxCRM() {
           payload: {
             conversation_id: selectedConversation.id,
             documentKey: selectedConversation.document_key,
+            empresa_nome: resolvedCompany,
             telefone: resolvedPhone ?? selectedConversation.telefone ?? selectedConversation.document_key,
             customer_email: resolvedEmail ?? selectedConversation.email_principal ?? (selectedConversation.fila === 'email' ? selectedConversation.document_key : null),
             canal: selectedConversation.fila === 'renovacao'
@@ -1800,6 +1814,7 @@ export default function ChatInboxCRM() {
       setContactEdit(prev => ({
         ...prev,
         name: resolvedName || '',
+        company: resolvedCompany || '',
         phone: resolvedPhone || '',
         email: resolvedEmail || '',
         status: resolvedStatus || '',
@@ -2837,12 +2852,22 @@ export default function ChatInboxCRM() {
                     <PanelBlock title="Contato e histórico">
                       <div className="space-y-3">
                         <label className="block space-y-1">
-                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Nome</span>
+                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Nome da pessoa</span>
                           <input
                             value={contactEdit.name}
                             onChange={event => setContactEdit(prev => ({ ...prev, name: event.target.value }))}
                             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
                             placeholder="Nome do contato"
+                          />
+                        </label>
+
+                        <label className="block space-y-1">
+                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Nome da empresa</span>
+                          <input
+                            value={contactEdit.company}
+                            onChange={event => setContactEdit(prev => ({ ...prev, company: event.target.value }))}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                            placeholder="Razão social ou nome fantasia"
                           />
                         </label>
 
@@ -2917,7 +2942,8 @@ export default function ChatInboxCRM() {
                     </PanelBlock>
 
                     <PanelBlock title="Resumo operacional">
-                      <InfoRow icon={<User size={14} />} label="Cliente" value={selectedConversation.nome_crm || selectedConversation.cliente_nome || 'Nao informado'} />
+                      <InfoRow icon={<User size={14} />} label="Pessoa" value={selectedConversation.nome_crm || selectedConversation.cliente_nome || 'Nao informado'} />
+                      <InfoRow icon={<UserRound size={14} />} label="Empresa" value={selectedConversation.empresa_nome || 'Nao informada'} />
                       <InfoRow icon={<Phone size={14} />} label="Telefone" value={contactPhone(selectedConversation)} mono />
                       <InfoRow icon={<Mail size={14} />} label="Email" value={selectedConversation.email_principal || (selectedConversation.fila === 'email' ? selectedConversation.document_key : 'Nao informado')} />
                       <InfoRow icon={<Clock3 size={14} />} label="Status CRM" value={selectedConversation.contato_status || 'Nao definido'} />
@@ -3009,7 +3035,11 @@ export default function ChatInboxCRM() {
                     </PanelBlock>
 
                     <PanelBlock title="Observacoes do contato">
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{selectedConversation.observacoes || 'Sem observacoes no crm_customers.'}</p>
+                      <div className="space-y-2 text-sm leading-relaxed text-slate-700">
+                        <p><span className="font-semibold text-slate-500">Pessoa:</span> {selectedConversation.nome_crm || selectedConversation.cliente_nome || 'Nao informado'}</p>
+                        <p><span className="font-semibold text-slate-500">Empresa:</span> {selectedConversation.empresa_nome || 'Nao informada'}</p>
+                        <p className="whitespace-pre-wrap">{selectedConversation.observacoes || 'Sem observacoes no crm_customers.'}</p>
+                      </div>
                     </PanelBlock>
 
                     <PanelBlock title="Leitura operacional">
