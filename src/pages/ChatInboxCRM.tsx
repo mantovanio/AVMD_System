@@ -1652,12 +1652,14 @@ export default function ChatInboxCRM() {
 
   function buildContactVCardBlob(contact: ContactEditForm) {
     const fullName = contact.name.trim() || selectedConversation?.cliente_nome || selectedConversation?.nome_crm || 'Contato'
+    const companyName = contact.company.trim() || selectedConversation?.empresa_nome || ''
     const phoneDigits = normalizeContactPhone(contact.phone || selectedConversation?.telefone || selectedConversation?.document_key || '')
     const email = contact.email.trim()
     const vcard = [
       'BEGIN:VCARD',
       'VERSION:3.0',
       `FN:${fullName}`,
+      companyName ? `ORG:${companyName}` : null,
       phoneDigits ? `TEL;TYPE=CELL:+${phoneDigits}` : null,
       email ? `EMAIL;TYPE=INTERNET:${email}` : null,
       'END:VCARD',
@@ -1834,8 +1836,12 @@ export default function ChatInboxCRM() {
     try {
       const cardBlob = buildContactVCardBlob(contactEdit)
       const contactName = contactEdit.name.trim() || selectedConversation.cliente_nome || selectedConversation.nome_crm || 'Contato'
+      const companyName = contactEdit.company.trim() || selectedConversation.empresa_nome || ''
       const phoneDigits = normalizeContactPhone(contactEdit.phone || selectedConversation.telefone || selectedConversation.document_key || '')
-      const filename = `${contactName.replace(/[^\p{L}\p{N}]+/gu, '_') || 'contato'}.vcf`
+      const filenameBase = companyName
+        ? `${contactName} ${companyName}`
+        : contactName
+      const filename = `${filenameBase.replace(/[^\p{L}\p{N}]+/gu, '_') || 'contato'}.vcf`
       const result = await sendHumanAttachment(cardBlob, filename, 'text/vcard')
       if (!result.ok) throw new Error(result.error ?? 'Nao foi possivel enviar o contato.')
     } catch (err) {
@@ -2193,7 +2199,7 @@ export default function ChatInboxCRM() {
     const query = search.trim().toLowerCase()
     const queryDigits = normalizeDigits(search)
     return conversations.filter(item => {
-      const text = `${item.cliente_nome ?? ''} ${item.nome_crm ?? ''} ${item.telefone ?? ''} ${item.document_key ?? ''} ${item.ultima_mensagem ?? ''}`.toLowerCase()
+      const text = `${item.cliente_nome ?? ''} ${item.nome_crm ?? ''} ${item.empresa_nome ?? ''} ${item.telefone ?? ''} ${item.document_key ?? ''} ${item.ultima_mensagem ?? ''}`.toLowerCase()
       if (!query) return true
       if (queryDigits) return text.includes(query) || phoneMatchesQuery(item, queryDigits)
       return text.includes(query)
