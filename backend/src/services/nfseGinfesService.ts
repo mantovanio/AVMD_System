@@ -132,165 +132,80 @@ function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
 }
 
+function escapeXmlForParam(s: string): string {
+  return escapeXml(s)
+}
+
 function formatDate(isoDate: string): string {
   return isoDate.replace(/\.\d{3}Z$/, '').replace('Z', '')
 }
 
-function buildEnviarLoteRpsXml(config: GinfesConfig, rps: GinfesRps): string {
+function buildCabecalhoXml(): string {
+  return `<Cabecalho xmlns="http://www.ginfes.com.br/servico_enviar_lote_rps_envio_v03.xsd"><versaoDados>3</versaoDados></Cabecalho>`
+}
+
+function buildEnviarLoteRpsInnerXml(config: GinfesConfig, rps: GinfesRps): string {
   const loteId = `lote${config.numeroRpsAtual}`
   const rpsId = `rps${rps.numero}`
 
+  return `<EnviarLoteRpsEnvio xmlns="http://www.ginfes.com.br/servico_enviar_lote_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><LoteRps Id="${escapeXml(loteId)}"><tipos:NumeroLote>${config.numeroRpsAtual}</tipos:NumeroLote><tipos:Cnpj>${escapeXml(config.cnpjPrestador)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(config.inscricaoMunicipal)}</tipos:InscricaoMunicipal><tipos:QuantidadeRps>1</tipos:QuantidadeRps><ListaRps xmlns="http://www.ginfes.com.br/tipos_v03.xsd"><Rps><InfRps Id="${escapeXml(rpsId)}"><IdentificacaoRps><Numero>${rps.numero}</Numero><Serie>${escapeXml(rps.serie)}</Serie><Tipo>${rps.tipo}</Tipo></IdentificacaoRps><DataEmissao>${escapeXml(rps.dataEmissao)}</DataEmissao><NaturezaOperacao>${escapeXml(rps.naturezaOperacao)}</NaturezaOperacao>${rps.regimeEspecialTributacao ? `<RegimeEspecialTributacao>${rps.regimeEspecialTributacao}</RegimeEspecialTributacao>` : ''}<OptanteSimplesNacional>${rps.optanteSimplesNacional}</OptanteSimplesNacional><IncentivadorCultural>${rps.incentivadorCultural}</IncentivadorCultural><Status>${rps.status}</Status><Servico><Valores><ValorServicos>${rps.servico.valorServicos.toFixed(2)}</ValorServicos><ValorDeducoes>${rps.servico.valorDeducoes.toFixed(2)}</ValorDeducoes><ValorPis>${rps.servico.valorPis.toFixed(2)}</ValorPis><ValorCofins>${rps.servico.valorCofins.toFixed(2)}</ValorCofins><ValorInss>${rps.servico.valorInss.toFixed(2)}</ValorInss><ValorIr>${rps.servico.valorIr.toFixed(2)}</ValorIr><ValorCsll>${rps.servico.valorCsll.toFixed(2)}</ValorCsll><IssRetido>${rps.servico.issRetido}</IssRetido><ValorIss>${rps.servico.valorIss.toFixed(2)}</ValorIss><ValorIssRetido>${rps.servico.valorIssRetido.toFixed(2)}</ValorIssRetido><OutrasRetencoes>${rps.servico.outrasRetencoes.toFixed(2)}</OutrasRetencoes><BaseCalculo>${rps.servico.baseCalculo.toFixed(2)}</BaseCalculo><Aliquota>${rps.servico.aliquota.toFixed(2)}</Aliquota><ValorLiquidoNfse>${rps.servico.valorLiquidoNfse.toFixed(2)}</ValorLiquidoNfse><DescontoIncondicionado>${rps.servico.descontoIncondicionado.toFixed(2)}</DescontoIncondicionado><DescontoCondicionado>${rps.servico.descontoCondicionado.toFixed(2)}</DescontoCondicionado></Valores><ItemListaServico>${escapeXml(rps.servico.itemListaServico)}</ItemListaServico>${rps.servico.codigoCnae ? `<CodigoCnae>${escapeXml(rps.servico.codigoCnae)}</CodigoCnae>` : ''}<CodigoTributacaoMunicipio>${escapeXml(rps.servico.codigoTributacaoMunicipio)}</CodigoTributacaoMunicipio><Discriminacao>${escapeXml(rps.servico.discriminacao)}</Discriminacao><CodigoMunicipio>${escapeXml(rps.servico.codigoMunicipio)}</CodigoMunicipio></Servico><Prestador><Cnpj>${escapeXml(rps.prestador.cnpj)}</Cnpj><InscricaoMunicipal>${escapeXml(rps.prestador.inscricaoMunicipal)}</InscricaoMunicipal></Prestador><Tomador><IdentificacaoTomador><CpfCnpj>${rps.tomador.cpfCnpj.cnpj ? `<Cnpj>${escapeXml(rps.tomador.cpfCnpj.cnpj)}</Cnpj>` : `<Cpf>${escapeXml(rps.tomador.cpfCnpj.cpf ?? '')}</Cpf>`}</CpfCnpj>${rps.tomador.inscricaoMunicipal ? `<InscricaoMunicipal>${escapeXml(rps.tomador.inscricaoMunicipal)}</InscricaoMunicipal>` : ''}</IdentificacaoTomador><RazaoSocial>${escapeXml(rps.tomador.razaoSocial)}</RazaoSocial><Endereco><Endereco>${escapeXml(rps.tomador.endereco.endereco)}</Endereco><Numero>${escapeXml(rps.tomador.endereco.numero)}</Numero>${rps.tomador.endereco.complemento ? `<Complemento>${escapeXml(rps.tomador.endereco.complemento)}</Complemento>` : ''}<Bairro>${escapeXml(rps.tomador.endereco.bairro)}</Bairro><CodigoMunicipio>${escapeXml(rps.tomador.endereco.codigoMunicipio)}</CodigoMunicipio><Uf>${escapeXml(rps.tomador.endereco.uf)}</Uf><Cep>${escapeXml(rps.tomador.endereco.cep)}</Cep></Endereco><Contato><Telefone>${escapeXml(rps.tomador.contato.telefone)}</Telefone><Email>${escapeXml(rps.tomador.contato.email)}</Email></Contato></Tomador></InfRps></Rps></ListaRps></LoteRps></EnviarLoteRpsEnvio>`
+}
+
+function buildEnviarLoteRpsXml(config: GinfesConfig, rps: GinfesRps): string {
+  const cabecalhoXml = escapeXmlForParam(buildCabecalhoXml())
+  const envioXml = escapeXmlForParam(buildEnviarLoteRpsInnerXml(config, rps))
+
   return `<?xml version="1.0" encoding="UTF-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://homologacao.ginfes.com.br">
   <soap:Body>
-    <ns1:RecepcionarLoteRpsV3 xmlns:ns1="http://www.ginfes.com.br/">
-      <Cabecalho>
-        <versaoDados>3</versaoDados>
-      </Cabecalho>
-      <EnviarLoteRpsEnvio xmlns="http://www.ginfes.com.br/servico_enviar_lote_rps_envio_v03.xsd"
-                          xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd">
-        <LoteRps Id="${escapeXml(loteId)}">
-          <tipos:NumeroLote>${config.numeroRpsAtual}</tipos:NumeroLote>
-          <tipos:Cnpj>${escapeXml(config.cnpjPrestador)}</tipos:Cnpj>
-          <tipos:InscricaoMunicipal>${escapeXml(config.inscricaoMunicipal)}</tipos:InscricaoMunicipal>
-          <tipos:QuantidadeRps>1</tipos:QuantidadeRps>
-          <ListaRps xmlns="http://www.ginfes.com.br/tipos_v03.xsd">
-            <Rps>
-              <InfRps Id="${escapeXml(rpsId)}">
-                <IdentificacaoRps>
-                  <Numero>${rps.numero}</Numero>
-                  <Serie>${escapeXml(rps.serie)}</Serie>
-                  <Tipo>${rps.tipo}</Tipo>
-                </IdentificacaoRps>
-                <DataEmissao>${escapeXml(rps.dataEmissao)}</DataEmissao>
-                <NaturezaOperacao>${escapeXml(rps.naturezaOperacao)}</NaturezaOperacao>
-                ${rps.regimeEspecialTributacao ? `<RegimeEspecialTributacao>${rps.regimeEspecialTributacao}</RegimeEspecialTributacao>` : ''}
-                <OptanteSimplesNacional>${rps.optanteSimplesNacional}</OptanteSimplesNacional>
-                <IncentivadorCultural>${rps.incentivadorCultural}</IncentivadorCultural>
-                <Status>${rps.status}</Status>
-                <Servico>
-                  <Valores>
-                    <ValorServicos>${rps.servico.valorServicos.toFixed(2)}</ValorServicos>
-                    <ValorDeducoes>${rps.servico.valorDeducoes.toFixed(2)}</ValorDeducoes>
-                    <ValorPis>${rps.servico.valorPis.toFixed(2)}</ValorPis>
-                    <ValorCofins>${rps.servico.valorCofins.toFixed(2)}</ValorCofins>
-                    <ValorInss>${rps.servico.valorInss.toFixed(2)}</ValorInss>
-                    <ValorIr>${rps.servico.valorIr.toFixed(2)}</ValorIr>
-                    <ValorCsll>${rps.servico.valorCsll.toFixed(2)}</ValorCsll>
-                    <IssRetido>${rps.servico.issRetido}</IssRetido>
-                    <ValorIss>${rps.servico.valorIss.toFixed(2)}</ValorIss>
-                    <ValorIssRetido>${rps.servico.valorIssRetido.toFixed(2)}</ValorIssRetido>
-                    <OutrasRetencoes>${rps.servico.outrasRetencoes.toFixed(2)}</OutrasRetencoes>
-                    <BaseCalculo>${rps.servico.baseCalculo.toFixed(2)}</BaseCalculo>
-                    <Aliquota>${rps.servico.aliquota.toFixed(2)}</Aliquota>
-                    <ValorLiquidoNfse>${rps.servico.valorLiquidoNfse.toFixed(2)}</ValorLiquidoNfse>
-                    <DescontoIncondicionado>${rps.servico.descontoIncondicionado.toFixed(2)}</DescontoIncondicionado>
-                    <DescontoCondicionado>${rps.servico.descontoCondicionado.toFixed(2)}</DescontoCondicionado>
-                  </Valores>
-                  <ItemListaServico>${escapeXml(rps.servico.itemListaServico)}</ItemListaServico>
-                  ${rps.servico.codigoCnae ? `<CodigoCnae>${escapeXml(rps.servico.codigoCnae)}</CodigoCnae>` : ''}
-                  <CodigoTributacaoMunicipio>${escapeXml(rps.servico.codigoTributacaoMunicipio)}</CodigoTributacaoMunicipio>
-                  <Discriminacao>${escapeXml(rps.servico.discriminacao)}</Discriminacao>
-                  <CodigoMunicipio>${escapeXml(rps.servico.codigoMunicipio)}</CodigoMunicipio>
-                </Servico>
-                <Prestador>
-                  <Cnpj>${escapeXml(rps.prestador.cnpj)}</Cnpj>
-                  <InscricaoMunicipal>${escapeXml(rps.prestador.inscricaoMunicipal)}</InscricaoMunicipal>
-                </Prestador>
-                <Tomador>
-                  <IdentificacaoTomador>
-                    <CpfCnpj>
-                      ${rps.tomador.cpfCnpj.cnpj ? `<Cnpj>${escapeXml(rps.tomador.cpfCnpj.cnpj)}</Cnpj>` : `<Cpf>${escapeXml(rps.tomador.cpfCnpj.cpf ?? '')}</Cpf>`}
-                    </CpfCnpj>
-                    ${rps.tomador.inscricaoMunicipal ? `<InscricaoMunicipal>${escapeXml(rps.tomador.inscricaoMunicipal)}</InscricaoMunicipal>` : ''}
-                  </IdentificacaoTomador>
-                  <RazaoSocial>${escapeXml(rps.tomador.razaoSocial)}</RazaoSocial>
-                  <Endereco>
-                    <Endereco>${escapeXml(rps.tomador.endereco.endereco)}</Endereco>
-                    <Numero>${escapeXml(rps.tomador.endereco.numero)}</Numero>
-                    ${rps.tomador.endereco.complemento ? `<Complemento>${escapeXml(rps.tomador.endereco.complemento)}</Complemento>` : ''}
-                    <Bairro>${escapeXml(rps.tomador.endereco.bairro)}</Bairro>
-                    <CodigoMunicipio>${escapeXml(rps.tomador.endereco.codigoMunicipio)}</CodigoMunicipio>
-                    <Uf>${escapeXml(rps.tomador.endereco.uf)}</Uf>
-                    <Cep>${escapeXml(rps.tomador.endereco.cep)}</Cep>
-                  </Endereco>
-                  <Contato>
-                    <Telefone>${escapeXml(rps.tomador.contato.telefone)}</Telefone>
-                    <Email>${escapeXml(rps.tomador.contato.email)}</Email>
-                  </Contato>
-                </Tomador>
-              </InfRps>
-            </Rps>
-          </ListaRps>
-        </LoteRps>
-      </EnviarLoteRpsEnvio>
+    <ns1:RecepcionarLoteRpsV3>
+      <arg0>${cabecalhoXml}</arg0>
+      <arg1>${envioXml}</arg1>
     </ns1:RecepcionarLoteRpsV3>
   </soap:Body>
 </soap:Envelope>`
 }
 
 function buildConsultarSituacaoLoteXml(cnpj: string, im: string, protocolo: string): string {
+  const cabecalhoXml = escapeXmlForParam(buildCabecalhoXml())
+  const envioXml = escapeXmlForParam(`<ConsultarSituacaoLoteRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_situacao_lote_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></Prestador><Protocolo>${escapeXml(protocolo)}</Protocolo></ConsultarSituacaoLoteRpsEnvio>`)
+
   return `<?xml version="1.0" encoding="UTF-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://homologacao.ginfes.com.br">
   <soap:Body>
-    <ns1:ConsultarSituacaoLoteRpsV3 xmlns:ns1="http://www.ginfes.com.br/">
-      <Cabecalho>
-        <versaoDados>3</versaoDados>
-      </Cabecalho>
-      <ConsultarSituacaoLoteRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_situacao_lote_rps_envio_v03.xsd"
-                                     xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd">
-        <Prestador>
-          <tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj>
-          <tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal>
-        </Prestador>
-        <Protocolo>${escapeXml(protocolo)}</Protocolo>
-      </ConsultarSituacaoLoteRpsEnvio>
+    <ns1:ConsultarSituacaoLoteRpsV3>
+      <arg0>${cabecalhoXml}</arg0>
+      <arg1>${envioXml}</arg1>
     </ns1:ConsultarSituacaoLoteRpsV3>
   </soap:Body>
 </soap:Envelope>`
 }
 
 function buildConsultarLoteRpsXml(cnpj: string, im: string, protocolo: string): string {
+  const cabecalhoXml = escapeXmlForParam(buildCabecalhoXml())
+  const envioXml = escapeXmlForParam(`<ConsultarLoteRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_lote_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></Prestador><Protocolo>${escapeXml(protocolo)}</Protocolo></ConsultarLoteRpsEnvio>`)
+
   return `<?xml version="1.0" encoding="UTF-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://homologacao.ginfes.com.br">
   <soap:Body>
-    <ns1:ConsultarLoteRpsV3 xmlns:ns1="http://www.ginfes.com.br/">
-      <Cabecalho>
-        <versaoDados>3</versaoDados>
-      </Cabecalho>
-      <ConsultarLoteRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_lote_rps_envio_v03.xsd"
-                             xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd">
-        <Prestador>
-          <tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj>
-          <tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal>
-        </Prestador>
-        <Protocolo>${escapeXml(protocolo)}</Protocolo>
-      </ConsultarLoteRpsEnvio>
+    <ns1:ConsultarLoteRpsV3>
+      <arg0>${cabecalhoXml}</arg0>
+      <arg1>${envioXml}</arg1>
     </ns1:ConsultarLoteRpsV3>
   </soap:Body>
 </soap:Envelope>`
 }
 
 function buildConsultarNfsePorRpsXml(numeroRps: number, serie: string, tipo: number, cnpj: string, im: string): string {
+  const cabecalhoXml = escapeXmlForParam(buildCabecalhoXml())
+  const envioXml = escapeXmlForParam(`<ConsultarNfseRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_nfse_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><IdentificacaoRps><tipos:Numero>${numeroRps}</tipos:Numero><tipos:Serie>${escapeXml(serie)}</tipos:Serie><tipos:Tipo>${tipo}</tipos:Tipo></IdentificacaoRps><Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></Prestador></ConsultarNfseRpsEnvio>`)
+
   return `<?xml version="1.0" encoding="UTF-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://homologacao.ginfes.com.br">
   <soap:Body>
-    <ns1:ConsultarNfsePorRpsV3 xmlns:ns1="http://www.ginfes.com.br/">
-      <Cabecalho>
-        <versaoDados>3</versaoDados>
-      </Cabecalho>
-      <ConsultarNfseRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_nfse_rps_envio_v03.xsd"
-                             xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd">
-        <IdentificacaoRps>
-          <tipos:Numero>${numeroRps}</tipos:Numero>
-          <tipos:Serie>${escapeXml(serie)}</tipos:Serie>
-          <tipos:Tipo>${tipo}</tipos:Tipo>
-        </IdentificacaoRps>
-        <Prestador>
-          <tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj>
-          <tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal>
-        </Prestador>
-      </ConsultarNfseRpsEnvio>
+    <ns1:ConsultarNfsePorRpsV3>
+      <arg0>${cabecalhoXml}</arg0>
+      <arg1>${envioXml}</arg1>
     </ns1:ConsultarNfsePorRpsV3>
   </soap:Body>
 </soap:Envelope>`
