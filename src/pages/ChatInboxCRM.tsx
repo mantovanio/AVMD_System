@@ -396,6 +396,14 @@ function normalizeDisplaySenderName(value: string | null | undefined) {
   return text
 }
 
+function displayConversationName(item: ConversationRow | null | undefined) {
+  if (!item) return 'Sem nome identificado'
+  const person = normalizeDisplaySenderName(item.nome_crm || item.cliente_nome)
+  const company = normalizeDisplaySenderName(item.empresa_nome)
+  if (person && company && person.toLowerCase() !== company.toLowerCase()) return `${person} · ${company}`
+  return person || company || (item.fila === 'email' ? item.email_principal || item.document_key : null) || contactPhone(item) || 'Sem nome identificado'
+}
+
 function stripOutgoingSignature(text: string | null | undefined, senderName?: string | null): string {
   if (!text || !senderName) return text ?? ''
   const trimmed = text.trimEnd()
@@ -2206,6 +2214,14 @@ export default function ChatInboxCRM() {
     })
   }, [conversations, search])
 
+  function displayConversationName(item: ConversationRow | null | undefined) {
+    if (!item) return 'Sem nome identificado'
+    const person = normalizeDisplaySenderName(item.nome_crm || item.cliente_nome)
+    const company = normalizeDisplaySenderName(item.empresa_nome)
+    if (person && company && person.toLowerCase() !== company.toLowerCase()) return `${person} · ${company}`
+    return person || company || (item.fila === 'email' ? item.email_principal || item.document_key : null) || contactPhone(item) || 'Sem nome identificado'
+  }
+
   const activeConversations = useMemo(() => (
     searchMatchedConversations.filter(item => !isClosedConversationStatus(normalizeKanbanStatus(item.kanban_status)))
   ), [searchMatchedConversations])
@@ -2291,7 +2307,7 @@ export default function ChatInboxCRM() {
         ...column,
         items: kanbanItems.filter(item => normalizeKanbanStatus(item.kanban_status) === column.key),
       }))
-    }, [searchMatchedConversations, queueFilter, humanFilter, humanOverrideIds])
+  }, [searchMatchedConversations, queueFilter, humanFilter, humanOverrideIds])
 
   useEffect(() => {
     if (visibleConversations.length === 0) {
@@ -2506,7 +2522,7 @@ export default function ChatInboxCRM() {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <h3 className="text-lg font-semibold">
-                          {normalizeDisplaySenderName(selectedConversation.cliente_nome || selectedConversation.nome_crm) || (selectedConversation.fila === 'email' ? selectedConversation.email_principal || selectedConversation.document_key : null) || contactPhone(selectedConversation) || 'Sem nome identificado'}
+                          {displayConversationName(selectedConversation)}
                         </h3>
                         <p className="mt-1 text-sm text-slate-500">
                           {contactPhone(selectedConversation)}
@@ -3371,7 +3387,7 @@ function ConversationCard({
             </button>
           )}
           <button type="button" onClick={onClick} className="min-w-0 flex-1 text-left">
-            <p className="truncate text-sm font-semibold text-slate-900">{normalizeDisplaySenderName(item.cliente_nome || item.nome_crm) || contactPhone(item)}</p>
+            <p className="truncate text-sm font-semibold text-slate-900">{displayConversationName(item)}</p>
             <p className="mt-1 truncate text-xs text-slate-500">{contactPhone(item)}</p>
           </button>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -3495,7 +3511,7 @@ function ConversationMiniCard({
         )}
         <button type="button" onClick={onClick} draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd} className={`w-full py-3 text-left ${onCheckToggle ? 'pl-7 pr-3' : 'px-3'}`}>
           <div className="flex items-center justify-between gap-2">
-            <p className="truncate text-sm font-semibold">{normalizeDisplaySenderName(item.cliente_nome || item.nome_crm) || contactPhone(item)}</p>
+            <p className="truncate text-sm font-semibold">{displayConversationName(item)}</p>
             <div className="flex items-center gap-2">
               {unreadCount > 0 && <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${selected ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700'}`}>{unreadCount}</span>}
               {human ? <UserRound size={14} /> : <Bot size={14} />}
@@ -3539,10 +3555,10 @@ function MessageRow({
     const isContactMsg = message.sender_type === 'cliente' || message.sender_type === 'contact' || !isOutgoing
     const isIaMsg = message.sender_type === 'ia'
     const senderLabel = isContactMsg
-      ? normalizeDisplaySenderName(conversation?.nome_crm || conversation?.cliente_nome) || (conversation ? contactPhone(conversation) : 'Cliente')
-      : isIaMsg
-        ? 'IA Clara'
-        : normalizedSenderName || fallbackHumanName || 'Humano'
+      ? displayConversationName(conversation)
+        : isIaMsg
+          ? 'IA Clara'
+          : normalizedSenderName || fallbackHumanName || 'Humano'
     const detailLabel = isContactMsg
       ? conversation ? contactPhone(conversation) : 'Canal de entrada'
       : isIaMsg
