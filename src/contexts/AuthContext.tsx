@@ -55,7 +55,6 @@ type ClerkEmailSecondFactor = {
 }
 
 type ClerkPasswordResetSignIn = {
-  create: (params: { strategy: 'reset_password_email_code'; identifier: string }) => Promise<unknown>
   resetPasswordEmailCode: {
     sendCode: () => Promise<{ error: unknown }>
   }
@@ -438,19 +437,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const recoverySignIn = signIn as typeof signIn & ClerkPasswordResetSignIn
-
-        await withTimeout(
-          recoverySignIn.create({
+        const recoveryAttempt = await withTimeout(
+          signIn.create({
             strategy: 'reset_password_email_code',
             identifier: normalizedEmail,
           }),
           15000,
           'O Clerk não respondeu ao preparar a recuperação de senha.',
-        )
+        ) as typeof signIn & ClerkPasswordResetSignIn
 
         const sendCodeResult = await withTimeout(
-          recoverySignIn.resetPasswordEmailCode.sendCode() as Promise<{ error?: unknown }>,
+          recoveryAttempt.resetPasswordEmailCode.sendCode() as Promise<{ error?: unknown }>,
           15000,
           'O Clerk não respondeu ao enviar o código de recuperação.',
         )
