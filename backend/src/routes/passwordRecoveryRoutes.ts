@@ -57,6 +57,12 @@ function buildClerkUsername(email: string) {
   return `${base}${randomInt(100000, 1000000)}`.slice(0, 24)
 }
 
+function buildTemporaryStrongPassword() {
+  const stamp = Date.now().toString(36)
+  const rand = randomInt(100000, 999999)
+  return `Tmp#${stamp}${rand}aA1!`
+}
+
 async function syncClerkUser(
   clerkClient: ReturnType<typeof createClerkClient>,
   profileRepository: ProfileRepository,
@@ -92,6 +98,7 @@ async function syncClerkUser(
     const createdUser = await clerkClient.users.createUser({
       emailAddress: [recoveryEmail],
       username: buildClerkUsername(recoveryEmail),
+      password: buildTemporaryStrongPassword(),
       firstName: firstNameRaw || 'Usuario',
       lastName: lastNameParts.join(' ').trim() || undefined,
     })
