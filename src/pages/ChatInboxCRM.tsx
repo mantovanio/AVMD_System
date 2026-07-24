@@ -573,8 +573,18 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[], viewerQueryStr
             ?? nestedUrl
             ?? null
       const finalMimeType = mimeType || nestedMime || null
+      const inferredMediaKind =
+        finalMimeType?.startsWith('image/') || /(^|\b)(imagem|image)(\b|$)/i.test(String(content ?? ''))
+          ? 'image'
+          : finalMimeType?.startsWith('audio/') || /(^|\b)(áudio|audio)(\b|$)/i.test(String(content ?? '')) || /\.ogg$|\.mp3$|\.m4a$|\.webm$/i.test(String(fileName ?? ''))
+            ? 'audio'
+            : finalMimeType?.startsWith('video/') || /(^|\b)(vídeo|video)(\b|$)/i.test(String(content ?? '')) || /\.(mp4|mov|mkv|webm)$/i.test(String(fileName ?? ''))
+              ? 'video'
+              : finalMimeType?.startsWith('application/') || /(^|\b)(documento|arquivo)(\b|$)/i.test(String(content ?? ''))
+                ? 'document'
+                : null
       const isEncryptedWhatsappMediaUrl = Boolean(mediaUrl && /(^https?:\/\/)?mmg\.whatsapp\.net\//i.test(mediaUrl))
-      const eventMediaUrl = viewerQueryString && (mediaUrl || finalMimeType || fileName || /image|video|audio|document|file|sticker/i.test(messageType))
+      const eventMediaUrl = viewerQueryString && (mediaUrl || finalMimeType || fileName || inferredMediaKind || /image|video|audio|document|file|sticker/i.test(messageType))
         ? `/api/chat/event-media/${encodeURIComponent(String(event.id))}?${viewerQueryString}`
         : null
       const externalMessageId = (payload.messageId as string | undefined)
