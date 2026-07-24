@@ -860,6 +860,16 @@ export async function handleChatRoutes(
       })
     }
 
+    await db.query(
+      `UPDATE crm_chat_conversations
+          SET atendimento_humano = true,
+              agente_nome = COALESCE($2, agente_nome),
+              updated_at = NOW()
+        WHERE document_key = $1
+           OR telefone = $1`,
+      [normalizePhoneDigits(lead?.whatsapp_lead) ?? remoteJid.replace(/@.+$/, ''), asString(body.sender_name) || null],
+    ).catch(() => undefined)
+
     writeJson(res, 200, { ok: true, messageId, remoteJid }, corsOrigin)
     return true
   }
@@ -1178,6 +1188,16 @@ export async function handleChatRoutes(
         provider_payload: sendResult.payload,
       },
     })
+
+    await db.query(
+      `UPDATE crm_chat_conversations
+          SET atendimento_humano = true,
+              agente_nome = COALESCE($2, agente_nome),
+              updated_at = NOW()
+        WHERE document_key = $1
+           OR telefone = $1`,
+      [destinationNumber, senderName || null],
+    ).catch(() => undefined)
 
     writeJson(res, 200, { ok: true, messageId, mediaUrl }, corsOrigin)
     return true
