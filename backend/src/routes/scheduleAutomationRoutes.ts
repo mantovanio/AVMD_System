@@ -265,6 +265,14 @@ function buildConfirmationMessages(input: {
 }) {
   const firstName = (input.customerName?.trim().split(/\s+/)[0] || 'cliente')
   const whenText = input.dataAgendada ? ` para ${new Date(input.dataAgendada).toLocaleString('pt-BR')}` : ''
+  const documentList = [
+    'documento pessoal colorido (RG ou CNH)',
+    'Contrato Social / Estatuto',
+    'ata atualizada da empresa',
+  ]
+  const documentSentence = documentList.length === 3
+    ? `${documentList[0]}, ${documentList[1]} e ${documentList[2]}`
+    : documentList.join(', ')
 
   if (input.eventType === 'cancelamento') {
     return {
@@ -279,12 +287,12 @@ function buildConfirmationMessages(input: {
 
   const actionLabel = input.eventType === 'reagendamento' ? 'reagendamento' : 'agendamento'
   return {
-    whatsapp: `Olá, ${firstName}. Recebemos seu ${actionLabel}${whenText}. A equipe ${input.brand} já está acompanhando sua validação.`,
+    whatsapp: `Olá, ${firstName}. Recebemos seu ${actionLabel}${whenText}. Para seguir com a validação por videoconferência, envie por este canal ${documentSentence}.`,
     emailSubject: input.emailSubject,
-    emailBody: `Olá, ${firstName}.\n\nRecebemos seu ${actionLabel}${whenText}.\n\nA equipe ${input.brand} já registrou sua validação e seguirá com o atendimento.`,
-    docsWhatsapp: 'Para agilizar a etapa de validação, envie por este canal os documentos solicitados ou responda ao e-mail com os arquivos necessários antes do atendimento.',
+    emailBody: `Olá, ${firstName}.\n\nRecebemos seu ${actionLabel}${whenText}.\n\nPara seguir com a validação por videoconferência, será necessário o envio de ${documentSentence}.\n\nSe preferir, responda este e-mail com os arquivos ou envie pelo WhatsApp.`,
+    docsWhatsapp: `Para seguir com a validação por videoconferência, envie ${documentSentence}.`,
     docsEmailSubject: `Documentos para validacao - ${input.brand}`,
-    docsEmailBody: `Olá, ${firstName}.\n\nPara agilizar sua validação, encaminhe os documentos necessários antes do atendimento.\n\nSe preferir, responda este e-mail com os arquivos ou envie pelo WhatsApp.`,
+    docsEmailBody: `Olá, ${firstName}.\n\nPara seguir com a validação por videoconferência, será necessário o envio de ${documentSentence}.\n\nSe preferir, responda este e-mail com os arquivos ou envie pelo WhatsApp.`,
   }
 }
 
