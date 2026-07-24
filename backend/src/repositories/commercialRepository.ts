@@ -1561,6 +1561,114 @@ export class CommercialRepository {
     return result.rows
   }
 
+  async importParceiros(items: Array<Record<string, unknown>>) {
+    if (items.length === 0) return { inseridos: 0, atualizados: 0, ignorados: 0 }
+    if (items.length > 2000) throw new Error('Limite de 2.000 parceiros por importação.')
+    const documents = items
+      .map(item => String(item.cpf_cnpj ?? '').replace(/\D/g, ''))
+      .filter(Boolean)
+    const duplicatedDocuments = documents.filter((document, index) => documents.indexOf(document) !== index)
+    if (duplicatedDocuments.length > 0) {
+      throw new Error(`Importação bloqueada: há CPF/CNPJ repetido no arquivo (${[...new Set(duplicatedDocuments)].join(', ')}).`)
+    }
+
+    return this.db.transaction(async trx => {
+      let inseridos = 0
+      let atualizados = 0
+      let ignorados = 0
+
+      for (const item of items) {
+        const nome = String(item.nome ?? item.razao_social ?? '').trim()
+        const documento = String(item.cpf_cnpj ?? '').trim()
+        if (!nome || !documento) {
+          ignorados += 1
+          continue
+        }
+
+        const existing = await trx.query<{ id: string }>(`
+          select id from parceiros
+          where regexp_replace(coalesce(cpf_cnpj, ''), '[^0-9]', '', 'g')
+              = regexp_replace($1, '[^0-9]', '', 'g')
+          limit 1
+        `, [documento])
+        const id = existing.rows[0]?.id ?? randomUUID()
+        const isUpdate = existing.rows.length > 0
+
+        await trx.query(`
+          insert into parceiros (
+            id, codigo_parceiro, cpf_cnpj, nome, razao_social, nome_fantasia,
+            ddd, telefone, email, cep, logradouro, numero, ibge, complemento,
+            bairro, cidade, estado, observacao, tipo_parceiro, data_ativacao,
+            data_desativacao, bloquear_vendas_protocolos, segmento, status,
+            desde, metadata
+          ) values (
+            $1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+            $14, $15, $16, $17, $18, $19, $20::date, $21::date, $22, $23,
+            $24, $20::date, $25::jsonb
+          )
+          on conflict (id) do update set
+            codigo_parceiro = excluded.codigo_parceiro,
+            cpf_cnpj = excluded.cpf_cnpj,
+            nome = excluded.nome,
+            razao_social = excluded.razao_social,
+            nome_fantasia = excluded.nome_fantasia,
+            ddd = excluded.ddd,
+            telefone = excluded.telefone,
+            email = excluded.email,
+            cep = excluded.cep,
+            logradouro = excluded.logradouro,
+            numero = excluded.numero,
+            ibge = excluded.ibge,
+            complemento = excluded.complemento,
+            bairro = excluded.bairro,
+            cidade = excluded.cidade,
+            estado = excluded.estado,
+            observacao = excluded.observacao,
+            tipo_parceiro = excluded.tipo_parceiro,
+            data_ativacao = excluded.data_ativacao,
+            data_desativacao = excluded.data_desativacao,
+            bloquear_vendas_protocolos = excluded.bloquear_vendas_protocolos,
+            segmento = excluded.segmento,
+            status = excluded.status,
+            desde = excluded.desde,
+            metadata = coalesce(parceiros.metadata, '{}'::jsonb) || excluded.metadata,
+            updated_at = now()
+        `, [
+          id,
+          item.codigo_parceiro ?? null,
+          documento,
+          nome,
+          item.razao_social ?? nome,
+          item.nome_fantasia ?? null,
+          item.ddd ?? null,
+          item.telefone ?? null,
+          item.email ?? null,
+          item.cep ?? null,
+          item.logradouro ?? null,
+          item.numero ?? null,
+          item.ibge ?? null,
+          item.complemento ?? null,
+          item.bairro ?? null,
+          item.cidade ?? null,
+          item.estado ?? null,
+          item.observacao ?? null,
+          item.tipo_parceiro ?? null,
+          item.data_ativacao ?? null,
+          item.data_desativacao ?? null,
+          Boolean(item.bloquear_vendas_protocolos),
+          item.segmento ?? 'baixo',
+          item.status === 'inativo' ? 'inativo' : 'ativo',
+          JSON.stringify(item.metadata ?? {}),
+        ])
+
+        if (isUpdate) atualizados += 1
+        else inseridos += 1
+      }
+
+      return { inseridos, atualizados, ignorados }
+    })
+  }
+
   async saveParceiro(input: Record<string, unknown>) {
     const id = (input.id as string | null)?.trim() || randomUUID()
     const fields = [
@@ -1575,11 +1683,11 @@ export class CommercialRepository {
       'gestor_1_id','gestor_2_id','gestor_3_id','gestor_4_id','gestor_5_id',
       'tipo_conta','banco_id','agencia','agencia_digito','conta','conta_digito','operacao',
       'cnpj_cpf_titular','titular_conta','chave_pix','centro_custo_id',
-      'segmento','status','emissoes_mes','receita_mes','desde',
+      'segmento','status','emissoes_mes','receita_mes','desde','metadata',
     ]
-    const vals = fields.map(f => input[f] ?? null)
+    const vals = fields.map(f => f === 'metadata' ? JSON.stringify(input[f] ?? {}) : input[f] ?? null)
     const colList = fields.join(', ')
-    const placeholders = fields.map((_, i) => `$${i + 2}`).join(', ')
+    const placeholders = fields.map((field, i) => `$${i + 2}${field === 'metadata' ? '::jsonb' : ''}`).join(', ')
     const updates = fields.map((f, i) => `${f} = excluded.${f}`).join(', ')
     const result = await this.db.query<{ id: string }>(`
       insert into parceiros (id, ${colList})

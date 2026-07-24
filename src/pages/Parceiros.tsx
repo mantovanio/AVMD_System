@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Edit3, PlusCircle, RefreshCw, Search, X, Trash2, PowerOff } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import * as XLSX from 'xlsx'
+import { Edit3, PlusCircle, RefreshCw, Search, X, Trash2, PowerOff, Upload, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getApiUrl } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -109,6 +110,37 @@ type AgentePermitidoForm = {
   ativo: boolean
 }
 
+type PapelParceiro = 'vendedor' | 'agente_registro' | 'contador'
+type ParceiroImportItem = Partial<NovoParceiro> & {
+  nome: string
+  cpf_cnpj: string
+  metadata: Record<string, unknown> & { papeis_adicionais?: PapelParceiro[] }
+}
+
+function normalizeHeader(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function parseLegacyDate(value: string) {
+  const match = value.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : null
+}
+
+function legacyBoolean(value: string) {
+  return ['sim', 'yes', 'true', '1'].includes(value.trim().toLowerCase())
+}
+
+function mapLegacyPartnerType(value: string, controleTotal: boolean): TipoParceiro | null {
+  const normalized = normalizeHeader(value)
+  if (normalized === 'contador') return 'contador'
+  if (normalized === 'vendedor') return 'vendedor'
+  if (normalized === 'gestor') return 'gestor'
+  if (normalized === 'pontoatendimento') return controleTotal ? 'pa_controle_total' : 'pa_emissor'
+  if (normalized === 'ar') return 'ar'
+  if (normalized === 'ecommerce') return 'ecommerce'
+  return null
+}
+
 export default function Parceiros() {
   const { profile } = useAuth()
   const canManage = hasPerfil(profile, 'admin', 'vendedor')
@@ -128,6 +160,11 @@ export default function Parceiros() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<NovoParceiro>(EMPTY)
   const [salvando, setSalvando] = useState(false)
+  const importInputRef = useRef<HTMLInputElement>(null)
+  const [importPreview, setImportPreview] = useState<ParceiroImportItem[]>([])
+  const [importFileName, setImportFileName] = useState('')
+  const [importando, setImportando] = useState(false)
+  const [importResult, setImportResult] = useState<{ inseridos: number; atualizados: number; ignorados: number } | null>(null)
 
   type AcaoModal = { parceiro: Parceiro; tipo: 'excluir' | 'inativar'; vinculosCount: number }
   const [acaoModal, setAcaoModal]     = useState<AcaoModal | null>(null)
@@ -162,6 +199,111 @@ export default function Parceiros() {
 
   function updateField<K extends keyof NovoParceiro>(key: K, value: NovoParceiro[K]) {
     setForm(prev => ({ ...prev, [key]: value }))
+  }
+
+  function toggleFormRole(role: PapelParceiro) {
+    setForm(current => {
+      const metadata = current.metadata ?? {}
+      const roles = Array.isArray(metadata.papeis_adicionais) ? metadata.papeis_adicionais as PapelParceiro[] : []
+      const nextRoles = roles.includes(role) ? roles.filter(value => value !== role) : [...roles, role]
+      return { ...current, metadata: { ...metadata, papeis_adicionais: nextRoles } }
+    })
+  }
+
+  async function readPartnersFile(file: File) {
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false })
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+    const source = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', raw: false })
+    const mapped = source.map(row => {
+      const normalized = Object.fromEntries(Object.entries(row).map(([key, value]) => [normalizeHeader(key), String(value ?? '').trim()]))
+      const get = (name: string) => normalized[normalizeHeader(name)] ?? ''
+      const controleTotal = legacyBoolean(get('100% Controle'))
+      const status = normalizeHeader(get('Status')) === 'inativo' ? 'inativo' : 'ativo'
+      const razaoSocial = get('Nome/Razão Social')
+      const tipoOriginal = normalizeHeader(get('Tipo Parceiro'))
+      const papeisAdicionais: PapelParceiro[] = []
+      if (tipoOriginal === 'vendedor') papeisAdicionais.push('vendedor')
+      if (tipoOriginal === 'contador') papeisAdicionais.push('contador')
+      return {
+        codigo_parceiro: get('Código Parceiro') || null,
+        cpf_cnpj: get('CNPJ/CPF'),
+        nome: razaoSocial || get('Nome Fantasia'),
+        razao_social: razaoSocial || null,
+        nome_fantasia: get('Nome Fantasia') || null,
+        ddd: get('DDD') || null,
+        telefone: get('Telefone') || null,
+        email: get('E-mail') || null,
+        cep: get('CEP') || null,
+        logradouro: get('Logradouro') || null,
+        numero: get('Número') || null,
+        complemento: get('Complemento') || null,
+        bairro: get('Bairro') || null,
+        cidade: get('Cidade') || null,
+        estado: get('UF') || null,
+        ibge: get('Código IBGE') || null,
+        observacao: get('Observação Parceiro') || null,
+        tipo_parceiro: mapLegacyPartnerType(get('Tipo Parceiro'), controleTotal),
+        data_ativacao: parseLegacyDate(get('Data Ativação')),
+        data_desativacao: parseLegacyDate(get('Data Desativação')),
+        bloquear_vendas_protocolos: legacyBoolean(get('Bloqueado Vendas/Protocolo')),
+        status,
+        segmento: status === 'inativo' ? 'inativo' : 'baixo',
+        metadata: {
+          origem_importacao: 'parceiros_sistema_anterior',
+          importado_em: new Date().toISOString(),
+          hash_sistema_anterior: get('Hash') || null,
+          independente: legacyBoolean(get('Independente')),
+          controle_total: controleTotal,
+          faixa_comissao_importada: get('Faixa de Comissão') || null,
+          cobranca_remuneracao_importada: get('Cobrança/Remuneração') || null,
+          gestores_importados: [1, 2, 3, 4, 5].map(index => get(`Gestor 0${index}`)).filter(Boolean),
+          papeis_adicionais: papeisAdicionais,
+        },
+      } satisfies ParceiroImportItem
+    }).filter(item => item.nome && item.cpf_cnpj)
+
+    const documents = mapped.map(item => item.cpf_cnpj.replace(/\D/g, ''))
+    const duplicates = [...new Set(documents.filter((document, index) => document && documents.indexOf(document) !== index))]
+    if (duplicates.length > 0) {
+      setError(`Importação bloqueada: CPF/CNPJ repetido no arquivo (${duplicates.join(', ')}).`)
+      setImportPreview([])
+      return
+    }
+    setError(null)
+    setImportFileName(file.name)
+    setImportPreview(mapped)
+    setImportResult(null)
+  }
+
+  function toggleImportRole(index: number, role: PapelParceiro) {
+    setImportPreview(current => current.map((item, itemIndex) => {
+      if (itemIndex !== index) return item
+      const roles = item.metadata.papeis_adicionais ?? []
+      const nextRoles = roles.includes(role) ? roles.filter(value => value !== role) : [...roles, role]
+      return { ...item, metadata: { ...item.metadata, papeis_adicionais: nextRoles } }
+    }))
+  }
+
+  async function confirmPartnersImport() {
+    if (!importPreview.length) return
+    setImportando(true)
+    try {
+      const response = await fetch(getApiUrl('/parceiros/import'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: importPreview }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error ?? 'Falha ao importar parceiros.')
+      setImportResult(data.result)
+      setImportPreview([])
+      setImportFileName('')
+      await fetchAll()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao importar parceiros.')
+    } finally {
+      setImportando(false)
+    }
   }
 
   async function preencherCep(cep: string | null) {
@@ -486,6 +628,25 @@ export default function Parceiros() {
           >
             <RefreshCw size={13} /> Atualizar
           </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".csv,.tsv,.txt,.xls,.xlsx"
+            className="hidden"
+            onChange={event => {
+              const file = event.target.files?.[0]
+              if (file) void readPartnersFile(file)
+              event.target.value = ''
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => importInputRef.current?.click()}
+            disabled={!canManage || importando}
+            className="flex items-center gap-1.5 px-3 py-2 border border-blue-300 text-blue-600 text-xs font-medium rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50"
+          >
+            <Upload size={13} /> Importar parceiros
+          </button>
           <button
             type="button"
             onClick={abrirNovo}
@@ -495,6 +656,65 @@ export default function Parceiros() {
             <PlusCircle size={13} /> Novo Parceiro
           </button>
         </div>
+
+        {importPreview.length > 0 && (
+          <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">Prévia da importação</h3>
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                  {importFileName}: {importPreview.length} parceiro(s) válido(s).{' '}
+                  {importPreview.filter(item => lista.some(parceiro => parceiro.cpf_cnpj?.replace(/\D/g, '') === item.cpf_cnpj.replace(/\D/g, ''))).length} já existente(s) serão atualizados, sem duplicação.
+                </p>
+                <p className="text-xs text-gray-500 mt-2">Defina abaixo os papéis adicionais de cada cadastro, sem criar parceiros duplicados.</p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button type="button" onClick={() => setImportPreview([])} className="px-3 py-2 rounded-lg text-xs text-gray-600 hover:bg-white">Cancelar</button>
+                <button type="button" onClick={() => void confirmPartnersImport()} disabled={importando} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold disabled:opacity-50">
+                  {importando ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                  Confirmar importação
+                </button>
+              </div>
+            </div>
+            <div className="mt-4 max-h-80 overflow-auto rounded-lg border border-blue-100 dark:border-blue-800 bg-white dark:bg-gray-900">
+              <table className="min-w-full text-xs">
+                <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Parceiro</th>
+                    <th className="px-3 py-2 text-left">CPF/CNPJ</th>
+                    <th className="px-3 py-2 text-center">Vendedor</th>
+                    <th className="px-3 py-2 text-center">Agente de Registro</th>
+                    <th className="px-3 py-2 text-center">Contador</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importPreview.map((item, index) => (
+                    <tr key={`${item.cpf_cnpj}-${index}`} className="border-t border-gray-100 dark:border-gray-800">
+                      <td className="px-3 py-2">{item.nome}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{item.cpf_cnpj}</td>
+                      {(['vendedor', 'agente_registro', 'contador'] as PapelParceiro[]).map(role => (
+                        <td key={role} className="px-3 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={(item.metadata.papeis_adicionais ?? []).includes(role)}
+                            onChange={() => toggleImportRole(index, role)}
+                            className="w-4 h-4 accent-blue-600"
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {importResult && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            Importação concluída: {importResult.inseridos} novo(s), {importResult.atualizados} atualizado(s) e {importResult.ignorados} ignorado(s).
+          </div>
+        )}
 
         {showForm && (
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-5">
@@ -537,6 +757,25 @@ export default function Parceiros() {
                 <TextField label="Inscrição Estadual" value={form.inscricao_estadual} onChange={v => updateField('inscricao_estadual', v)} />
                 <SelectField label="Tipo Parceiro" value={form.tipo_parceiro} onChange={v => updateField('tipo_parceiro', (v as TipoParceiro) || null)}
                   options={[{ value: '', label: 'Selecione' }, ...TIPO_PARCEIRO_OPTIONS]} />
+                <div className="md:col-span-4 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Este parceiro também atua como:</p>
+                  <div className="flex flex-wrap gap-4">
+                    {([
+                      ['vendedor', 'Vendedor'],
+                      ['agente_registro', 'Agente de Registro'],
+                      ['contador', 'Contador'],
+                    ] as Array<[PapelParceiro, string]>).map(([role, label]) => {
+                      const roles = Array.isArray(form.metadata?.papeis_adicionais) ? form.metadata.papeis_adicionais as PapelParceiro[] : []
+                      return (
+                        <label key={role} className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                          <input type="checkbox" checked={roles.includes(role)} onChange={() => toggleFormRole(role)} className="w-4 h-4 accent-blue-600" />
+                          {label}
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-2">Os papéis ficam no mesmo cadastro e podem ser alterados posteriormente.</p>
+                </div>
                 <TextField label="Data Ativação" type="date" value={form.data_ativacao} onChange={v => updateField('data_ativacao', v)} />
                 <TextField label="Data Desativação" type="date" value={form.data_desativacao} onChange={v => updateField('data_desativacao', v)} />
                 <SelectField label="Segmento" value={form.segmento} onChange={v => updateField('segmento', (v as Parceiro['segmento']) || 'baixo')}

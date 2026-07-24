@@ -398,6 +398,13 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
     return true
   }
 
+  if (method === 'POST' && url === '/api/parceiros/import') {
+    const body = await readJson<{ items?: Array<Record<string, unknown>> }>(req)
+    const result = await repository.importParceiros(body.items ?? [])
+    writeJson(res, 200, { ok: true, result }, corsOrigin)
+    return true
+  }
+
   if (method === 'POST' && url === '/api/parceiros') {
     const body = await readJson<Record<string, unknown>>(req)
     const parceiro = await repository.saveParceiro(body)
