@@ -911,7 +911,21 @@ export async function handleChatRoutes(
     const textBody = asString(body.body)
     const conversationId = asString(body.conversation_id)
     const leadId = asString(body.lead_id)
-    const fromName = asString(body.from_name) || 'Certifast'
+    let fromName = asString(body.from_name) || 'Certifast'
+
+    if (conversationId) {
+      const conversation = await db.query<{ whatsapp_instance: string | null; fila: string | null }>(
+        `SELECT whatsapp_instance, fila
+           FROM crm_chat_conversations
+          WHERE id::text = $1 OR document_key = $1
+          LIMIT 1`,
+        [conversationId],
+      )
+      const instance = String(conversation.rows[0]?.whatsapp_instance ?? '').toLowerCase()
+      const fila = String(conversation.rows[0]?.fila ?? '').toLowerCase()
+      if (instance.includes('certiid') || fila === 'renovacao') fromName = 'CertiID'
+      else if (instance.includes('certisign') || instance.includes('certifast') || fila === 'agendamento') fromName = 'Certifast'
+    }
 
     if (!to) {
       writeJson(res, 400, { ok: false, error: 'to (destinatario) obrigatorio.' }, corsOrigin)
@@ -959,8 +973,8 @@ export async function handleChatRoutes(
         const n8nRes = await fetch(n8nUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to, subject, body: textBody, from_name: fromName }),
-        })
+        body: JSON.stringify({ to, subject, body: textBody, from_name: fromName }),
+      })
         if (n8nRes.ok) n8nSent = true
         else n8nError = `n8n retornou HTTP ${n8nRes.status}`
       } catch (err) {
