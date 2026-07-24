@@ -1653,6 +1653,145 @@ export class CommercialRepository {
     return result.rows
   }
 
+  async listOperationalReportFilters() {
+    const [parceiros, vendedores, agentes] = await Promise.all([
+      this.db.query(`select id, nome from parceiros where status = 'ativo' order by nome asc`),
+      this.db.query(`select id, nome, parceiro_id from profiles where perfil = 'vendedor' and status = 'ativo' order by nome asc`),
+      this.db.query(`select id, nome, parceiro_id from profiles where perfil = 'agente_registro' and status = 'ativo' order by nome asc`),
+    ])
+    return {
+      parceiros: parceiros.rows,
+      vendedores: vendedores.rows,
+      agentes: agentes.rows,
+    }
+  }
+
+  async getOperationalReport(input: {
+    tipo?: 'vendas' | 'validacoes'
+    from?: string | null
+    to?: string | null
+    viewer_profile_id: string
+    viewer_perfil: string
+    parceiro_id?: string | null
+    vendedor_id?: string | null
+    agente_registro_id?: string | null
+    pedido?: string | null
+    protocolo?: string | null
+    status?: string | null
+  }) {
+    const tipo = input.tipo === 'validacoes' ? 'validacoes' : 'vendas'
+    const from = input.from?.trim() || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+    const to = input.to?.trim() || new Date().toISOString()
+    const params: unknown[] = [from, to]
+    const where: string[] = []
+    const addFilter = (sql: string, value?: string | null) => {
+      if (!value?.trim()) return
+      params.push(value.trim())
+      where.push(sql.replace('?', `$${params.length}`))
+    }
+
+    addFilter('coalesce(v.parceiro_id, vendedor.parceiro_id, agente.parceiro_id) = ?::uuid', input.parceiro_id)
+    addFilter('v.vendedor_id = ?::uuid', input.vendedor_id)
+    addFilter('coalesce(a.agente_registro_id, v.agente_registro_id) = ?::uuid', input.agente_registro_id)
+    addFilter('v.pedido_numero ilike concat(\'%\', ?, \'%\')', input.pedido)
+    addFilter('v.protocolo_numero ilike concat(\'%\', ?, \'%\')', input.protocolo)
+    addFilter(tipo === 'vendas' ? 'v.status_venda = ?' : 'a.status_agendamento = ?', input.status)
+
+    if (input.viewer_perfil !== 'admin') {
+      params.push(input.viewer_profile_id)
+      where.push(`(v.vendedor_id = $${params.length}::uuid or coalesce(a.agente_registro_id, v.agente_registro_id) = $${params.length}::uuid)`)
+    }
+
+    const dateExpression = tipo === 'vendas' ? 'v.created_at' : 'coalesce(a.data_agendada, a.created_at)'
+    const agendaJoin = tipo === 'validacoes'
+      ? 'join agendamentos_validacao a on a.venda_certificado_id = v.id'
+      : 'left join lateral (select null::uuid as id, null::uuid as agente_registro_id, null::text as status_agendamento, null::timestamptz as data_agendada, null::timestamptz as created_at, null::text as tipo_atendimento) a on true'
+    const baseWhere = [
+      `${dateExpression} >= $1::timestamptz`,
+      `${dateExpression} <= $2::timestamptz`,
+      tipo === 'vendas' ? `coalesce(v.status_venda, '') != 'cancelado'` : `coalesce(a.status_agendamento, '') != 'cancelado'`,
+      ...where,
+    ]
+
+    const result = await this.db.query<{
+      id: string
+      tipo: string
+      data: string
+      pedido: string | null
+      protocolo: string | null
+      cliente: string | null
+      produto: string | null
+      parceiro_id: string | null
+      parceiro: string | null
+      vendedor_id: string | null
+      vendedor: string | null
+      agente_registro_id: string | null
+      agente_registro: string | null
+      status: string | null
+      tipo_atendimento: string | null
+      valor: number | null
+    }>(`
+      select
+        ${tipo === 'vendas' ? 'v.id' : 'a.id'} as id,
+        '${tipo}' as tipo,
+        ${dateExpression} as data,
+        v.pedido_numero as pedido,
+        v.protocolo_numero as protocolo,
+        coalesce(v.nome_faturamento, cb.nome, cb.nome_fantasia) as cliente,
+        v.tipo_produto as produto,
+        coalesce(v.parceiro_id, vendedor.parceiro_id, agente.parceiro_id) as parceiro_id,
+        parceiro.nome as parceiro,
+        v.vendedor_id,
+        vendedor.nome as vendedor,
+        coalesce(a.agente_registro_id, v.agente_registro_id) as agente_registro_id,
+        agente.nome as agente_registro,
+        ${tipo === 'vendas' ? 'v.status_venda' : 'a.status_agendamento'} as status,
+        a.tipo_atendimento,
+        ${tipo === 'vendas' ? 'coalesce(v.valor_venda, 0)' : '0'} as valor
+      from vendas_certificados v
+      ${agendaJoin}
+      left join cadastros_base cb on cb.id = v.cadastro_base_id
+      left join profiles vendedor on vendedor.id = v.vendedor_id
+      left join profiles agente on agente.id = coalesce(a.agente_registro_id, v.agente_registro_id)
+      left join parceiros parceiro on parceiro.id = coalesce(v.parceiro_id, vendedor.parceiro_id, agente.parceiro_id)
+      where ${baseWhere.join('\n and ')}
+      order by ${dateExpression} desc
+      limit 5000
+    `, params)
+
+    const linhas = result.rows.map(row => ({ ...row, valor: Number(row.valor ?? 0) }))
+    const totalValor = Number(linhas.reduce((sum, row) => sum + row.valor, 0).toFixed(2))
+    const realizados = linhas.filter(row => row.status === 'realizado' || row.status === 'emitido').length
+    const agrupamentos = {
+      parceiros: this.groupOperationalRows(linhas as Array<Record<string, unknown> & { valor: number }>, 'parceiro'),
+      vendedores: this.groupOperationalRows(linhas as Array<Record<string, unknown> & { valor: number }>, 'vendedor'),
+      agentes: this.groupOperationalRows(linhas as Array<Record<string, unknown> & { valor: number }>, 'agente_registro'),
+    }
+
+    return {
+      tipo,
+      from,
+      to,
+      resumo: { quantidade: linhas.length, realizados, valor_total: totalValor },
+      agrupamentos,
+      linhas,
+    }
+  }
+
+  private groupOperationalRows(rows: Array<Record<string, unknown> & { valor: number }>, field: string) {
+    const groups = new Map<string, { nome: string; quantidade: number; valor: number }>()
+    for (const row of rows) {
+      const nome = String(row[field] ?? 'Não informado')
+      const current = groups.get(nome) ?? { nome, quantidade: 0, valor: 0 }
+      current.quantidade += 1
+      current.valor += row.valor
+      groups.set(nome, current)
+    }
+    return [...groups.values()]
+      .map(item => ({ ...item, valor: Number(item.valor.toFixed(2)) }))
+      .sort((a, b) => b.quantidade - a.quantidade)
+  }
+
   async getCommissionReport(input: {
     from?: string | null
     to?: string | null

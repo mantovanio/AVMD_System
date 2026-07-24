@@ -106,6 +106,19 @@ type CommissionReportRequest = {
   viewer_perfil: string
   target_profile_id?: string | null
 }
+type OperationalReportRequest = {
+  tipo?: 'vendas' | 'validacoes'
+  from?: string | null
+  to?: string | null
+  viewer_profile_id: string
+  viewer_perfil: string
+  parceiro_id?: string | null
+  vendedor_id?: string | null
+  agente_registro_id?: string | null
+  pedido?: string | null
+  protocolo?: string | null
+  status?: string | null
+}
 
 
 type CustomerPortalAccessRequest = { customerId?: string }
@@ -291,6 +304,19 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
   if (req.method === 'POST' && req.url === '/api/comercial/relatorios/comissoes') {
     const body = await readJson<CommissionReportRequest>(req)
     const relatorio = await repository.getCommissionReport(body)
+    writeJson(res, 200, { ok: true, relatorio }, corsOrigin)
+    return true
+  }
+
+  if (req.method === 'GET' && req.url === '/api/comercial/relatorios/operacionais/filtros') {
+    const filtros = await repository.listOperationalReportFilters()
+    writeJson(res, 200, { ok: true, filtros }, corsOrigin)
+    return true
+  }
+
+  if (req.method === 'POST' && req.url === '/api/comercial/relatorios/operacionais') {
+    const body = await readJson<OperationalReportRequest>(req)
+    const relatorio = await repository.getOperationalReport(body)
     writeJson(res, 200, { ok: true, relatorio }, corsOrigin)
     return true
   }
