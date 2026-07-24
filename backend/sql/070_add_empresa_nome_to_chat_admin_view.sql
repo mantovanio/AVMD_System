@@ -1,5 +1,7 @@
 -- Exponibiliza o nome da empresa no painel do chat CRM.
-CREATE OR REPLACE VIEW crm_chat_admin_view AS
+DROP VIEW IF EXISTS crm_chat_admin_view;
+
+CREATE VIEW crm_chat_admin_view AS
 SELECT
   c.id,
   c.document_key,
@@ -34,4 +36,3 @@ LEFT JOIN LATERAL (
   ORDER BY created_at DESC
   LIMIT 1
 ) a ON true;
-
