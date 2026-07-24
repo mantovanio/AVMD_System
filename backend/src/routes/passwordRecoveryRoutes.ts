@@ -1,11 +1,19 @@
 import { createClerkClient } from '@clerk/backend'
-import { randomInt } from 'node:crypto'
+import { randomInt, randomUUID, createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
+import type { PasswordRecoveryRepository } from '../repositories/passwordRecoveryRepository.js'
 import type { ProfileRepository } from '../repositories/profileRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
 
 type RequestBody = {
   email?: string
+}
+
+type VerifyBody = {
+  email?: string
+  code?: string
+  password?: string
 }
 
 type ClerkErrorLike = {
@@ -63,6 +71,31 @@ function buildTemporaryStrongPassword() {
   return `Tmp#${stamp}${rand}aA1!`
 }
 
+function buildRecoveryCode() {
+  return String(randomInt(0, 1000000)).padStart(6, '0')
+}
+
+function hashRecoveryCode(code: string) {
+  return createHash('sha256').update(code).digest('hex')
+}
+
+function buildRecoveryEmail(nome: string, code: string) {
+  const firstName = nome.trim().split(/\s+/)[0] || 'cliente'
+  return {
+    subject: 'Código de recuperação de senha',
+    body: `Olá, ${firstName}.
+
+Recebemos sua solicitação de recuperação de senha.
+
+Use este código para redefinir seu acesso:
+
+${code}
+
+Esse código é válido por 15 minutos.
+Se você não solicitou essa alteração, desconsidere esta mensagem.`,
+  }
+}
+
 async function syncClerkUser(
   clerkClient: ReturnType<typeof createClerkClient>,
   profileRepository: ProfileRepository,
@@ -116,6 +149,8 @@ export async function handlePasswordRecoveryRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   profileRepository: ProfileRepository,
+  passwordRecoveryRepository: PasswordRecoveryRepository,
+  outboxRepository: CommunicationOutboxRepository,
   clerkSecretKey: string,
   corsOrigin: string,
 ): Promise<boolean> {
@@ -142,17 +177,90 @@ export async function handlePasswordRecoveryRoutes(
 
     try {
       await syncClerkUser(clerkClient, profileRepository, profile.id, email, profile.nome, profile.clerk_user_id)
+      const recoveryCode = buildRecoveryCode()
+      const tokenHash = hashRecoveryCode(recoveryCode)
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+
+      await passwordRecoveryRepository.create({
+        profileId: profile.id,
+        email,
+        tokenHash,
+        expiresAt,
+      })
+
+      const recoveryEmail = buildRecoveryEmail(profile.nome, recoveryCode)
+      await outboxRepository.create({
+        channel: 'email',
+        provider: 'email_smtp',
+        to_address: email,
+        subject: recoveryEmail.subject,
+        body: recoveryEmail.body,
+        payload: {
+          context: 'password_recovery',
+          profile_id: profile.id,
+          email,
+          code: recoveryCode,
+        },
+      })
+
+      writeJson(res, 200, { ok: true, email: maskEmail(email) }, corsOrigin)
+      return true
     } catch (error) {
       writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
       return true
     }
-
-    writeJson(res, 200, { ok: true, email: maskEmail(email) }, corsOrigin)
-    return true
   }
 
   if (req.method === 'POST' && req.url === '/api/auth/password-recovery/verify') {
-    writeJson(res, 410, { ok: false, error: 'Recuperação de senha agora é feita pelo Clerk.' }, corsOrigin)
+    if (!clerkSecretKey) {
+      writeJson(res, 503, { ok: false, error: 'CLERK_SECRET_KEY não configurada no backend.' }, corsOrigin)
+      return true
+    }
+
+    const body = await readJson<VerifyBody>(req)
+    const email = normalizeEmail(String(body?.email ?? ''))
+    const code = String(body?.code ?? '').replace(/\D/g, '').slice(0, 6)
+    const password = String(body?.password ?? '')
+
+    if (!email || code.length !== 6 || !password) {
+      writeJson(res, 400, { ok: false, error: 'Informe e-mail, código de 6 dígitos e nova senha.' }, corsOrigin)
+      return true
+    }
+
+    const profile = await profileRepository.findByEmail(email)
+    if (!profile) {
+      writeJson(res, 404, { ok: false, error: 'Conta não encontrada.' }, corsOrigin)
+      return true
+    }
+
+    const tokenHash = hashRecoveryCode(code)
+    const token = await passwordRecoveryRepository.findValidByTokenHash(tokenHash)
+    if (!token || token.profile_id !== profile.id) {
+      writeJson(res, 400, { ok: false, error: 'Código inválido ou expirado.' }, corsOrigin)
+      return true
+    }
+
+    const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
+    try {
+      await syncClerkUser(clerkClient, profileRepository, profile.id, email, profile.nome, profile.clerk_user_id)
+      const resolvedProfile = await profileRepository.findById(profile.id)
+      const clerkUserId = resolvedProfile?.clerk_user_id
+
+      if (!clerkUserId) {
+        writeJson(res, 400, { ok: false, error: 'Conta vinculada não encontrada no Clerk.' }, corsOrigin)
+        return true
+      }
+
+      await clerkClient.users.updateUser(clerkUserId, {
+        password,
+        skipPasswordChecks: true,
+        signOutOfOtherSessions: true,
+      })
+      await passwordRecoveryRepository.consume(token.id)
+      writeJson(res, 200, { ok: true }, corsOrigin)
+    } catch (error) {
+      writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
+    }
     return true
   }
 

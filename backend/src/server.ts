@@ -35,6 +35,7 @@ import { CommunicationOutboxRepository } from './repositories/communicationOutbo
 import { CommunicationEventRepository } from './repositories/communicationEventRepository.js'
 import { ConfigRepository } from './repositories/configRepository.js'
 import { FileRepository } from './repositories/fileRepository.js'
+import { PasswordRecoveryRepository } from './repositories/passwordRecoveryRepository.js'
 import { ScheduleAutomationRepository } from './repositories/scheduleAutomationRepository.js'
 import { OutboxProcessor } from './services/outboxProcessor.js'
 import { handleRenovacaoRoutes } from './routes/renovacaoRoutes.js'
@@ -73,6 +74,7 @@ const communicationOutboxRepository = new CommunicationOutboxRepository(db)
 const communicationEventRepository = new CommunicationEventRepository(db)
 const configRepository = new ConfigRepository(db)
 const fileRepository = new FileRepository(db)
+const passwordRecoveryRepository = new PasswordRecoveryRepository(db)
 const scheduleAutomationRepository = new ScheduleAutomationRepository(db)
 const permissoesRepository = new PermissoesRepository(db)
 const integrationRegistry = createIntegrationRegistry(config)
@@ -115,6 +117,8 @@ const server = createServer(async (req, res) => {
       req,
       res,
       profileRepository,
+      passwordRecoveryRepository,
+      communicationOutboxRepository,
       config.clerkSecretKey,
       config.corsOrigin,
     )

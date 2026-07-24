@@ -33,7 +33,7 @@ interface AuthContextValue {
   signUp: (data: SignUpData) => Promise<AuthActionResult>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<AuthActionResult>
-  confirmPasswordReset: (code: string, newPassword: string) => Promise<AuthActionResult>
+  confirmPasswordReset: (email: string, code: string, newPassword: string) => Promise<AuthActionResult>
   updatePassword: (password: string) => Promise<AuthActionResult>
   isPasswordRecovery: boolean
   finishPasswordRecovery: () => void
@@ -52,13 +52,6 @@ type ClerkEmailSecondFactor = {
   strategy?: string
   emailAddressId?: string
   safeIdentifier?: string
-}
-
-type ClerkPasswordResetSignIn = {
-  resetPasswordEmailCode: {
-    sendCode: () => Promise<{ error: unknown }>
-  }
-  attemptFirstFactor: (params: { strategy: 'reset_password_email_code'; code: string; password: string }) => Promise<{ error?: unknown; status?: string }>
 }
 
 type ClerkSignInAttempt = {
@@ -425,51 +418,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; email?: string } | null
       if (!response.ok || !data?.ok) {
-        return { error: data?.error ?? 'Falha ao preparar a recuperação no Clerk.' }
+        return { error: data?.error ?? 'Falha ao preparar a recuperação de senha.' }
       }
 
-      if (!signInLoaded || !signIn) {
-        const clerkReady = await waitForClerkBootstrap()
-        if (clerkReady && signIn) {
-          return resetPassword(normalizedEmail)
-        }
-        return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
-      }
-
-      try {
-        const recoveryAttempt = await withTimeout(
-          signIn.create({
-            strategy: 'reset_password_email_code',
-            identifier: normalizedEmail,
-          }),
-          15000,
-          'O Clerk não respondeu ao preparar a recuperação de senha.',
-        ) as typeof signIn & ClerkPasswordResetSignIn
-
-        const sendCodeResult = await withTimeout(
-          recoveryAttempt.resetPasswordEmailCode.sendCode() as Promise<{ error?: unknown }>,
-          15000,
-          'O Clerk não respondeu ao enviar o código de recuperação.',
-        )
-
-        if (sendCodeResult.error) {
-          const sendCodeError = getClerkErrorMessage(sendCodeResult.error, 'Falha ao enviar o código de recuperação.')
-          return {
-            error: isPasswordRequirementsError(sendCodeError)
-              ? 'Não foi possível iniciar a recuperação agora. Verifique o e-mail cadastrado e tente novamente.'
-              : sendCodeError,
-          }
-        }
-
-        return { error: `Código enviado para ${data.email ?? normalizedEmail}.` }
-      } catch (error) {
-        const message = getClerkErrorMessage(error, 'Falha ao enviar o código de recuperação. Tente novamente.')
-        return {
-          error: isPasswordRequirementsError(message)
-            ? 'Não foi possível iniciar a recuperação agora. Verifique o e-mail cadastrado e tente novamente.'
-            : message,
-        }
-      }
+      return { error: `Código enviado para ${data.email ?? normalizedEmail}.` }
     } catch (error) {
       const message = getClerkErrorMessage(error, 'Falha ao enviar o código de recuperação. Tente novamente.')
       return {
@@ -480,34 +432,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function confirmPasswordReset(code: string, newPassword: string) {
+  async function confirmPasswordReset(email: string, code: string, newPassword: string) {
     try {
-      const recoverySignIn = signIn as typeof signIn & ClerkPasswordResetSignIn
-      if (!signInLoaded || !signIn) {
-        const clerkReady = await waitForClerkBootstrap()
-        if (clerkReady && signIn) {
-          return confirmPasswordReset(code, newPassword)
-        }
-        return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
-      }
-
+      const normalizedEmail = email.trim().toLowerCase()
       const normalizedCode = code.replace(/\D/g, '').slice(0, 6)
       if (normalizedCode.length !== 6) {
         return { error: 'Informe o código de 6 dígitos enviado ao seu e-mail.' }
       }
 
-      const verifyResult = await withTimeout(
-        recoverySignIn.attemptFirstFactor({
-          strategy: 'reset_password_email_code',
-          code: normalizedCode,
-          password: newPassword,
-        }) as Promise<{ error?: unknown; status?: string }>,
-        15000,
-        'O Clerk não respondeu ao validar o código de recuperação.',
-      )
-
-      if (verifyResult.error) {
-        return { error: getClerkErrorMessage(verifyResult.error, 'Código inválido ou expirado. Solicite um novo código.') }
+      const response = await fetch(getApiUrl('/auth/password-recovery/verify'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, code: normalizedCode, password: newPassword }),
+      })
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
+      if (!response.ok || !data?.ok) {
+        return { error: data?.error ?? 'Código inválido ou expirado. Solicite um novo código.' }
       }
 
       return { error: null }

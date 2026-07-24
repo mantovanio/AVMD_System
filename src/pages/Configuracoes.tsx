@@ -666,7 +666,7 @@ function AbaUsuarios() {
   }, [isAdmin, load])
 
   function getAuthUserId(user: Profile) {
-    return user.clerk_user_id ?? user.id
+    return user.id
   }
 
   async function saveEdit(userId: string) {

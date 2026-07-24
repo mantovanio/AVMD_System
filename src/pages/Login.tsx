@@ -302,7 +302,7 @@ export default function Login() {
     setForgotResetError(null)
     if (forgotNewPass !== forgotNewConfirm) { setForgotResetError('As senhas não coincidem.'); return }
     setForgotResetLoading(true)
-    const { error } = await confirmPasswordReset(forgotCode.trim(), forgotNewPass)
+    const { error } = await confirmPasswordReset(forgotEmail, forgotCode.trim(), forgotNewPass)
     if (error) setForgotResetError(translateError(error))
     else setForgotDone(true)
     setForgotResetLoading(false)
@@ -526,7 +526,7 @@ export default function Login() {
               </button>
 
               <h2 className="text-xl font-bold text-white mb-1">Recuperar senha</h2>
-              <p className="text-sm text-white/80 mb-6">Informe seu email e enviaremos um código oficial do Clerk para redefinir sua senha.</p>
+              <p className="text-sm text-white/80 mb-6">Informe seu email e enviaremos um código de recuperação para redefinir sua senha.</p>
 
               {forgotDone ? (
                 <div className="text-center py-6 space-y-4">
