@@ -94,6 +94,7 @@ export type GinfesResult = {
   codigoVerificacao?: string
   statusLote?: number
   error?: string
+  message?: string
   mensagens?: Array<{ codigo: string; mensagem: string; correcao: string }>
   rawResponse?: string
 }
@@ -456,8 +457,9 @@ export async function emitirNFSeGinfes(
   repo: CatalogRepository,
   vendaId: string,
 ): Promise<GinfesResult> {
-  const config = await repo.getActiveNfseConfiguracao()
-  if (!config) return { ok: false, error: 'Nenhuma configuracao fiscal ativa encontrada.' }
+  const rawConfig = await repo.getActiveNfseConfiguracao()
+  if (!rawConfig) return { ok: false, error: 'Nenhuma configuracao fiscal ativa encontrada.' }
+  const config = rawConfig as Record<string, unknown>
 
   const payload = (config.payload_reforma_tributaria ?? {}) as Record<string, unknown>
   const wsdlUrl = String(payload.ginfes_wsdl_homologacao ?? payload.gissonline_wsdl_url ?? '').trim()
@@ -472,10 +474,11 @@ export async function emitirNFSeGinfes(
   if (!existsSync(absPfxPath)) return { ok: false, error: `Certificado A1 nao encontrado em ${absPfxPath}.` }
   const pfxBuffer = readFileSync(absPfxPath)
 
-  const venda = await repo.getNfseVendaContext(vendaId)
-  if (!venda) return { ok: false, error: 'Venda nao encontrada.' }
+  const rawVenda = await repo.getNfseVendaContext(vendaId)
+  if (!rawVenda) return { ok: false, error: 'Venda nao encontrada.' }
+  const venda = rawVenda as Record<string, unknown>
 
-  const numeroRps = (config.numero_rps_atual ?? 1)
+  const numeroRps = Number(config.numero_rps_atual ?? 1)
   const agora = new Date()
   const dataEmissao = formatDate(agora.toISOString())
 
@@ -483,10 +486,10 @@ export async function emitirNFSeGinfes(
   const isCnpj = doc.length === 14
   const rps: GinfesRps = {
     numero: numeroRps,
-    serie: config.serie_rps ?? '1',
+    serie: String(config.serie_rps ?? '1'),
     tipo: Number(config.tipo_rps ?? 1),
     dataEmissao,
-    naturezaOperacao: config.natureza_operacao ?? '1',
+    naturezaOperacao: String(config.natureza_operacao ?? '1'),
     regimeEspecialTributacao: Number(config.regime_especial ?? 0) || 0,
     optanteSimplesNacional: config.simples_nacional ? 1 : 2,
     incentivadorCultural: config.incentivo_fiscal ? 1 : 2,
@@ -508,38 +511,38 @@ export async function emitirNFSeGinfes(
       valorLiquidoNfse: Number(venda.valor_venda ?? 0),
       descontoIncondicionado: 0,
       descontoCondicionado: 0,
-      itemListaServico: config.codigo_servico_municipio ?? '',
-      codigoCnae: config.cnae ?? '',
-      codigoTributacaoMunicipio: config.codigo_tributacao_municipio ?? '',
+      itemListaServico: String(config.codigo_servico_municipio ?? ''),
+      codigoCnae: String(config.cnae ?? ''),
+      codigoTributacaoMunicipio: String(config.codigo_tributacao_municipio ?? ''),
       discriminacao: String(venda.observacoes ?? `Servico de certificado digital - venda ${vendaId.slice(0, 8)}`),
-      codigoMunicipio: config.municipio_codigo_ibge ?? '',
+      codigoMunicipio: String(config.municipio_codigo_ibge ?? ''),
     },
     prestador: {
-      cnpj: config.cnpj_emitente ?? '',
-      inscricaoMunicipal: config.inscricao_municipal ?? '',
+      cnpj: String(config.cnpj_emitente ?? ''),
+      inscricaoMunicipal: String(config.inscricao_municipal ?? ''),
     },
     tomador: {
       cpfCnpj: isCnpj ? { cnpj: doc } : { cpf: doc },
-      inscricaoMunicipal: venda.inscricao_municipal ?? '',
-      razaoSocial: venda.nome_faturamento ?? '',
+      inscricaoMunicipal: String(venda.inscricao_municipal ?? ''),
+      razaoSocial: String(venda.nome_faturamento ?? ''),
       endereco: {
-        endereco: venda.logradouro ?? '',
-        numero: venda.numero ?? 's/n',
-        complemento: venda.complemento ?? '',
-        bairro: venda.bairro ?? '',
-        codigoMunicipio: config.municipio_codigo_ibge ?? '',
-        uf: venda.uf ?? '',
-        cep: (venda.cep ?? '').replace(/\D/g, ''),
+        endereco: String(venda.logradouro ?? ''),
+        numero: String(venda.numero ?? 's/n'),
+        complemento: String(venda.complemento ?? ''),
+        bairro: String(venda.bairro ?? ''),
+        codigoMunicipio: String(config.municipio_codigo_ibge ?? ''),
+        uf: String(venda.uf ?? ''),
+        cep: String(venda.cep ?? '').replace(/\D/g, ''),
       },
       contato: {
-        telefone: (venda.telefone_faturamento ?? '').replace(/\D/g, ''),
-        email: venda.email_faturamento ?? '',
+        telefone: String(venda.telefone_faturamento ?? '').replace(/\D/g, ''),
+        email: String(venda.email_faturamento ?? ''),
       },
     },
   }
 
   const result = await enviarLoteRps(
-    { ...config, wsdlUrl, certificadoPfxPath: absPfxPath, certificadoSenha: certSenha } as GinfesConfig,
+    { ...config, wsdlUrl, certificadoPfxPath: absPfxPath, certificadoSenha: certSenha } as unknown as GinfesConfig,
     rps,
     pfxBuffer,
   )
@@ -547,23 +550,23 @@ export async function emitirNFSeGinfes(
   if (result.ok && result.protocolo) {
     await repo.createNfse({
       venda_certificado_id: vendaId,
-      cadastro_base_tomador_id: venda.cadastro_base_id ?? null,
+      cadastro_base_tomador_id: String(venda.cadastro_base_id ?? '') || null,
       numero_nf: null,
       codigo_verificacao: null,
       status_nf: 'enviado',
       data_emissao: agora.toISOString(),
-      valor_servico: venda.valor_venda ?? 0,
+      valor_servico: Number(venda.valor_venda ?? 0),
       valor_iss: rps.servico.valorIss,
       payload_envio: { modo: 'ginfes', rps, protocolo: result.protocolo, numero_lote: result.numeroLote },
       payload_retorno: {},
       metadata: { ginfes_wsdl: wsdlUrl, numero_rps: numeroRps },
     })
 
-    await repo.updateNfseConfigRpsNumber(config.id, numeroRps + 1)
+    await repo.updateNfseConfigRpsNumber(String(config.id), numeroRps + 1)
 
-    const pollingResult = await pollLoteRps(config, result.protocolo, pfxBuffer)
+    const pollingResult = await pollLoteRps({ ...config, wsdlUrl } as unknown as GinfesConfig, result.protocolo, pfxBuffer)
     if (pollingResult.ok && pollingResult.numeroNf) {
-      const notaId = await repo.updateNfseStatusByProtocolo(result.protocolo, {
+      await repo.updateNfseStatusByProtocolo(result.protocolo, {
         numero_nf: pollingResult.numeroNf,
         codigo_verificacao: pollingResult.codigoVerificacao ?? null,
         status_nf: 'processado',

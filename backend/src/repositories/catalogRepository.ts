@@ -146,8 +146,8 @@ export class CatalogRepository {
     )
   }
 
-  async updateNfseStatusByProtocolo(protocolo: string, updates: { numero_nf: string; codigo_verificacao: string | null; status_nf: string }) {
-    const result = await this.db.query(
+  async updateNfseStatusByProtocolo(protocolo: string, updates: { numero_nf: string; codigo_verificacao: string | null; status_nf: string }): Promise<string | null> {
+    const result = await this.db.query<{ id: string }>(
       `update nfse_emitidas
        set numero_nf = $2, codigo_verificacao = $3, status_nf = $4, updated_at = now()
        where (payload_envio->>'protocolo' = $1 OR metadata->>'protocolo' = $1)
