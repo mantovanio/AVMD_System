@@ -1871,12 +1871,12 @@ export default function Comercial() {
     } finally {
       if (!options?.silent) setLoadingV(false)
     }
-  }, [])
+  }, [profile?.id, profile?.perfil])
 
   const fetchClientes = useCallback(async () => {
     const data = await fetchAivenCommercialCustomers({ viewer_profile_id: profile?.id ?? null, viewer_perfil: profile?.perfil ?? null })
     setClientes(data as CadastroBase[])
-  }, [])
+  }, [profile?.id, profile?.perfil])
 
   useEffect(() => {
     void fetchAgencyConfig().then(({ data }) => setAgencyConfig(data))

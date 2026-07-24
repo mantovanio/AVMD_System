@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -13,25 +13,8 @@ import {
   X,
   BookOpen,
   ChevronLeft,
-  TrendingUp,
-  Calendar,
-  CreditCard,
-  ShoppingBag,
-  Tag,
-  Upload,
-  Wallet,
-  Landmark,
-  SplitSquareHorizontal,
-  FileText,
-  Shield,
-  Store,
-  Receipt,
-  LineChart,
-  Globe,
-  MousePointerClick,
-  Lock,
-  Building2,
-  ScrollText,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AgencyConfig } from '@/lib/agencyConfig'
@@ -48,39 +31,6 @@ export type Page =
   | 'parceiros'
   | 'configuracoes'
   | 'catalogo_ia'
-
-type SubItem = { id: string; label: string; icon?: React.ComponentType<{ size?: number; className?: string }> }
-
-const PAGE_SUB_ITEMS: Partial<Record<Page, SubItem[]>> = {
-  comercial: [
-    { id: 'vendas',       label: 'Lançar Vendas',    icon: TrendingUp  },
-    { id: 'agenda',       label: 'Agenda',           icon: Calendar    },
-    { id: 'pagamento',    label: 'Pagamentos',       icon: CreditCard  },
-    { id: 'certificados', label: 'Certificados',     icon: ShoppingBag },
-    { id: 'tabelas',      label: 'Tabelas de Preço', icon: Tag         },
-    { id: 'comissoes',    label: 'Comissões',        icon: TrendingUp  },
-    { id: 'importar',     label: 'Importações',      icon: Upload      },
-  ],
-  financeiro: [
-    { id: 'pagarReceber', label: 'Pagar / Receber',  icon: Wallet           },
-    { id: 'contas',       label: 'Contas Bancárias', icon: Landmark         },
-    { id: 'centros',      label: 'Centro de Custos', icon: Building2        },
-    { id: 'comissoes',    label: 'Comissões',        icon: TrendingUp       },
-    { id: 'split',        label: 'Extrato Split',    icon: SplitSquareHorizontal },
-    { id: 'fiscal',       label: 'Fiscal',           icon: Receipt          },
-  ],
-  configuracoes: [
-    { id: 'geral',        label: 'Geral',                  icon: Settings    },
-    { id: 'integracoes',  label: 'Integrações',            icon: Globe       },
-    { id: 'automacoes',   label: 'Automações',             icon: MousePointerClick },
-    { id: 'usuarios',     label: 'Usuários',               icon: Users       },
-    { id: 'permissoes',   label: 'Permissões',             icon: Lock        },
-    { id: 'pontos',       label: 'Pontos de Atendimento',  icon: Store       },
-    { id: 'pagamentos',   label: 'Pagamentos',             icon: CreditCard  },
-    { id: 'fiscal',       label: 'Fiscal / NFS-e',         icon: ScrollText  },
-    { id: 'privacidade',  label: 'Privacidade (LGPD)',     icon: Shield      },
-  ],
-}
 
 interface Props {
   activePage:   Page
@@ -138,79 +88,24 @@ function IconRail({
   activePage,
   onNavigate,
   onLogout,
-  onMobileClose,
   agencyConfig,
+  expanded,
+  onToggle,
 }: {
   groups: SidebarGroup[]
   activePage: Page
   onNavigate: (page: Page) => void
   onLogout?: () => void
-  onMobileClose?: () => void
   agencyConfig?: AgencyConfig
+  expanded: boolean
+  onToggle: () => void
 }) {
-  const [hoveredPage, setHoveredPage] = useState<Page | null>(null)
-  const [flyoutStyle, setFlyoutStyle] = useState<React.CSSProperties | undefined>(undefined)
-  const hoverTimeout = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const railRef = useRef<HTMLDivElement>(null)
-  const flyoutRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!hoveredPage) return
-
-    function closeFlyout() {
-      setHoveredPage(null)
-      setFlyoutStyle(undefined)
-      clearTimeout(hoverTimeout.current)
-    }
-
-    function handlePointerDown(event: PointerEvent) {
-      const target = event.target as Node | null
-      if (!target) return
-      if (railRef.current?.contains(target)) return
-      if (flyoutRef.current?.contains(target)) return
-      closeFlyout()
-    }
-
-    window.addEventListener('pointerdown', handlePointerDown)
-    return () => window.removeEventListener('pointerdown', handlePointerDown)
-  }, [hoveredPage])
-
-  function handleFlyoutNavigate(page: Page, tab: string) {
-    setHoveredPage(null)
-    setFlyoutStyle(undefined)
-    clearTimeout(hoverTimeout.current)
-    onNavigate(page)
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        window.dispatchEvent(new CustomEvent('crm:navigate-tab', { detail: { tab } }))
-      })
-    })
-  }
-
-  function handleMouseEnter(page: Page, e: React.MouseEvent) {
-    clearTimeout(hoverTimeout.current)
-    const subs = PAGE_SUB_ITEMS[page]
-    if (subs && subs.length > 0) {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-      setFlyoutStyle({ left: rect.right + 4, top: rect.top })
-      setHoveredPage(page)
-    }
-  }
-
-  function handleZoneLeave() {
-    clearTimeout(hoverTimeout.current)
-    hoverTimeout.current = setTimeout(() => {
-      setHoveredPage(null)
-      setFlyoutStyle(undefined)
-    }, 300)
-  }
-
-  const hoveredSubs = hoveredPage ? (PAGE_SUB_ITEMS[hoveredPage] ?? null) : null
-  const hoveredLabel = hoveredPage ? MENU_GROUPS.flatMap(g => g.items).find(i => i.id === hoveredPage)?.label ?? '' : ''
-
   return (
-    <div ref={railRef} className="w-16 flex flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
-      <div className="flex items-center justify-center mb-4">
+    <div className={cn(
+      'flex flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0 transition-[width] duration-200',
+      expanded ? 'w-64' : 'w-16',
+    )}>
+      <div className={cn('flex items-center mb-4 px-2', expanded ? 'justify-between' : 'justify-center')}>
         {agencyConfig?.logo_interna_url?.trim() ? (
           <div className="w-9 h-9 rounded-xl bg-white border border-gray-200 dark:border-gray-800 flex items-center justify-center p-1.5 overflow-hidden">
             <img src={agencyConfig.logo_interna_url} alt={agencyConfig.nome_agencia} className="w-full h-full object-contain" />
@@ -223,85 +118,71 @@ function IconRail({
             ID
           </div>
         )}
-        {onMobileClose && (
-          <button type="button" onClick={onMobileClose}
-            className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
-            <X size={16} />
-          </button>
+        {expanded && (
+          <span className="min-w-0 flex-1 px-3 text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">
+            {agencyConfig?.nome_agencia ?? 'Menu principal'}
+          </span>
         )}
+        <button
+          type="button"
+          onClick={onToggle}
+          title={expanded ? 'Recolher menu principal' : 'Abrir menu principal'}
+          aria-label={expanded ? 'Recolher menu principal' : 'Abrir menu principal'}
+          className={cn(
+            'flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 transition-colors',
+            expanded ? 'w-9 h-9 shrink-0' : 'absolute left-11 top-2 w-7 h-7 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-sm',
+          )}
+        >
+          {expanded ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={16} />}
+        </button>
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0" onMouseLeave={handleZoneLeave}>
+      <div className="flex-1 flex flex-col min-h-0">
         <nav className="flex flex-col flex-1 px-2 overflow-y-auto sidebar-scroll">
           {groups.map((group, groupIndex) => (
             <div key={group.id} className={cn(groupIndex > 0 && 'mt-3 pt-3 border-t border-gray-100 dark:border-gray-800')}>
+              {expanded && (
+                <p className="px-3 mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                  {group.label}
+                </p>
+              )}
               <div className="flex flex-col gap-1">
                 {group.items.map(({ id, icon: Icon, label }) => (
-                  <div
+                  <button
                     key={id}
-                    onMouseEnter={e => handleMouseEnter(id, e)}
+                    onClick={() => onNavigate(id)}
+                    type="button"
+                    title={expanded ? undefined : label}
+                    className={cn(
+                      'flex items-center h-12 rounded-xl transition-colors',
+                      expanded ? 'w-full gap-3 px-3' : 'justify-center w-12 mx-auto',
+                      activePage === id
+                        ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
+                        : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300',
+                    )}
                   >
-                    <button
-                      onClick={() => {
-                        setHoveredPage(null)
-                        setFlyoutStyle(undefined)
-                        clearTimeout(hoverTimeout.current)
-                        onNavigate(id)
-                        onMobileClose?.()
-                      }}
-                      type="button"
-                      title={label}
-                      className={cn(
-                        'flex items-center justify-center w-12 h-12 rounded-xl transition-colors mx-auto',
-                        activePage === id
-                          ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
-                          : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300',
-                      )}
-                    >
-                      <Icon size={20} />
-                    </button>
-                  </div>
+                    <Icon size={20} className="shrink-0" />
+                    {expanded && <span className="text-sm font-medium truncate">{label}</span>}
+                  </button>
                 ))}
               </div>
             </div>
           ))}
         </nav>
-
-        {hoveredPage && hoveredSubs && flyoutStyle && (
-          <div
-            ref={flyoutRef}
-            onMouseEnter={() => clearTimeout(hoverTimeout.current)}
-            className="fixed z-50 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl"
-            style={flyoutStyle}
-          >
-            <div className="max-h-80 overflow-y-auto p-1.5">
-              <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                {hoveredLabel}
-              </p>
-              {hoveredSubs.map(sub => (
-                <button
-                  key={sub.id}
-                  type="button"
-                  onClick={() => handleFlyoutNavigate(hoveredPage, sub.id)}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors"
-                >
-                  {sub.icon && <sub.icon size={16} className="shrink-0 text-gray-400 dark:text-gray-500" />}
-                  <span>{sub.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="px-2 pt-3 mt-3 border-t border-gray-100 dark:border-gray-800">
         <button
           type="button"
           title="Sair"
-          className="flex items-center justify-center w-12 h-12 rounded-xl text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 transition-colors mx-auto"
+          className={cn(
+            'flex items-center h-12 rounded-xl text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 transition-colors',
+            expanded ? 'w-full gap-3 px-3' : 'justify-center w-12 mx-auto',
+          )}
           onClick={onLogout}
         >
-          <LogOut size={18} />
+          <LogOut size={18} className="shrink-0" />
+          {expanded && <span className="text-sm font-medium">Sair</span>}
         </button>
       </div>
     </div>
@@ -400,6 +281,7 @@ function MobileDrawer({
 }
 
 export default function Sidebar({ activePage, onNavigate, allowedPages, onLogout, agencyConfig, mobileOpen, onMobileClose }: Props) {
+  const [desktopExpanded, setDesktopExpanded] = useState(false)
   const groups = MENU_GROUPS
     .map(group => ({
       ...group,
@@ -418,6 +300,8 @@ export default function Sidebar({ activePage, onNavigate, allowedPages, onLogout
           onNavigate={onNavigate}
           onLogout={onLogout}
           agencyConfig={agencyConfig}
+          expanded={desktopExpanded}
+          onToggle={() => setDesktopExpanded(value => !value)}
         />
       </aside>
 

@@ -895,7 +895,7 @@ export default function Clientes() {
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize, search, filterTipo, filterStatus])
+  }, [page, pageSize, search, filterTipo, filterStatus, profile?.id, profile?.perfil])
 
   useEffect(() => { void fetchClientes() }, [fetchClientes])
 

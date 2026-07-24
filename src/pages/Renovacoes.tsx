@@ -582,7 +582,7 @@ export default function Renovacoes() {
     } finally {
       setLoading(false)
     }
-  }, [visao])
+  }, [visao, profile?.id, profile?.perfil])
 
   const carregarMaisRenovacoes = useCallback(async () => {
     if (loading || loadingMore || !hasMore) return
@@ -598,7 +598,7 @@ export default function Renovacoes() {
     } finally {
       setLoadingMore(false)
     }
-  }, [hasMore, lista.length, loading, loadingMore, visao])
+  }, [hasMore, lista.length, loading, loadingMore, visao, profile?.id, profile?.perfil])
 
   useEffect(() => {
     const root = pageScrollRef.current
