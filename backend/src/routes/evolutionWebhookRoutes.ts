@@ -95,6 +95,14 @@ function buildRemoteJid(phoneDigits: string | null) {
   return phoneDigits ? `${phoneDigits}@s.whatsapp.net` : null
 }
 
+function normalizeConversationKey(value: string | null | undefined) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return { raw: '', digits: null }
+  const withoutSuffix = raw.split('@')[0] ?? raw
+  const digits = normalizePhoneDigits(withoutSuffix)
+  return { raw, digits }
+}
+
 function inferMediaFileName(mimeType: string, messageType: string, fallback = 'arquivo') {
   const mime = mimeType.toLowerCase()
   const label = fallback || 'arquivo'
@@ -261,14 +269,15 @@ function normalizeEvolutionEvent(body: JsonRecord): NormalizedEvolutionEvent {
     || pickString(data, 'remoteJid', 'chatId', 'conversationId')
     || pickString(key, 'remoteJid')
     || ''
+  const normalizedConversation = normalizeConversationKey(rawConversationId)
 
-  const contactDigits = normalizePhoneDigits(
+  const contactDigits = normalizedConversation.digits ?? normalizePhoneDigits(
     pickString(body, 'contact', 'phone', 'number')
     || pickString(data, 'contact', 'phone', 'number')
-    || (rawConversationId ? rawConversationId.split('@')[0] : ''),
+    || rawConversationId,
   )
 
-  const conversationId = rawConversationId || buildRemoteJid(contactDigits)
+  const conversationId = normalizedConversation.raw || buildRemoteJid(contactDigits)
   const eventType = pickString(body, 'event', 'eventType', 'type') || pickString(data, 'eventType', 'type') || null
   const instanceName = pickString(body, 'instance', 'instanceName') || pickString(data, 'instance', 'instanceName') || null
   const fromMe = Boolean(body.fromMe ?? data?.fromMe ?? key?.fromMe ?? false)
@@ -528,6 +537,8 @@ export async function handleEvolutionWebhookRoutes(
       ...normalized.raw,
       content: normalized.content,
       fromMe: normalized.fromMe,
+      from: normalized.conversationId,
+      remoteJid: normalized.conversationId,
       messageId: normalized.externalMessageId,
       messageType: normalized.messageType,
       pushName: normalized.pushName,
@@ -537,6 +548,7 @@ export async function handleEvolutionWebhookRoutes(
       quoted: normalized.quoted,
       conversationId: normalized.conversationId,
       documentKey: normalized.contactDigits,
+      contact: normalized.contactDigits,
       instanceName: normalized.instanceName,
       instance_name: normalized.instanceName,
     }

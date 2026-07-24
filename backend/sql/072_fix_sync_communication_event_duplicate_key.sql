@@ -57,9 +57,16 @@ BEGIN
    WHERE c.document_key = v_phone
      AND (
        NOT v_is_email
-       OR COALESCE(c.whatsapp_instance, '') = COALESCE(v_instance, '')
+       OR COALESCE(NULLIF(c.whatsapp_instance, ''), NULLIF(v_instance, '')) = COALESCE(NULLIF(v_instance, ''), NULLIF(c.whatsapp_instance, ''))
      )
-   ORDER BY c.updated_at DESC NULLS LAST, c.created_at DESC
+   ORDER BY
+     CASE
+       WHEN NULLIF(v_instance, '') IS NOT NULL AND COALESCE(c.whatsapp_instance, '') = v_instance THEN 0
+       WHEN NULLIF(c.whatsapp_instance, '') IS NULL THEN 1
+       ELSE 2
+     END,
+     c.updated_at DESC NULLS LAST,
+     c.created_at DESC
    LIMIT 1;
 
   IF v_conv_id IS NOT NULL THEN
