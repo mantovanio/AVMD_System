@@ -2635,9 +2635,12 @@ export default function Comercial() {
     setShowClienteForm(true)
   }
 
-  function abrirEditarCliente(cadastroId: string) {
-    const cliente = clientes.find(c => c.id === cadastroId)
-    if (!cliente) return
+  function abrirEditarCliente(cadastroId: string, fallbackCliente?: CadastroBase | null) {
+    const cliente = clientes.find(c => c.id === cadastroId) ?? fallbackCliente ?? null
+    if (!cliente) {
+      showMsg('Não foi possível abrir o cadastro do cliente. Recarregue a lista e tente novamente.')
+      return
+    }
     setEditingClienteId(cliente.id)
     setFormCliente({
       tipo_cliente: cliente.tipo_cliente,
@@ -5703,7 +5706,7 @@ export default function Comercial() {
                               </p>
                               <button
                                 type="button"
-                                onClick={() => abrirEditarCliente(formV2.cadastro_base_id)}
+                                onClick={() => abrirEditarCliente(formV2.cadastro_base_id, clienteSelecionadoObj)}
                                 className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg border border-green-300 text-green-700 hover:bg-green-100 dark:border-green-700 dark:text-green-300 dark:hover:bg-green-900/30"
                               >
                                 Editar cadastro
