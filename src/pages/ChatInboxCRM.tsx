@@ -744,6 +744,7 @@ export default function ChatInboxCRM() {
   const humanModeActive = useMemo(() => {
     if (!selectedConversation) return false
     if (selectedConversation.atendimento_humano || humanOverrideIds.includes(selectedConversation.id)) return true
+    if (selectedConversation.fila !== 'renovacao') return true
     const inst = String(selectedConversation.whatsapp_instance ?? '').trim().toLowerCase()
     if (inst && !inst.includes('renov') && !inst.includes('certiid')) return true
     return false
@@ -1530,6 +1531,23 @@ export default function ChatInboxCRM() {
       })
       const data = await response.json()
       if (!data.ok) throw new Error(data.error || 'Falha ao salvar contato')
+      setConversations(prev => prev.map(item => (
+        item.id === conversationId
+          ? {
+              ...item,
+              cliente_nome: conv.cliente_nome || conv.nome_crm || item.cliente_nome,
+              telefone: conv.telefone || conv.document_key || item.telefone,
+              crm_customer_id: data.customer_id ?? item.crm_customer_id,
+            }
+          : item
+      )))
+      if (selectedConversation?.id === conversationId) {
+        setContactEdit(prev => ({
+          ...prev,
+          name: conv.cliente_nome || conv.nome_crm || prev.name,
+          phone: conv.telefone || conv.document_key || prev.phone,
+        }))
+      }
       await loadConversations(false)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err))
@@ -1715,6 +1733,26 @@ export default function ChatInboxCRM() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cliente_nome: resolvedName, telefone: resolvedPhone }),
       })
+
+      setConversations(prev => prev.map(item => (
+        item.id === selectedConversation.id
+          ? {
+              ...item,
+              cliente_nome: resolvedName,
+              telefone: resolvedPhone,
+              crm_customer_id: nextCustomerId ?? item.crm_customer_id,
+              nome_crm: resolvedName,
+            }
+          : item
+      )))
+      setContactEdit(prev => ({
+        ...prev,
+        name: resolvedName ?? prev.name,
+        phone: resolvedPhone ?? prev.phone,
+        email: resolvedEmail ?? prev.email,
+        status: resolvedStatus ?? prev.status,
+        observations: resolvedObs ?? prev.observations,
+      }))
 
       const historyText = [
         'Dados do contato atualizados no painel',
