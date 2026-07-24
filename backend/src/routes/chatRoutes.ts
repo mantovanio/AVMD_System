@@ -911,9 +911,10 @@ export async function handleChatRoutes(
     const textBody = asString(body.body)
     const conversationId = asString(body.conversation_id)
     const leadId = asString(body.lead_id)
-    let fromName = asString(body.from_name) || 'Certifast'
+    const explicitFromName = asString(body.from_name)
+    let fromName = explicitFromName || 'Certifast'
 
-    if (conversationId) {
+    if (!explicitFromName && conversationId) {
       const conversation = await db.query<{ whatsapp_instance: string | null; fila: string | null }>(
         `SELECT whatsapp_instance, fila
            FROM crm_chat_conversations
