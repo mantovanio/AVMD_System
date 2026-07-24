@@ -419,7 +419,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const normalizedEmail = email.trim().toLowerCase()
 
     try {
-      const recoverySignIn = signIn as typeof signIn & ClerkResetPasswordFlow
       const response = await fetch(getApiUrl('/auth/password-recovery/request'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -438,47 +437,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: 'Clerk ainda está carregando. Tente novamente em alguns segundos.' }
       }
 
-      let createErrorMessage: string | null = null
       try {
-        const createResult = await withTimeout(
-          signIn.create({ identifier: normalizedEmail }),
+        const recoverySignIn = signIn as typeof signIn & ClerkResetPasswordFlow
+        const sendCodeResult = await withTimeout(
+          recoverySignIn.resetPasswordEmailCode.sendCode(),
           15000,
-          'O Clerk não respondeu ao iniciar a recuperação.',
+          'O Clerk não respondeu ao enviar o código de recuperação.',
         )
-        const createResultError = (createResult as { error?: unknown }).error
-        createErrorMessage = createResultError
-          ? getClerkErrorMessage(createResultError, '')
-          : null
+
+        if (sendCodeResult.error) {
+          const sendCodeError = getClerkErrorMessage(sendCodeResult.error, 'Falha ao enviar o código de recuperação.')
+          return {
+            error: isPasswordRequirementsError(sendCodeError)
+              ? 'Não foi possível iniciar a recuperação agora. Verifique o e-mail cadastrado e tente novamente.'
+              : sendCodeError,
+          }
+        }
+
+        return { error: `Código enviado para ${data.email ?? normalizedEmail}.` }
       } catch (error) {
-        const message = getClerkErrorMessage(error, '')
-        if (!isPasswordRequirementsError(message)) {
-          throw error
-        }
-        createErrorMessage = message
-        console.warn('[AuthContext] Clerk retornou politica de senha ao iniciar recuperacao; seguindo para envio do codigo.')
-      }
-
-      const sendCodeResult = await withTimeout(
-        recoverySignIn.resetPasswordEmailCode.sendCode(),
-        15000,
-        'O Clerk não respondeu ao enviar o código de recuperação.',
-      )
-
-      if (sendCodeResult.error) {
-        const sendCodeError = getClerkErrorMessage(sendCodeResult.error, 'Falha ao enviar o código de recuperação.')
+        const message = getClerkErrorMessage(error, 'Falha ao enviar o código de recuperação. Tente novamente.')
         return {
-          error: isPasswordRequirementsError(sendCodeError)
+          error: isPasswordRequirementsError(message)
             ? 'Não foi possível iniciar a recuperação agora. Verifique o e-mail cadastrado e tente novamente.'
-            : sendCodeError,
+            : message,
         }
       }
-
-      if (createErrorMessage && !isPasswordRequirementsError(createErrorMessage)) {
-        // O fluxo foi iniciado com sucesso; o erro do create não deve interromper a recuperação.
-        console.warn('[AuthContext] createResult retornou aviso no fluxo de recuperação:', createErrorMessage)
-      }
-
-      return { error: `Código enviado para ${data.email ?? normalizedEmail}.` }
     } catch (error) {
       const message = getClerkErrorMessage(error, 'Falha ao enviar o código de recuperação. Tente novamente.')
       return {
