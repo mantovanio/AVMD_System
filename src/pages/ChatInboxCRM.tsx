@@ -285,6 +285,10 @@ function inferMediaKind(
   if (mime.startsWith('audio/') || url.startsWith('data:audio/') || /\.(mp3|wav|ogg|m4a|webm)(\?.*)?$/i.test(url) || /\.(mp3|wav|ogg|m4a|webm)$/i.test(name) || text === 'áudio' || text === 'audio') return 'audio'
   if (mime.startsWith('video/') || url.startsWith('data:video/') || /\.(mp4|mov|mkv|webm)(\?.*)?$/i.test(url) || /\.(mp4|mov|mkv|webm)$/i.test(name) || text === 'vídeo' || text === 'video') return 'video'
   if (mime.startsWith('application/') || /\.(pdf|docx?|xlsx?|pptx?|txt)(\?.*)?$/i.test(url) || /\.(pdf|docx?|xlsx?|pptx?|txt)$/i.test(name) || text === 'documento' || text === 'arquivo') return 'document'
+  if (url.includes('/api/chat/files/') && (text === 'áudio' || text === 'audio' || /\.(ogg|opus|mp3|wav|m4a|webm)$/i.test(name))) return 'audio'
+  if (url.includes('/api/chat/files/') && (text === 'vídeo' || text === 'video' || /\.(mp4|mov|mkv|webm)$/i.test(name))) return 'video'
+  if (url.includes('/api/chat/files/') && (text === 'imagem' || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(name))) return 'image'
+  if (url.includes('/api/chat/files/') && (text === 'documento' || text === 'arquivo' || /\.(pdf|docx?|xlsx?|pptx?|txt)$/i.test(name))) return 'document'
   return 'text'
 }
 
@@ -3603,31 +3607,30 @@ function MessageRow({
   conversation?: ConversationRow | null
 }) {
   const isOutgoing = message.direction === 'outgoing'
-    const normalizedSenderName = normalizeDisplaySenderName(message.sender_name)
-    const isContactMsg = message.sender_type === 'cliente' || message.sender_type === 'contact' || !isOutgoing
-    const isIaMsg = message.sender_type === 'ia'
-    const senderLabel = isContactMsg
+  const normalizedSenderName = normalizeDisplaySenderName(message.sender_name)
+  const isContactMsg = message.sender_type === 'cliente' || message.sender_type === 'contact' || !isOutgoing
+  const isIaMsg = message.sender_type === 'ia'
+  const senderLabel = isContactMsg
       ? displayConversationName(conversation)
         : isIaMsg
           ? 'IA Clara'
           : normalizedSenderName || fallbackHumanName || 'Humano'
-    const detailLabel = isContactMsg
+  const detailLabel = isContactMsg
       ? conversation ? contactPhone(conversation) : 'Canal de entrada'
       : isIaMsg
         ? conversation?.whatsapp_instance || 'Automacao'
         : normalizedSenderName || fallbackHumanName || conversation?.agente_atual || 'Humano'
-    const downloadFileName = inferMediaFileName(message.mime_type, message.file_name, message.mensagem)
-    const rawResolvedMediaUrl = resolveChatMediaUrl(message.media_url, conversation?.whatsapp_instance, downloadFileName)
-    const resolvedMediaUrl = isEncryptedWhatsappMediaUrl(rawResolvedMediaUrl) ? null : rawResolvedMediaUrl
-    const mediaKind = inferMediaKind(message.mime_type, resolvedMediaUrl, downloadFileName || message.file_name, message.mensagem)
-    const isImage = mediaKind === 'image'
-    const isAudio = mediaKind === 'audio'
-    const isVideo = mediaKind === 'video'
-    const isDocument = mediaKind === 'document'
-    const hasMedia = isImage || isAudio || isVideo || isDocument
-    const mediaLabel = message.file_name || message.mensagem || downloadFileName || (isAudio ? 'Audio' : isImage ? 'Imagem' : isVideo ? 'Video' : isDocument ? 'Arquivo' : '')
-    const [imagePreviewOpen, setImagePreviewOpen] = useState(false)
-    const receiptStatus = String(message.delivery_status ?? '').trim().toLowerCase()
+  const downloadFileName = inferMediaFileName(message.mime_type, message.file_name, message.mensagem)
+  const rawResolvedMediaUrl = resolveChatMediaUrl(message.media_url, conversation?.whatsapp_instance, downloadFileName)
+  const resolvedMediaUrl = isEncryptedWhatsappMediaUrl(rawResolvedMediaUrl) ? null : rawResolvedMediaUrl
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false)
+  const [detectedMediaKind, setDetectedMediaKind] = useState(() => inferMediaKind(
+    message.mime_type,
+    resolvedMediaUrl,
+    downloadFileName || message.file_name,
+    message.mensagem,
+  ))
+  const receiptStatus = String(message.delivery_status ?? '').trim().toLowerCase()
     const receiptLabel = receiptStatus === 'read'
       ? 'Lida'
       : receiptStatus === 'delivered'
@@ -3644,9 +3647,54 @@ function MessageRow({
         : receiptStatus === 'failed'
           ? 'text-rose-600'
           : 'text-slate-400'
-    const receiptTime = message.read_at || message.delivered_at || message.status_updated_at || message.created_at
-  
-    return (
+  const receiptTime = message.read_at || message.delivered_at || message.status_updated_at || message.created_at
+
+  useEffect(() => {
+    let active = true
+
+    const initialKind = inferMediaKind(
+      message.mime_type,
+      resolvedMediaUrl,
+      downloadFileName || message.file_name,
+      message.mensagem,
+    )
+    setDetectedMediaKind(initialKind)
+
+    if (!resolvedMediaUrl || initialKind !== 'text') return () => { active = false }
+
+    async function probeMediaKind() {
+      try {
+        const response = await fetch(String(resolvedMediaUrl), { method: 'HEAD' })
+        const contentType = (response.headers.get('content-type') || '').toLowerCase()
+        if (!active || !contentType) return
+        if (contentType.startsWith('image/')) setDetectedMediaKind('image')
+        else if (contentType.startsWith('audio/')) setDetectedMediaKind('audio')
+        else if (contentType.startsWith('video/')) setDetectedMediaKind('video')
+        else if (contentType.startsWith('application/')) setDetectedMediaKind('document')
+      } catch {
+        if (!active) return
+        if (resolvedMediaUrl && resolvedMediaUrl.includes('/api/chat/files/')) {
+          const name = String(downloadFileName || message.file_name || message.mensagem || '').toLowerCase()
+          if (/\.(ogg|opus|mp3|wav|m4a|webm)$/i.test(name) || String(message.mensagem ?? '').trim().toLowerCase() === 'áudio') setDetectedMediaKind('audio')
+          else if (/\.(mp4|mov|mkv|webm)$/i.test(name) || String(message.mensagem ?? '').trim().toLowerCase() === 'vídeo') setDetectedMediaKind('video')
+          else if (/\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(name) || String(message.mensagem ?? '').trim().toLowerCase() === 'imagem') setDetectedMediaKind('image')
+          else if (/\.(pdf|docx?|xlsx?|pptx?|txt)$/i.test(name) || String(message.mensagem ?? '').trim().toLowerCase() === 'arquivo' || String(message.mensagem ?? '').trim().toLowerCase() === 'documento') setDetectedMediaKind('document')
+        }
+      }
+    }
+
+    void probeMediaKind()
+    return () => { active = false }
+  }, [downloadFileName, message.file_name, message.mime_type, message.mensagem, resolvedMediaUrl])
+
+  const isImage = detectedMediaKind === 'image'
+  const isAudio = detectedMediaKind === 'audio'
+  const isVideo = detectedMediaKind === 'video'
+  const isDocument = detectedMediaKind === 'document'
+  const hasMedia = isImage || isAudio || isVideo || isDocument
+  const mediaLabel = message.file_name || message.mensagem || downloadFileName || (isAudio ? 'Audio' : isImage ? 'Imagem' : isVideo ? 'Video' : isDocument ? 'Arquivo' : '')
+
+  return (
       <div className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'}`}>
         <div className={`max-w-[78%] rounded-2xl px-4 py-3 shadow-sm ${isOutgoing ? 'bg-emerald-100 text-emerald-950' : 'bg-white text-slate-800'}`}>
           <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
