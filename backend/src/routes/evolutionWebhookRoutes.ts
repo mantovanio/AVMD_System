@@ -1,9 +1,15 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { BackendConfig } from '../config/env.js'
+import { createAivenSqlClient } from '../db/aivenClient.js'
 import type { CommunicationEventRepository } from '../repositories/communicationEventRepository.js'
 import type { LeadRepository } from '../repositories/leadRepository.js'
 import type { ConfigRepository } from '../repositories/configRepository.js'
+import { FileRepository } from '../repositories/fileRepository.js'
+import { buildStoredPath, saveFile } from '../utils/storage.js'
 import { readJson, writeJson } from '../utils/http.js'
+
+const db = createAivenSqlClient()
+const fileRepository = new FileRepository(db)
 
 type JsonRecord = Record<string, unknown>
 
@@ -89,6 +95,30 @@ function buildRemoteJid(phoneDigits: string | null) {
   return phoneDigits ? `${phoneDigits}@s.whatsapp.net` : null
 }
 
+function inferMediaFileName(mimeType: string, messageType: string, fallback = 'arquivo') {
+  const mime = mimeType.toLowerCase()
+  const label = fallback || 'arquivo'
+  if (mime.includes('pdf')) return label !== 'Arquivo' ? `${label}.pdf` : 'documento.pdf'
+  if (mime.includes('png')) return label !== 'Imagem' ? `${label}.png` : 'imagem.png'
+  if (mime.includes('webp')) return label !== 'Imagem' ? `${label}.webp` : 'imagem.webp'
+  if (mime.includes('jpeg') || mime.includes('jpg') || mime.startsWith('image/')) return label !== 'Imagem' ? `${label}.jpg` : 'imagem.jpg'
+  if (mime.includes('mpeg') || mime.includes('mp3')) return label !== 'Audio' ? `${label}.mp3` : 'audio.mp3'
+  if (mime.includes('ogg') || mime.includes('opus') || mime.startsWith('audio/')) return label !== 'Audio' ? `${label}.ogg` : 'audio.ogg'
+  if (mime.includes('mp4') || mime.startsWith('video/')) return label !== 'Video' ? `${label}.mp4` : 'video.mp4'
+  if (messageType.startsWith('image')) return 'imagem.jpg'
+  if (messageType.startsWith('audio')) return 'audio.ogg'
+  if (messageType.startsWith('video')) return 'video.mp4'
+  if (messageType.startsWith('document')) return 'documento.pdf'
+  return fallback || 'arquivo'
+}
+
+function normalizeBase64Payload(value: string) {
+  const trimmed = value.trim()
+  const match = trimmed.match(/^data:([^;]+);base64,(.+)$/i)
+  if (match) return { mimeType: match[1], base64: match[2] }
+  return { mimeType: '', base64: trimmed }
+}
+
 function inferCanalFromInstance(instanceName: string | null | undefined) {
   const normalized = String(instanceName ?? '').trim().toLowerCase()
   if (!normalized) return 'atendimento'
@@ -171,6 +201,53 @@ function extractMessageContent(message: JsonRecord | null): { content: string | 
     mediaUrl,
     quoted: quotedId ? { messageId: quotedId, content: quotedContent || 'Mensagem respondida' } : null,
   }
+}
+
+async function persistEvolutionMedia(
+  fileRepository: FileRepository,
+  conversationJid: string | null,
+  payload: JsonRecord,
+  fallbackMimeType: string | null,
+  fallbackFileName: string | null,
+  messageType: string,
+  mediaUrl: string | null,
+) {
+  const rawBase64 = deepFindString(payload, ['base64', 'data', 'mediaBase64'])
+  const rawMediaUrl = mediaUrl || pickString(payload, 'url', 'mediaUrl')
+  const candidate = rawBase64 || (String(rawMediaUrl ?? '').startsWith('data:') ? String(rawMediaUrl) : '')
+  if (!conversationJid || !candidate) return rawMediaUrl || null
+
+  const normalized = normalizeBase64Payload(candidate)
+  const mimeType = normalized.mimeType || fallbackMimeType || (messageType.startsWith('audio') ? 'audio/ogg' : messageType.startsWith('video') ? 'video/mp4' : messageType.startsWith('image') ? 'image/jpeg' : 'application/octet-stream')
+  const buffer = Buffer.from(normalized.base64, 'base64')
+  if (buffer.length === 0) return rawMediaUrl || null
+  if (buffer.length > 50 * 1024 * 1024) return rawMediaUrl || null
+
+  const fileName = fallbackFileName || inferMediaFileName(mimeType, messageType)
+  const storedPath = buildStoredPath(conversationJid, fileName)
+  saveFile(storedPath, buffer)
+
+  const conversationResult = await db.query<{ id: string }>(
+    `select id
+       from crm_chat_conversations
+      where document_key = $1
+      order by updated_at desc, created_at desc
+      limit 1`,
+    [conversationJid],
+  )
+  const conversationId = conversationResult.rows[0]?.id ?? null
+  if (!conversationId) return rawMediaUrl || null
+
+  const created = await fileRepository.create({
+    conversation_id: conversationId,
+    original_name: fileName,
+    stored_path: storedPath,
+    mime_type: mimeType,
+    size_bytes: buffer.length,
+    uploaded_by: null,
+  })
+
+  return `/api/chat/files/${created.id}`
 }
 
 function normalizeEvolutionEvent(body: JsonRecord): NormalizedEvolutionEvent {
@@ -421,11 +498,28 @@ export async function handleEvolutionWebhookRoutes(
 
   if (method === 'POST' && url === '/api/webhooks/evolution') {
     const body = await readJson<JsonRecord>(req)
-    const normalized = normalizeEvolutionEvent(body)
+    let normalized = normalizeEvolutionEvent(body)
 
     if (normalized.eventType === 'messages.update') {
       writeJson(res, 200, { ok: true, skipped: true, reason: 'status update' }, corsOrigin)
       return true
+    }
+
+    const resolvedMediaUrl = !normalized.fromMe
+      ? await persistEvolutionMedia(
+        fileRepository,
+        normalized.conversationId,
+        normalized.raw,
+        normalized.mimeType,
+        normalized.fileName,
+        normalized.messageType,
+        normalized.mediaUrl,
+      ).catch(() => normalized.mediaUrl)
+      : normalized.mediaUrl
+
+    normalized = {
+      ...normalized,
+      mediaUrl: resolvedMediaUrl,
     }
 
     const lead = await upsertLeadFromEvolutionEvent(leadRepository, normalized)
