@@ -2214,14 +2214,6 @@ export default function ChatInboxCRM() {
     })
   }, [conversations, search])
 
-  function displayConversationName(item: ConversationRow | null | undefined) {
-    if (!item) return 'Sem nome identificado'
-    const person = normalizeDisplaySenderName(item.nome_crm || item.cliente_nome)
-    const company = normalizeDisplaySenderName(item.empresa_nome)
-    if (person && company && person.toLowerCase() !== company.toLowerCase()) return `${person} · ${company}`
-    return person || company || (item.fila === 'email' ? item.email_principal || item.document_key : null) || contactPhone(item) || 'Sem nome identificado'
-  }
-
   const activeConversations = useMemo(() => (
     searchMatchedConversations.filter(item => !isClosedConversationStatus(normalizeKanbanStatus(item.kanban_status)))
   ), [searchMatchedConversations])
