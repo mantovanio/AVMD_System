@@ -301,8 +301,6 @@ export default function Login() {
     e.preventDefault()
     setForgotResetError(null)
     if (forgotNewPass !== forgotNewConfirm) { setForgotResetError('As senhas não coincidem.'); return }
-    const forgotPasswordError = validateStrongPassword(forgotNewPass)
-    if (forgotPasswordError) { setForgotResetError(forgotPasswordError); return }
     setForgotResetLoading(true)
     const { error } = await confirmPasswordReset(forgotCode.trim(), forgotNewPass)
     if (error) setForgotResetError(translateError(error))

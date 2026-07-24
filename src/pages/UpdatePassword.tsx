@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { CheckCircle, Eye, EyeOff, KeyRound, Loader2, Shield } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { DEFAULT_AGENCY_CONFIG, buildAuthBackground, fetchAgencyConfig } from '@/lib/agencyConfig'
-import { translatePasswordPolicyError, validateStrongPassword } from '@/lib/passwordPolicy'
+import { translatePasswordPolicyError } from '@/lib/passwordPolicy'
 
 function PasswordInput({
   label,
@@ -69,12 +69,6 @@ export default function UpdatePassword() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-
-    const passwordError = validateStrongPassword(password)
-    if (passwordError) {
-      setError(passwordError)
-      return
-    }
 
     if (password !== confirm) {
       setError('As senhas não coincidem.')
