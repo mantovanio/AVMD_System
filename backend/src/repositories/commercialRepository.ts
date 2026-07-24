@@ -1655,9 +1655,32 @@ export class CommercialRepository {
 
   async listOperationalReportFilters() {
     const [parceiros, vendedores, agentes] = await Promise.all([
-      this.db.query(`select id, nome from parceiros where status = 'ativo' order by nome asc`),
-      this.db.query(`select id, nome, parceiro_id from profiles where perfil = 'vendedor' and status = 'ativo' order by nome asc`),
-      this.db.query(`select id, nome, parceiro_id from profiles where perfil = 'agente_registro' and status = 'ativo' order by nome asc`),
+      this.db.query(`
+        select nome as id, nome
+        from (
+          select distinct nullif(trim(nome_parceiro_safeweb), '') as nome from vendas_certificados
+          union
+          select distinct nullif(trim(nome), '') as nome from parceiros where status = 'ativo'
+        ) source where nome is not null order by nome asc
+      `),
+      this.db.query(`
+        select nome as id, nome
+        from (
+          select distinct nullif(trim(metadata->>'vendedor_importado'), '') as nome from vendas_certificados
+          union
+          select distinct nullif(trim(p.nome), '') as nome
+          from profiles p where p.perfil = 'vendedor' and p.status = 'ativo'
+        ) source where nome is not null order by nome asc
+      `),
+      this.db.query(`
+        select nome as id, nome
+        from (
+          select distinct nullif(trim(metadata->>'agente_registro_importado'), '') as nome from vendas_certificados
+          union
+          select distinct nullif(trim(p.nome), '') as nome
+          from profiles p where p.perfil = 'agente_registro' and p.status = 'ativo'
+        ) source where nome is not null order by nome asc
+      `),
     ])
     return {
       parceiros: parceiros.rows,
@@ -1690,26 +1713,46 @@ export class CommercialRepository {
       where.push(sql.replace('?', `$${params.length}`))
     }
 
-    addFilter('coalesce(v.parceiro_id, vendedor.parceiro_id, agente.parceiro_id) = ?::uuid', input.parceiro_id)
-    addFilter('v.vendedor_id = ?::uuid', input.vendedor_id)
-    addFilter('coalesce(a.agente_registro_id, v.agente_registro_id) = ?::uuid', input.agente_registro_id)
+    addFilter('coalesce(nullif(trim(v.nome_parceiro_safeweb), \'\'), \'Não informado\') = ?', input.parceiro_id)
+    addFilter('coalesce(nullif(trim(v.metadata->>\'vendedor_importado\'), \'\'), vendedor.nome, \'Não informado\') = ?', input.vendedor_id)
+    addFilter('coalesce(nullif(trim(v.metadata->>\'agente_registro_importado\'), \'\'), agente.nome, \'Não informado\') = ?', input.agente_registro_id)
     addFilter('v.pedido_numero ilike concat(\'%\', ?, \'%\')', input.pedido)
     addFilter('v.protocolo_numero ilike concat(\'%\', ?, \'%\')', input.protocolo)
-    addFilter(tipo === 'vendas' ? 'v.status_venda = ?' : 'a.status_agendamento = ?', input.status)
+    const validationStatus = `coalesce(a.status_agendamento, case
+      when v.status_venda = 'emitido' then 'realizado'
+      when v.status_venda = 'em_validacao' then 'confirmado'
+      when v.status_venda = 'cancelado' then 'cancelado'
+      else 'pendente'
+    end)`
+    addFilter(tipo === 'vendas' ? 'v.status_venda = ?' : `${validationStatus} = ?`, input.status)
 
     if (input.viewer_perfil !== 'admin') {
       params.push(input.viewer_profile_id)
       where.push(`(v.vendedor_id = $${params.length}::uuid or coalesce(a.agente_registro_id, v.agente_registro_id) = $${params.length}::uuid)`)
     }
 
-    const dateExpression = tipo === 'vendas' ? 'v.created_at' : 'coalesce(a.data_agendada, a.created_at)'
+    const importedStatusDate = `case when nullif(v.metadata->>'data_status', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+      then (v.metadata->>'data_status')::date end`
+    const importedAgendaDate = `case when nullif(v.metadata->>'data_agenda', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+      then (v.metadata->>'data_agenda')::date end`
+    const dateExpression = tipo === 'vendas'
+      ? `coalesce(${importedStatusDate}, v.created_at)`
+      : `coalesce(a.data_agendada, ${importedAgendaDate}, ${importedStatusDate}, v.created_at)`
     const agendaJoin = tipo === 'validacoes'
-      ? 'join agendamentos_validacao a on a.venda_certificado_id = v.id'
+      ? `left join lateral (
+          select av.id, av.agente_registro_id, av.status_agendamento, av.data_agendada, av.created_at, av.tipo_atendimento
+          from agendamentos_validacao av
+          where av.venda_certificado_id = v.id
+          order by coalesce(av.data_agendada, av.created_at) desc
+          limit 1
+        ) a on true`
       : 'left join lateral (select null::uuid as id, null::uuid as agente_registro_id, null::text as status_agendamento, null::timestamptz as data_agendada, null::timestamptz as created_at, null::text as tipo_atendimento) a on true'
     const baseWhere = [
       `${dateExpression} >= $1::timestamptz`,
       `${dateExpression} <= $2::timestamptz`,
-      tipo === 'vendas' ? `coalesce(v.status_venda, '') != 'cancelado'` : `coalesce(a.status_agendamento, '') != 'cancelado'`,
+      ...(tipo === 'validacoes'
+        ? [`coalesce(nullif(trim(v.metadata->>'agente_registro_importado'), ''), agente.nome) is not null`]
+        : []),
       ...where,
     ]
 
@@ -1732,28 +1775,27 @@ export class CommercialRepository {
       valor: number | null
     }>(`
       select
-        ${tipo === 'vendas' ? 'v.id' : 'a.id'} as id,
+        ${tipo === 'vendas' ? 'v.id' : 'coalesce(a.id, v.id)'} as id,
         '${tipo}' as tipo,
         ${dateExpression} as data,
         v.pedido_numero as pedido,
         v.protocolo_numero as protocolo,
         coalesce(v.nome_faturamento, cb.nome, cb.nome_fantasia) as cliente,
         v.tipo_produto as produto,
-        coalesce(v.parceiro_id, vendedor.parceiro_id, agente.parceiro_id) as parceiro_id,
-        parceiro.nome as parceiro,
+        null::uuid as parceiro_id,
+        coalesce(nullif(trim(v.nome_parceiro_safeweb), ''), 'Não informado') as parceiro,
         v.vendedor_id,
-        vendedor.nome as vendedor,
+        coalesce(nullif(trim(v.metadata->>'vendedor_importado'), ''), vendedor.nome, 'Não informado') as vendedor,
         coalesce(a.agente_registro_id, v.agente_registro_id) as agente_registro_id,
-        agente.nome as agente_registro,
-        ${tipo === 'vendas' ? 'v.status_venda' : 'a.status_agendamento'} as status,
-        a.tipo_atendimento,
+        coalesce(nullif(trim(v.metadata->>'agente_registro_importado'), ''), agente.nome, 'Não informado') as agente_registro,
+        ${tipo === 'vendas' ? 'v.status_venda' : validationStatus} as status,
+        coalesce(a.tipo_atendimento, nullif(v.tipo_emissao, '')) as tipo_atendimento,
         ${tipo === 'vendas' ? 'coalesce(v.valor_venda, 0)' : '0'} as valor
       from vendas_certificados v
       ${agendaJoin}
       left join cadastros_base cb on cb.id = v.cadastro_base_id
       left join profiles vendedor on vendedor.id = v.vendedor_id
       left join profiles agente on agente.id = coalesce(a.agente_registro_id, v.agente_registro_id)
-      left join parceiros parceiro on parceiro.id = coalesce(v.parceiro_id, vendedor.parceiro_id, agente.parceiro_id)
       where ${baseWhere.join('\n and ')}
       order by ${dateExpression} desc
       limit 5000
