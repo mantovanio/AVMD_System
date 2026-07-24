@@ -82,6 +82,17 @@ Esse endpoint faz o resto do tratamento no sistema:
 
 Importante: o workflow legado `AVMD - Email to CRM Kanban` nao deve ser reimportado nem reativado, porque ele duplica as entradas do Inbox operacional ao enviar o mesmo e-mail para `POST /api/chat/crm/events`.
 
+## Manual operacional do CEM
+
+O procedimento padrão de atendimento, incluindo entrada, triagem, resposta, salvamento, renovação e encerramento, está documentado em:
+
+- [docs/manual-cem-atendimento.md](/C:/projetos/AVMD_System/docs/manual-cem-atendimento.md)
+
+Ponto crítico do processo:
+
+- cancelamento de agendamento deve ser tratado imediatamente pelo número do pedido, que é a chave operacional de decisão nesse caso
+- o cadastro precisa ser preservado para futura renovação mesmo quando o agendamento foi cancelado
+
 ## Ordem sugerida de importacao
 
 1. Importar `avmd-clara-inbound-router.workflow.json`.
