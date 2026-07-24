@@ -126,6 +126,37 @@ export class CatalogRepository {
     return result.rows[0] ?? null
   }
 
+  async getNfseVendaContext(vendaId: string) {
+    const result = await this.db.query(
+      `select id, cadastro_base_id, nome_faturamento, documento_faturamento,
+              email_faturamento, telefone_faturamento, logradouro, numero,
+              complemento, bairro, cidade, uf, cep, inscricao_municipal,
+              inscricao_estadual, valor_venda, iss_retido, observacoes
+       from vendas_certificados
+       where id = $1::uuid`,
+      [vendaId],
+    )
+    return result.rows[0] ?? null
+  }
+
+  async updateNfseConfigRpsNumber(configId: string, nextNumber: number) {
+    await this.db.query(
+      `update nfse_configuracoes set numero_rps_atual = $2, updated_at = now() where id = $1::uuid`,
+      [configId, nextNumber],
+    )
+  }
+
+  async updateNfseStatusByProtocolo(protocolo: string, updates: { numero_nf: string; codigo_verificacao: string | null; status_nf: string }) {
+    const result = await this.db.query(
+      `update nfse_emitidas
+       set numero_nf = $2, codigo_verificacao = $3, status_nf = $4, updated_at = now()
+       where (payload_envio->>'protocolo' = $1 OR metadata->>'protocolo' = $1)
+       returning id`,
+      [protocolo, updates.numero_nf, updates.codigo_verificacao, updates.status_nf],
+    )
+    return result.rows[0]?.id ?? null
+  }
+
   // ── Certificados ─────────────────────────────────────────────────────
   async listCertificados() {
     const r = await this.db.query(`select * from certificados order by tipo asc`)

@@ -1054,6 +1054,23 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
     return true
   }
 
+  if (method === 'POST' && url === '/api/nfse/emitir') {
+    const body = await readJson<{ venda_certificado_id?: string }>(req)
+    if (!body.venda_certificado_id) {
+      writeJson(res, 400, { ok: false, error: 'venda_certificado_id e obrigatorio.' }, corsOrigin)
+      return true
+    }
+    try {
+      const { emitirNFSeGinfes } = await import('../services/nfseGinfesService.js')
+      const result = await emitirNFSeGinfes(repo, body.venda_certificado_id)
+      writeJson(res, result.ok ? 200 : 422, result, corsOrigin)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao emitir NFS-e.'
+      writeJson(res, 500, { ok: false, error: message }, corsOrigin)
+    }
+    return true
+  }
+
   const nfseDeleteMatch = url.match(/^\/api\/nfse\/([^/]+)$/)
   if (method === 'DELETE' && nfseDeleteMatch) {
     const deleted = await repo.deleteNfse(nfseDeleteMatch[1])

@@ -4731,35 +4731,34 @@ export default function Comercial() {
   }
 
   async function emitirNfseViaGissOnline(venda: VendaRow) {
-    const accessToken = await getSupabaseAccessToken()
-    const response = await fetch(getEdgeFunctionUrl('nfse-gissonline-emit'), {
+    const response = await fetch(getApiUrl('/nfse/emitir'), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         venda_certificado_id: venda.id,
-        justificativa_fora_etapa: (venda.metadata as Record<string, unknown> | null)?.nfse_justificativa_fora_etapa ?? null,
       }),
-      signal: AbortSignal.timeout(45000),
+      signal: AbortSignal.timeout(120000),
     })
 
     const data = await response.json() as {
       ok: boolean
       error?: string
-      stage?: string
-      numero_lote?: string
+      numeroLote?: string
       protocolo?: string
-      nota_id?: string
+      numeroNf?: string
       message?: string
     }
 
     if (!response.ok || !data.ok) {
-      throw new Error(data.error ?? 'Não foi possível emitir a NFS-e no GISSONLINE.')
+      throw new Error(data.error ?? 'Nao foi possivel emitir a NFS-e no GINFES.')
     }
 
-    return data
+    return {
+      ok: true,
+      protocolo: data.protocolo,
+      numero_lote: data.numeroLote,
+      message: data.message,
+    }
   }
 
   async function emitirNfseViaNotaJoseense(venda: VendaRow) {
