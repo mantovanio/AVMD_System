@@ -56,7 +56,7 @@ import {
 import { getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { getApiUrl } from '@/lib/api'
 import { getProductProfile } from '@/lib/checkout'
-import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenTitularByCpf, updateAivenCommercialSaleStatus, updateAivenCommercialSalePaymentStatus, updateVenda, updateVendaPaymentMethod, type CancelamentoVendaInput, type UpdateVendaInput } from '@/lib/commercialAiven'
+import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenCommercialVendasByDocumento, getAivenTitularByCpf, updateAivenCommercialSaleStatus, updateAivenCommercialSalePaymentStatus, updateVenda, updateVendaPaymentMethod, type CancelamentoVendaInput, type UpdateVendaInput } from '@/lib/commercialAiven'
 import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
 import { useAuth } from '@/contexts/AuthContext'
 import { canChangePayment, canChangeProtocol, canDeleteSale, canReleaseEmission, hasPerfil, isAdminProfile } from '@/lib/security'
@@ -983,6 +983,7 @@ export default function Comercial() {
   const [safewebVendas, setSafewebVendas] = useState<VendaRow[]>([])
   const [loadingSafewebVendas, setLoadingSafewebVendas] = useState(false)
   const [safewebViewerOpen, setSafewebViewerOpen] = useState(false)
+  const [safewebDocumentoFiltro, setSafewebDocumentoFiltro] = useState('')
   // tabelas form
   const [selectedTabelaId, setSelectedTabelaId]   = useState<string | null>(null)
   const [showFormTabela, setShowFormTabela]         = useState(false)
@@ -4178,9 +4179,12 @@ export default function Comercial() {
     }
   }
 
-  async function carregarSafewebVendas() {
+  async function carregarSafewebVendas(documento?: string) {
     setLoadingSafewebVendas(true)
-    const data = await getAivenCommercialSafewebVendas()
+    const filtro = documento?.trim() ?? ''
+    const data = filtro
+      ? await getAivenCommercialVendasByDocumento(filtro, profile?.id ?? null, profile?.perfil ?? null, 500)
+      : await getAivenCommercialSafewebVendas()
     setSafewebVendas(data as VendaRow[])
     setLoadingSafewebVendas(false)
   }
@@ -8504,7 +8508,7 @@ export default function Comercial() {
                   onClick={() => {
                     const next = !safewebViewerOpen
                     setSafewebViewerOpen(next)
-                    if (next) void carregarSafewebVendas()
+                    if (next) void carregarSafewebVendas(safewebDocumentoFiltro)
                   }}
                   className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl transition-colors">
                   {safewebViewerOpen ? 'Fechar' : 'Ver registros'}
@@ -8513,6 +8517,21 @@ export default function Comercial() {
 
               {safewebViewerOpen && (
                 <div className="mt-4">
+                  <div className="flex flex-col md:flex-row gap-3 mb-4">
+                    <input
+                      value={safewebDocumentoFiltro}
+                      onChange={e => setSafewebDocumentoFiltro(e.target.value)}
+                      placeholder="CPF ou CNPJ para ver todas as vendas"
+                      className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void carregarSafewebVendas(safewebDocumentoFiltro)}
+                      className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium transition-colors"
+                    >
+                      Buscar histórico
+                    </button>
+                  </div>
                   {loadingSafewebVendas ? (
                     <div className="flex items-center gap-2 text-gray-400 text-sm py-4"><Loader2 size={16} className="animate-spin" /> Carregando...</div>
                   ) : safewebVendas.length === 0 ? (

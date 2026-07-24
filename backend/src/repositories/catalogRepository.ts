@@ -92,6 +92,40 @@ export class CatalogRepository {
     return result.rows
   }
 
+  async listSalesByDocumento(documento: string, input: { viewer_profile_id?: string | null; viewer_perfil?: string | null; limit?: number } = {}) {
+    const limit = Math.min(Math.max(Number(input.limit || 500), 1), 5000)
+    const digits = String(documento ?? '').replace(/\D/g, '')
+    if (!digits) return []
+
+    const params: unknown[] = [digits]
+    const where: string[] = [
+      `(regexp_replace(coalesce(v.documento_faturamento, ''), '\\D', '', 'g') = $1
+        or regexp_replace(coalesce(cb.cpf_cnpj, ''), '\\D', '', 'g') = $1
+        or regexp_replace(coalesce(v.metadata->'safeweb_financeiro'->>'documento', ''), '\\D', '', 'g') = $1)`,
+    ]
+
+    if (input.viewer_profile_id && input.viewer_perfil && !['admin', 'superadmin'].includes(input.viewer_perfil)) {
+      params.push(input.viewer_profile_id)
+      where.push(`(v.vendedor_id::text = $${params.length} OR v.agente_registro_id::text = $${params.length})`)
+    }
+
+    params.push(limit)
+    const result = await this.db.query(
+      `select
+        v.*,
+        case when cb.id is null then null else jsonb_build_object('nome', cb.nome, 'cpf_cnpj', cb.cpf_cnpj) end as cadastros_base,
+        case when pa.id is null then null else jsonb_build_object('nome', pa.nome) end as pontos_atendimento
+      from vendas_certificados v
+      left join cadastros_base cb on cb.id = v.cadastro_base_id
+      left join pontos_atendimento pa on pa.id = v.ponto_atendimento_id
+      where ${where.join(' and ')}
+      order by coalesce(v.data_inicio_validade::date, v.created_at::date) desc, v.created_at desc
+      limit $${params.length}`,
+      params,
+    )
+    return result.rows
+  }
+
   async createNfse(input: Record<string, unknown>) {
     const fields = [
       'lancamento_financeiro_id','cadastro_base_tomador_id','venda_certificado_id','numero_nf','codigo_verificacao',

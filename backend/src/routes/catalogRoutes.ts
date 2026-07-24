@@ -840,6 +840,20 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
     return true
   }
 
+  if (method === 'POST' && url === '/api/comercial/vendas/por-documento') {
+    const body = await readJson<{ documento?: string; viewer_profile_id?: string; viewer_perfil?: string; limit?: number }>(req)
+    const documento = String(body.documento ?? '').replace(/\D/g, '')
+    const vendas = documento
+      ? await repo.listSalesByDocumento(documento, {
+          viewer_profile_id: body.viewer_profile_id ?? null,
+          viewer_perfil: body.viewer_perfil ?? null,
+          limit: body.limit ?? 500,
+        })
+      : []
+    writeJson(res, 200, { ok: true, vendas }, corsOrigin)
+    return true
+  }
+
   if (method === 'POST' && url === '/api/comercial/clientes/ids') {
     const body = await readJson<{ docs: string[] }>(req)
     const clientes = await repo.getClientesByDocs(body.docs ?? [])

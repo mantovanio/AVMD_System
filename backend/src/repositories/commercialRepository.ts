@@ -5,6 +5,7 @@ export type CommercialSalesInput = {
   limit?: number
   dateFrom?: string | null
   dateTo?: string | null
+  documento?: string | null
   viewer_profile_id?: string | null
   viewer_perfil?: string | null
 }
@@ -87,6 +88,7 @@ export class CommercialRepository {
     const limit = Math.min(Math.max(Number(input.limit || 2000), 1), 5000)
     const params: unknown[] = []
     const where: string[] = []
+    const documento = String(input.documento ?? '').replace(/\D/g, '')
     if (input.dateFrom) {
       params.push(input.dateFrom)
       where.push(`coalesce(v.data_inicio_validade::date, v.created_at::date) >= $${params.length}::date`)
@@ -94,6 +96,14 @@ export class CommercialRepository {
     if (input.dateTo) {
       params.push(input.dateTo)
       where.push(`coalesce(v.data_inicio_validade::date, v.created_at::date) <= $${params.length}::date`)
+    }
+    if (documento) {
+      params.push(documento)
+      where.push(`(
+        regexp_replace(coalesce(v.documento_faturamento, ''), '\\D', '', 'g') = $${params.length}
+        or regexp_replace(coalesce(cb.cpf_cnpj, ''), '\\D', '', 'g') = $${params.length}
+        or regexp_replace(coalesce(v.metadata->'safeweb_financeiro'->>'documento', ''), '\\D', '', 'g') = $${params.length}
+      )`)
     }
     const viewerId = input.viewer_profile_id
     const viewerPerfil = input.viewer_perfil
@@ -115,6 +125,15 @@ export class CommercialRepository {
       limit $${params.length}
     `, params)
     return result.rows
+  }
+
+  async listSalesByDocumento(documento: string, input: { viewer_profile_id?: string | null; viewer_perfil?: string | null; limit?: number } = {}) {
+    return this.listSales({
+      documento,
+      viewer_profile_id: input.viewer_profile_id ?? null,
+      viewer_perfil: input.viewer_perfil ?? null,
+      limit: input.limit ?? 500,
+    })
   }
 
   async updateSaleStatus(input: UpdateCommercialSaleStatusInput) {

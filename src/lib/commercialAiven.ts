@@ -129,6 +129,16 @@ export async function getAivenCommercialSafewebVendas() {
   return response.vendas ?? []
 }
 
+export async function getAivenCommercialVendasByDocumento(documento: string, viewer_profile_id?: string | null, viewer_perfil?: string | null, limit = 500) {
+  const response = await postJson<ApiResponse<'vendas', (VendaCertificado & { cadastros_base: { nome: string | null; cpf_cnpj: string | null } | null })[]>>(getApiUrl('/comercial/vendas/por-documento'), {
+    documento,
+    viewer_profile_id: viewer_profile_id ?? null,
+    viewer_perfil: viewer_perfil ?? null,
+    limit,
+  })
+  return response.vendas ?? []
+}
+
 export async function getAivenTitularByCpf(cpf: string) {
   const response = await postJson<ApiResponse<'titular', Record<string, unknown> | null>>(getApiUrl('/titulares/por-cpf'), { cpf })
   return response.titular ?? null
