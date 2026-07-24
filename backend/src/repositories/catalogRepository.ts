@@ -845,6 +845,70 @@ export class CatalogRepository {
       ...input,
       metadata: metadataFinal,
     }
+    const cadastroBaseIdInput = typeof payload.cadastro_base_id === 'string' ? payload.cadastro_base_id.trim() : ''
+    const documentoFaturamento = String(payload.documento_faturamento ?? '').replace(/\D/g, '')
+    const nomeFaturamento = String(payload.nome_faturamento ?? '').trim()
+    const emailFaturamento = String(payload.email_faturamento ?? '').trim()
+    const telefoneFaturamento = String(payload.telefone_faturamento ?? '').trim()
+
+    let resolvedCadastroBaseId = cadastroBaseIdInput || null
+    if (resolvedCadastroBaseId) {
+      const existingCadastro = await this.db.query<{ id: string }>(
+        `select id from cadastros_base where id = $1::uuid limit 1`,
+        [resolvedCadastroBaseId],
+      )
+      resolvedCadastroBaseId = existingCadastro.rows[0]?.id ?? null
+    }
+
+    if (!resolvedCadastroBaseId && documentoFaturamento) {
+      const cadastroByDocumento = await this.db.query<{ id: string }>(
+        `select id
+           from cadastros_base
+          where regexp_replace(coalesce(cpf_cnpj, ''), '\\D', '', 'g') = $1
+          order by updated_at desc nulls last, created_at desc nulls last
+          limit 1`,
+        [documentoFaturamento],
+      )
+      resolvedCadastroBaseId = cadastroByDocumento.rows[0]?.id ?? null
+    }
+
+    if (!resolvedCadastroBaseId && (documentoFaturamento || nomeFaturamento || emailFaturamento || telefoneFaturamento)) {
+      const novoCadastroId = randomUUID()
+      const tipoCliente = documentoFaturamento.length === 14 ? 'pessoa_juridica' : 'pessoa_fisica'
+      const tipoCadastro = 'cliente'
+      const nomeBase = nomeFaturamento || documentoFaturamento || 'Cliente'
+      await this.db.query(
+        `insert into cadastros_base (
+          id, tipo_cliente, tipo_cadastro, cpf_cnpj, nome, nome_fantasia,
+          email, telefone, status, metadata, created_at, updated_at
+        ) values (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10::jsonb, now(), now()
+        )`,
+        [
+          novoCadastroId,
+          tipoCliente,
+          tipoCadastro,
+          documentoFaturamento || null,
+          nomeBase,
+          documentoFaturamento.length === 14 ? nomeBase : null,
+          emailFaturamento || null,
+          telefoneFaturamento || null,
+          'ativo',
+          JSON.stringify({
+            origem: 'venda_comercial',
+            cadastro_auto_criado: true,
+          }),
+        ],
+      )
+      resolvedCadastroBaseId = novoCadastroId
+    }
+
+    if (!resolvedCadastroBaseId) {
+      throw new Error('Nao foi possivel vincular o cliente da venda. Atualize o cadastro antes de salvar.')
+    }
+
+    payload.cadastro_base_id = resolvedCadastroBaseId
     if (!payload.pedido_numero) {
       const seq = await this.db.query<{ nextval: string }>(`select nextval('vendas_pedido_numero_seq') as nextval`)
       payload.pedido_numero = seq.rows[0].nextval
