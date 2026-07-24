@@ -13,6 +13,9 @@ DECLARE
   v_cliente_nome  TEXT;
   v_is_email      BOOLEAN;
   v_fila          TEXT;
+  v_mime_type     TEXT;
+  v_file_name     TEXT;
+  v_media_url     TEXT;
 BEGIN
   v_phone     := COALESCE(NEW.payload->>'from', NEW.payload->>'remoteJid', '');
   v_instance  := COALESCE(NEW.payload->>'instance_name', '');
@@ -44,6 +47,9 @@ BEGIN
   v_sender_name := CASE WHEN v_is_from_me THEN (NEW.payload->>'pushName') ELSE NULL END;
   v_kanban_status := NEW.payload->>'kanban_status';
   v_cliente_nome := COALESCE(NEW.payload->>'from_name', NEW.payload->>'pushName', NEW.payload->>'cliente_nome');
+  v_mime_type := COALESCE(NEW.payload->>'mimeType', NEW.payload#>>'{message,mimetype}', NEW.payload->>'mime_type');
+  v_file_name := COALESCE(NEW.payload->>'fileName', NEW.payload->>'filename', NEW.payload->>'title');
+  v_media_url := COALESCE(NEW.payload->>'mediaUrl', NEW.payload->>'url', NEW.payload->>'link');
 
   SELECT c.id
     INTO v_conv_id
@@ -116,9 +122,31 @@ BEGIN
     RETURNING id INTO v_conv_id;
   END IF;
 
-  IF v_content <> '' OR NEW.payload->>'mimeType' IS NOT NULL OR NEW.payload->>'mediaUrl' IS NOT NULL THEN
-    INSERT INTO crm_chat_messages (conversation_id, document_key, direction, sender_type, sender_name, mensagem, created_at)
-    VALUES (v_conv_id, v_phone, v_direction, v_sender_type, v_sender_name, v_content, NEW.created_at)
+  IF v_content <> '' OR NULLIF(v_mime_type, '') IS NOT NULL OR NULLIF(v_media_url, '') IS NOT NULL THEN
+    INSERT INTO crm_chat_messages (
+      conversation_id,
+      document_key,
+      direction,
+      sender_type,
+      sender_name,
+      mensagem,
+      mime_type,
+      file_name,
+      media_url,
+      created_at
+    )
+    VALUES (
+      v_conv_id,
+      v_phone,
+      v_direction,
+      v_sender_type,
+      v_sender_name,
+      v_content,
+      NULLIF(v_mime_type, ''),
+      NULLIF(v_file_name, ''),
+      NULLIF(v_media_url, ''),
+      NEW.created_at
+    )
     ON CONFLICT DO NOTHING;
   END IF;
 
