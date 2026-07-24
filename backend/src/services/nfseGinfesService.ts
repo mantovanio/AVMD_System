@@ -541,11 +541,27 @@ export async function emitirNFSeGinfes(
     },
   }
 
-  const result = await enviarLoteRps(
-    { ...config, wsdlUrl, certificadoPfxPath: absPfxPath, certificadoSenha: certSenha } as unknown as GinfesConfig,
-    rps,
-    pfxBuffer,
-  )
+  const ginfesConfig: GinfesConfig = {
+    wsdlUrl,
+    cnpjPrestador: String(config.cnpj_emitente ?? ''),
+    inscricaoMunicipal: String(config.inscricao_municipal ?? ''),
+    codigoMunicipio: String(config.municipio_codigo_ibge ?? ''),
+    naturezaOperacao: String(config.natureza_operacao ?? '1'),
+    regimeEspecial: String(config.regime_especial ?? ''),
+    simplesNacional: Boolean(config.simples_nacional),
+    incentivoFiscal: Boolean(config.incentivo_fiscal),
+    tipoRps: String(config.tipo_rps ?? '1'),
+    serieRps: String(config.serie_rps ?? '1'),
+    numeroRpsAtual: Number(config.numero_rps_atual ?? 1),
+    codigoServicoMunicipio: String(config.codigo_servico_municipio ?? ''),
+    codigoTributacaoMunicipio: String(config.codigo_tributacao_municipio ?? ''),
+    cnae: String(config.cnae ?? ''),
+    aliquotaIss: Number(config.aliquota_iss ?? 0),
+    certificadoPfxPath: absPfxPath,
+    certificadoSenha: certSenha,
+  }
+
+  const result = await enviarLoteRps(ginfesConfig, rps, pfxBuffer)
 
   if (result.ok && result.protocolo) {
     await repo.createNfse({
@@ -564,7 +580,7 @@ export async function emitirNFSeGinfes(
 
     await repo.updateNfseConfigRpsNumber(String(config.id), numeroRps + 1)
 
-    const pollingResult = await pollLoteRps({ ...config, wsdlUrl } as unknown as GinfesConfig, result.protocolo, pfxBuffer)
+    const pollingResult = await pollLoteRps(ginfesConfig, result.protocolo, pfxBuffer)
     if (pollingResult.ok && pollingResult.numeroNf) {
       await repo.updateNfseStatusByProtocolo(result.protocolo, {
         numero_nf: pollingResult.numeroNf,
