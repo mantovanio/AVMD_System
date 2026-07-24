@@ -121,7 +121,7 @@ export default function NfseDocumentPreview({
         <SectionTitle>Dados do Prestador de Servicos</SectionTitle>
         <div className="grid grid-cols-[1.3fr_1fr] border-b border-gray-500">
           <Row label="Razao Social / Nome" value={data.prestador.nome} />
-          <Row label="Nome Fantasia" value={String(configuracao?.nome_fantasia_emitente?.trim() || (configuracao?.payload_reforma_tributaria as Record<string, unknown> | undefined)?.nome_fantasia ?? agency?.nome_agencia ?? configuracao?.identificador ?? '—')} />
+          <Row label="Nome Fantasia" value={String(configuracao?.nome_fantasia_emitente?.trim() || (configuracao?.payload_reforma_tributaria as Record<string, unknown> | undefined)?.nome_fantasia || agency?.nome_agencia || configuracao?.identificador || '—')} />
         </div>
         <div className="grid grid-cols-[1fr_140px_1fr] border-b border-gray-500">
           <Row label="CNPJ / CPF" value={data.prestador.documento} />
