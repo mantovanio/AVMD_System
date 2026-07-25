@@ -1789,7 +1789,7 @@ export class CommercialRepository {
         from (
           select distinct case
             when lower(trim(metadata->>'agente_registro_importado')) in ('isabella de oliveira vidal', 'isabella vidal') then 'Isabella Vidal'
-            when lower(trim(metadata->>'agente_registro_importado')) = 'ingrid braz pinto' then 'Ingrid Braz Pinto'
+            when lower(trim(metadata->>'agente_registro_importado')) in ('ingrid braz', 'ingrid braz pinto') then 'Ingrid Braz Pinto'
             else nullif(trim(metadata->>'agente_registro_importado'), '')
           end as nome from vendas_certificados
           union
@@ -1835,7 +1835,7 @@ export class CommercialRepository {
     end`
     const agentName = `case
       when lower(trim(v.metadata->>'agente_registro_importado')) in ('isabella de oliveira vidal', 'isabella vidal') then 'Isabella Vidal'
-      when lower(trim(v.metadata->>'agente_registro_importado')) = 'ingrid braz pinto' then 'Ingrid Braz Pinto'
+      when lower(trim(v.metadata->>'agente_registro_importado')) in ('ingrid braz', 'ingrid braz pinto') then 'Ingrid Braz Pinto'
       else coalesce(nullif(trim(v.metadata->>'agente_registro_importado'), ''), agente.nome, 'Não informado')
     end`
 
