@@ -173,6 +173,15 @@ function buildEnviarLoteRpsInnerXml(config: GinfesConfig, rps: GinfesRps, certPe
   return signXmlElement(signedRps, "//*[local-name()='LoteRps']", certPem, keyPem)
 }
 
+export function construirLoteRpsAssinado(
+  config: GinfesConfig,
+  rps: GinfesRps,
+  pfxBuffer: Buffer,
+): string {
+  const { certPem, keyPem } = extractCertFromPfx(pfxBuffer, config.certificadoSenha)
+  return buildEnviarLoteRpsInnerXml(config, rps, certPem, keyPem)
+}
+
 function soapNamespace(wsdlUrl: string): string {
   return wsdlUrl.toLowerCase().includes('producao.ginfes.com.br')
     ? 'http://producao.ginfes.com.br'
