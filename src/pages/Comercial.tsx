@@ -5319,7 +5319,7 @@ export default function Comercial() {
     )
   }
 
-  function renderVendaDetalhesFlutuante(v: VendaRow) {
+  function renderVendaDetalhesLateral(v: VendaRow) {
     const detalhes = [
       ['Pedido', v.pedido_numero ?? '—'],
       ['Protocolo', v.protocolo_numero ?? '—'],
@@ -5344,40 +5344,53 @@ export default function Comercial() {
     ]
     const link = getVendaExtra(v, 'link_atendimento')
     return (
-      <FloatingPanel
-        title="Detalhe completo da venda"
-        onClose={() => setSelectedRowId(null)}
-      >
-        <div className="space-y-4 p-1">
-          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-950/20 px-4 py-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-blue-500">Pedido selecionado</p>
-                <p className="mt-1 font-semibold text-gray-900 dark:text-gray-100">
-                  {(v.cadastros_base as { nome?: string } | null)?.nome ?? v.nome_faturamento ?? 'Cliente não informado'}
-                </p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Pedido {v.pedido_numero ?? '—'} · Protocolo {v.protocolo_numero ?? '—'}
-                </p>
+      <div className="fixed top-20 right-4 z-[120] hidden w-[420px] max-h-[calc(100vh-6rem)] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 xl:block">
+        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-800">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-blue-500">Detalhe da venda</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Painel lateral</p>
+          </div>
+          <button
+            type="button"
+            title="Fechar"
+            onClick={() => setSelectedRowId(null)}
+            className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="max-h-[calc(100vh-10rem)] overflow-y-auto p-4">
+          <div className="space-y-4">
+            <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-950/20 px-4 py-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-blue-500">Pedido selecionado</p>
+                  <p className="mt-1 font-semibold text-gray-900 dark:text-gray-100">
+                    {(v.cadastros_base as { nome?: string } | null)?.nome ?? v.nome_faturamento ?? 'Cliente não informado'}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Pedido {v.pedido_numero ?? '—'} · Protocolo {v.protocolo_numero ?? '—'}
+                  </p>
+                </div>
+                {link && (
+                  <a href={link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700" onClick={e => e.stopPropagation()}>
+                    Abrir link de emissão
+                    <ExternalLink size={12} />
+                  </a>
+                )}
               </div>
-              {link && (
-                <a href={link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700" onClick={e => e.stopPropagation()}>
-                  Abrir link de emissão
-                  <ExternalLink size={12} />
-                </a>
-              )}
+            </div>
+            <div className="grid gap-3">
+              {detalhes.map(([label, value]) => (
+                <div key={label} className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-950/40 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">{label}</p>
+                  <p className="mt-1 break-words text-sm font-medium text-gray-800 dark:text-gray-100">{value}</p>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {detalhes.map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-950/40 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">{label}</p>
-                <p className="mt-1 break-words text-sm font-medium text-gray-800 dark:text-gray-100">{value}</p>
-              </div>
-            ))}
-          </div>
         </div>
-      </FloatingPanel>
+      </div>
     )
   }
 
@@ -6513,7 +6526,7 @@ export default function Comercial() {
 
               {selectedRowId && (() => {
                 const vendaSelecionada = vendasPaginadas.find(row => row.id === selectedRowId)
-                return vendaSelecionada ? renderVendaDetalhesFlutuante(vendaSelecionada) : null
+                return vendaSelecionada ? renderVendaDetalhesLateral(vendaSelecionada) : null
               })()}
 
               {/* ── RODAPÉ: totalizador + paginação ── */}
