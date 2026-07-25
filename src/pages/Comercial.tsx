@@ -6526,7 +6526,11 @@ export default function Comercial() {
 
               {selectedRowId && (() => {
                 const vendaSelecionada = vendasPaginadas.find(row => row.id === selectedRowId)
-                return vendaSelecionada ? renderVendaDetalhesLateral(vendaSelecionada) : null
+                return vendaSelecionada ? (
+                  <div className="px-3 pt-3">
+                    {renderVendaDetalhesLateral(vendaSelecionada)}
+                  </div>
+                ) : null
               })()}
 
               {/* ── RODAPÉ: totalizador + paginação ── */}
