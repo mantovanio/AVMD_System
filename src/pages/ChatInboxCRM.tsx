@@ -519,6 +519,34 @@ function deepPickMessageRecord(value: unknown, predicate: (record: Record<string
   return null
 }
 
+function inferMessageTypeFromPayload(payload: Record<string, unknown>, fallback = 'conversation') {
+  const data = asMessageRecord(payload.data)
+  const message = data ? asMessageRecord(data.message) : asMessageRecord(payload.message)
+  const nested = message
+    ? asMessageRecord(message.imageMessage)
+      ?? asMessageRecord(message.videoMessage)
+      ?? asMessageRecord(message.audioMessage)
+      ?? asMessageRecord(message.documentMessage)
+      ?? message
+    : null
+
+  if (nested) {
+    if ('imageMessage' in message!) return 'imageMessage'
+    if ('videoMessage' in message!) return 'videoMessage'
+    if ('audioMessage' in message!) return 'audioMessage'
+    if ('documentMessage' in message!) return 'documentMessage'
+    const mime = String((nested.mimetype ?? nested.mimeType ?? nested.mime_type) ?? '').toLowerCase()
+    const url = String((nested.url ?? nested.mediaUrl ?? nested.link) ?? '').toLowerCase()
+    const name = String((nested.fileName ?? nested.filename ?? nested.title ?? nested.caption) ?? '').toLowerCase()
+    if (mime.startsWith('image/') || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(name) || url.includes('image')) return 'imageMessage'
+    if (mime.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|webm|opus)$/i.test(name) || url.includes('audio')) return 'audioMessage'
+    if (mime.startsWith('video/') || /\.(mp4|mov|mkv|webm)$/i.test(name) || url.includes('video')) return 'videoMessage'
+    if (mime.startsWith('application/') || /\.(pdf|docx?|xlsx?|pptx?|txt)$/i.test(name) || url.includes('document')) return 'documentMessage'
+  }
+
+  return (payload.messageType as string | undefined) ?? (data?.messageType as string | undefined) ?? fallback
+}
+
 function parseEvolutionEventMessages(events: EvolutionEventRow[], viewerQueryString = ''): CrmMessage[] {
   return events
     .filter(event => event.source === 'evolution')
@@ -528,9 +556,7 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[], viewerQueryStr
       const fromMe = Boolean(payload.fromMe ?? data?.fromMe)
       const senderType = (payload.senderType as SenderType | undefined)
         ?? (fromMe ? 'humano' : 'cliente')
-      const messageType = (payload.messageType as string | undefined)
-        ?? (data?.messageType as string | undefined)
-        ?? 'conversation'
+      const messageType = inferMessageTypeFromPayload(payload, 'conversation')
       const rawContent = (payload.content as string | undefined)
         ?? (data?.content as string | undefined)
         ?? null
@@ -542,16 +568,17 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[], viewerQueryStr
         ?? (data?.fileName as string | undefined)
         ?? deepPickMessageString(payload, ['fileName', 'filename', 'title', 'name'])
         ?? null
-      // A url do WhatsApp (mmg.whatsapp.net/...enc) e criptografada e nao pode
-      // ser tocada/exibida direto. A Evolution API (webhook com base64: true)
-      // ja manda o conteudo decifrado em data.message, mas o base64 fica dentro
-      // do tipo especifico (imageMessage.base64, videoMessage.base64, etc.).
+      // A Evolution pode mandar a midia em data.message.<tipo> ou como objeto
+      // direto dentro de data.message. Buscamos de forma mais tolerante.
       const rawMessage = data?.message as Record<string, unknown> | undefined
-      const messageEntry = rawMessage
-        ? Object.entries(rawMessage).find(([, v]) => v !== null && v !== undefined)
-        : null
-      const messagePayload = asMessageRecord(messageEntry?.[1])
-      const mediaRecord = deepPickMessageRecord(messageEntry?.[1], record =>
+      const nestedMessage = rawMessage
+        ? asMessageRecord(rawMessage.imageMessage)
+          ?? asMessageRecord(rawMessage.videoMessage)
+          ?? asMessageRecord(rawMessage.audioMessage)
+          ?? asMessageRecord(rawMessage.documentMessage)
+          ?? rawMessage
+        : undefined
+      const mediaRecord = deepPickMessageRecord(nestedMessage, record =>
         typeof record.base64 === 'string'
         || typeof record.data === 'string'
         || typeof record.url === 'string'
@@ -561,13 +588,12 @@ function parseEvolutionEventMessages(events: EvolutionEventRow[], viewerQueryStr
       )
       const inlineBase64 = (payload.base64 as string | undefined)
         ?? (rawMessage?.base64 as string | undefined)
-        ?? (messagePayload?.base64 as string | undefined)
         ?? (mediaRecord?.base64 as string | undefined)
         ?? (mediaRecord?.data as string | undefined)
         ?? null
-      const nestedBase64 = pickMessageString(messagePayload, 'base64', 'data') || deepPickMessageString(messageEntry?.[1], ['base64', 'data']) || (mediaRecord?.base64 as string | undefined) || (mediaRecord?.data as string | undefined) || ''
-      const nestedUrl = pickMessageString(messagePayload, 'url', 'mediaUrl') || deepPickMessageString(messageEntry?.[1], ['url', 'mediaUrl', 'link']) || (mediaRecord?.url as string | undefined) || (mediaRecord?.mediaUrl as string | undefined) || ''
-      const nestedMime = (mediaRecord?.mimetype as string | undefined) || (mediaRecord?.mimeType as string | undefined) || null
+      const nestedBase64 = deepPickMessageString(nestedMessage, ['base64', 'data']) || (mediaRecord?.base64 as string | undefined) || (mediaRecord?.data as string | undefined) || ''
+      const nestedUrl = deepPickMessageString(nestedMessage, ['url', 'mediaUrl', 'link']) || (mediaRecord?.url as string | undefined) || (mediaRecord?.mediaUrl as string | undefined) || ''
+      const nestedMime = deepPickMessageString(nestedMessage, ['mimetype', 'mimeType', 'mime_type']) || (mediaRecord?.mimetype as string | undefined) || (mediaRecord?.mimeType as string | undefined) || null
       const mediaUrl = inlineBase64
         ? `data:${mimeType || nestedMime || 'application/octet-stream'};base64,${inlineBase64}`
         : nestedBase64
