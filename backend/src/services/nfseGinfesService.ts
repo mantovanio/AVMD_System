@@ -173,6 +173,7 @@ function signXmlRoot(xml: string, xpath: string, certPem: string, keyPem: string
   })
   signer.addReference({
     xpath,
+    isEmptyUri: true,
     digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
