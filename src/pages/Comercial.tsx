@@ -5319,7 +5319,7 @@ export default function Comercial() {
     )
   }
 
-  function renderVendaDetalhes(v: VendaRow) {
+  function renderVendaDetalhesFlutuante(v: VendaRow) {
     const detalhes = [
       ['Pedido', v.pedido_numero ?? '—'],
       ['Protocolo', v.protocolo_numero ?? '—'],
@@ -5344,14 +5344,20 @@ export default function Comercial() {
     ]
     const link = getVendaExtra(v, 'link_atendimento')
     return (
-      <tr className="bg-blue-50/60 dark:bg-blue-950/20">
-        <td colSpan={vendaColumns.length} className="px-4 py-4">
-          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white dark:bg-gray-900 p-4 shadow-sm">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <FloatingPanel
+        title="Detalhe completo da venda"
+        onClose={() => setSelectedRowId(null)}
+      >
+        <div className="space-y-4 p-1">
+          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-950/20 px-4 py-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-blue-500">Detalhe completo da venda</p>
-                <p className="font-semibold text-gray-900 dark:text-gray-100">
+                <p className="text-xs uppercase tracking-[0.18em] text-blue-500">Pedido selecionado</p>
+                <p className="mt-1 font-semibold text-gray-900 dark:text-gray-100">
                   {(v.cadastros_base as { nome?: string } | null)?.nome ?? v.nome_faturamento ?? 'Cliente não informado'}
+                </p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Pedido {v.pedido_numero ?? '—'} · Protocolo {v.protocolo_numero ?? '—'}
                 </p>
               </div>
               {link && (
@@ -5361,17 +5367,17 @@ export default function Comercial() {
                 </a>
               )}
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {detalhes.map(([label, value]) => (
-                <div key={label} className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-950/40 px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">{label}</p>
-                  <p className="mt-1 break-words text-sm font-medium text-gray-800 dark:text-gray-100">{value}</p>
-                </div>
-              ))}
-            </div>
           </div>
-        </td>
-      </tr>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {detalhes.map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-950/40 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">{label}</p>
+                <p className="mt-1 break-words text-sm font-medium text-gray-800 dark:text-gray-100">{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </FloatingPanel>
     )
   }
 
@@ -6499,12 +6505,16 @@ export default function Comercial() {
                           )}>
                           {vendaColumns.map(column => renderVendaCell(v, column))}
                         </tr>
-                        {selectedRowId === v.id && renderVendaDetalhes(v)}
                       </Fragment>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              {selectedRowId && (() => {
+                const vendaSelecionada = vendasPaginadas.find(row => row.id === selectedRowId)
+                return vendaSelecionada ? renderVendaDetalhesFlutuante(vendaSelecionada) : null
+              })()}
 
               {/* ── RODAPÉ: totalizador + paginação ── */}
               <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30">
