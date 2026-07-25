@@ -1694,7 +1694,7 @@ export async function handleChatRoutes(
     return true
   }
 
-  const eventMediaMatch = req.method === 'GET' ? url.match(/^\/api\/chat\/event-media\/([^/?#]+)/) : null
+  const eventMediaMatch = (req.method === 'GET' || req.method === 'HEAD') ? url.match(/^\/api\/chat\/event-media\/([^/?#]+)/) : null
   if (eventMediaMatch) {
     const parsed = new URL(url, 'http://localhost')
     const eventId = decodeURIComponent(eventMediaMatch[1])
@@ -1747,6 +1747,10 @@ export async function handleChatRoutes(
         'Access-Control-Allow-Origin': corsOrigin,
         'Cache-Control': 'private, max-age=3600',
       })
+      if (req.method === 'HEAD') {
+        res.end()
+        return true
+      }
       res.end(buffer)
       return true
     }
@@ -1787,6 +1791,10 @@ export async function handleChatRoutes(
             'Access-Control-Allow-Origin': corsOrigin,
             'Cache-Control': 'private, max-age=3600',
           })
+          if (req.method === 'HEAD') {
+            res.end()
+            return true
+          }
           res.end(buffer)
           return true
         } catch (err) {
@@ -1818,6 +1826,10 @@ export async function handleChatRoutes(
             'Access-Control-Allow-Origin': corsOrigin,
             'Cache-Control': 'private, max-age=3600',
           })
+          if (req.method === 'HEAD') {
+            res.end()
+            return true
+          }
           const reader = mediaRes.body?.getReader()
           if (!reader) {
             writeJson(res, 502, { error: 'Resposta de midia vazia.' }, corsOrigin)
@@ -1846,7 +1858,7 @@ export async function handleChatRoutes(
 
   // GET /api/chat/media-proxy?url=...&instance=...
   // Proxy para Evolution API media — o browser nao pode adicionar header apikey
-  if (req.method === 'GET' && url.startsWith('/api/chat/media-proxy')) {
+  if ((req.method === 'GET' || req.method === 'HEAD') && url.startsWith('/api/chat/media-proxy')) {
     const parsed = new URL(url, 'http://localhost')
     const mediaUrl = parsed.searchParams.get('url')
     const instanceName = parsed.searchParams.get('instance')
@@ -1883,6 +1895,10 @@ export async function handleChatRoutes(
           'Access-Control-Allow-Origin': corsOrigin,
           'Cache-Control': 'private, max-age=3600',
         })
+        if (req.method === 'HEAD') {
+          res.end()
+          return true
+        }
 
         const reader = mediaRes.body?.getReader()
         if (!reader) {
