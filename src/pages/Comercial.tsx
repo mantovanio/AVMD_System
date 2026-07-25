@@ -5175,7 +5175,7 @@ export default function Comercial() {
       column.align === 'right' && 'text-right',
       column.align === 'center' && 'text-center',
     )
-    if (column.key === 'select') {
+    if ((column.key as string) === 'select') {
       return (
         <td key={column.key} className={cellBase} onClick={(e) => e.stopPropagation()}>
           <input type="checkbox" checked={selectedIds.has(v.id)}
@@ -5210,6 +5210,33 @@ export default function Comercial() {
               <option key={s} value={s}>{STATUS_PAGAMENTO_LABEL[s]}</option>
             ))}
           </select>
+        </td>
+      )
+    }
+    if (column.key === 'select') {
+      return (
+        <td key={column.key} className={cn(cellBase, 'text-center align-middle')}>
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation()
+              toggleSelected(v.id)
+            }}
+            onDoubleClick={e => {
+              e.stopPropagation()
+              setSelectedRowId(v.id)
+            }}
+            title={selectedIds.has(v.id) ? 'Desmarcar para ações em lote' : 'Marcar para ações em lote'}
+            aria-label={selectedIds.has(v.id) ? 'Desmarcar venda' : 'Selecionar venda'}
+            className={cn(
+              'inline-flex h-5 w-5 items-center justify-center rounded border transition-colors',
+              selectedIds.has(v.id)
+                ? 'border-blue-600 bg-blue-600 text-white shadow-sm shadow-blue-600/20'
+                : 'border-gray-300 bg-white text-transparent hover:border-blue-400 hover:bg-blue-50 dark:border-gray-600 dark:bg-gray-900 dark:hover:bg-blue-950/30',
+            )}
+          >
+            <Check size={12} />
+          </button>
         </td>
       )
     }
@@ -6514,7 +6541,8 @@ export default function Comercial() {
                           onClick={() => setSelectedRowId(prev => prev === v.id ? null : v.id)}
                           className={cn(
                             'hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer',
-                            selectedRowId === v.id && 'bg-blue-50 dark:bg-blue-900/20 ring-1 ring-inset ring-blue-300 dark:ring-blue-700',
+                            selectedRowId === v.id && 'bg-gradient-to-r from-blue-50 via-white to-blue-50 dark:from-blue-950/30 dark:via-gray-900 dark:to-blue-950/20 ring-2 ring-inset ring-blue-400 dark:ring-blue-600 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.18)]',
+                            selectedIds.has(v.id) && 'outline outline-1 outline-blue-200 dark:outline-blue-900/30',
                           )}>
                           {vendaColumns.map(column => renderVendaCell(v, column))}
                         </tr>
@@ -6527,7 +6555,7 @@ export default function Comercial() {
               {selectedRowId && (() => {
                 const vendaSelecionada = vendasPaginadas.find(row => row.id === selectedRowId)
                 return vendaSelecionada ? (
-                  <div className="px-3 pt-3">
+                  <div className="px-3 pt-3 border-t border-blue-100 dark:border-blue-900/30 bg-gradient-to-b from-blue-50/40 to-transparent dark:from-blue-950/10">
                     {renderVendaDetalhesLateral(vendaSelecionada)}
                   </div>
                 ) : null
