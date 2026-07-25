@@ -1844,12 +1844,16 @@ export class CommercialRepository {
     addFilter(`${agentName} = ?`, input.agente_registro_id)
     addFilter('v.pedido_numero ilike concat(\'%\', ?, \'%\')', input.pedido)
     addFilter('v.protocolo_numero ilike concat(\'%\', ?, \'%\')', input.protocolo)
-    const validationStatus = `coalesce(a.status_agendamento, case
-      when v.status_venda = 'emitido' then 'realizado'
-      when v.status_venda = 'em_validacao' then 'confirmado'
-      when v.status_venda = 'cancelado' then 'cancelado'
-      else 'pendente'
-    end)`
+    const hasValidation = `(coalesce(nullif(trim(v.metadata->>'agente_registro_importado'), ''), agente.nome) is not null)`
+    const validationStatus = `case
+      when not ${hasValidation} then 'sem_solicitacao'
+      else coalesce(a.status_agendamento, case
+        when v.status_venda = 'emitido' then 'realizado'
+        when v.status_venda = 'em_validacao' then 'confirmado'
+        when v.status_venda = 'cancelado' then 'cancelado'
+        else 'pendente'
+      end)
+    end`
     addFilter(tipo === 'vendas' ? 'v.status_venda = ?' : `${validationStatus} = ?`, input.status)
 
     if (input.viewer_perfil !== 'admin') {
@@ -1919,10 +1923,10 @@ export class CommercialRepository {
         ${agentName} as agente_registro,
         ${tipo === 'vendas' ? 'v.status_venda' : validationStatus} as status,
         ${validationStatus} as status_validacao,
-        coalesce(a.data_agendada, ${importedAgendaDate}, ${importedStatusDate}) as data_validacao,
+        case when ${hasValidation} then coalesce(a.data_agendada, ${importedAgendaDate}, ${importedStatusDate}) end as data_validacao,
         v.pedido_status,
         v.protocolo_status,
-        (coalesce(nullif(trim(v.metadata->>'agente_registro_importado'), ''), agente.nome) is not null) as possui_validacao,
+        ${hasValidation} as possui_validacao,
         coalesce(a.tipo_atendimento, nullif(v.tipo_emissao, '')) as tipo_atendimento,
         ${tipo === 'vendas' ? 'coalesce(v.valor_venda, 0)' : '0'} as valor
       from vendas_certificados v
