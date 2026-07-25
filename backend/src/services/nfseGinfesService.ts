@@ -140,7 +140,7 @@ function formatDate(isoDate: string): string {
 }
 
 function buildCabecalhoXml(): string {
-  return `<?xml version="1.0" encoding="UTF-8"?><cabecalho xmlns="http://www.ginfes.com.br/cabecalho_v03.xsd" versao="3"><versaoDados>3</versaoDados></cabecalho>`
+  return `<cab:cabecalho xmlns:cab="http://www.ginfes.com.br/cabecalho_v03.xsd" versao="3"><versaoDados>3</versaoDados></cab:cabecalho>`
 }
 
 function signXmlElement(xml: string, xpath: string, certPem: string, keyPem: string): string {
@@ -160,6 +160,27 @@ function signXmlElement(xml: string, xpath: string, certPem: string, keyPem: str
   })
   signer.computeSignature(xml, {
     location: { reference: xpath, action: 'after' },
+  })
+  return signer.getSignedXml()
+}
+
+function signXmlRoot(xml: string, xpath: string, certPem: string, keyPem: string): string {
+  const signer = new SignedXml({
+    privateKey: keyPem,
+    publicCert: certPem,
+    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+  })
+  signer.addReference({
+    xpath,
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+    transforms: [
+      'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    ],
+  })
+  signer.computeSignature(xml, {
+    location: { reference: xpath, action: 'append' },
   })
   return signer.getSignedXml()
 }
@@ -197,16 +218,16 @@ function buildEnviarLoteRpsXml(config: GinfesConfig, rps: GinfesRps, certPem: st
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
   <soap:Body>
     <ns1:RecepcionarLoteRpsV3>
-      <arg0>${escapeXmlForParam(cabecalhoXml)}</arg0>
-      <arg1>${escapeXmlForParam(envioXml)}</arg1>
+      <arg0>${cabecalhoXml}</arg0>
+      <arg1>${envioXml}</arg1>
     </ns1:RecepcionarLoteRpsV3>
   </soap:Body>
 </soap:Envelope>`
 }
 
-function buildConsultarSituacaoLoteXml(cnpj: string, im: string, protocolo: string, namespace: string): string {
-  const cabecalhoXml = escapeXmlForParam(buildCabecalhoXml())
-  const envioXml = escapeXmlForParam(`<ConsultarSituacaoLoteRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_situacao_lote_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></Prestador><Protocolo>${escapeXml(protocolo)}</Protocolo></ConsultarSituacaoLoteRpsEnvio>`)
+function buildConsultarSituacaoLoteXml(cnpj: string, im: string, protocolo: string, namespace: string, certPem: string, keyPem: string): string {
+  const cabecalhoXml = buildCabecalhoXml()
+  const envioXml = signXmlRoot(`<q:ConsultarSituacaoLoteRpsEnvio xmlns:q="http://www.ginfes.com.br/servico_consultar_situacao_lote_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><q:Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></q:Prestador><q:Protocolo>${escapeXml(protocolo)}</q:Protocolo></q:ConsultarSituacaoLoteRpsEnvio>`, "//*[local-name()='ConsultarSituacaoLoteRpsEnvio']", certPem, keyPem)
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
@@ -219,9 +240,9 @@ function buildConsultarSituacaoLoteXml(cnpj: string, im: string, protocolo: stri
 </soap:Envelope>`
 }
 
-function buildConsultarLoteRpsXml(cnpj: string, im: string, protocolo: string, namespace: string): string {
-  const cabecalhoXml = escapeXmlForParam(buildCabecalhoXml())
-  const envioXml = escapeXmlForParam(`<ConsultarLoteRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_lote_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></Prestador><Protocolo>${escapeXml(protocolo)}</Protocolo></ConsultarLoteRpsEnvio>`)
+function buildConsultarLoteRpsXml(cnpj: string, im: string, protocolo: string, namespace: string, certPem: string, keyPem: string): string {
+  const cabecalhoXml = buildCabecalhoXml()
+  const envioXml = signXmlRoot(`<q:ConsultarLoteRpsEnvio xmlns:q="http://www.ginfes.com.br/servico_consultar_lote_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><q:Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></q:Prestador><q:Protocolo>${escapeXml(protocolo)}</q:Protocolo></q:ConsultarLoteRpsEnvio>`, "//*[local-name()='ConsultarLoteRpsEnvio']", certPem, keyPem)
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
@@ -234,9 +255,9 @@ function buildConsultarLoteRpsXml(cnpj: string, im: string, protocolo: string, n
 </soap:Envelope>`
 }
 
-function buildConsultarNfsePorRpsXml(numeroRps: number, serie: string, tipo: number, cnpj: string, im: string, namespace: string): string {
-  const cabecalhoXml = escapeXmlForParam(buildCabecalhoXml())
-  const envioXml = escapeXmlForParam(`<ConsultarNfseRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_nfse_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><IdentificacaoRps><tipos:Numero>${numeroRps}</tipos:Numero><tipos:Serie>${escapeXml(serie)}</tipos:Serie><tipos:Tipo>${tipo}</tipos:Tipo></IdentificacaoRps><Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></Prestador></ConsultarNfseRpsEnvio>`)
+function buildConsultarNfsePorRpsXml(numeroRps: number, serie: string, tipo: number, cnpj: string, im: string, namespace: string, certPem: string, keyPem: string): string {
+  const cabecalhoXml = buildCabecalhoXml()
+  const envioXml = signXmlRoot(`<q:ConsultarNfseRpsEnvio xmlns:q="http://www.ginfes.com.br/servico_consultar_nfse_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><q:IdentificacaoRps><tipos:Numero>${numeroRps}</tipos:Numero><tipos:Serie>${escapeXml(serie)}</tipos:Serie><tipos:Tipo>${tipo}</tipos:Tipo></q:IdentificacaoRps><q:Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></q:Prestador></q:ConsultarNfseRpsEnvio>`, "//*[local-name()='ConsultarNfseRpsEnvio']", certPem, keyPem)
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
@@ -372,7 +393,8 @@ export async function enviarLoteRps(config: GinfesConfig, rps: GinfesRps, pfxBuf
 
 export async function consultarSituacaoLote(config: GinfesConfig, protocolo: string, pfxBuffer: Buffer): Promise<GinfesResult> {
   const agent = createMtlsAgent(pfxBuffer, config.certificadoSenha)
-  const xml = buildConsultarSituacaoLoteXml(config.cnpjPrestador, config.inscricaoMunicipal, protocolo, soapNamespace(config.wsdlUrl))
+  const { certPem, keyPem } = extractCertFromPfx(pfxBuffer, config.certificadoSenha)
+  const xml = buildConsultarSituacaoLoteXml(config.cnpjPrestador, config.inscricaoMunicipal, protocolo, soapNamespace(config.wsdlUrl), certPem, keyPem)
 
   try {
     const response = await sendSoap(config.wsdlUrl, xml, agent)
@@ -390,7 +412,8 @@ export async function consultarSituacaoLote(config: GinfesConfig, protocolo: str
 
 export async function consultarLoteRps(config: GinfesConfig, protocolo: string, pfxBuffer: Buffer): Promise<GinfesResult> {
   const agent = createMtlsAgent(pfxBuffer, config.certificadoSenha)
-  const xml = buildConsultarLoteRpsXml(config.cnpjPrestador, config.inscricaoMunicipal, protocolo, soapNamespace(config.wsdlUrl))
+  const { certPem, keyPem } = extractCertFromPfx(pfxBuffer, config.certificadoSenha)
+  const xml = buildConsultarLoteRpsXml(config.cnpjPrestador, config.inscricaoMunicipal, protocolo, soapNamespace(config.wsdlUrl), certPem, keyPem)
 
   try {
     const response = await sendSoap(config.wsdlUrl, xml, agent)
@@ -419,6 +442,7 @@ export async function consultarNfsePorRps(
   pfxBuffer: Buffer,
 ): Promise<GinfesResult> {
   const agent = createMtlsAgent(pfxBuffer, config.certificadoSenha)
+  const { certPem, keyPem } = extractCertFromPfx(pfxBuffer, config.certificadoSenha)
   const xml = buildConsultarNfsePorRpsXml(
     rps.numero,
     rps.serie,
@@ -426,6 +450,8 @@ export async function consultarNfsePorRps(
     config.cnpjPrestador,
     config.inscricaoMunicipal,
     soapNamespace(config.wsdlUrl),
+    certPem,
+    keyPem,
   )
   try {
     const response = await sendSoap(config.wsdlUrl, xml, agent)
