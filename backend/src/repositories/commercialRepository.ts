@@ -1774,7 +1774,11 @@ export class CommercialRepository {
       this.db.query(`
         select nome as id, nome
         from (
-          select distinct nullif(trim(metadata->>'vendedor_importado'), '') as nome from vendas_certificados
+          select distinct case
+            when lower(trim(metadata->>'vendedor_importado')) in ('isabella de oliveira vidal - isabella', 'isabella de oliveira vidal') then 'Isabella Vidal'
+            when lower(trim(metadata->>'vendedor_importado')) in ('ingrid braz pinto - vendedor - ingrid braz pinto', 'ingrid braz pinto - certi id - ingrid braz') then 'Ingrid Braz Pinto'
+            else nullif(trim(metadata->>'vendedor_importado'), '')
+          end as nome from vendas_certificados
           union
           select distinct nullif(trim(p.nome), '') as nome
           from profiles p where p.perfil = 'vendedor' and p.status = 'ativo'
@@ -1783,7 +1787,11 @@ export class CommercialRepository {
       this.db.query(`
         select nome as id, nome
         from (
-          select distinct nullif(trim(metadata->>'agente_registro_importado'), '') as nome from vendas_certificados
+          select distinct case
+            when lower(trim(metadata->>'agente_registro_importado')) in ('isabella de oliveira vidal', 'isabella vidal') then 'Isabella Vidal'
+            when lower(trim(metadata->>'agente_registro_importado')) = 'ingrid braz pinto' then 'Ingrid Braz Pinto'
+            else nullif(trim(metadata->>'agente_registro_importado'), '')
+          end as nome from vendas_certificados
           union
           select distinct nullif(trim(p.nome), '') as nome
           from profiles p where p.perfil = 'agente_registro' and p.status = 'ativo'
@@ -1820,10 +1828,20 @@ export class CommercialRepository {
       params.push(value.trim())
       where.push(sql.replace('?', `$${params.length}`))
     }
+    const sellerName = `case
+      when lower(trim(v.metadata->>'vendedor_importado')) in ('isabella de oliveira vidal - isabella', 'isabella de oliveira vidal') then 'Isabella Vidal'
+      when lower(trim(v.metadata->>'vendedor_importado')) in ('ingrid braz pinto - vendedor - ingrid braz pinto', 'ingrid braz pinto - certi id - ingrid braz') then 'Ingrid Braz Pinto'
+      else coalesce(nullif(trim(v.metadata->>'vendedor_importado'), ''), vendedor.nome, 'Não informado')
+    end`
+    const agentName = `case
+      when lower(trim(v.metadata->>'agente_registro_importado')) in ('isabella de oliveira vidal', 'isabella vidal') then 'Isabella Vidal'
+      when lower(trim(v.metadata->>'agente_registro_importado')) = 'ingrid braz pinto' then 'Ingrid Braz Pinto'
+      else coalesce(nullif(trim(v.metadata->>'agente_registro_importado'), ''), agente.nome, 'Não informado')
+    end`
 
     addFilter('coalesce(nullif(trim(v.nome_parceiro_safeweb), \'\'), \'Não informado\') = ?', input.parceiro_id)
-    addFilter('coalesce(nullif(trim(v.metadata->>\'vendedor_importado\'), \'\'), vendedor.nome, \'Não informado\') = ?', input.vendedor_id)
-    addFilter('coalesce(nullif(trim(v.metadata->>\'agente_registro_importado\'), \'\'), agente.nome, \'Não informado\') = ?', input.agente_registro_id)
+    addFilter(`${sellerName} = ?`, input.vendedor_id)
+    addFilter(`${agentName} = ?`, input.agente_registro_id)
     addFilter('v.pedido_numero ilike concat(\'%\', ?, \'%\')', input.pedido)
     addFilter('v.protocolo_numero ilike concat(\'%\', ?, \'%\')', input.protocolo)
     const validationStatus = `coalesce(a.status_agendamento, case
@@ -1846,15 +1864,13 @@ export class CommercialRepository {
     const dateExpression = tipo === 'vendas'
       ? `coalesce(${importedStatusDate}, v.created_at)`
       : `coalesce(a.data_agendada, ${importedAgendaDate}, ${importedStatusDate}, v.created_at)`
-    const agendaJoin = tipo === 'validacoes'
-      ? `left join lateral (
+    const agendaJoin = `left join lateral (
           select av.id, av.agente_registro_id, av.status_agendamento, av.data_agendada, av.created_at, av.tipo_atendimento
           from agendamentos_validacao av
           where av.venda_certificado_id = v.id
           order by coalesce(av.data_agendada, av.created_at) desc
           limit 1
         ) a on true`
-      : 'left join lateral (select null::uuid as id, null::uuid as agente_registro_id, null::text as status_agendamento, null::timestamptz as data_agendada, null::timestamptz as created_at, null::text as tipo_atendimento) a on true'
     const baseWhere = [
       `${dateExpression} >= $1::timestamptz`,
       `${dateExpression} <= $2::timestamptz`,
@@ -1879,6 +1895,11 @@ export class CommercialRepository {
       agente_registro_id: string | null
       agente_registro: string | null
       status: string | null
+      status_validacao: string | null
+      data_validacao: string | null
+      pedido_status: string | null
+      protocolo_status: string | null
+      possui_validacao: boolean
       tipo_atendimento: string | null
       valor: number | null
     }>(`
@@ -1893,10 +1914,15 @@ export class CommercialRepository {
         null::uuid as parceiro_id,
         coalesce(nullif(trim(v.nome_parceiro_safeweb), ''), 'Não informado') as parceiro,
         v.vendedor_id,
-        coalesce(nullif(trim(v.metadata->>'vendedor_importado'), ''), vendedor.nome, 'Não informado') as vendedor,
+        ${sellerName} as vendedor,
         coalesce(a.agente_registro_id, v.agente_registro_id) as agente_registro_id,
-        coalesce(nullif(trim(v.metadata->>'agente_registro_importado'), ''), agente.nome, 'Não informado') as agente_registro,
+        ${agentName} as agente_registro,
         ${tipo === 'vendas' ? 'v.status_venda' : validationStatus} as status,
+        ${validationStatus} as status_validacao,
+        coalesce(a.data_agendada, ${importedAgendaDate}, ${importedStatusDate}) as data_validacao,
+        v.pedido_status,
+        v.protocolo_status,
+        (coalesce(nullif(trim(v.metadata->>'agente_registro_importado'), ''), agente.nome) is not null) as possui_validacao,
         coalesce(a.tipo_atendimento, nullif(v.tipo_emissao, '')) as tipo_atendimento,
         ${tipo === 'vendas' ? 'coalesce(v.valor_venda, 0)' : '0'} as valor
       from vendas_certificados v
@@ -1912,6 +1938,8 @@ export class CommercialRepository {
     const linhas = result.rows.map(row => ({ ...row, valor: Number(row.valor ?? 0) }))
     const totalValor = Number(linhas.reduce((sum, row) => sum + row.valor, 0).toFixed(2))
     const realizados = linhas.filter(row => row.status === 'realizado' || row.status === 'emitido').length
+    const comValidacao = linhas.filter(row => row.possui_validacao).length
+    const validacoesRealizadas = linhas.filter(row => row.status_validacao === 'realizado').length
     const agrupamentos = {
       parceiros: this.groupOperationalRows(linhas as Array<Record<string, unknown> & { valor: number }>, 'parceiro'),
       vendedores: this.groupOperationalRows(linhas as Array<Record<string, unknown> & { valor: number }>, 'vendedor'),
@@ -1922,7 +1950,7 @@ export class CommercialRepository {
       tipo,
       from,
       to,
-      resumo: { quantidade: linhas.length, realizados, valor_total: totalValor },
+      resumo: { quantidade: linhas.length, realizados, valor_total: totalValor, com_validacao: comValidacao, validacoes_realizadas: validacoesRealizadas },
       agrupamentos,
       linhas,
     }

@@ -20,6 +20,11 @@ type ReportRow = {
   vendedor: string | null
   agente_registro: string | null
   status: string | null
+  status_validacao: string | null
+  data_validacao: string | null
+  pedido_status: string | null
+  protocolo_status: string | null
+  possui_validacao: boolean
   tipo_atendimento: string | null
   valor: number
 }
@@ -28,7 +33,7 @@ type OperationalReport = {
   tipo: ReportType
   from: string
   to: string
-  resumo: { quantidade: number; realizados: number; valor_total: number }
+  resumo: { quantidade: number; realizados: number; valor_total: number; com_validacao: number; validacoes_realizadas: number }
   agrupamentos: { parceiros: GroupRow[]; vendedores: GroupRow[]; agentes: GroupRow[] }
   linhas: ReportRow[]
 }
@@ -180,10 +185,11 @@ export default function Relatorios() {
 
   function exportCsv() {
     if (!report?.linhas.length) return
-    const headers = ['Data', 'Pedido', 'Protocolo', 'Cliente', 'Produto', 'Parceiro', 'Vendedor', 'Agente de Registro', 'Status', 'Tipo de Atendimento', 'Valor']
+    const headers = ['Data da Venda', 'Pedido', 'Status do Pedido', 'Protocolo', 'Status do Protocolo', 'Cliente', 'Produto', 'Parceiro', 'Vendedor', 'Agente de Registro', 'Status da Venda', 'Status da Validação', 'Data da Validação', 'Tipo de Atendimento', 'Valor']
     const rows = report.linhas.map(row => [
-      formatDate(row.data), row.pedido, row.protocolo, row.cliente, row.produto, row.parceiro,
-      row.vendedor, row.agente_registro, row.status, row.tipo_atendimento, row.valor.toFixed(2),
+      formatDate(row.data), row.pedido, row.pedido_status, row.protocolo, row.protocolo_status, row.cliente, row.produto, row.parceiro,
+      row.vendedor, row.agente_registro, row.status, row.status_validacao,
+      row.data_validacao ? formatDate(row.data_validacao) : '', row.tipo_atendimento, row.valor.toFixed(2),
     ])
     const content = '\uFEFF' + [headers, ...rows].map(row => row.map(csvCell).join(';')).join('\r\n')
     const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }))
@@ -205,13 +211,19 @@ export default function Relatorios() {
       Parceiro: row.parceiro ?? '',
       Vendedor: row.vendedor ?? '',
       'Agente de Registro': row.agente_registro ?? '',
-      Status: row.status?.replaceAll('_', ' ') ?? '',
+      'Status da Venda': row.status?.replaceAll('_', ' ') ?? '',
+      'Status da Validação': row.status_validacao?.replaceAll('_', ' ') ?? '',
+      'Data da Validação': row.data_validacao ? formatDate(row.data_validacao) : '',
+      'Status do Pedido': row.pedido_status?.replaceAll('_', ' ') ?? '',
+      'Status do Protocolo': row.protocolo_status?.replaceAll('_', ' ') ?? '',
       'Tipo de Atendimento': row.tipo_atendimento ?? '',
       Valor: row.valor,
     }))
     const summaryRows = [
       { Indicador: tipo === 'vendas' ? 'Vendas encontradas' : 'Validações encontradas', Valor: report.resumo.quantidade },
       { Indicador: tipo === 'vendas' ? 'Emitidas' : 'Realizadas', Valor: report.resumo.realizados },
+      { Indicador: 'Com pedido de validação', Valor: report.resumo.com_validacao },
+      { Indicador: 'Validações realizadas', Valor: report.resumo.validacoes_realizadas },
       { Indicador: 'Valor total', Valor: report.resumo.valor_total },
       { Indicador: 'Período inicial', Valor: from },
       { Indicador: 'Período final', Valor: to },
@@ -328,9 +340,10 @@ export default function Relatorios() {
 
       <main className="flex-1 overflow-auto p-6 space-y-5">
         {error && <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4"><p className="text-2xl font-bold">{report?.resumo.quantidade ?? 0}</p><p className="text-xs text-gray-500 mt-1">{tipo === 'vendas' ? 'Vendas encontradas' : 'Validações encontradas'}</p></div>
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4"><p className="text-2xl font-bold text-emerald-600">{report?.resumo.realizados ?? 0}</p><p className="text-xs text-gray-500 mt-1">{tipo === 'vendas' ? 'Emitidas' : 'Realizadas'}</p></div>
+          <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4"><p className="text-2xl font-bold text-blue-600">{report?.resumo.com_validacao ?? 0}</p><p className="text-xs text-gray-500 mt-1">Com pedido de validação</p></div>
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4"><p className="text-2xl font-bold">{formatCurrency(report?.resumo.valor_total ?? 0)}</p><p className="text-xs text-gray-500 mt-1">{tipo === 'vendas' ? 'Valor total das vendas' : 'Valor informativo'}</p></div>
         </div>
 
@@ -355,10 +368,10 @@ export default function Relatorios() {
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead><tr className="text-left text-gray-500 border-b border-gray-200 dark:border-gray-800">
-                  {['Data', 'Pedido', 'Protocolo', 'Cliente', 'Produto', 'Parceiro', 'Vendedor', 'Agente de Registro', 'Status', tipo === 'vendas' ? 'Valor' : 'Atendimento'].map(label => <th key={label} className="px-3 py-3 whitespace-nowrap">{label}</th>)}
+                  {['Data da Venda', 'Pedido', 'Status Pedido', 'Protocolo', 'Status Protocolo', 'Cliente', 'Produto', 'Parceiro', 'Vendedor', 'Agente de Registro', 'Status Venda', 'Status Validação', 'Data Validação', tipo === 'vendas' ? 'Valor' : 'Atendimento'].map(label => <th key={label} className="px-3 py-3 whitespace-nowrap">{label}</th>)}
                 </tr></thead>
                 <tbody>{report.linhas.map(row => <tr key={row.id} className="border-b border-gray-100 dark:border-gray-800/70">
-                  <td className="px-3 py-2 whitespace-nowrap">{formatDate(row.data)}</td><td className="px-3 py-2">{row.pedido ?? '—'}</td><td className="px-3 py-2">{row.protocolo ?? '—'}</td><td className="px-3 py-2 whitespace-nowrap">{row.cliente ?? '—'}</td><td className="px-3 py-2">{row.produto ?? '—'}</td><td className="px-3 py-2">{row.parceiro ?? '—'}</td><td className="px-3 py-2">{row.vendedor ?? '—'}</td><td className="px-3 py-2">{row.agente_registro ?? '—'}</td><td className="px-3 py-2 capitalize">{row.status?.replaceAll('_', ' ') ?? '—'}</td><td className="px-3 py-2 whitespace-nowrap">{tipo === 'vendas' ? formatCurrency(row.valor) : row.tipo_atendimento ?? '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{formatDate(row.data)}</td><td className="px-3 py-2">{row.pedido ?? '—'}</td><td className="px-3 py-2 capitalize">{row.pedido_status?.replaceAll('_', ' ') ?? '—'}</td><td className="px-3 py-2">{row.protocolo ?? '—'}</td><td className="px-3 py-2 capitalize">{row.protocolo_status?.replaceAll('_', ' ') ?? '—'}</td><td className="px-3 py-2 whitespace-nowrap">{row.cliente ?? '—'}</td><td className="px-3 py-2">{row.produto ?? '—'}</td><td className="px-3 py-2">{row.parceiro ?? '—'}</td><td className="px-3 py-2">{row.vendedor ?? '—'}</td><td className="px-3 py-2">{row.agente_registro ?? '—'}</td><td className="px-3 py-2 capitalize">{row.status?.replaceAll('_', ' ') ?? '—'}</td><td className="px-3 py-2 capitalize">{row.status_validacao?.replaceAll('_', ' ') ?? '—'}</td><td className="px-3 py-2 whitespace-nowrap">{row.data_validacao ? formatDate(row.data_validacao) : '—'}</td><td className="px-3 py-2 whitespace-nowrap">{tipo === 'vendas' ? formatCurrency(row.valor) : row.tipo_atendimento ?? '—'}</td>
                 </tr>)}</tbody>
               </table>
             </div>
