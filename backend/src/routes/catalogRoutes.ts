@@ -46,6 +46,16 @@ function extractStringRecord(value: unknown) {
     : {}
 }
 
+function sanitizeNfseConfig(config: Record<string, unknown> | null) {
+  if (!config) return null
+  return {
+    ...config,
+    senha_prefeitura: config.senha_prefeitura ? '********' : null,
+    chave_autenticacao: config.chave_autenticacao ? '********' : null,
+    certificado_senha: config.certificado_senha ? '********' : null,
+  }
+}
+
 function buildNfseRequiredChecks(config: Record<string, unknown>) {
   const payload = extractStringRecord(config.payload_reforma_tributaria)
   const certPath = String(config.certificado_pfx_path ?? '').trim().replace(/\\/g, '/')
@@ -901,13 +911,16 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   // ── NFS-e ─────────────────────────────────────────────────────────────
   if (method === 'GET' && url === '/api/nfse/configuracoes') {
     const configuracoes = await repo.listNfseConfiguracoes()
-    writeJson(res, 200, { ok: true, configuracoes }, corsOrigin)
+    writeJson(res, 200, {
+      ok: true,
+      configuracoes: (configuracoes as Array<Record<string, unknown>>).map(sanitizeNfseConfig),
+    }, corsOrigin)
     return true
   }
 
   if (method === 'GET' && url === '/api/nfse/configuracao') {
     const configuracao = await repo.getActiveNfseConfiguracao()
-    writeJson(res, 200, { ok: true, configuracao }, corsOrigin)
+    writeJson(res, 200, { ok: true, configuracao: sanitizeNfseConfig(configuracao as Record<string, unknown> | null) }, corsOrigin)
     return true
   }
 
@@ -1064,7 +1077,7 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   if (method === 'POST' && url === '/api/nfse/configuracoes') {
     const body = await readJson<Record<string, unknown>>(req)
     const configuracao = await repo.saveNfseConfiguracao(body)
-    writeJson(res, 200, { ok: true, configuracao }, corsOrigin)
+    writeJson(res, 200, { ok: true, configuracao: sanitizeNfseConfig(configuracao as Record<string, unknown>) }, corsOrigin)
     return true
   }
 

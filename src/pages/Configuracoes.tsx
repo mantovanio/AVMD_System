@@ -5294,6 +5294,7 @@ const NFSE_PRESETS: NfsePreset[] = [
     observacoes: 'Município opera com NFS-e via GINFES. A homologação exige certificado digital cliente para abrir o WSDL.',
     payload_reforma_tributaria: {
       ginfes_wsdl_homologacao: 'https://homologacao.ginfes.com.br/ServiceGinfesImpl?WSDL',
+      ginfes_wsdl_producao: 'https://producao.ginfes.com.br/ServiceGinfesImpl?WSDL',
       ginfes_requires_client_certificate: true,
     },
   },
@@ -6087,16 +6088,28 @@ function AbaFiscal() {
               />
             )}
             {form.provedor === 'ginfes' && (
-              <ConfigInput
-                label="WSDL de homologação GINFES"
-                value={String(payloadFiscal.ginfes_wsdl_homologacao ?? '')}
-                onChange={v => updateField('payload_reforma_tributaria', {
-                  ...payloadFiscal,
-                  ginfes_wsdl_homologacao: v,
-                  ginfes_requires_client_certificate: true,
-                } as NfseConfiguracao['payload_reforma_tributaria'])}
-                placeholder="https://homologacao.ginfes.com.br/ServiceGinfesImpl?WSDL"
-              />
+              <>
+                <ConfigInput
+                  label="WSDL de homologação GINFES"
+                  value={String(payloadFiscal.ginfes_wsdl_homologacao ?? '')}
+                  onChange={v => updateField('payload_reforma_tributaria', {
+                    ...payloadFiscal,
+                    ginfes_wsdl_homologacao: v,
+                    ginfes_requires_client_certificate: true,
+                  } as NfseConfiguracao['payload_reforma_tributaria'])}
+                  placeholder="https://homologacao.ginfes.com.br/ServiceGinfesImpl?WSDL"
+                />
+                <ConfigInput
+                  label="WSDL de produção GINFES"
+                  value={String(payloadFiscal.ginfes_wsdl_producao ?? '')}
+                  onChange={v => updateField('payload_reforma_tributaria', {
+                    ...payloadFiscal,
+                    ginfes_wsdl_producao: v,
+                    ginfes_requires_client_certificate: true,
+                  } as NfseConfiguracao['payload_reforma_tributaria'])}
+                  placeholder="https://producao.ginfes.com.br/ServiceGinfesImpl?WSDL"
+                />
+              </>
             )}
           </div>
 

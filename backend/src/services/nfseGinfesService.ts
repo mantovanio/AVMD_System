@@ -5,9 +5,8 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import * as https from 'node:https'
 import type { Agent } from 'node:https'
+import { SignedXml } from 'xml-crypto'
 import type { CatalogRepository } from '../repositories/catalogRepository.js'
-
-type HttpFetch = typeof fetch
 
 export type GinfesConfig = {
   wsdlUrl: string
@@ -114,7 +113,7 @@ function extractCertFromPfx(pfxBuffer: Buffer, passphrase: string): { certPem: s
     return { certPem, keyPem }
   } finally {
     for (const f of [pfxPath, certPath, keyPath]) {
-      try { if (existsSync(f)) unlinkSync(f) } catch {}
+      try { if (existsSync(f)) unlinkSync(f) } catch { /* limpeza temporária em melhor esforço */ }
     }
   }
 }
@@ -124,7 +123,7 @@ function createMtlsAgent(pfxBuffer: Buffer, password: string): Agent {
   return new https.Agent({
     cert: certPem,
     key: keyPem,
-    rejectUnauthorized: false,
+    rejectUnauthorized: true,
   })
 }
 
@@ -141,36 +140,66 @@ function formatDate(isoDate: string): string {
 }
 
 function buildCabecalhoXml(): string {
-  return `<Cabecalho versaoDados="3"></Cabecalho>`
+  return `<cabecalho xmlns="http://www.ginfes.com.br/cabecalho_v03.xsd" versao="3"><versaoDados>3</versaoDados></cabecalho>`
 }
 
-function buildEnviarLoteRpsInnerXml(config: GinfesConfig, rps: GinfesRps): string {
+function signXmlElement(xml: string, xpath: string, certPem: string, keyPem: string): string {
+  const signer = new SignedXml({
+    privateKey: keyPem,
+    publicCert: certPem,
+    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+  })
+  signer.addReference({
+    xpath,
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+    transforms: [
+      'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    ],
+  })
+  signer.computeSignature(xml, {
+    location: { reference: xpath, action: 'after' },
+  })
+  return signer.getSignedXml()
+}
+
+function buildEnviarLoteRpsInnerXml(config: GinfesConfig, rps: GinfesRps, certPem: string, keyPem: string): string {
   const loteId = `lote${config.numeroRpsAtual}`
   const rpsId = `rps${rps.numero}`
 
-  return `<EnviarLoteRpsEnvio xmlns="http://www.ginfes.com.br/servico_enviar_lote_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><LoteRps Id="${escapeXml(loteId)}"><tipos:NumeroLote>${config.numeroRpsAtual}</tipos:NumeroLote><tipos:Cnpj>${escapeXml(config.cnpjPrestador)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(config.inscricaoMunicipal)}</tipos:InscricaoMunicipal><tipos:QuantidadeRps>1</tipos:QuantidadeRps><ListaRps xmlns="http://www.ginfes.com.br/tipos_v03.xsd"><Rps><InfRps Id="${escapeXml(rpsId)}"><IdentificacaoRps><Numero>${rps.numero}</Numero><Serie>${escapeXml(rps.serie)}</Serie><Tipo>${rps.tipo}</Tipo></IdentificacaoRps><DataEmissao>${escapeXml(rps.dataEmissao)}</DataEmissao><NaturezaOperacao>${escapeXml(rps.naturezaOperacao)}</NaturezaOperacao>${rps.regimeEspecialTributacao ? `<RegimeEspecialTributacao>${rps.regimeEspecialTributacao}</RegimeEspecialTributacao>` : ''}<OptanteSimplesNacional>${rps.optanteSimplesNacional}</OptanteSimplesNacional><IncentivadorCultural>${rps.incentivadorCultural}</IncentivadorCultural><Status>${rps.status}</Status><Servico><Valores><ValorServicos>${rps.servico.valorServicos.toFixed(2)}</ValorServicos><ValorDeducoes>${rps.servico.valorDeducoes.toFixed(2)}</ValorDeducoes><ValorPis>${rps.servico.valorPis.toFixed(2)}</ValorPis><ValorCofins>${rps.servico.valorCofins.toFixed(2)}</ValorCofins><ValorInss>${rps.servico.valorInss.toFixed(2)}</ValorInss><ValorIr>${rps.servico.valorIr.toFixed(2)}</ValorIr><ValorCsll>${rps.servico.valorCsll.toFixed(2)}</ValorCsll><IssRetido>${rps.servico.issRetido}</IssRetido><ValorIss>${rps.servico.valorIss.toFixed(2)}</ValorIss><ValorIssRetido>${rps.servico.valorIssRetido.toFixed(2)}</ValorIssRetido><OutrasRetencoes>${rps.servico.outrasRetencoes.toFixed(2)}</OutrasRetencoes><BaseCalculo>${rps.servico.baseCalculo.toFixed(2)}</BaseCalculo><Aliquota>${rps.servico.aliquota.toFixed(2)}</Aliquota><ValorLiquidoNfse>${rps.servico.valorLiquidoNfse.toFixed(2)}</ValorLiquidoNfse><DescontoIncondicionado>${rps.servico.descontoIncondicionado.toFixed(2)}</DescontoIncondicionado><DescontoCondicionado>${rps.servico.descontoCondicionado.toFixed(2)}</DescontoCondicionado></Valores><ItemListaServico>${escapeXml(rps.servico.itemListaServico)}</ItemListaServico>${rps.servico.codigoCnae ? `<CodigoCnae>${escapeXml(rps.servico.codigoCnae)}</CodigoCnae>` : ''}<CodigoTributacaoMunicipio>${escapeXml(rps.servico.codigoTributacaoMunicipio)}</CodigoTributacaoMunicipio><Discriminacao>${escapeXml(rps.servico.discriminacao)}</Discriminacao><CodigoMunicipio>${escapeXml(rps.servico.codigoMunicipio)}</CodigoMunicipio></Servico><Prestador><Cnpj>${escapeXml(rps.prestador.cnpj)}</Cnpj><InscricaoMunicipal>${escapeXml(rps.prestador.inscricaoMunicipal)}</InscricaoMunicipal></Prestador><Tomador><IdentificacaoTomador><CpfCnpj>${rps.tomador.cpfCnpj.cnpj ? `<Cnpj>${escapeXml(rps.tomador.cpfCnpj.cnpj)}</Cnpj>` : `<Cpf>${escapeXml(rps.tomador.cpfCnpj.cpf ?? '')}</Cpf>`}</CpfCnpj>${rps.tomador.inscricaoMunicipal ? `<InscricaoMunicipal>${escapeXml(rps.tomador.inscricaoMunicipal)}</InscricaoMunicipal>` : ''}</IdentificacaoTomador><RazaoSocial>${escapeXml(rps.tomador.razaoSocial)}</RazaoSocial><Endereco><Endereco>${escapeXml(rps.tomador.endereco.endereco)}</Endereco><Numero>${escapeXml(rps.tomador.endereco.numero)}</Numero>${rps.tomador.endereco.complemento ? `<Complemento>${escapeXml(rps.tomador.endereco.complemento)}</Complemento>` : ''}<Bairro>${escapeXml(rps.tomador.endereco.bairro)}</Bairro><CodigoMunicipio>${escapeXml(rps.tomador.endereco.codigoMunicipio)}</CodigoMunicipio><Uf>${escapeXml(rps.tomador.endereco.uf)}</Uf><Cep>${escapeXml(rps.tomador.endereco.cep)}</Cep></Endereco><Contato><Telefone>${escapeXml(rps.tomador.contato.telefone)}</Telefone><Email>${escapeXml(rps.tomador.contato.email)}</Email></Contato></Tomador></InfRps></Rps></ListaRps></LoteRps></EnviarLoteRpsEnvio>`
+  const unsigned = `<EnviarLoteRpsEnvio xmlns="http://www.ginfes.com.br/servico_enviar_lote_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><LoteRps Id="${escapeXml(loteId)}"><tipos:NumeroLote>${config.numeroRpsAtual}</tipos:NumeroLote><tipos:Cnpj>${escapeXml(config.cnpjPrestador)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(config.inscricaoMunicipal)}</tipos:InscricaoMunicipal><tipos:QuantidadeRps>1</tipos:QuantidadeRps><ListaRps xmlns="http://www.ginfes.com.br/tipos_v03.xsd"><Rps><InfRps Id="${escapeXml(rpsId)}"><IdentificacaoRps><Numero>${rps.numero}</Numero><Serie>${escapeXml(rps.serie)}</Serie><Tipo>${rps.tipo}</Tipo></IdentificacaoRps><DataEmissao>${escapeXml(rps.dataEmissao)}</DataEmissao><NaturezaOperacao>${escapeXml(rps.naturezaOperacao)}</NaturezaOperacao>${rps.regimeEspecialTributacao ? `<RegimeEspecialTributacao>${rps.regimeEspecialTributacao}</RegimeEspecialTributacao>` : ''}<OptanteSimplesNacional>${rps.optanteSimplesNacional}</OptanteSimplesNacional><IncentivadorCultural>${rps.incentivadorCultural}</IncentivadorCultural><Status>${rps.status}</Status><Servico><Valores><ValorServicos>${rps.servico.valorServicos.toFixed(2)}</ValorServicos><ValorDeducoes>${rps.servico.valorDeducoes.toFixed(2)}</ValorDeducoes><ValorPis>${rps.servico.valorPis.toFixed(2)}</ValorPis><ValorCofins>${rps.servico.valorCofins.toFixed(2)}</ValorCofins><ValorInss>${rps.servico.valorInss.toFixed(2)}</ValorInss><ValorIr>${rps.servico.valorIr.toFixed(2)}</ValorIr><ValorCsll>${rps.servico.valorCsll.toFixed(2)}</ValorCsll><IssRetido>${rps.servico.issRetido}</IssRetido><ValorIss>${rps.servico.valorIss.toFixed(2)}</ValorIss><ValorIssRetido>${rps.servico.valorIssRetido.toFixed(2)}</ValorIssRetido><OutrasRetencoes>${rps.servico.outrasRetencoes.toFixed(2)}</OutrasRetencoes><BaseCalculo>${rps.servico.baseCalculo.toFixed(2)}</BaseCalculo><Aliquota>${rps.servico.aliquota.toFixed(4)}</Aliquota><ValorLiquidoNfse>${rps.servico.valorLiquidoNfse.toFixed(2)}</ValorLiquidoNfse><DescontoIncondicionado>${rps.servico.descontoIncondicionado.toFixed(2)}</DescontoIncondicionado><DescontoCondicionado>${rps.servico.descontoCondicionado.toFixed(2)}</DescontoCondicionado></Valores><ItemListaServico>${escapeXml(rps.servico.itemListaServico)}</ItemListaServico>${rps.servico.codigoCnae ? `<CodigoCnae>${escapeXml(rps.servico.codigoCnae)}</CodigoCnae>` : ''}<CodigoTributacaoMunicipio>${escapeXml(rps.servico.codigoTributacaoMunicipio)}</CodigoTributacaoMunicipio><Discriminacao>${escapeXml(rps.servico.discriminacao)}</Discriminacao><CodigoMunicipio>${escapeXml(rps.servico.codigoMunicipio)}</CodigoMunicipio></Servico><Prestador><Cnpj>${escapeXml(rps.prestador.cnpj)}</Cnpj><InscricaoMunicipal>${escapeXml(rps.prestador.inscricaoMunicipal)}</InscricaoMunicipal></Prestador><Tomador><IdentificacaoTomador><CpfCnpj>${rps.tomador.cpfCnpj.cnpj ? `<Cnpj>${escapeXml(rps.tomador.cpfCnpj.cnpj)}</Cnpj>` : `<Cpf>${escapeXml(rps.tomador.cpfCnpj.cpf ?? '')}</Cpf>`}</CpfCnpj>${rps.tomador.inscricaoMunicipal ? `<InscricaoMunicipal>${escapeXml(rps.tomador.inscricaoMunicipal)}</InscricaoMunicipal>` : ''}</IdentificacaoTomador><RazaoSocial>${escapeXml(rps.tomador.razaoSocial)}</RazaoSocial><Endereco><Endereco>${escapeXml(rps.tomador.endereco.endereco)}</Endereco><Numero>${escapeXml(rps.tomador.endereco.numero)}</Numero>${rps.tomador.endereco.complemento ? `<Complemento>${escapeXml(rps.tomador.endereco.complemento)}</Complemento>` : ''}<Bairro>${escapeXml(rps.tomador.endereco.bairro)}</Bairro><CodigoMunicipio>${escapeXml(rps.tomador.endereco.codigoMunicipio)}</CodigoMunicipio><Uf>${escapeXml(rps.tomador.endereco.uf)}</Uf><Cep>${escapeXml(rps.tomador.endereco.cep)}</Cep></Endereco><Contato><Telefone>${escapeXml(rps.tomador.contato.telefone)}</Telefone><Email>${escapeXml(rps.tomador.contato.email)}</Email></Contato></Tomador></InfRps></Rps></ListaRps></LoteRps></EnviarLoteRpsEnvio>`
+  const signedRps = signXmlElement(unsigned, "//*[local-name()='InfRps']", certPem, keyPem)
+  return signXmlElement(signedRps, "//*[local-name()='LoteRps']", certPem, keyPem)
 }
 
-function buildEnviarLoteRpsXml(config: GinfesConfig, rps: GinfesRps): string {
+function soapNamespace(wsdlUrl: string): string {
+  return wsdlUrl.toLowerCase().includes('producao.ginfes.com.br')
+    ? 'http://producao.ginfes.com.br'
+    : 'http://homologacao.ginfes.com.br'
+}
+
+function buildEnviarLoteRpsXml(config: GinfesConfig, rps: GinfesRps, certPem: string, keyPem: string): string {
   const cabecalhoXml = buildCabecalhoXml()
-  const envioXml = buildEnviarLoteRpsInnerXml(config, rps)
+  const envioXml = buildEnviarLoteRpsInnerXml(config, rps, certPem, keyPem)
+  const namespace = soapNamespace(config.wsdlUrl)
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://homologacao.ginfes.com.br">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
   <soap:Body>
     <ns1:RecepcionarLoteRpsV3>
-      <arg0>${cabecalhoXml}</arg0>
-      <arg1>${envioXml}</arg1>
+      <arg0>${escapeXmlForParam(cabecalhoXml)}</arg0>
+      <arg1>${escapeXmlForParam(envioXml)}</arg1>
     </ns1:RecepcionarLoteRpsV3>
   </soap:Body>
 </soap:Envelope>`
 }
 
-function buildConsultarSituacaoLoteXml(cnpj: string, im: string, protocolo: string): string {
+function buildConsultarSituacaoLoteXml(cnpj: string, im: string, protocolo: string, namespace: string): string {
   const envioXml = escapeXmlForParam(`<ConsultarSituacaoLoteRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_situacao_lote_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></Prestador><Protocolo>${escapeXml(protocolo)}</Protocolo></ConsultarSituacaoLoteRpsEnvio>`)
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://homologacao.ginfes.com.br">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
   <soap:Body>
     <ns1:ConsultarSituacaoLoteRpsV3>
       <arg0>3</arg0>
@@ -180,11 +209,11 @@ function buildConsultarSituacaoLoteXml(cnpj: string, im: string, protocolo: stri
 </soap:Envelope>`
 }
 
-function buildConsultarLoteRpsXml(cnpj: string, im: string, protocolo: string): string {
+function buildConsultarLoteRpsXml(cnpj: string, im: string, protocolo: string, namespace: string): string {
   const envioXml = escapeXmlForParam(`<ConsultarLoteRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_lote_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></Prestador><Protocolo>${escapeXml(protocolo)}</Protocolo></ConsultarLoteRpsEnvio>`)
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://homologacao.ginfes.com.br">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
   <soap:Body>
     <ns1:ConsultarLoteRpsV3>
       <arg0>3</arg0>
@@ -194,11 +223,11 @@ function buildConsultarLoteRpsXml(cnpj: string, im: string, protocolo: string): 
 </soap:Envelope>`
 }
 
-function buildConsultarNfsePorRpsXml(numeroRps: number, serie: string, tipo: number, cnpj: string, im: string): string {
+function buildConsultarNfsePorRpsXml(numeroRps: number, serie: string, tipo: number, cnpj: string, im: string, namespace: string): string {
   const envioXml = escapeXmlForParam(`<ConsultarNfseRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_nfse_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><IdentificacaoRps><tipos:Numero>${numeroRps}</tipos:Numero><tipos:Serie>${escapeXml(serie)}</tipos:Serie><tipos:Tipo>${tipo}</tipos:Tipo></IdentificacaoRps><Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></Prestador></ConsultarNfseRpsEnvio>`)
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://homologacao.ginfes.com.br">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
   <soap:Body>
     <ns1:ConsultarNfsePorRpsV3>
       <arg0>3</arg0>
@@ -299,7 +328,8 @@ async function sendSoap(wsdlUrl: string, soapBody: string, agent: Agent): Promis
 
 export async function enviarLoteRps(config: GinfesConfig, rps: GinfesRps, pfxBuffer: Buffer): Promise<GinfesResult> {
   const agent = createMtlsAgent(pfxBuffer, config.certificadoSenha)
-  const xml = buildEnviarLoteRpsXml(config, rps)
+  const { certPem, keyPem } = extractCertFromPfx(pfxBuffer, config.certificadoSenha)
+  const xml = buildEnviarLoteRpsXml(config, rps, certPem, keyPem)
 
   try {
     const response = await sendSoap(config.wsdlUrl, xml, agent)
@@ -324,7 +354,7 @@ export async function enviarLoteRps(config: GinfesConfig, rps: GinfesRps, pfxBuf
 
 export async function consultarSituacaoLote(config: GinfesConfig, protocolo: string, pfxBuffer: Buffer): Promise<GinfesResult> {
   const agent = createMtlsAgent(pfxBuffer, config.certificadoSenha)
-  const xml = buildConsultarSituacaoLoteXml(config.cnpjPrestador, config.inscricaoMunicipal, protocolo)
+  const xml = buildConsultarSituacaoLoteXml(config.cnpjPrestador, config.inscricaoMunicipal, protocolo, soapNamespace(config.wsdlUrl))
 
   try {
     const response = await sendSoap(config.wsdlUrl, xml, agent)
@@ -342,7 +372,7 @@ export async function consultarSituacaoLote(config: GinfesConfig, protocolo: str
 
 export async function consultarLoteRps(config: GinfesConfig, protocolo: string, pfxBuffer: Buffer): Promise<GinfesResult> {
   const agent = createMtlsAgent(pfxBuffer, config.certificadoSenha)
-  const xml = buildConsultarLoteRpsXml(config.cnpjPrestador, config.inscricaoMunicipal, protocolo)
+  const xml = buildConsultarLoteRpsXml(config.cnpjPrestador, config.inscricaoMunicipal, protocolo, soapNamespace(config.wsdlUrl))
 
   try {
     const response = await sendSoap(config.wsdlUrl, xml, agent)
@@ -365,6 +395,37 @@ export async function consultarLoteRps(config: GinfesConfig, protocolo: string, 
   }
 }
 
+export async function consultarNfsePorRps(
+  config: GinfesConfig,
+  rps: { numero: number; serie: string; tipo: number },
+  pfxBuffer: Buffer,
+): Promise<GinfesResult> {
+  const agent = createMtlsAgent(pfxBuffer, config.certificadoSenha)
+  const xml = buildConsultarNfsePorRpsXml(
+    rps.numero,
+    rps.serie,
+    rps.tipo,
+    config.cnpjPrestador,
+    config.inscricaoMunicipal,
+    soapNamespace(config.wsdlUrl),
+  )
+  try {
+    const response = await sendSoap(config.wsdlUrl, xml, agent)
+    const mensagens = parseMensagensRetorno(response)
+    if (mensagens.length > 0) {
+      return { ok: false, mensagens, rawResponse: response, error: mensagens.map(m => `${m.codigo}: ${m.mensagem}`).join('; ') }
+    }
+    return {
+      ok: true,
+      numeroNf: extractTag(response, 'Numero') || undefined,
+      codigoVerificacao: extractTag(response, 'CodigoVerificacao') || undefined,
+      rawResponse: response,
+    }
+  } finally {
+    agent.destroy()
+  }
+}
+
 export async function emitirNFSeGinfes(
   repo: CatalogRepository,
   vendaId: string,
@@ -374,7 +435,15 @@ export async function emitirNFSeGinfes(
   const config = rawConfig as Record<string, unknown>
 
   const payload = (config.payload_reforma_tributaria ?? {}) as Record<string, unknown>
-  const wsdlUrl = String(payload.ginfes_wsdl_homologacao ?? payload.gissonline_wsdl_url ?? '').trim()
+  const ambiente = String(config.ambiente ?? 'homologacao').trim()
+  if (ambiente === 'producao' && process.env.NFSE_PRODUCAO_HABILITADA !== 'true') {
+    return { ok: false, error: 'Emissao fiscal em producao bloqueada. Conclua a homologacao e habilite NFSE_PRODUCAO_HABILITADA=true.' }
+  }
+  const wsdlUrl = String(
+    ambiente === 'producao'
+      ? payload.ginfes_wsdl_producao
+      : payload.ginfes_wsdl_homologacao ?? payload.gissonline_wsdl_url,
+  ).trim()
   if (!wsdlUrl) return { ok: false, error: 'WSDL do GINFES nao configurado.' }
 
   const pfxPath = String(config.certificado_pfx_path ?? '').trim()
@@ -396,12 +465,26 @@ export async function emitirNFSeGinfes(
 
   const doc = String(venda.documento_faturamento ?? '').replace(/\D/g, '')
   const isCnpj = doc.length === 14
+  const naturezaMap: Record<string, string> = {
+    'tributação no município': '1',
+    'tributacao no municipio': '1',
+    'tributação fora do município': '2',
+    'tributacao fora do municipio': '2',
+    'isenção': '3',
+    'isencao': '3',
+    'imune': '4',
+    'exigibilidade suspensa por decisão judicial': '5',
+    'exigibilidade suspensa por procedimento administrativo': '6',
+  }
+  const naturezaRaw = String(config.natureza_operacao ?? '1').trim()
+  const naturezaOperacao = naturezaMap[naturezaRaw.toLocaleLowerCase('pt-BR')] ?? naturezaRaw
+
   const rps: GinfesRps = {
     numero: numeroRps,
     serie: String(config.serie_rps ?? '1'),
     tipo: Number(config.tipo_rps ?? 1),
     dataEmissao,
-    naturezaOperacao: String(config.natureza_operacao ?? '1'),
+    naturezaOperacao,
     regimeEspecialTributacao: Number(config.regime_especial ?? 0) || 0,
     optanteSimplesNacional: config.simples_nacional ? 1 : 2,
     incentivadorCultural: config.incentivo_fiscal ? 1 : 2,
@@ -424,7 +507,7 @@ export async function emitirNFSeGinfes(
       descontoIncondicionado: 0,
       descontoCondicionado: 0,
       itemListaServico: String(config.codigo_servico_municipio ?? ''),
-      codigoCnae: String(config.cnae ?? ''),
+      codigoCnae: String(config.cnae ?? '').replace(/\D/g, ''),
       codigoTributacaoMunicipio: String(config.codigo_tributacao_municipio ?? ''),
       discriminacao: String(venda.observacoes ?? `Servico de certificado digital - venda ${vendaId.slice(0, 8)}`),
       codigoMunicipio: String(config.municipio_codigo_ibge ?? ''),
@@ -442,7 +525,7 @@ export async function emitirNFSeGinfes(
         numero: String(venda.numero ?? 's/n'),
         complemento: String(venda.complemento ?? ''),
         bairro: String(venda.bairro ?? ''),
-        codigoMunicipio: String(config.municipio_codigo_ibge ?? ''),
+        codigoMunicipio: String(venda.ibge ?? config.municipio_codigo_ibge ?? ''),
         uf: String(venda.uf ?? ''),
         cep: String(venda.cep ?? '').replace(/\D/g, ''),
       },
@@ -458,7 +541,7 @@ export async function emitirNFSeGinfes(
     cnpjPrestador: String(config.cnpj_emitente ?? ''),
     inscricaoMunicipal: String(config.inscricao_municipal ?? ''),
     codigoMunicipio: String(config.municipio_codigo_ibge ?? ''),
-    naturezaOperacao: String(config.natureza_operacao ?? '1'),
+    naturezaOperacao,
     regimeEspecial: String(config.regime_especial ?? ''),
     simplesNacional: Boolean(config.simples_nacional),
     incentivoFiscal: Boolean(config.incentivo_fiscal),

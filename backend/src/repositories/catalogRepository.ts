@@ -25,6 +25,13 @@ export class CatalogRepository {
 
   async saveNfseConfiguracao(input: Record<string, unknown>) {
     const id = String(input.id ?? '').trim() || randomUUID()
+    const existingResult = await this.db.query(
+      `select senha_prefeitura, chave_autenticacao, certificado_senha
+         from nfse_configuracoes where id = $1::uuid`,
+      [id],
+    )
+    const existing = (existingResult.rows[0] ?? {}) as Record<string, unknown>
+    const secretFields = new Set(['senha_prefeitura', 'chave_autenticacao', 'certificado_senha'])
     const fields = [
       'identificador','municipio_nome','municipio_codigo_ibge','provedor','ativo','cadastro_base_emitente_id',
       'cnpj_emitente','inscricao_municipal','inscricao_estadual','cnae','ambiente','natureza_operacao',
@@ -36,7 +43,10 @@ export class CatalogRepository {
       'razao_social_emitente','nome_fantasia_emitente','telefone_emitente','email_emitente','endereco_emitente','complemento_emitente',
     ]
     const vals = fields.map(field => {
-      const value = input[field] ?? null
+      const incoming = input[field]
+      const value = secretFields.has(field) && (!incoming || incoming === '********')
+        ? existing[field] ?? null
+        : incoming ?? null
       if (field === 'payload_reforma_tributaria') return JSON.stringify(value && typeof value === 'object' ? value : {})
       if (['ativo','simples_nacional','incentivo_fiscal','usa_certificado_digital','robo_ligado'].includes(field)) return Boolean(value)
       if (field === 'cadastro_base_emitente_id' || field === 'updated_by') return String(value ?? '').trim() || null
@@ -164,7 +174,7 @@ export class CatalogRepository {
     const result = await this.db.query(
       `select id, cadastro_base_id, nome_faturamento, documento_faturamento,
               email_faturamento, telefone_faturamento, logradouro, numero,
-              complemento, bairro, cidade, uf, cep, inscricao_municipal,
+              complemento, bairro, cidade, uf, cep, ibge, inscricao_municipal,
               inscricao_estadual, valor_venda, iss_retido, observacoes
        from vendas_certificados
        where id = $1::uuid`,
