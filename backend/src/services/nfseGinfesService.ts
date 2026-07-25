@@ -267,13 +267,13 @@ function parseMensagensRetorno(xml: string): Array<{ codigo: string; mensagem: s
     if (codigo || mensagem) {
       mensagens.push({ codigo: codigo || '', mensagem: mensagem || '', correcao: correcao || '' })
     }
-    match = msgRegex.exec(xml)
+    match = msgRegex.exec(decodedXml)
   }
   return mensagens
 }
 
 function extractTag(xml: string, tag: string): string {
-  const regex = new RegExp(`<${tag}>([^<]*)<\\/${tag}>`)
+  const regex = new RegExp(`<(?:\\w+:)?${tag}>([^<]*)<\\/(?:\\w+:)?${tag}>`)
   const match = regex.exec(xml)
   return match?.[1]?.trim() ?? ''
 }
