@@ -557,8 +557,8 @@ export async function emitirNFSeGinfes(
 
   const ginfesConfig: GinfesConfig = {
     wsdlUrl,
-    cnpjPrestador: String(config.cnpj_emitente ?? ''),
-    inscricaoMunicipal: String(config.inscricao_municipal ?? ''),
+    cnpjPrestador: String(config.cnpj_emitente ?? '').replace(/\D/g, ''),
+    inscricaoMunicipal: String(config.inscricao_municipal ?? '').replace(/\D/g, ''),
     codigoMunicipio: String(config.municipio_codigo_ibge ?? ''),
     naturezaOperacao,
     regimeEspecial: String(config.regime_especial ?? ''),
