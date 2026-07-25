@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { BarChart3, BookmarkPlus, Download, Loader2, RefreshCcw, Search } from 'lucide-react'
+import { BookmarkPlus, Download, Loader2, RefreshCcw, Search } from 'lucide-react'
 import { getApiUrl } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { cn } from '@/lib/utils'
@@ -113,7 +113,6 @@ export default function Relatorios() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [report, setReport] = useState<OperationalReport | null>(null)
-  const [groupView, setGroupView] = useState<'parceiros' | 'vendedores' | 'agentes'>('parceiros')
   const [savedReports, setSavedReports] = useState<SavedReport[]>(() => {
     try {
       return JSON.parse(localStorage.getItem(SAVED_REPORTS_KEY) ?? '[]') as SavedReport[]
@@ -174,7 +173,6 @@ export default function Relatorios() {
     ? ['rascunho', 'vendido', 'agendado', 'em_validacao', 'emitido', 'cancelado']
     : ['pendente', 'confirmado', 'realizado', 'cancelado']
 
-  const groupedRows = useMemo(() => report?.agrupamentos[groupView] ?? [], [groupView, report])
   const detailColumns = useMemo<ConfigurableColumn<ReportRow>[]>(() => [
     { id: 'data', label: 'Data da Venda', width: 185, accessor: row => formatDate(row.data), className: 'whitespace-nowrap' },
     { id: 'pedido', label: 'Pedido', width: 115, accessor: row => row.pedido ?? '—' },
@@ -369,18 +367,6 @@ export default function Relatorios() {
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4"><p className="text-2xl font-bold text-blue-600">{report?.resumo.com_validacao ?? 0}</p><p className="text-xs text-gray-500 mt-1">Com pedido de validação</p></div>
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4"><p className="text-2xl font-bold">{formatCurrency(report?.resumo.valor_total ?? 0)}</p><p className="text-xs text-gray-500 mt-1">{tipo === 'vendas' ? 'Valor total das vendas' : 'Valor informativo'}</p></div>
         </div>
-
-        <section className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
-          <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
-            <div className="flex items-center gap-2"><BarChart3 size={16} className="text-blue-600" /><h2 className="text-sm font-semibold">Resumo agrupado</h2></div>
-            <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-              {(['parceiros', 'vendedores', 'agentes'] as const).map(value => <button key={value} onClick={() => setGroupView(value)} className={cn('px-3 py-1.5 rounded-md text-xs capitalize', groupView === value ? 'bg-white dark:bg-gray-700 text-blue-600 shadow-sm' : 'text-gray-500')}>{value}</button>)}
-            </div>
-          </div>
-          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
-            {groupedRows.slice(0, 12).map(row => <div key={row.nome} className="rounded-lg bg-gray-50 dark:bg-gray-800/60 px-3 py-2"><p className="text-sm font-medium truncate">{row.nome}</p><p className="text-xs text-gray-500">{row.quantidade} registros{tipo === 'vendas' ? ` · ${formatCurrency(row.valor)}` : ''}</p></div>)}
-          </div>
-        </section>
 
         <section className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
