@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import Sidebar, { type Page } from '@/components/Sidebar'
 import NotificationBell from '@/components/NotificationBell'
 import { useNotifications } from '@/hooks/useNotifications'
-import { Menu } from 'lucide-react'
+import { Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { APP_VERSION } from '@/lib/version'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig } from '@/lib/agencyConfig'
 import { PAGE_LABELS, PERFIL_LABEL, isAdminProfile, resolveAllowedPages as resolveLegacyPages, resolveDefaultPage } from '@/lib/security'
@@ -239,6 +239,7 @@ function AppContent() {
     : rolePages.filter(p => modulePages.includes(p))
   const defaultPage  = resolveDefaultPage(profile)
   const activePage: Page = allowedPages.includes(page) ? page : (allowedPages[0] ?? defaultPage)
+  const [desktopSidebarHidden, setDesktopSidebarHidden] = useState(false)
 
   function handleNavigate(p: Page) {
     if (allowedPages.includes(p)) setPage(p)
@@ -255,6 +256,8 @@ function AppContent() {
         allowedPages={allowedPages}
         onLogout={() => void signOut()}
         agencyConfig={agencyConfig}
+        desktopHidden={desktopSidebarHidden}
+        onDesktopHiddenToggle={() => setDesktopSidebarHidden(v => !v)}
         mobileOpen={mobileNavOpen}
         onMobileClose={() => setMobileNavOpen(false)}
       />
@@ -265,6 +268,15 @@ function AppContent() {
             <button type="button" onClick={() => setMobileNavOpen(true)}
               className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
               <Menu size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setDesktopSidebarHidden(v => !v)}
+              title={desktopSidebarHidden ? 'Mostrar menu lateral' : 'Ocultar menu lateral'}
+              className="hidden md:inline-flex h-8 items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-900/40 dark:bg-gray-900 dark:text-blue-300 dark:hover:bg-blue-950/30 transition-colors"
+            >
+              {desktopSidebarHidden ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
+              <span>{desktopSidebarHidden ? 'Mostrar menu' : 'Ocultar menu'}</span>
             </button>
             {agencyConfig.logo_interna_url?.trim() ? (
               <img src={agencyConfig.logo_interna_url} alt={agencyConfig.nome_agencia} className="h-7 w-auto object-contain" />

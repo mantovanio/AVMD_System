@@ -38,6 +38,8 @@ interface Props {
   allowedPages?: Page[]
   onLogout?:    () => void
   agencyConfig?: AgencyConfig
+  desktopHidden?: boolean
+  onDesktopHiddenToggle?: () => void
   mobileOpen?:  boolean
   onMobileClose?: () => void
 }
@@ -280,7 +282,7 @@ function MobileDrawer({
   )
 }
 
-export default function Sidebar({ activePage, onNavigate, allowedPages, onLogout, agencyConfig, mobileOpen, onMobileClose }: Props) {
+export default function Sidebar({ activePage, onNavigate, allowedPages, onLogout, agencyConfig, desktopHidden = false, onDesktopHiddenToggle, mobileOpen, onMobileClose }: Props) {
   const [desktopExpanded, setDesktopExpanded] = useState(false)
   const groups = MENU_GROUPS
     .map(group => ({
@@ -293,17 +295,29 @@ export default function Sidebar({ activePage, onNavigate, allowedPages, onLogout
 
   return (
     <>
-      <aside className="hidden md:flex flex-col shrink-0">
-        <IconRail
-          groups={groups}
-          activePage={activePage}
-          onNavigate={onNavigate}
-          onLogout={onLogout}
-          agencyConfig={agencyConfig}
-          expanded={desktopExpanded}
-          onToggle={() => setDesktopExpanded(value => !value)}
-        />
-      </aside>
+      {!desktopHidden ? (
+        <aside className="hidden md:flex flex-col shrink-0">
+          <IconRail
+            groups={groups}
+            activePage={activePage}
+            onNavigate={onNavigate}
+            onLogout={onLogout}
+            agencyConfig={agencyConfig}
+            expanded={desktopExpanded}
+            onToggle={() => setDesktopExpanded(value => !value)}
+          />
+        </aside>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onDesktopHiddenToggle?.()}
+          title="Mostrar menu lateral"
+          aria-label="Mostrar menu lateral"
+          className="hidden md:flex fixed left-2 top-20 z-50 h-10 w-10 items-center justify-center rounded-2xl border border-blue-200 bg-white/95 text-blue-600 shadow-lg shadow-black/5 hover:bg-blue-50 transition-colors"
+        >
+          <PanelLeftOpen size={18} />
+        </button>
+      )}
 
       {mobileOpen && (
         <MobileDrawer
