@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { Edit3, PlusCircle, RefreshCw, Search, X, Trash2, PowerOff, Upload, Loader2 } from 'lucide-react'
+import { Edit3, PlusCircle, RefreshCw, Search, X, Trash2, PowerOff, Upload, Loader2, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getApiUrl } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -304,6 +304,46 @@ export default function Parceiros() {
     } finally {
       setImportando(false)
     }
+  }
+
+  function exportPartners(bookType: 'xlsx' | 'xls') {
+    const rows = lista.map(parceiro => {
+      const metadata = parceiro.metadata ?? {}
+      const roles = Array.isArray(metadata.papeis_adicionais) ? metadata.papeis_adicionais as string[] : []
+      return {
+        Status: parceiro.status === 'ativo' ? 'Ativo' : 'Inativo',
+        'Tipo Parceiro': TIPO_PARCEIRO_OPTIONS.find(option => option.value === parceiro.tipo_parceiro)?.label ?? '',
+        Vendedor: roles.includes('vendedor') ? 'Sim' : 'Não',
+        'Agente de Registro': roles.includes('agente_registro') ? 'Sim' : 'Não',
+        Contador: roles.includes('contador') ? 'Sim' : 'Não',
+        'Bloqueado Vendas/Protocolo': parceiro.bloquear_vendas_protocolos ? 'Sim' : 'Não',
+        'Código Parceiro': parceiro.codigo_parceiro ?? '',
+        'CNPJ/CPF': parceiro.cpf_cnpj ?? '',
+        'Nome/Razão Social': parceiro.razao_social ?? parceiro.nome,
+        'Nome Fantasia': parceiro.nome_fantasia ?? '',
+        'Data Ativação': parceiro.data_ativacao ?? parceiro.desde ?? '',
+        'Data Desativação': parceiro.data_desativacao ?? '',
+        'E-mail': parceiro.email ?? '',
+        DDD: parceiro.ddd ?? '',
+        Telefone: parceiro.telefone ?? '',
+        CEP: parceiro.cep ?? '',
+        Logradouro: parceiro.logradouro ?? '',
+        Número: parceiro.numero ?? '',
+        Complemento: parceiro.complemento ?? '',
+        Bairro: parceiro.bairro ?? '',
+        Cidade: parceiro.cidade ?? '',
+        UF: parceiro.estado ?? '',
+        'Código IBGE': parceiro.ibge ?? '',
+        Observação: parceiro.observacao ?? '',
+        'Faixa de Comissão': String(metadata.faixa_comissao_importada ?? ''),
+        'Cobrança/Remuneração': String(metadata.cobranca_remuneracao_importada ?? ''),
+      }
+    })
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+    worksheet['!cols'] = Object.keys(rows[0] ?? {}).map(key => ({ wch: Math.min(45, Math.max(12, key.length + 2)) }))
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Parceiros')
+    XLSX.writeFile(workbook, `parceiros-avmd-${new Date().toISOString().slice(0, 10)}.${bookType}`, { bookType })
   }
 
   async function preencherCep(cep: string | null) {
@@ -646,6 +686,12 @@ export default function Parceiros() {
             className="flex items-center gap-1.5 px-3 py-2 border border-blue-300 text-blue-600 text-xs font-medium rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50"
           >
             <Upload size={13} /> Importar parceiros
+          </button>
+          <button type="button" onClick={() => exportPartners('xlsx')} className="flex items-center gap-1.5 px-3 py-2 border border-emerald-300 text-emerald-700 text-xs font-medium rounded-lg hover:bg-emerald-50">
+            <Download size={13} /> XLSX
+          </button>
+          <button type="button" onClick={() => exportPartners('xls')} className="flex items-center gap-1.5 px-3 py-2 border border-emerald-300 text-emerald-700 text-xs font-medium rounded-lg hover:bg-emerald-50">
+            <Download size={13} /> XLS
           </button>
           <button
             type="button"

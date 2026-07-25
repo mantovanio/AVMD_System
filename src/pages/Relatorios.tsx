@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BarChart3, Download, Loader2, RefreshCcw, Search } from 'lucide-react'
+import * as XLSX from 'xlsx'
+import { BarChart3, BookmarkPlus, Download, Loader2, RefreshCcw, Search } from 'lucide-react'
 import { getApiUrl } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { cn } from '@/lib/utils'
@@ -31,8 +32,25 @@ type OperationalReport = {
   agrupamentos: { parceiros: GroupRow[]; vendedores: GroupRow[]; agentes: GroupRow[] }
   linhas: ReportRow[]
 }
+type SavedReport = {
+  id: string
+  nome: string
+  filters: {
+    tipo: ReportType
+    periodo: PeriodPreset
+    from: string
+    to: string
+    parceiroId: string
+    vendedorId: string
+    agenteId: string
+    pedido: string
+    protocolo: string
+    status: string
+  }
+}
 
 const EMPTY_FILTERS: ReportFilters = { parceiros: [], vendedores: [], agentes: [] }
+const SAVED_REPORTS_KEY = 'avmd:relatorios-operacionais:salvos'
 
 function localDate(date: Date) {
   const offset = date.getTimezoneOffset() * 60_000
@@ -90,6 +108,13 @@ export default function Relatorios() {
   const [error, setError] = useState('')
   const [report, setReport] = useState<OperationalReport | null>(null)
   const [groupView, setGroupView] = useState<'parceiros' | 'vendedores' | 'agentes'>('parceiros')
+  const [savedReports, setSavedReports] = useState<SavedReport[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(SAVED_REPORTS_KEY) ?? '[]') as SavedReport[]
+    } catch {
+      return []
+    }
+  })
 
   const loadFilters = useCallback(async () => {
     const response = await fetch(getApiUrl('/comercial/relatorios/operacionais/filtros'))
@@ -169,6 +194,67 @@ export default function Relatorios() {
     URL.revokeObjectURL(url)
   }
 
+  function exportExcel(bookType: 'xlsx' | 'xls') {
+    if (!report?.linhas.length) return
+    const detailRows = report.linhas.map(row => ({
+      Data: formatDate(row.data),
+      Pedido: row.pedido ?? '',
+      Protocolo: row.protocolo ?? '',
+      Cliente: row.cliente ?? '',
+      Produto: row.produto ?? '',
+      Parceiro: row.parceiro ?? '',
+      Vendedor: row.vendedor ?? '',
+      'Agente de Registro': row.agente_registro ?? '',
+      Status: row.status?.replaceAll('_', ' ') ?? '',
+      'Tipo de Atendimento': row.tipo_atendimento ?? '',
+      Valor: row.valor,
+    }))
+    const summaryRows = [
+      { Indicador: tipo === 'vendas' ? 'Vendas encontradas' : 'Validações encontradas', Valor: report.resumo.quantidade },
+      { Indicador: tipo === 'vendas' ? 'Emitidas' : 'Realizadas', Valor: report.resumo.realizados },
+      { Indicador: 'Valor total', Valor: report.resumo.valor_total },
+      { Indicador: 'Período inicial', Valor: from },
+      { Indicador: 'Período final', Valor: to },
+    ]
+    const workbook = XLSX.utils.book_new()
+    const detailSheet = XLSX.utils.json_to_sheet(detailRows)
+    detailSheet['!cols'] = Object.keys(detailRows[0] ?? {}).map(key => ({ wch: Math.min(40, Math.max(13, key.length + 2)) }))
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryRows), 'Resumo')
+    XLSX.utils.book_append_sheet(workbook, detailSheet, 'Detalhamento')
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(report.agrupamentos.parceiros), 'Por Parceiro')
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(report.agrupamentos.vendedores), 'Por Vendedor')
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(report.agrupamentos.agentes), 'Por Agente')
+    XLSX.writeFile(workbook, `relatorio-${tipo}-${from}-a-${to}.${bookType}`, { bookType })
+  }
+
+  function saveCurrentReport() {
+    const nome = window.prompt('Nome para esta configuração de relatório:')
+    if (!nome?.trim()) return
+    const saved: SavedReport = {
+      id: crypto.randomUUID(),
+      nome: nome.trim(),
+      filters: { tipo, periodo, from, to, parceiroId, vendedorId, agenteId, pedido, protocolo, status },
+    }
+    const next = [...savedReports, saved]
+    setSavedReports(next)
+    localStorage.setItem(SAVED_REPORTS_KEY, JSON.stringify(next))
+  }
+
+  function applySavedReport(id: string) {
+    const saved = savedReports.find(item => item.id === id)
+    if (!saved) return
+    setTipo(saved.filters.tipo)
+    setPeriodo(saved.filters.periodo)
+    setFrom(saved.filters.from)
+    setTo(saved.filters.to)
+    setParceiroId(saved.filters.parceiroId)
+    setVendedorId(saved.filters.vendedorId)
+    setAgenteId(saved.filters.agenteId)
+    setPedido(saved.filters.pedido)
+    setProtocolo(saved.filters.protocolo)
+    setStatus(saved.filters.status)
+  }
+
   if (!profile) return <div className="flex items-center justify-center h-full text-gray-400">Carregando perfil...</div>
 
   return (
@@ -179,9 +265,26 @@ export default function Relatorios() {
             <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Relatórios Operacionais</h1>
             <p className="text-xs text-gray-500 mt-1">Vendas e validações com filtros cruzados e detalhamento por responsável.</p>
           </div>
-          <button type="button" onClick={exportCsv} disabled={!report?.linhas.length} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm disabled:opacity-40">
-            <Download size={15} /> Exportar CSV
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {savedReports.length > 0 && (
+              <select defaultValue="" onChange={event => { applySavedReport(event.target.value); event.target.value = '' }} className="border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800">
+                <option value="" disabled>Relatórios salvos</option>
+                {savedReports.map(saved => <option key={saved.id} value={saved.id}>{saved.nome}</option>)}
+              </select>
+            )}
+            <button type="button" onClick={saveCurrentReport} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-blue-200 text-blue-600 text-sm">
+              <BookmarkPlus size={15} /> Salvar filtros
+            </button>
+            <button type="button" onClick={() => exportExcel('xlsx')} disabled={!report?.linhas.length} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 text-sm disabled:opacity-40">
+              <Download size={15} /> XLSX
+            </button>
+            <button type="button" onClick={() => exportExcel('xls')} disabled={!report?.linhas.length} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 text-sm disabled:opacity-40">
+              <Download size={15} /> XLS
+            </button>
+            <button type="button" onClick={exportCsv} disabled={!report?.linhas.length} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm disabled:opacity-40">
+              <Download size={15} /> CSV
+            </button>
+          </div>
         </div>
 
         <div className="flex gap-2 mt-4">
