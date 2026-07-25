@@ -99,6 +99,7 @@ function AppContent() {
   const [claudeOpen, setClaudeOpen]     = useState(false)
   const [debugOpen,  setDebugOpen]      = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [desktopSidebarHidden, setDesktopSidebarHidden] = useState(false)
 
   // Permissões por módulo — carregadas do backend
   const { loading: permLoading, resolveAllowedPages: resolveModulePages } = usePermissions()
@@ -239,7 +240,6 @@ function AppContent() {
     : rolePages.filter(p => modulePages.includes(p))
   const defaultPage  = resolveDefaultPage(profile)
   const activePage: Page = allowedPages.includes(page) ? page : (allowedPages[0] ?? defaultPage)
-  const [desktopSidebarHidden, setDesktopSidebarHidden] = useState(false)
 
   function handleNavigate(p: Page) {
     if (allowedPages.includes(p)) setPage(p)
