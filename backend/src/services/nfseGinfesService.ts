@@ -140,7 +140,7 @@ function formatDate(isoDate: string): string {
 }
 
 function buildCabecalhoXml(): string {
-  return `<cabecalho xmlns="http://www.ginfes.com.br/cabecalho_v03.xsd" versao="3"><versaoDados>3</versaoDados></cabecalho>`
+  return `<?xml version="1.0" encoding="UTF-8"?><cabecalho xmlns="http://www.ginfes.com.br/cabecalho_v03.xsd" versao="3"><versaoDados>3</versaoDados></cabecalho>`
 }
 
 function signXmlElement(xml: string, xpath: string, certPem: string, keyPem: string): string {
@@ -250,9 +250,15 @@ function buildConsultarNfsePorRpsXml(numeroRps: number, serie: string, tipo: num
 }
 
 function parseMensagensRetorno(xml: string): Array<{ codigo: string; mensagem: string; correcao: string }> {
+  const decodedXml = xml
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
   const mensagens: Array<{ codigo: string; mensagem: string; correcao: string }> = []
   const msgRegex = /<(?:\w+:)?MensagemRetorno>([\s\S]*?)<\/(?:\w+:)?MensagemRetorno>/g
-  let match = msgRegex.exec(xml)
+  let match = msgRegex.exec(decodedXml)
   while (match) {
     const block = match[1]
     const codigo = extractTag(block, 'Codigo')
