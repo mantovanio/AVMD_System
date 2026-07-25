@@ -5344,7 +5344,7 @@ export default function Comercial() {
     ]
     const link = getVendaExtra(v, 'link_atendimento')
     return (
-      <div className="fixed top-20 right-4 z-[120] hidden w-[420px] max-h-[calc(100vh-6rem)] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 xl:block">
+      <div className="fixed top-24 right-4 z-[120] hidden w-[420px] max-h-[calc(100vh-7rem)] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 xl:block">
         <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-800">
           <div>
             <p className="text-xs uppercase tracking-[0.18em] text-blue-500">Detalhe da venda</p>
@@ -5359,7 +5359,7 @@ export default function Comercial() {
             <X size={18} />
           </button>
         </div>
-        <div className="max-h-[calc(100vh-10rem)] overflow-y-auto p-4">
+        <div className="max-h-[calc(100vh-11rem)] overflow-y-auto p-4">
           <div className="space-y-4">
             <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-950/20 px-4 py-3">
               <div className="flex flex-wrap items-start justify-between gap-3">

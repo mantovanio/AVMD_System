@@ -36,7 +36,7 @@ export function RecordActionBar({ recordName, recordBadge, actions, onClose, cla
 
   return (
     <div className={cn(
-      'sticky top-0 z-20 border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm',
+      'sticky top-0 z-40 border-b border-gray-200 dark:border-gray-800 bg-white/98 dark:bg-gray-900/98 backdrop-blur-md shadow-sm',
       'px-3 py-2.5 flex items-center gap-2 flex-wrap sm:px-4 sm:gap-3',
       className,
     )}>
