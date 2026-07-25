@@ -46,7 +46,7 @@ export function RecordActionBar({ recordName, recordBadge, actions, onClose, cla
             Operação selecionada
           </span>
           <span className="text-base sm:text-lg font-bold text-gray-950 dark:text-gray-50 truncate max-w-[160px] sm:max-w-[240px]">
-          {recordName}
+            {recordName}
           </span>
         </div>
         {recordBadge}
@@ -57,17 +57,17 @@ export function RecordActionBar({ recordName, recordBadge, actions, onClose, cla
       <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
         {visibleActions.map(action => (
           <button
-            key={action.key}
-            type="button"
-            onClick={action.onClick}
-            disabled={action.disabled}
-            title={action.tooltip ?? action.label}
-            className={cn(
-              'inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border text-sm font-medium transition-colors',
+              key={action.key}
+              type="button"
+              onClick={action.onClick}
+              disabled={action.disabled}
+              title={action.tooltip ?? action.label}
+              className={cn(
+              'inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border text-sm font-medium transition-colors shadow-sm',
               'disabled:opacity-40 disabled:cursor-not-allowed',
               variantClasses[action.variant ?? 'default'],
-            )}
-          >
+              )}
+            >
             {action.icon}
             <span className="hidden md:inline">{action.label}</span>
           </button>

@@ -3754,12 +3754,19 @@ function MessageRow({
 function PanelBlock({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <button type="button" onClick={() => setOpen(prev => !prev)} className="flex w-full items-center justify-between gap-2 text-left">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h4>
-        <ChevronDown size={14} className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-0' : '-rotate-90'}`} />
+    <div className="rounded-2xl border border-blue-100/80 dark:border-blue-900/30 bg-gradient-to-b from-white to-slate-50/80 dark:from-gray-900 dark:to-blue-950/10 p-4 shadow-sm">
+      <button
+        type="button"
+        onClick={() => setOpen(prev => !prev)}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">Bloco operacional</span>
+          <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{title}</h4>
+        </div>
+        <ChevronDown size={16} className={`shrink-0 text-blue-500 transition-transform ${open ? 'rotate-0' : '-rotate-90'}`} />
       </button>
-      {open && <div className="mt-3 space-y-3">{children}</div>}
+      {open && <div className="mt-4 space-y-3">{children}</div>}
     </div>
   )
 }
