@@ -4,6 +4,7 @@ import { BarChart3, BookmarkPlus, Download, Loader2, RefreshCcw, Search } from '
 import { getApiUrl } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { cn } from '@/lib/utils'
+import { ConfigurableTable, type ConfigurableColumn } from '@/components/ConfigurableTable'
 
 type ReportType = 'vendas' | 'validacoes'
 type PeriodPreset = 'semana' | 'quinzena' | 'mes' | 'personalizado'
@@ -174,6 +175,28 @@ export default function Relatorios() {
     : ['pendente', 'confirmado', 'realizado', 'cancelado']
 
   const groupedRows = useMemo(() => report?.agrupamentos[groupView] ?? [], [groupView, report])
+  const detailColumns = useMemo<ConfigurableColumn<ReportRow>[]>(() => [
+    { id: 'data', label: 'Data da Venda', width: 185, accessor: row => formatDate(row.data), className: 'whitespace-nowrap' },
+    { id: 'pedido', label: 'Pedido', width: 115, accessor: row => row.pedido ?? '—' },
+    { id: 'pedido_status', label: 'Status Pedido', width: 145, accessor: row => row.pedido_status?.replaceAll('_', ' ') ?? '—', className: 'capitalize' },
+    { id: 'protocolo', label: 'Protocolo', width: 135, accessor: row => row.protocolo ?? '—' },
+    { id: 'protocolo_status', label: 'Status Protocolo', width: 155, accessor: row => row.protocolo_status?.replaceAll('_', ' ') ?? '—', className: 'capitalize' },
+    { id: 'cliente', label: 'Cliente', width: 250, accessor: row => row.cliente ?? '—' },
+    { id: 'produto', label: 'Produto', width: 235, accessor: row => row.produto ?? '—' },
+    { id: 'parceiro', label: 'Parceiro', width: 250, accessor: row => row.parceiro ?? '—' },
+    { id: 'vendedor', label: 'Vendedor', width: 210, accessor: row => row.vendedor ?? '—' },
+    { id: 'agente', label: 'Agente de Registro', width: 210, accessor: row => row.agente_registro ?? '—' },
+    { id: 'status', label: 'Status Venda', width: 145, accessor: row => row.status?.replaceAll('_', ' ') ?? '—', className: 'capitalize' },
+    { id: 'status_validacao', label: 'Status Validação', width: 155, accessor: row => row.status_validacao?.replaceAll('_', ' ') ?? '—', className: 'capitalize' },
+    { id: 'data_validacao', label: 'Data Validação', width: 185, accessor: row => row.data_validacao ? formatDate(row.data_validacao) : '—', className: 'whitespace-nowrap' },
+    {
+      id: 'valor_atendimento',
+      label: tipo === 'vendas' ? 'Valor' : 'Atendimento',
+      width: 145,
+      accessor: row => tipo === 'vendas' ? formatCurrency(row.valor) : row.tipo_atendimento ?? '—',
+      className: 'whitespace-nowrap',
+    },
+  ], [tipo])
 
   function setPreset(value: PeriodPreset) {
     setPeriodo(value)
@@ -365,16 +388,7 @@ export default function Relatorios() {
             <button type="button" onClick={() => void loadReport()} className="text-gray-500 hover:text-blue-600"><RefreshCcw size={15} /></button>
           </div>
           {loading ? <div className="h-48 flex items-center justify-center text-gray-400"><Loader2 size={18} className="animate-spin mr-2" /> Gerando relatório...</div> : !report?.linhas.length ? <p className="py-12 text-center text-sm text-gray-400">Nenhum registro encontrado com os filtros informados.</p> : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead><tr className="text-left text-gray-500 border-b border-gray-200 dark:border-gray-800">
-                  {['Data da Venda', 'Pedido', 'Status Pedido', 'Protocolo', 'Status Protocolo', 'Cliente', 'Produto', 'Parceiro', 'Vendedor', 'Agente de Registro', 'Status Venda', 'Status Validação', 'Data Validação', tipo === 'vendas' ? 'Valor' : 'Atendimento'].map(label => <th key={label} className="px-3 py-3 whitespace-nowrap">{label}</th>)}
-                </tr></thead>
-                <tbody>{report.linhas.map(row => <tr key={row.id} className="border-b border-gray-100 dark:border-gray-800/70">
-                  <td className="px-3 py-2 whitespace-nowrap">{formatDate(row.data)}</td><td className="px-3 py-2">{row.pedido ?? '—'}</td><td className="px-3 py-2 capitalize">{row.pedido_status?.replaceAll('_', ' ') ?? '—'}</td><td className="px-3 py-2">{row.protocolo ?? '—'}</td><td className="px-3 py-2 capitalize">{row.protocolo_status?.replaceAll('_', ' ') ?? '—'}</td><td className="px-3 py-2 whitespace-nowrap">{row.cliente ?? '—'}</td><td className="px-3 py-2">{row.produto ?? '—'}</td><td className="px-3 py-2">{row.parceiro ?? '—'}</td><td className="px-3 py-2">{row.vendedor ?? '—'}</td><td className="px-3 py-2">{row.agente_registro ?? '—'}</td><td className="px-3 py-2 capitalize">{row.status?.replaceAll('_', ' ') ?? '—'}</td><td className="px-3 py-2 capitalize">{row.status_validacao?.replaceAll('_', ' ') ?? '—'}</td><td className="px-3 py-2 whitespace-nowrap">{row.data_validacao ? formatDate(row.data_validacao) : '—'}</td><td className="px-3 py-2 whitespace-nowrap">{tipo === 'vendas' ? formatCurrency(row.valor) : row.tipo_atendimento ?? '—'}</td>
-                </tr>)}</tbody>
-              </table>
-            </div>
+            <ConfigurableTable storageKey={`relatorios-operacionais-${tipo}`} columns={detailColumns} rows={report.linhas} rowKey={row => row.id} />
           )}
         </section>
       </main>
