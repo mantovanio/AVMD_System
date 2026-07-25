@@ -300,28 +300,6 @@ function extractTag(xml: string, tag: string): string {
   return match?.[1]?.trim() ?? ''
 }
 
-async function sendSoapRequest(wsdlUrl: string, soapBody: string, agent: Agent): Promise<string> {
-  const endpoint = wsdlUrl.replace(/\?wsdl$/i, '').replace(/\/$/, '')
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'text/xml; charset=utf-8',
-      SOAPAction: '""',
-    },
-    body: soapBody,
-    // @ts-expect-error -- Node.js fetch supports dispatcher for mTLS
-    dispatcher: agent,
-    signal: AbortSignal.timeout(60000),
-  })
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(`HTTP ${response.status}: ${text.slice(0, 500)}`)
-  }
-
-  return response.text()
-}
-
 async function sendSoapRequestWithNodeHttps(wsdlUrl: string, soapBody: string, agent: Agent): Promise<string> {
   const endpoint = wsdlUrl.replace(/\?wsdl$/i, '').replace(/\/$/, '')
   const url = new URL(endpoint)
@@ -338,7 +316,7 @@ async function sendSoapRequestWithNodeHttps(wsdlUrl: string, soapBody: string, a
         'Content-Length': Buffer.byteLength(soapBody),
       },
       agent,
-      timeout: 60000,
+      timeout: 30000,
     }, (res) => {
       let data = ''
       res.on('data', (chunk: Buffer) => { data += chunk.toString() })
@@ -359,11 +337,7 @@ async function sendSoapRequestWithNodeHttps(wsdlUrl: string, soapBody: string, a
 }
 
 async function sendSoap(wsdlUrl: string, soapBody: string, agent: Agent): Promise<string> {
-  try {
-    return await sendSoapRequest(wsdlUrl, soapBody, agent)
-  } catch {
-    return await sendSoapRequestWithNodeHttps(wsdlUrl, soapBody, agent)
-  }
+  return sendSoapRequestWithNodeHttps(wsdlUrl, soapBody, agent)
 }
 
 export async function enviarLoteRps(config: GinfesConfig, rps: GinfesRps, pfxBuffer: Buffer): Promise<GinfesResult> {
