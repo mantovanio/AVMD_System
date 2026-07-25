@@ -6470,18 +6470,20 @@ export default function Comercial() {
                 ...(canReleaseEmission(profile, v) ? [{ key: 'liberar', icon: <Unlock size={13} />, label: 'Liberar', tooltip: 'Liberar emissão quando há pendência fiscal', onClick: () => void liberarEmissao(v), variant: 'green' as const }] : []),
               ]
               return (
-                <RecordActionBar
-                  recordName={clienteNome}
-                  recordBadge={
-                    <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full',
-                      v.status_venda === 'emitido' && 'bg-blue-100 text-blue-700',
-                      v.status_venda === 'cancelado' && 'bg-red-100 text-red-700',
-                      v.status_venda === 'rascunho' && 'bg-yellow-100 text-yellow-700',
-                    )}>{statusLabel}</span>
-                  }
-                  actions={actions}
-                  onClose={() => setSelectedRowId(null)}
-                />
+                <div className="mt-4 mb-4 rounded-2xl border border-blue-100/80 dark:border-blue-900/30 bg-gradient-to-b from-blue-50/30 to-transparent dark:from-blue-950/10 dark:to-transparent p-2 sm:p-3">
+                  <RecordActionBar
+                    recordName={clienteNome}
+                    recordBadge={
+                      <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full',
+                        v.status_venda === 'emitido' && 'bg-blue-100 text-blue-700',
+                        v.status_venda === 'cancelado' && 'bg-red-100 text-red-700',
+                        v.status_venda === 'rascunho' && 'bg-yellow-100 text-yellow-700',
+                      )}>{statusLabel}</span>
+                    }
+                    actions={actions}
+                    onClose={() => setSelectedRowId(null)}
+                  />
+                </div>
               )
             })()}
 

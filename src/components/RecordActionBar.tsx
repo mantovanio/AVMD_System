@@ -36,20 +36,25 @@ export function RecordActionBar({ recordName, recordBadge, actions, onClose, cla
 
   return (
     <div className={cn(
-      'sticky top-0 z-50 rounded-2xl border border-blue-200/80 dark:border-blue-900/30 bg-gradient-to-r from-white via-blue-50/70 to-white dark:from-gray-900 dark:via-blue-950/20 dark:to-gray-900 backdrop-blur-md shadow-[0_10px_30px_rgba(15,23,42,0.08)]',
-      'px-3 py-3 flex items-center gap-2 flex-wrap sm:px-4 sm:gap-3',
+      'sticky top-0 z-50 rounded-2xl border border-blue-200/80 dark:border-blue-900/30 bg-gradient-to-r from-white via-blue-50/80 to-white dark:from-gray-900 dark:via-blue-950/25 dark:to-gray-900 backdrop-blur-md shadow-[0_14px_36px_rgba(15,23,42,0.10)]',
+      'px-4 py-4 flex items-center gap-3 flex-wrap sm:px-5 sm:py-4 sm:gap-4',
       className,
     )}>
-      <div className="flex items-center gap-2 min-w-0 shrink-0">
-        <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate max-w-[140px] sm:max-w-[200px]">
+      <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+        <div className="flex flex-col min-w-0">
+          <span className="text-xs uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400 font-semibold">
+            Operação selecionada
+          </span>
+          <span className="text-base sm:text-lg font-bold text-gray-950 dark:text-gray-50 truncate max-w-[160px] sm:max-w-[240px]">
           {recordName}
-        </span>
+          </span>
+        </div>
         {recordBadge}
       </div>
 
-      <div className="hidden w-px h-6 bg-blue-200 dark:bg-blue-900/40 shrink-0 sm:block" />
+      <div className="hidden w-px h-8 bg-blue-200 dark:bg-blue-900/40 shrink-0 sm:block" />
 
-      <div className="flex items-center gap-1 flex-wrap flex-1 min-w-0">
+      <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
         {visibleActions.map(action => (
           <button
             key={action.key}
@@ -58,7 +63,7 @@ export function RecordActionBar({ recordName, recordBadge, actions, onClose, cla
             disabled={action.disabled}
             title={action.tooltip ?? action.label}
             className={cn(
-              'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors',
+              'inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border text-sm font-medium transition-colors',
               'disabled:opacity-40 disabled:cursor-not-allowed',
               variantClasses[action.variant ?? 'default'],
             )}
@@ -74,9 +79,9 @@ export function RecordActionBar({ recordName, recordBadge, actions, onClose, cla
         type="button"
         onClick={onClose}
         title="Fechar barra de ações"
-        className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-blue-200/70 text-blue-500 hover:bg-blue-100 dark:border-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/20 transition-colors"
+        className="shrink-0 w-9 h-9 flex items-center justify-center rounded-xl border border-blue-200/70 text-blue-500 hover:bg-blue-100 dark:border-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/20 transition-colors"
       >
-        <X size={14} />
+        <X size={15} />
       </button>
     </div>
   )
