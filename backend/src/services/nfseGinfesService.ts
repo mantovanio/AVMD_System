@@ -205,13 +205,14 @@ function buildEnviarLoteRpsXml(config: GinfesConfig, rps: GinfesRps, certPem: st
 }
 
 function buildConsultarSituacaoLoteXml(cnpj: string, im: string, protocolo: string, namespace: string): string {
+  const cabecalhoXml = escapeXmlForParam(buildCabecalhoXml())
   const envioXml = escapeXmlForParam(`<ConsultarSituacaoLoteRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_situacao_lote_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></Prestador><Protocolo>${escapeXml(protocolo)}</Protocolo></ConsultarSituacaoLoteRpsEnvio>`)
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
   <soap:Body>
     <ns1:ConsultarSituacaoLoteRpsV3>
-      <arg0>3</arg0>
+      <arg0>${cabecalhoXml}</arg0>
       <arg1>${envioXml}</arg1>
     </ns1:ConsultarSituacaoLoteRpsV3>
   </soap:Body>
@@ -219,13 +220,14 @@ function buildConsultarSituacaoLoteXml(cnpj: string, im: string, protocolo: stri
 }
 
 function buildConsultarLoteRpsXml(cnpj: string, im: string, protocolo: string, namespace: string): string {
+  const cabecalhoXml = escapeXmlForParam(buildCabecalhoXml())
   const envioXml = escapeXmlForParam(`<ConsultarLoteRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_lote_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></Prestador><Protocolo>${escapeXml(protocolo)}</Protocolo></ConsultarLoteRpsEnvio>`)
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
   <soap:Body>
     <ns1:ConsultarLoteRpsV3>
-      <arg0>3</arg0>
+      <arg0>${cabecalhoXml}</arg0>
       <arg1>${envioXml}</arg1>
     </ns1:ConsultarLoteRpsV3>
   </soap:Body>
@@ -233,13 +235,14 @@ function buildConsultarLoteRpsXml(cnpj: string, im: string, protocolo: string, n
 }
 
 function buildConsultarNfsePorRpsXml(numeroRps: number, serie: string, tipo: number, cnpj: string, im: string, namespace: string): string {
+  const cabecalhoXml = escapeXmlForParam(buildCabecalhoXml())
   const envioXml = escapeXmlForParam(`<ConsultarNfseRpsEnvio xmlns="http://www.ginfes.com.br/servico_consultar_nfse_rps_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><IdentificacaoRps><tipos:Numero>${numeroRps}</tipos:Numero><tipos:Serie>${escapeXml(serie)}</tipos:Serie><tipos:Tipo>${tipo}</tipos:Tipo></IdentificacaoRps><Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></Prestador></ConsultarNfseRpsEnvio>`)
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
   <soap:Body>
     <ns1:ConsultarNfsePorRpsV3>
-      <arg0>3</arg0>
+      <arg0>${cabecalhoXml}</arg0>
       <arg1>${envioXml}</arg1>
     </ns1:ConsultarNfsePorRpsV3>
   </soap:Body>
@@ -248,7 +251,7 @@ function buildConsultarNfsePorRpsXml(numeroRps: number, serie: string, tipo: num
 
 function parseMensagensRetorno(xml: string): Array<{ codigo: string; mensagem: string; correcao: string }> {
   const mensagens: Array<{ codigo: string; mensagem: string; correcao: string }> = []
-  const msgRegex = /<MensagemRetorno>([\s\S]*?)<\/MensagemRetorno>/g
+  const msgRegex = /<(?:\w+:)?MensagemRetorno>([\s\S]*?)<\/(?:\w+:)?MensagemRetorno>/g
   let match = msgRegex.exec(xml)
   while (match) {
     const block = match[1]
