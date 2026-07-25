@@ -1780,7 +1780,11 @@ export class CommercialRepository {
             else nullif(trim(metadata->>'vendedor_importado'), '')
           end as nome from vendas_certificados
           union
-          select distinct nullif(trim(p.nome), '') as nome
+          select distinct case
+            when lower(trim(p.nome)) in ('isabella de oliveira vidal', 'isabella vidal') then 'Isabella Vidal'
+            when lower(trim(p.nome)) in ('ingrid braz', 'ingrid braz pinto') then 'Ingrid Braz Pinto'
+            else nullif(trim(p.nome), '')
+          end as nome
           from profiles p where p.perfil = 'vendedor' and p.status = 'ativo'
         ) source where nome is not null order by nome asc
       `),
@@ -1793,7 +1797,11 @@ export class CommercialRepository {
             else nullif(trim(metadata->>'agente_registro_importado'), '')
           end as nome from vendas_certificados
           union
-          select distinct nullif(trim(p.nome), '') as nome
+          select distinct case
+            when lower(trim(p.nome)) in ('isabella de oliveira vidal', 'isabella vidal') then 'Isabella Vidal'
+            when lower(trim(p.nome)) in ('ingrid braz', 'ingrid braz pinto') then 'Ingrid Braz Pinto'
+            else nullif(trim(p.nome), '')
+          end as nome
           from profiles p where p.perfil = 'agente_registro' and p.status = 'ativo'
         ) source where nome is not null order by nome asc
       `),
