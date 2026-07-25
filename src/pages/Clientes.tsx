@@ -1315,7 +1315,7 @@ export default function Clientes() {
       </div>
 
       {/* action bar + table */}
-      <div className="flex-1 overflow-auto flex flex-col">
+      <div className="flex-1 overflow-auto flex flex-col gap-4">
         {expandedId && (() => {
           const cliente = clientes.find(c => c.id === expandedId)
           const detalhe = cliente ? detalhes[cliente.id] : null
@@ -1334,16 +1334,18 @@ export default function Clientes() {
             }] as ActionBarAction[] : []),
           ]
           return (
-            <RecordActionBar
-              recordName={cliente.nome}
-              recordBadge={
-                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${cliente.status === 'ativo' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500'}`}>
-                  {cliente.status === 'ativo' ? 'Ativo' : 'Inativo'}
-                </span>
-              }
-              actions={actions}
-              onClose={() => setExpandedId(null)}
-            />
+            <div className="rounded-2xl border border-blue-100/80 dark:border-blue-900/30 bg-gradient-to-b from-blue-50/30 to-transparent dark:from-blue-950/10 dark:to-transparent p-2 sm:p-3">
+              <RecordActionBar
+                recordName={cliente.nome}
+                recordBadge={
+                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${cliente.status === 'ativo' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500'}`}>
+                    {cliente.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                  </span>
+                }
+                actions={actions}
+                onClose={() => setExpandedId(null)}
+              />
+            </div>
           )
         })()}
         {loading ? (
@@ -1356,23 +1358,23 @@ export default function Clientes() {
             {search && <p className="text-sm mt-1">Tente uma busca diferente.</p>}
           </div>
         ) : (
-            <div className="flex-1 min-h-0 overflow-auto min-w-0 max-h-[calc(100vh-260px)]">
+            <div className="flex-1 min-h-0 overflow-auto min-w-0 max-h-[calc(100vh-260px)] rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-gray-900 shadow-sm">
               <table className="w-full min-w-[1200px] text-sm">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-gray-50 dark:bg-gray-800/80 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left">
-                <th className="px-4 py-3 font-medium bg-gray-50 dark:bg-gray-800/95"></th>
-                <th className="px-4 py-3 font-medium bg-gray-50 dark:bg-gray-800/95">Nome</th>
-                <th className="px-4 py-3 font-medium bg-gray-50 dark:bg-gray-800/95">CPF / CNPJ</th>
-                <th className="px-4 py-3 font-medium hidden md:table-cell bg-gray-50 dark:bg-gray-800/95">Cidade/UF</th>
-                <th className="px-4 py-3 font-medium hidden lg:table-cell bg-gray-50 dark:bg-gray-800/95">Contato</th>
-                <th className="px-4 py-3 font-medium text-center bg-gray-50 dark:bg-gray-800/95">Vendas</th>
-                <th className="px-4 py-3 font-medium hidden md:table-cell bg-gray-50 dark:bg-gray-800/95">Último produto</th>
-                <th className="px-4 py-3 font-medium hidden xl:table-cell bg-gray-50 dark:bg-gray-800/95">Último atendimento</th>
-                <th className="px-4 py-3 font-medium text-right hidden lg:table-cell bg-gray-50 dark:bg-gray-800/95">Valor total</th>
-                <th className="px-4 py-3 font-medium text-center bg-gray-50 dark:bg-gray-800/95">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-gray-50 dark:bg-gray-800/80 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left">
+                    <th className="px-4 py-3 font-medium bg-gray-50 dark:bg-gray-800/95"></th>
+                    <th className="px-4 py-3 font-medium bg-gray-50 dark:bg-gray-800/95">Nome</th>
+                    <th className="px-4 py-3 font-medium bg-gray-50 dark:bg-gray-800/95">CPF / CNPJ</th>
+                    <th className="px-4 py-3 font-medium hidden md:table-cell bg-gray-50 dark:bg-gray-800/95">Cidade/UF</th>
+                    <th className="px-4 py-3 font-medium hidden lg:table-cell bg-gray-50 dark:bg-gray-800/95">Contato</th>
+                    <th className="px-4 py-3 font-medium text-center bg-gray-50 dark:bg-gray-800/95">Vendas</th>
+                    <th className="px-4 py-3 font-medium hidden md:table-cell bg-gray-50 dark:bg-gray-800/95">Último produto</th>
+                    <th className="px-4 py-3 font-medium hidden xl:table-cell bg-gray-50 dark:bg-gray-800/95">Último atendimento</th>
+                    <th className="px-4 py-3 font-medium text-right hidden lg:table-cell bg-gray-50 dark:bg-gray-800/95">Valor total</th>
+                    <th className="px-4 py-3 font-medium text-center bg-gray-50 dark:bg-gray-800/95">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {clientes.map(c => {
                 const detalhe = detalhes[c.id]
                 const contatoMaisRecente = detalhe?.contatos[0] ?? null

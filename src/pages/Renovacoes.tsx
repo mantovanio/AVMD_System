@@ -2525,65 +2525,67 @@ export default function Renovacoes() {
             ...(isAdmin ? [{ key: 'excluir', icon: <Trash2 size={13} />, label: 'Excluir', tooltip: 'Excluir permanentemente este registro', onClick: () => void excluirRenovacao(r), variant: 'red' as const }] as ActionBarAction[] : []),
           ]
           return (
-            <RecordActionBar
-              recordName={r.cliente}
-              recordBadge={
-                <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full',
-                  r.status === 'convertido' && 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-                  r.status === 'perdido' && 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-                  r.status === 'contatado' && 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-                  r.status === 'pendente' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-                )}>{r.status}</span>
-              }
-              actions={actions}
-              onClose={() => setSelectedRowId(null)}
-            />
+            <div className="rounded-2xl border border-blue-100/80 dark:border-blue-900/30 bg-gradient-to-b from-blue-50/30 to-transparent dark:from-blue-950/10 dark:to-transparent p-2 sm:p-3">
+              <RecordActionBar
+                recordName={r.cliente}
+                recordBadge={
+                  <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full',
+                    r.status === 'convertido' && 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+                    r.status === 'perdido' && 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                    r.status === 'contatado' && 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                    r.status === 'pendente' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+                  )}>{r.status}</span>
+                }
+                actions={actions}
+                onClose={() => setSelectedRowId(null)}
+              />
+            </div>
           )
         })()}
 
         {/* ── Bulk Action Bar ──────────────────────────────────── */}
         {selCount > 0 && (
-          <div className="sticky top-0 z-10 bg-blue-600 text-white rounded-xl px-4 py-3 flex flex-wrap items-center gap-2 shadow-lg">
-            <span className="text-sm font-semibold shrink-0">{selCount} selecionado(s)</span>
+          <div className="sticky top-0 z-10 rounded-2xl border border-blue-200/60 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-3.5 flex flex-wrap items-center gap-2 shadow-[0_10px_30px_rgba(37,99,235,0.25)]">
+            <span className="text-sm font-semibold shrink-0 tracking-wide">{selCount} selecionado(s)</span>
             <div className="flex-1" />
             <button type="button" disabled={bulkSending} onClick={() => void bulkEnviarWhatsApp()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 hover:bg-green-400 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-green-500 hover:bg-green-400 text-white text-xs font-medium rounded-xl disabled:opacity-50 transition-colors shadow-sm">
               {bulkSending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
               WA em Lote
             </button>
             <button type="button" disabled={bulkSending} onClick={() => void bulkEnviarEmail()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-sky-500 hover:bg-sky-400 text-white text-xs font-medium rounded-xl disabled:opacity-50 transition-colors shadow-sm">
               {bulkSending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
               Email em Lote
             </button>
             <button type="button" disabled={bulkSending} onClick={() => void bulkMarcarRenovado()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-medium rounded-xl disabled:opacity-50 transition-colors shadow-sm">
               <Check size={12} /> Marcar Renovado
             </button>
             <button type="button" disabled={bulkSending} onClick={() => void bulkMarcarNaoRenovado()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-400 hover:bg-red-300 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-red-400 hover:bg-red-300 text-white text-xs font-medium rounded-xl disabled:opacity-50 transition-colors shadow-sm">
               <X size={12} /> Não Renovado
             </button>
             <button type="button" disabled={bulkSending} onClick={() => void bulkKanban()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500 hover:bg-purple-400 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-500 hover:bg-purple-400 text-white text-xs font-medium rounded-xl disabled:opacity-50 transition-colors shadow-sm">
               <Users size={12} /> → Kanban
             </button>
             <button type="button" disabled={importingToBase} onClick={() => void handleImportToBase()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-white text-xs font-medium rounded-xl disabled:opacity-50 transition-colors shadow-sm">
               {importingToBase ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
               {importingToBase ? 'Importando…' : 'Importar p/ Base'}
             </button>
             <button type="button" disabled={importingToCrm} onClick={() => void handleImportToCrm()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-sky-500 hover:bg-sky-400 text-white text-xs font-medium rounded-xl disabled:opacity-50 transition-colors shadow-sm">
               {importingToCrm ? <Loader2 size={12} className="animate-spin" /> : <Users size={12} />}
               {importingToCrm ? 'Salvando…' : 'Salvar no CRM'}
             </button>
             <button type="button" disabled={bulkSending} onClick={() => void bulkExcluirRenovacoes()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500 hover:bg-rose-400 text-white text-xs font-medium rounded-lg disabled:opacity-50 transition-colors">
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-500 hover:bg-rose-400 text-white text-xs font-medium rounded-xl disabled:opacity-50 transition-colors shadow-sm">
               <Trash2 size={12} /> Excluir
             </button>
             <button type="button" onClick={() => setSelectedIds(new Set())}
-              className="flex items-center gap-1 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-medium rounded-lg transition-colors">
+              className="flex items-center gap-1 px-3.5 py-2 bg-white/20 hover:bg-white/30 text-white text-xs font-medium rounded-xl transition-colors shadow-sm">
               <X size={12} /> Limpar
             </button>
           </div>

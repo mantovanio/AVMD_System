@@ -8686,14 +8686,15 @@ export default function Comercial() {
             </div>
 
             {isAdminProfile(profile) && (
-              <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 mt-6">
+              <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 mt-6 shadow-sm">
                 <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shadow-sm">
                       <ClipboardList size={18} className="text-amber-600 dark:text-amber-400" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-800 dark:text-gray-100">Auditoria de vendas excluídas / canceladas</h3>
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-600 dark:text-amber-400">Bloco operacional</span>
+                      <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Auditoria de vendas excluídas / canceladas</h3>
                       <p className="text-xs text-gray-500">Rastro operacional para validar cancelamentos e exclusões com o administrador.</p>
                     </div>
                   </div>
@@ -8704,19 +8705,19 @@ export default function Comercial() {
                       setVendaAuditoriaAberta(next)
                       if (next) void carregarAuditoriaVendas()
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-xl transition-colors"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-xl transition-colors shadow-sm"
                   >
                     {vendaAuditoriaAberta ? 'Fechar' : 'Ver auditoria'}
                   </button>
                 </div>
 
                 {vendaAuditoriaAberta && (
-                  <div className="mt-4">
+                  <div className="mt-5">
                     <div className="flex justify-end mb-3">
                       <button
                         type="button"
                         onClick={() => void carregarAuditoriaVendas()}
-                        className="px-4 py-2 rounded-xl border border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/30 text-sm"
+                        className="px-4 py-2 rounded-xl border border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/30 text-sm shadow-sm"
                       >
                         Atualizar auditoria
                       </button>
@@ -8728,7 +8729,7 @@ export default function Comercial() {
                     ) : vendaAuditoria.length === 0 ? (
                       <p className="text-sm text-gray-400 py-4">Nenhum registro de auditoria encontrado.</p>
                     ) : (
-                      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+                      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shadow-sm">
                         <table className="w-full text-xs min-w-[1100px]">
                           <thead>
                             <tr className="bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 uppercase tracking-wide text-left border-b border-gray-200 dark:border-gray-800">
