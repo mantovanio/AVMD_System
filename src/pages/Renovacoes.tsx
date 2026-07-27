@@ -170,6 +170,8 @@ type RenovacoesColumnKey =
   | 'agr'
   | 'vendedor'
   | 'contador'
+  | 'statusDisparo'
+  | 'ultimoEnvio'
   | 'status'
 
 type RenovacoesColumnConfig = {
@@ -195,7 +197,9 @@ const RENOVACOES_COLUMNS: RenovacoesColumnConfig[] = [
   { key: 'agr', label: 'AGR', defaultWidth: 110 },
   { key: 'vendedor', label: 'Vendedor', defaultWidth: 150 },
   { key: 'contador', label: 'Contador', defaultWidth: 150 },
-  { key: 'status', label: 'Status', defaultWidth: 120 },
+  { key: 'statusDisparo', label: 'Status de disparo', defaultWidth: 150 },
+  { key: 'ultimoEnvio', label: 'Último envio', defaultWidth: 165 },
+  { key: 'status', label: 'Status comercial', defaultWidth: 130 },
 ]
 
 const RENOVACOES_DEFAULT_COLUMN_WIDTHS: Record<RenovacoesColumnKey, number> = Object.fromEntries(
@@ -2670,12 +2674,17 @@ export default function Renovacoes() {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {loading ? (
-                  <tr><td colSpan={18} className="px-5 py-10 text-center text-gray-400 animate-pulse">Carregando…</td></tr>
+                  <tr><td colSpan={20} className="px-5 py-10 text-center text-gray-400 animate-pulse">Carregando…</td></tr>
                 ) : listagem.length === 0 ? (
-                  <tr><td colSpan={18} className="px-5 py-10 text-center text-gray-400">Nenhuma renovação encontrada.</td></tr>
+                  <tr><td colSpan={20} className="px-5 py-10 text-center text-gray-400">Nenhuma renovação encontrada.</td></tr>
                 ) : listagem.map(r => {
                   const pCfg    = PRIORIDADE_CONFIG[r.prioridade]
                   const sCfg    = STATUS_CONFIG[r.status]
+                  const disparoAtivo = r.status_disparo === 'enviado' || !!r.ultimo_lembrete
+                  const statusDisparoLabel = disparoAtivo ? 'Enviado' : 'Pendente'
+                  const ultimoEnvioLabel = r.ultimo_lembrete
+                    ? new Date(r.ultimo_lembrete).toLocaleString('pt-BR')
+                    : '—'
                   const busy    = updatingId === r.id || sendingId === r.id
                   const sel     = selectedIds.has(r.id)
 
@@ -2782,6 +2791,19 @@ export default function Renovacoes() {
                       <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: `${columnWidths.agr}px` }}>{r.agr ?? '—'}</td>
                       <td className="px-3 py-3 text-xs text-gray-500 overflow-hidden" style={{ width: `${columnWidths.vendedor}px` }}><span className="truncate block">{r.vendedor ?? '—'}</span></td>
                       <td className="px-3 py-3 text-xs text-gray-500 overflow-hidden" style={{ width: `${columnWidths.contador}px` }}><span className="truncate block">{r.contador ?? '—'}</span></td>
+                      <td className="px-3 py-3 whitespace-nowrap overflow-hidden" style={{ width: `${columnWidths.statusDisparo}px` }}>
+                        <span className={cn(
+                          'px-2 py-0.5 rounded-full text-xs font-medium',
+                          disparoAtivo
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                            : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+                        )}>
+                          {statusDisparoLabel}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: `${columnWidths.ultimoEnvio}px` }}>
+                        {ultimoEnvioLabel}
+                      </td>
 
                       {/* Status badge */}
                       <td className="px-3 py-3 whitespace-nowrap overflow-hidden" style={{ width: `${columnWidths.status}px` }}>
