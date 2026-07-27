@@ -164,13 +164,21 @@ export interface SendWhatsAppButton {
 export async function sendWhatsApp(
   phone: string,
   body: string,
-  options?: { canal?: 'atendimento' | 'renovacao'; instance_name?: string; buttons?: SendWhatsAppButton[] },
+  options?: {
+    canal?: 'atendimento' | 'renovacao'
+    instance_name?: string
+    buttons?: SendWhatsAppButton[]
+    customer_name?: string | null
+    renovacao_id?: string | null
+  },
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const payload: Record<string, unknown> = { phone, body }
     if (options?.canal) payload.canal = options.canal
     if (options?.instance_name) payload.instance_name = options.instance_name
     if (options?.buttons?.length) payload.buttons = options.buttons
+    if (options?.customer_name) payload.customer_name = options.customer_name
+    if (options?.renovacao_id) payload.renovacao_id = options.renovacao_id
     const data = await apiFetch<{ ok: boolean; error?: string }>('/whatsapp/send', {
       method: 'POST',
       body: JSON.stringify(payload),

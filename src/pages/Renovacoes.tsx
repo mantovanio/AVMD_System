@@ -940,7 +940,12 @@ export default function Renovacoes() {
     const buttons = linkUrl
       ? [{ type: 'linkButton' as const, text: '🔐 Renovar Agora', url: linkUrl as string }]
       : undefined
-    const result = await apiSendWhatsApp(r.telefone, body, { canal: 'atendimento', buttons })
+    const result = await apiSendWhatsApp(r.telefone, body, {
+      canal: 'renovacao',
+      buttons,
+      customer_name: r.cliente || r.razao_social,
+      renovacao_id: r.id,
+    })
     if (!result.ok) { setSendingId(null); showMsg('Erro WhatsApp: ' + result.error, 'err'); return }
     const agora = new Date().toISOString()
     await apiUpdateRenovacao(r.id, { ultimo_lembrete: agora, status_disparo: 'enviado', enviou_whatsapp: true })
@@ -1034,7 +1039,12 @@ export default function Renovacoes() {
       const buttons = linkUrl
         ? [{ type: 'linkButton' as const, text: '🔐 Renovar Agora', url: linkUrl as string }]
         : undefined
-      const result = await apiSendWhatsApp(r.telefone!, body, { canal: 'atendimento', buttons })
+      const result = await apiSendWhatsApp(r.telefone!, body, {
+        canal: 'renovacao',
+        buttons,
+        customer_name: r.cliente || r.razao_social,
+        renovacao_id: r.id,
+      })
       if (result.ok) {
         enviados++
         const agora = new Date().toISOString()
@@ -1150,7 +1160,12 @@ export default function Renovacoes() {
       const buttons = linkUrl
         ? [{ type: 'linkButton' as const, text: '🔐 Renovar Agora', url: linkUrl as string }]
         : undefined
-      const result = await apiSendWhatsApp(r.telefone!, body, { canal: 'atendimento', buttons })
+      const result = await apiSendWhatsApp(r.telefone!, body, {
+        canal: 'renovacao',
+        buttons,
+        customer_name: r.cliente || r.razao_social,
+        renovacao_id: r.id,
+      })
       if (result.ok) {
         enviados++
         const agora = new Date().toISOString()

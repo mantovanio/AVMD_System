@@ -24,6 +24,8 @@ interface SendWhatsAppInput {
   instance_name?: string
   canal?: 'atendimento' | 'renovacao'
   buttons?: SendWhatsAppButton[]
+  customer_name?: string | null
+  renovacao_id?: string | null
 }
 
 type JsonRecord = Record<string, unknown>
@@ -840,6 +842,22 @@ export async function handleWhatsappSendRoutes(
     const remoteJid = buildRemoteJid(destinationNumber)
     const messageId = parseMessageId(payload)
     const canal = body.canal ?? inferCanalFromInstance(integration.instance_name)
+    let customerName = asString(body.customer_name) || null
+    if (!customerName) {
+      const renewalResult = await db.query<{ nome: string | null }>(
+        `SELECT COALESCE(NULLIF(r.cliente, ''), NULLIF(r.razao_social, '')) AS nome
+           FROM renovacoes r
+          WHERE ($1::uuid IS NOT NULL AND r.id = $1::uuid)
+             OR fn_normalize_phone_br(r.telefone) = fn_normalize_phone_br($2)
+          ORDER BY
+            CASE WHEN $1::uuid IS NOT NULL AND r.id = $1::uuid THEN 0 ELSE 1 END,
+            r.updated_at DESC NULLS LAST,
+            r.created_at DESC
+          LIMIT 1`,
+        [asString(body.renovacao_id) || null, destinationNumber],
+      )
+      customerName = renewalResult.rows[0]?.nome ?? null
+    }
 
     await communicationEventRepository.create({
       source: 'evolution',
@@ -855,6 +873,10 @@ export async function handleWhatsappSendRoutes(
         messageId,
         messageType: 'conversation',
         pushName: integration.sender_name || integration.name || 'Operador',
+        customer_name: customerName,
+        contact_name: customerName,
+        cliente_nome: customerName,
+        renovacao_id: asString(body.renovacao_id) || null,
         conversationId: remoteJid,
         documentKey: destinationNumber,
         instanceName: integration.instance_name,
