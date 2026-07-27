@@ -1384,6 +1384,78 @@ export async function handleChatRoutes(
     return true
   }
 
+  const archiveHistoryMatch = url.match(/^\/api\/chat\/crm\/conversations\/([^/]+)\/archive-history$/)
+  if (method === 'POST' && archiveHistoryMatch) {
+    const conversationId = archiveHistoryMatch[1]
+    const body = await readJson<{ archived_by?: string }>(req)
+    const archivedBy = asString(body.archived_by) || null
+
+    const result = await db.query<{ id: string; summary: string | null; message_count: number }>(
+      `WITH conversation AS (
+         SELECT * FROM crm_chat_conversations WHERE id = $1 FOR UPDATE
+       ),
+       previous_cycle AS (
+         SELECT MAX(cycle_ended_at) AS ended_at
+         FROM crm_chat_history_archives WHERE conversation_id = $1
+       ),
+       cycle_messages AS (
+         SELECT m.*
+         FROM crm_chat_messages m CROSS JOIN previous_cycle p
+         WHERE m.conversation_id = $1
+           AND (p.ended_at IS NULL OR m.created_at > p.ended_at)
+       ),
+       totals AS (
+         SELECT COUNT(*)::int AS message_count,
+                COUNT(*) FILTER (WHERE direction = 'incoming')::int AS incoming_count,
+                COUNT(*) FILTER (WHERE direction = 'outgoing')::int AS outgoing_count,
+                MIN(created_at) AS first_message_at,
+                MAX(created_at) AS last_message_at
+         FROM cycle_messages
+       ),
+       recent AS (
+         SELECT STRING_AGG(
+                  CONCAT(
+                    CASE WHEN direction = 'incoming' THEN 'Cliente' ELSE COALESCE(NULLIF(sender_name, ''), 'Atendimento') END,
+                    ': ',
+                    COALESCE(NULLIF(mensagem, ''), CASE WHEN file_name IS NOT NULL THEN CONCAT('Arquivo: ', file_name) ELSE 'Mensagem sem texto' END)
+                  ),
+                  E'\n' ORDER BY created_at
+                ) AS summary
+         FROM (SELECT * FROM cycle_messages ORDER BY created_at DESC LIMIT 8) latest
+       ),
+       archived AS (
+         INSERT INTO crm_chat_history_archives (
+           conversation_id, cycle_started_at, message_count, incoming_count,
+           outgoing_count, summary, snapshot, archived_by
+         )
+         SELECT c.id, COALESCE(t.first_message_at, c.created_at),
+                t.message_count, t.incoming_count, t.outgoing_count, r.summary,
+                jsonb_build_object(
+                  'cliente_nome', c.cliente_nome, 'telefone', c.telefone,
+                  'fila', c.fila, 'agente_nome', c.agente_nome,
+                  'first_message_at', t.first_message_at, 'last_message_at', t.last_message_at
+                ),
+                $2
+         FROM conversation c CROSS JOIN totals t CROSS JOIN recent r
+         RETURNING id, summary, message_count
+       )
+       UPDATE crm_chat_conversations
+       SET kanban_status = 'arquivado', atendimento_humano = false, updated_at = NOW()
+       WHERE id = $1
+       RETURNING (SELECT id FROM archived) AS id,
+                 (SELECT summary FROM archived) AS summary,
+                 (SELECT message_count FROM archived) AS message_count`,
+      [conversationId, archivedBy],
+    )
+
+    if (!result.rows[0]?.id) {
+      writeJson(res, 404, { ok: false, error: 'Conversa nao encontrada.' }, corsOrigin)
+      return true
+    }
+    writeJson(res, 200, { ok: true, archive: result.rows[0] }, corsOrigin)
+    return true
+  }
+
   if (method === 'POST' && url === '/api/chat/crm/assignments') {
     const body = await readJson<{ conversation_id?: string; agent_id?: string; agente_nome?: string; deactivate_only?: boolean }>(req)
     const conversationId = asString(body.conversation_id)

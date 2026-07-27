@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Archive,
   Bot,
+  BookOpenCheck,
   Calendar,
   Check,
   CheckCheck,
@@ -1521,16 +1523,16 @@ export default function ChatInboxCRM() {
     setActionLoading(false)
   }
 
-  async function deleteConversation(conversationId: string) {
-    if (!confirm('Arquivar esta conversa? O histórico será preservado e ela voltará para a caixa quando o cliente enviar uma nova mensagem.')) return
+  async function archiveConversationWithHistory(conversationId: string) {
+    if (!confirm('Encerrar este ciclo com histórico? O sistema gravará um resumo do atendimento e arquivará a conversa. Ela voltará para a caixa quando o cliente enviar uma nova mensagem.')) return
     try {
-      const response = await fetch(getApiUrl(`/chat/crm/conversations/${conversationId}`), {
-        method: 'PATCH',
+      const response = await fetch(getApiUrl(`/chat/crm/conversations/${conversationId}/archive-history`), {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kanban_status: 'arquivado' }),
+        body: JSON.stringify({ archived_by: profile?.nome ?? null }),
       })
       const data = await response.json()
-      if (!data.ok) throw new Error(data.error || 'Falha ao arquivar conversa')
+      if (!data.ok) throw new Error(data.error || 'Falha ao encerrar conversa com histórico')
       await loadConversations(false)
       if (selectedId === conversationId) setSelectedId(null)
     } catch (err) {
@@ -2565,7 +2567,7 @@ export default function ChatInboxCRM() {
                       human={item.atendimento_humano || humanOverrideIds.includes(item.id)}
                       unreadCount={unreadCounts[item.id] ?? 0}
                       onArchive={() => void updateConversationStatusById(item.id, 'arquivado')}
-                      onDelete={() => void deleteConversation(item.id)}
+                      onDelete={() => void archiveConversationWithHistory(item.id)}
                       onSaveContact={() => void saveContactFromConversation(item.id)}
                       checked={selectedConversationIds.has(item.id)}
                       onCheckToggle={event => toggleConversationSelection('inbox-ativas', item.id, filteredConversationIds, event.shiftKey)}
@@ -2591,7 +2593,7 @@ export default function ChatInboxCRM() {
                             human={item.atendimento_humano || humanOverrideIds.includes(item.id)}
                             unreadCount={unreadCounts[item.id] ?? 0}
                             closed
-                            onDelete={() => void deleteConversation(item.id)}
+                            onDelete={() => void archiveConversationWithHistory(item.id)}
                             onSaveContact={() => void saveContactFromConversation(item.id)}
                             checked={selectedConversationIds.has(item.id)}
                             onCheckToggle={event => toggleConversationSelection('inbox-encerradas', item.id, filteredClosedConversationIds, event.shiftKey)}
@@ -3142,7 +3144,7 @@ export default function ChatInboxCRM() {
                           onClick={() => void updateConversationStatus('arquivado')}
                           className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
                         >
-                          Arquivar e sair
+                          Arquivar da fila
                         </button>
                       </div>
 
@@ -3366,7 +3368,7 @@ export default function ChatInboxCRM() {
                               event.dataTransfer.effectAllowed = 'move'
                             }}
                             onDragEnd={() => setDraggedConversationId(null)}
-                            onDelete={() => void deleteConversation(item.id)}
+                            onDelete={() => void archiveConversationWithHistory(item.id)}
                             onSaveContact={() => void saveContactFromConversation(item.id)}
                             checked={selectedConversationIds.has(item.id)}
                             onCheckToggle={event => toggleConversationSelection(`kanban:${column.key}`, item.id, column.items.map(i => i.id), event.shiftKey)}
@@ -3527,9 +3529,9 @@ function ConversationCard({
                   onArchive()
                 }}
                 className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-600"
-                title="Arquivar conversa"
+                title="Arquivar da fila sem fechar um ciclo de histórico"
               >
-                <Save size={14} />
+                <Archive size={14} />
               </button>
             )}
             {onDelete && (
@@ -3540,9 +3542,9 @@ function ConversationCard({
                   onDelete()
                 }}
                 className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-                title="Arquivar conversa preservando o histórico"
+                title="Encerrar ciclo e gravar resumo no histórico"
               >
-                <Save size={14} />
+                <BookOpenCheck size={14} />
               </button>
             )}
           </div>
@@ -3647,8 +3649,8 @@ function ConversationMiniCard({
           {onDelete && (
             <button type="button" onClick={event => { event.stopPropagation(); onDelete() }}
               className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-slate-500 shadow-sm hover:bg-red-50 hover:text-red-600"
-              title="Arquivar conversa preservando o histórico">
-              <Save size={13} />
+              title="Encerrar ciclo e gravar resumo no histórico">
+              <BookOpenCheck size={13} />
             </button>
           )}
         </div>
