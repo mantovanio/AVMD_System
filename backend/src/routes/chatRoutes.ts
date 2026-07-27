@@ -321,7 +321,12 @@ async function canViewerAccessConversation(
        SELECT 1
        FROM crm_chat_admin_view conv
        CROSS JOIN viewer
-       WHERE (conv.id::text = $8 OR conv.document_key = $9)
+       WHERE (
+         conv.id::text = $8
+         OR conv.document_key = $9
+         OR fn_normalize_phone_br(conv.document_key) = fn_normalize_phone_br($9)
+         OR fn_normalize_phone_br(conv.telefone) = fn_normalize_phone_br($9)
+       )
          AND ${buildConversationVisibilitySql('conv')}
      ) AS allowed`,
     [
