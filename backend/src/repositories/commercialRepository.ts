@@ -1046,9 +1046,16 @@ export class CommercialRepository {
            and (
              ($1::text is not null and protocolo = $1)
              or ($2::text is not null and pedido = $2)
-             or (($1::text is null and $2::text is null) and ((cpf = $3 and $3 <> '') or (cnpj = $3 and $3 <> '')) and data_vencimento = $4::date)
+             or ((cpf = $3 and $3 <> '') or (cnpj = $3 and $3 <> '')) and data_vencimento = $4::date
            )
-         order by updated_at desc
+         order by
+           case
+             when $1::text is not null and protocolo = $1 then 0
+             when $2::text is not null and pedido = $2 then 1
+             when ((cpf = $3 and $3 <> '') or (cnpj = $3 and $3 <> '')) and data_vencimento = $4::date then 2
+             else 3
+           end,
+           updated_at desc
          limit 1`,
         [item.protocolo, item.pedido, item.cpf_cnpj, dataVencimento],
       )
@@ -1065,18 +1072,18 @@ export class CommercialRepository {
         await this.db.query(
           `update renovacoes
            set pedido = $2,
-               protocolo = $3,
-               data_vencimento = $4::date,
-               cliente = $5,
-               email = $6,
-               telefone = $7,
-               tipo_certificado = $8,
-               valor = $9,
+               protocolo = coalesce(nullif($3, ''), protocolo),
+               data_vencimento = coalesce($4::date, data_vencimento),
+               cliente = coalesce(nullif($5, ''), cliente),
+               email = coalesce(nullif($6, ''), email),
+               telefone = coalesce(nullif($7, ''), telefone),
+               tipo_certificado = coalesce(nullif($8, ''), tipo_certificado),
+               valor = coalesce($9, valor),
                cpf = case when length($16) = 11 then $16 when length($10) = 11 then $10 else cpf end,
                cnpj = case when length($10) = 14 then $10 else cnpj end,
-               razao_social = $11,
-               agr = coalesce($12, $13),
-               vendedor = $14,
+               razao_social = coalesce(nullif($11, ''), razao_social),
+               agr = coalesce(nullif($12, ''), nullif($13, ''), agr),
+               vendedor = coalesce(nullif($14, ''), vendedor),
                snapshot_json = coalesce(snapshot_json, '{}'::jsonb) || $15::jsonb,
                updated_at = now()
            where id = $1::uuid`,
