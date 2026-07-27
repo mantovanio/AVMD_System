@@ -8593,9 +8593,22 @@ export default function Comercial() {
           </FlowModal>
         )}
 
-        {showVendaNfsePreviewTelaCheia && vendaNfseModal && (
-          <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm p-4">
-            <div className="h-full w-full rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800 flex flex-col">
+        {showVendaNfsePreviewTelaCheia && vendaNfseModal && createPortal(
+          <div
+            className="fixed inset-0 z-[10050] bg-black/60 backdrop-blur-sm p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Prévia da NFS-e em tela cheia"
+            onMouseDown={event => {
+              if (event.target === event.currentTarget) {
+                setShowVendaNfsePreviewTelaCheia(false)
+              }
+            }}
+          >
+            <div
+              className="h-full w-full rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800 flex flex-col"
+              onMouseDown={event => event.stopPropagation()}
+            >
               <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-800 shrink-0">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Prévia da NFS-e</h3>
@@ -8617,7 +8630,8 @@ export default function Comercial() {
                 />
               </div>
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
 
         {/* ── IMPORTAR ───────────────────────────────────────── */}
