@@ -539,7 +539,9 @@ export async function emitirNFSeGinfes(
       valorIr: 0,
       valorCsll: 0,
       issRetido: venda.iss_retido ? 1 : 2,
-      valorIss: Number(venda.valor_venda ?? 0) * Number(config.aliquota_iss ?? 0) / 100,
+      valorIss: config.simples_nacional && !venda.iss_retido
+        ? 0
+        : Number(venda.valor_venda ?? 0) * Number(config.aliquota_iss ?? 0) / 100,
       valorIssRetido: 0,
       outrasRetencoes: 0,
       baseCalculo: Number(venda.valor_venda ?? 0),
