@@ -55,28 +55,28 @@ export function RecordActionBar({ recordName, recordBadge, actions, onClose, cla
   return (
     <div className={cn(
       'sticky top-0 z-50 rounded-2xl border border-blue-200/80 dark:border-blue-900/30 bg-gradient-to-r from-white via-blue-50/80 to-white dark:from-gray-900 dark:via-blue-950/25 dark:to-gray-900 backdrop-blur-md shadow-[0_14px_36px_rgba(15,23,42,0.10)]',
-      'px-3 py-3 flex items-start gap-3 flex-wrap sm:px-5 sm:py-4 sm:gap-4',
+      'px-2.5 py-2.5 flex items-start gap-2.5 flex-wrap sm:px-4 sm:py-3 sm:gap-3',
       className,
     )}>
-      <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+      <div className="flex items-center gap-2 min-w-0 shrink-0">
         <div className="flex flex-col min-w-0">
-          <span className="text-xs uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400 font-semibold">
+          <span className="text-[10px] uppercase tracking-[0.16em] text-blue-600 dark:text-blue-400 font-semibold">
             Operação selecionada
           </span>
-          <span className="text-base sm:text-lg font-bold text-gray-950 dark:text-gray-50 truncate max-w-[160px] sm:max-w-[240px]">
+          <span className="text-sm sm:text-base font-bold text-gray-950 dark:text-gray-50 truncate max-w-[150px] sm:max-w-[220px]">
             {recordName}
           </span>
         </div>
         {recordBadge}
       </div>
 
-      <div className="hidden w-px h-8 bg-blue-200 dark:bg-blue-900/40 shrink-0 sm:block" />
+      <div className="hidden w-px h-7 bg-blue-200 dark:bg-blue-900/40 shrink-0 sm:block" />
 
-      <div className="flex flex-col gap-2 flex-1 min-w-0">
+      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
         {grouped.map(group => (
-          <div key={group.group ?? `group-${group.items[0]?.key}`} className="flex flex-wrap items-center gap-2">
+          <div key={group.group ?? `group-${group.items[0]?.key}`} className="flex flex-wrap items-center gap-1.5">
             {group.group && (
-              <span className="mr-1 inline-flex items-center rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-600 dark:border-blue-900/40 dark:bg-gray-950 dark:text-blue-400">
+              <span className="mr-0.5 inline-flex items-center rounded-full border border-blue-200 bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-blue-600 dark:border-blue-900/40 dark:bg-gray-950 dark:text-blue-400">
                 {groupLabel[group.group] ?? group.group}
               </span>
             )}
@@ -88,8 +88,8 @@ export function RecordActionBar({ recordName, recordBadge, actions, onClose, cla
                 disabled={action.disabled}
                 title={action.tooltip ?? action.label}
                 className={cn(
-                  'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition-colors shadow-sm',
-                  'sm:px-3.5 sm:py-2 sm:gap-2 sm:text-sm',
+                  'inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border text-[10px] font-medium transition-colors shadow-sm',
+                  'sm:px-3 sm:py-1.75 sm:gap-1.5 sm:text-xs',
                   'disabled:opacity-40 disabled:cursor-not-allowed',
                   variantClasses[action.variant ?? 'default'],
                 )}

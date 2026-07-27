@@ -2565,7 +2565,7 @@ export default function Renovacoes() {
             ...(isAdmin ? [{ key: 'excluir', icon: <Trash2 size={13} />, label: 'Excluir', tooltip: 'Excluir permanentemente este registro', onClick: () => void excluirRenovacao(r), variant: 'red' as const, group: 'admin' }] as ActionBarAction[] : []),
           ]
           return (
-            <div className="rounded-2xl border border-blue-100/80 dark:border-blue-900/30 bg-gradient-to-b from-blue-50/30 to-transparent dark:from-blue-950/10 dark:to-transparent p-2 sm:p-3">
+            <div className="rounded-2xl border border-blue-100/80 dark:border-blue-900/30 bg-gradient-to-b from-blue-50/30 to-transparent dark:from-blue-950/10 dark:to-transparent p-1.5 sm:p-2">
               <RecordActionBar
                 recordName={r.cliente}
                 recordBadge={
