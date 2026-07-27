@@ -840,15 +840,21 @@ export async function handleChatRoutes(
       provider_payload: sendResult.payload,
     }
 
-    await communicationEventRepository.create({
-      source: 'evolution',
-      event_type: 'message_sent',
-      external_id: messageId,
-      conversation_id: remoteJid,
-      lead_id: lead?.id ?? null,
-      contact: normalizePhoneDigits(lead?.whatsapp_lead) ?? remoteJid.replace(/@.+$/, ''),
-      payload,
-    })
+    let persistenceWarning: string | null = null
+    try {
+      await communicationEventRepository.create({
+        source: 'evolution',
+        event_type: 'message_sent',
+        external_id: messageId,
+        conversation_id: remoteJid,
+        lead_id: lead?.id ?? null,
+        contact: normalizePhoneDigits(lead?.whatsapp_lead) ?? remoteJid.replace(/@.+$/, ''),
+        payload,
+      })
+    } catch (error) {
+      persistenceWarning = 'Mensagem enviada pelo WhatsApp, mas o histórico será sincronizado pelo retorno do provedor.'
+      console.error('[chat/send] WhatsApp confirmou o envio, mas o registro local falhou:', error)
+    }
 
     if (lead?.id) {
       await leadRepository.update(lead.id, {
@@ -870,7 +876,7 @@ export async function handleChatRoutes(
       [normalizePhoneDigits(lead?.whatsapp_lead) ?? remoteJid.replace(/@.+$/, ''), asString(body.sender_name) || null],
     ).catch(() => undefined)
 
-    writeJson(res, 200, { ok: true, messageId, remoteJid }, corsOrigin)
+    writeJson(res, 200, { ok: true, messageId, remoteJid, warning: persistenceWarning }, corsOrigin)
     return true
   }
 
@@ -1179,30 +1185,36 @@ export async function handleChatRoutes(
     const messageId = parseMessageId(sendResult.payload)
     const remoteJid = buildRemoteJid(destinationNumber)
 
-    await communicationEventRepository.create({
-      source: 'evolution',
-      event_type: 'message_sent',
-      external_id: messageId,
-      conversation_id: remoteJid,
-      lead_id: null,
-      contact: destinationNumber,
-      payload: {
-        content: caption ?? fileName,
-        fromMe: true,
-        canal: inferCanalFromInstance(sendResult.instanceName ?? instanceName),
-        messageId,
-        messageType: messageTypeFromCategory(category),
-        mimeType,
-        fileName,
-        mediaUrl,
-        pushName: senderName || 'Operador',
-        conversationId: remoteJid,
-        documentKey: destinationNumber,
-        instanceName: sendResult.instanceName ?? instanceName,
-        instance_name: sendResult.instanceName ?? instanceName,
-        provider_payload: sendResult.payload,
-      },
-    })
+    let persistenceWarning: string | null = null
+    try {
+      await communicationEventRepository.create({
+        source: 'evolution',
+        event_type: 'message_sent',
+        external_id: messageId,
+        conversation_id: remoteJid,
+        lead_id: null,
+        contact: destinationNumber,
+        payload: {
+          content: caption ?? fileName,
+          fromMe: true,
+          canal: inferCanalFromInstance(sendResult.instanceName ?? instanceName),
+          messageId,
+          messageType: messageTypeFromCategory(category),
+          mimeType,
+          fileName,
+          mediaUrl,
+          pushName: senderName || 'Operador',
+          conversationId: remoteJid,
+          documentKey: destinationNumber,
+          instanceName: sendResult.instanceName ?? instanceName,
+          instance_name: sendResult.instanceName ?? instanceName,
+          provider_payload: sendResult.payload,
+        },
+      })
+    } catch (error) {
+      persistenceWarning = 'Arquivo enviado pelo WhatsApp, mas o histórico será sincronizado pelo retorno do provedor.'
+      console.error('[chat/send-media] WhatsApp confirmou o envio, mas o registro local falhou:', error)
+    }
 
     await db.query(
       `UPDATE crm_chat_conversations
@@ -1214,7 +1226,7 @@ export async function handleChatRoutes(
       [destinationNumber, senderName || null],
     ).catch(() => undefined)
 
-    writeJson(res, 200, { ok: true, messageId, mediaUrl }, corsOrigin)
+    writeJson(res, 200, { ok: true, messageId, mediaUrl, warning: persistenceWarning }, corsOrigin)
     return true
   }
 
