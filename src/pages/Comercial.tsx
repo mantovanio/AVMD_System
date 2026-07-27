@@ -8400,16 +8400,16 @@ export default function Comercial() {
                         <th className="px-4 py-3">Emissão</th>
                         <th className="px-4 py-3">Valor</th>
                         <th className="px-4 py-3">Verificação</th>
-                        <th className="px-4 py-3 text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                       {vendaNfseModal.notas.length === 0 ? (
-                        <EmptyRow colSpan={7} label="Nenhuma NFS-e vinculada a esta venda." />
+                        <EmptyRow colSpan={6} label="Nenhuma NFS-e vinculada a esta venda." />
                       ) : vendaNfseModal.notas.map(nota => {
                         const prefeituraStatus = getNfsePrefeituraStatus(nota)
                         return (
-                          <tr key={nota.id}>
+                          <Fragment key={nota.id}>
+                          <tr>
                             <td className="px-4 py-3 font-medium">{nota.numero_nf ?? '—'}</td>
                             <td className="px-4 py-3">
                               <span className={cn(
@@ -8429,13 +8429,15 @@ export default function Comercial() {
                             <td className="px-4 py-3 text-gray-500">{nota.data_emissao ? new Date(nota.data_emissao).toLocaleString('pt-BR') : '—'}</td>
                             <td className="px-4 py-3">{formatCurrency(nota.valor_servico ?? 0)}</td>
                             <td className="px-4 py-3 text-gray-500">{nota.codigo_verificacao ?? '—'}</td>
-                            <td className="px-4 py-3">
-                            <div className="flex flex-wrap items-center justify-end gap-2">
+                          </tr>
+                          <tr className="bg-gray-50/70 dark:bg-gray-950/30">
+                            <td colSpan={6} className="px-4 py-2.5">
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
                               <button
                                 type="button"
                                 onClick={() => visualizarNfseOficial(nota)}
                                 disabled={!nota.pdf_url}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-950/20"
+                                className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-950/20"
                               >
                                 <Eye size={12} />
                                 Visualizar oficial
@@ -8443,27 +8445,27 @@ export default function Comercial() {
                               <button
                                 type="button"
                                 onClick={() => baixarNfsePdf(vendaNfseModal.venda, nota)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
+                                className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
                               >
                                 <Download size={12} />
                                 Imprimir/baixar
                               </button>
                               {nota.pdf_url && (
                                 <button type="button" onClick={() => window.open(nota.pdf_url!, '_blank')}
-                                  className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
+                                  className="w-full px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800">
                                   Abrir PDF
                                 </button>
                               )}
                               {nota.xml_url && (
                                 <button type="button" onClick={() => window.open(nota.xml_url!, '_blank')}
-                                  className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
+                                  className="w-full px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800">
                                   XML
                                 </button>
                               )}
                               <button
                                 type="button"
                                 onClick={() => void encaminharNfsePorEmail(vendaNfseModal.venda, nota)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800"
                               >
                                 <Mail size={12} />
                                 E-mail
@@ -8471,7 +8473,7 @@ export default function Comercial() {
                               <button
                                 type="button"
                                 onClick={() => void encaminharNfsePorWhatsApp(vendaNfseModal.venda, nota)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800"
                               >
                                 <MessageCircle size={12} />
                                 WhatsApp
@@ -8479,7 +8481,7 @@ export default function Comercial() {
                               <button
                                 type="button"
                                 onClick={() => void excluirRegistroNfse(vendaNfseModal.venda, nota)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-700 hover:bg-red-50 dark:border-red-900/40 dark:text-red-300 dark:hover:bg-red-950/20"
+                                className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-700 hover:bg-red-50 dark:border-red-900/40 dark:text-red-300 dark:hover:bg-red-950/20"
                               >
                                 <Trash2 size={12} />
                                 Excluir
@@ -8487,6 +8489,7 @@ export default function Comercial() {
                             </div>
                             </td>
                           </tr>
+                          </Fragment>
                         )
                       })}
                     </tbody>
