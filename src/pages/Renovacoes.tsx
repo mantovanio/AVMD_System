@@ -2720,6 +2720,7 @@ export default function Renovacoes() {
                       className={cn(
                         'hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors',
                         sel  && 'bg-blue-50/60 dark:bg-blue-900/10',
+                        r.status_disparo === 'cadastro_incompleto' && 'bg-amber-50/80 dark:bg-amber-900/10',
                         busy && 'opacity-60'
                       )}>
 
@@ -2820,13 +2821,14 @@ export default function Renovacoes() {
                       <td className="px-3 py-3 text-xs text-gray-500 overflow-hidden" style={{ width: `${columnWidths.contador}px` }}><span className="truncate block">{r.contador ?? '—'}</span></td>
                       <td className="px-3 py-3 whitespace-nowrap overflow-hidden" style={{ width: `${columnWidths.statusDisparo}px` }}>
                         <span className={cn(
-                          'px-2 py-0.5 rounded-full text-xs font-medium',
+                          'px-2.5 py-1 rounded-full text-xs font-semibold border inline-flex items-center gap-1',
                           r.status_disparo === 'cadastro_incompleto'
-                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                            ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700'
                             : disparoAtivo
-                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                            : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+                            ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800'
+                            : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
                         )}>
+                          {r.status_disparo === 'cadastro_incompleto' && <AlertTriangle size={10} />}
                           {statusDisparoLabel}
                         </span>
                       </td>
