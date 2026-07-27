@@ -312,6 +312,27 @@ function buildCancelarNfseXml(
 </soap:Envelope>`
 }
 
+function buildCancelarNfseLegadoXml(
+  numeroNfse: string,
+  cnpj: string,
+  im: string,
+  namespace: string,
+  certPem: string,
+  keyPem: string,
+): string {
+  const unsigned = `<CancelarNfseEnvio xmlns="http://www.ginfes.com.br/servico_cancelar_nfse_envio" xmlns:tipos="http://www.ginfes.com.br/tipos"><Prestador><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal></Prestador><NumeroNfse>${escapeXml(numeroNfse)}</NumeroNfse></CancelarNfseEnvio>`
+  const envioXml = signXmlRoot(unsigned, "//*[local-name()='CancelarNfseEnvio']", certPem, keyPem)
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
+  <soap:Body>
+    <ns1:CancelarNfse>
+      <arg0>${escapeXmlForParam(envioXml)}</arg0>
+    </ns1:CancelarNfse>
+  </soap:Body>
+</soap:Envelope>`
+}
+
 function parseMensagensRetorno(xml: string): Array<{ codigo: string; mensagem: string; correcao: string }> {
   const decodedXml = xml
     .replace(/&lt;/g, '<')
@@ -512,8 +533,22 @@ export async function cancelarNfseGinfes(
   )
 
   try {
-    const response = await sendSoap(config.wsdlUrl, xml, agent)
-    const mensagens = parseMensagensRetorno(response)
+    let response = await sendSoap(config.wsdlUrl, xml, agent)
+    let mensagens = parseMensagensRetorno(response)
+
+    if (mensagens.some(mensagem => mensagem.codigo === 'E156')) {
+      const legacyXml = buildCancelarNfseLegadoXml(
+        numeroNfse,
+        config.cnpjPrestador,
+        config.inscricaoMunicipal,
+        soapNamespace(config.wsdlUrl),
+        certPem,
+        keyPem,
+      )
+      response = await sendSoap(config.wsdlUrl, legacyXml, agent)
+      mensagens = parseMensagensRetorno(response)
+    }
+
     if (mensagens.length > 0) {
       return {
         ok: false,
