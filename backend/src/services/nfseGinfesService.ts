@@ -139,6 +139,21 @@ function formatDate(isoDate: string): string {
   return isoDate.replace(/\.\d{3}Z$/, '').replace('Z', '')
 }
 
+function formatDateForSaoPaulo(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${value.year}-${value.month}-${value.day}T${value.hour}:${value.minute}:${value.second}`
+}
+
 function buildCabecalhoXml(): string {
   return `<cab:cabecalho xmlns:cab="http://www.ginfes.com.br/cabecalho_v03.xsd" versao="3"><versaoDados>3</versaoDados></cab:cabecalho>`
 }
@@ -502,7 +517,7 @@ export async function emitirNFSeGinfes(
 
   const numeroRps = Number(config.numero_rps_atual ?? 1)
   const agora = new Date()
-  const dataEmissao = formatDate(agora.toISOString())
+  const dataEmissao = formatDateForSaoPaulo(agora)
 
   const doc = String(venda.documento_faturamento ?? '').replace(/\D/g, '')
   const isCnpj = doc.length === 14
