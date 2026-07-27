@@ -4022,9 +4022,9 @@ function ProfileNode({
                 <CreditCard size={13} />
               </button>
             )}
-            <button type="button" title="Modelo comercial" onClick={() => setShowModeloComercial(true)}
-              className="w-7 h-7 rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 flex items-center justify-center">
-              <Network size={13} />
+            <button type="button" title="Configurar modelo comercial e comissões" onClick={() => setShowModeloComercial(true)}
+              className="h-7 px-2.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300 flex items-center justify-center gap-1.5 text-[11px] font-semibold whitespace-nowrap">
+              <Network size={13} /> Modelo e comissões
             </button>
             <button type="button" title="Configurar" onClick={() => setEditingConfig(v => !v)}
               className="w-7 h-7 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-white dark:hover:bg-gray-800 flex items-center justify-center">
