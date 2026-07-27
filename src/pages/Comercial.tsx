@@ -6496,7 +6496,7 @@ export default function Comercial() {
                 ...(canReleaseEmission(profile, v) ? [{ key: 'liberar', icon: <Unlock size={13} />, label: 'Liberar', tooltip: 'Liberar emissão quando há pendência fiscal', onClick: () => void liberarEmissao(v), variant: 'green' as const }] : []),
               ]
               return (
-                <div className="pointer-events-none absolute left-4 right-4 top-[118px] z-40 xl:right-[25rem]">
+                <div className="pointer-events-none fixed left-[74px] top-[238px] right-[26rem] z-50">
                   <div className="pointer-events-auto rounded-2xl border border-blue-100/80 dark:border-blue-900/30 bg-white/95 dark:bg-gray-950/95 backdrop-blur-md shadow-[0_20px_50px_rgba(15,23,42,0.18)] p-2 sm:p-3">
                   <RecordActionBar
                     recordName={clienteNome}
