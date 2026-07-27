@@ -823,6 +823,37 @@ export async function handleChatRoutes(
     }
 
     const messageId = parseMessageId(sendResult.payload)
+    const contactPhone = normalizePhoneDigits(lead?.whatsapp_lead) ?? remoteJid.replace(/@.+$/, '')
+    let contactName = asString(body.contact_name) || lead?.nome_lead || null
+    if (!contactName && contactPhone) {
+      const contactResult = await db.query<{ nome: string | null }>(
+        `SELECT COALESCE(
+                  NULLIF(cust.nome, ''),
+                  NULLIF(CASE
+                    WHEN lower(btrim(COALESCE(conv.cliente_nome, ''))) IN ('operador', 'operator', 'atendente', 'usuario', 'usuário')
+                      THEN NULL
+                    ELSE conv.cliente_nome
+                  END, ''),
+                  (
+                    SELECT COALESCE(NULLIF(r.cliente, ''), NULLIF(r.razao_social, ''))
+                      FROM renovacoes r
+                     WHERE fn_normalize_phone_br(r.telefone) = fn_normalize_phone_br($1)
+                       AND r.deleted_at IS NULL
+                     ORDER BY r.updated_at DESC NULLS LAST, r.created_at DESC
+                     LIMIT 1
+                  )
+                ) AS nome
+           FROM (SELECT 1) seed
+           LEFT JOIN crm_chat_conversations conv
+             ON conv.document_key = fn_normalize_phone_br($1)
+             OR fn_normalize_phone_br(conv.telefone) = fn_normalize_phone_br($1)
+           LEFT JOIN crm_customers cust ON cust.id = conv.crm_customer_id
+          ORDER BY conv.updated_at DESC NULLS LAST
+          LIMIT 1`,
+        [contactPhone],
+      )
+      contactName = contactResult.rows[0]?.nome ?? null
+    }
     const payload: JsonRecord = {
       content,
       fromMe: true,
@@ -830,7 +861,9 @@ export async function handleChatRoutes(
       messageId,
       messageType: 'conversation',
       pushName: body.sender_name || 'Operador',
-      from_name: body.contact_name || null,
+      from_name: contactName,
+      contact_name: contactName,
+      cliente_nome: contactName,
       quoted: body.quoted_message_id
         ? {
             messageId: body.quoted_message_id,
@@ -848,7 +881,7 @@ export async function handleChatRoutes(
         external_id: messageId,
         conversation_id: remoteJid,
         lead_id: lead?.id ?? null,
-        contact: normalizePhoneDigits(lead?.whatsapp_lead) ?? remoteJid.replace(/@.+$/, ''),
+      contact: contactPhone,
         payload,
       })
     } catch (error) {
