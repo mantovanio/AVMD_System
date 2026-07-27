@@ -616,7 +616,16 @@ export default function Parceiros() {
 
   const ativos = lista.filter(p => p.status === 'ativo').length
   const inativos = lista.filter(p => p.status === 'inativo').length
-  const receitaTotal = lista.reduce((sum, parceiro) => sum + (parceiro.receita_mes ?? 0), 0)
+  const receitaTotal = lista.reduce((sum, parceiro) => {
+    const valor = Number(parceiro.receita_mes ?? 0)
+    return sum + (Number.isFinite(valor) ? valor : 0)
+  }, 0)
+  const receitaTotalFormatada = receitaTotal.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 
   return (
     <div className="flex flex-col h-full">
@@ -625,13 +634,13 @@ export default function Parceiros() {
           {[
             { label: 'Parceiros Ativos', value: loading ? '…' : String(ativos), color: 'bg-green-500' },
             { label: 'Inativos', value: loading ? '…' : String(inativos), color: 'bg-gray-400' },
-            { label: 'Receita Parceiros', value: loading ? '…' : `R$ ${receitaTotal.toLocaleString('pt-BR')}`, color: 'bg-blue-500' },
+            { label: 'Receita Parceiros', value: loading ? '…' : receitaTotalFormatada, color: 'bg-blue-500' },
             { label: 'Cadastros completos', value: loading ? '…' : String(lista.filter(p => !!p.cpf_cnpj && !!p.banco_id).length), color: 'bg-purple-500' },
           ].map(card => (
             <div key={card.label} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 flex items-center gap-3">
               <div className={cn('w-2 h-8 rounded-full shrink-0', card.color)} />
               <div>
-                <p className="text-xl font-bold">{card.value}</p>
+                <p className="text-xl font-bold break-words">{card.value}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">{card.label}</p>
               </div>
             </div>
