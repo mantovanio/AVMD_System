@@ -614,6 +614,66 @@ export async function handleChatRoutes(
     return true
   }
 
+  const profilePictureMatch = url.match(/^\/api\/chat\/crm\/conversations\/([^/]+)\/profile-picture$/)
+  if (method === 'GET' && profilePictureMatch) {
+    const conversationId = profilePictureMatch[1]
+    const conversationResult = await db.query<{
+      telefone: string | null
+      document_key: string
+      whatsapp_instance: string | null
+      avatar_url: string | null
+      avatar_updated_at: string | null
+    }>(
+      `SELECT telefone, document_key, whatsapp_instance, avatar_url, avatar_updated_at
+       FROM crm_chat_conversations WHERE id = $1 LIMIT 1`,
+      [conversationId],
+    )
+    const conversation = conversationResult.rows[0]
+    if (!conversation) {
+      writeJson(res, 404, { ok: false, error: 'Conversa nao encontrada.' }, corsOrigin)
+      return true
+    }
+
+    const avatarAge = conversation.avatar_updated_at
+      ? Date.now() - new Date(conversation.avatar_updated_at).getTime()
+      : Number.POSITIVE_INFINITY
+    if (avatarAge < 24 * 60 * 60 * 1000) {
+      writeJson(res, 200, { ok: true, avatar_url: conversation.avatar_url, cached: true }, corsOrigin)
+      return true
+    }
+
+    const integration = await resolveIntegration(externalIntegrationRepository, conversation.whatsapp_instance)
+    const number = normalizePhoneDigits(conversation.telefone || conversation.document_key)
+    if (!integration?.base_url || !integration.api_token || !integration.instance_name || !number) {
+      writeJson(res, 422, { ok: false, error: 'Contato ou integracao WhatsApp indisponivel.' }, corsOrigin)
+      return true
+    }
+
+    const evolutionResponse = await fetch(
+      `${cleanBaseUrl(integration.base_url)}/chat/fetchProfilePictureUrl/${integration.instance_name}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: integration.api_token },
+        body: JSON.stringify({ number }),
+      },
+    )
+    const payload = await evolutionResponse.json().catch(() => ({})) as JsonRecord
+    if (!evolutionResponse.ok) {
+      writeJson(res, 502, { ok: false, error: `WhatsApp retornou HTTP ${evolutionResponse.status}.` }, corsOrigin)
+      return true
+    }
+
+    const avatarUrl = asString(payload.profilePictureUrl) || null
+    await db.query(
+      `UPDATE crm_chat_conversations
+       SET avatar_url = $2, avatar_updated_at = NOW(), updated_at = NOW()
+       WHERE id = $1`,
+      [conversationId, avatarUrl],
+    )
+    writeJson(res, 200, { ok: true, avatar_url: avatarUrl, cached: false }, corsOrigin)
+    return true
+  }
+
   if (method === 'GET' && url.startsWith('/api/chat/crm/conversations')) {
     const parsedUrl = new URL(url, 'http://localhost')
     const viewerId = parsedUrl.searchParams.get('profile_id') ?? ''

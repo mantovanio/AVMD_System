@@ -48,6 +48,8 @@ interface ConversationRow {
   document_key: string
   telefone: string | null
   cliente_nome: string | null
+  avatar_url: string | null
+  avatar_updated_at: string | null
   empresa_nome: string | null
   whatsapp_instance: string | null
   numero_receptor: string | null
@@ -411,6 +413,18 @@ function displayConversationName(item: ConversationRow | null | undefined) {
   const company = normalizeDisplaySenderName(item.empresa_nome)
   if (person && company && person.toLowerCase() !== company.toLowerCase()) return `${person} · ${company}`
   return person || company || (item.fila === 'email' ? item.email_principal || item.document_key : null) || contactPhone(item) || 'Sem nome identificado'
+}
+
+function ContactAvatar({ item, size = 'md' }: { item: ConversationRow; size?: 'sm' | 'md' | 'lg' }) {
+  const name = displayConversationName(item)
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2)
+    .map(part => part[0]?.toUpperCase()).join('') || '?'
+  const sizeClass = size === 'lg' ? 'h-12 w-12 text-sm' : size === 'sm' ? 'h-8 w-8 text-[10px]' : 'h-10 w-10 text-xs'
+
+  if (item.avatar_url) {
+    return <img src={item.avatar_url} alt={`Foto de ${name}`} className={`${sizeClass} shrink-0 rounded-full border border-slate-200 bg-slate-100 object-cover`} referrerPolicy="no-referrer" />
+  }
+  return <div className={`${sizeClass} flex shrink-0 items-center justify-center rounded-full bg-slate-200 font-semibold text-slate-600`}>{initials}</div>
 }
 
 function stripOutgoingSignature(text: string | null | undefined, senderName?: string | null): string {
@@ -1006,6 +1020,25 @@ export default function ChatInboxCRM() {
     setShowHumanResponsePanel(false)
     setShowHumanResponseDetails(false)
     void loadMessages(selectedConversation.id)
+  }, [selectedConversation?.id])
+
+  useEffect(() => {
+    if (!selectedConversation?.id || selectedConversation.fila === 'email') return
+    let cancelled = false
+    void fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}/profile-picture`))
+      .then(async response => response.ok
+        ? response.json() as Promise<{ ok?: boolean; avatar_url?: string | null }>
+        : null)
+      .then(payload => {
+        if (cancelled || !payload?.ok) return
+        setConversations(prev => prev.map(item => (
+          item.id === selectedConversation.id
+            ? { ...item, avatar_url: payload.avatar_url ?? null, avatar_updated_at: new Date().toISOString() }
+            : item
+        )))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
   }, [selectedConversation?.id])
 
   useEffect(() => {
@@ -2625,13 +2658,16 @@ export default function ChatInboxCRM() {
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col xl:border-r xl:border-slate-200">
                   <div className="shrink-0 border-b border-slate-200 px-4 py-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <h3 className="text-lg font-semibold">
-                          {displayConversationName(selectedConversation)}
-                        </h3>
-                        <p className="mt-1 text-sm text-slate-500">
-                          {contactPhone(selectedConversation)}
-                        </p>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <ContactAvatar item={selectedConversation} size="lg" />
+                        <div className="min-w-0">
+                          <h3 className="truncate text-lg font-semibold">
+                            {displayConversationName(selectedConversation)}
+                          </h3>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {contactPhone(selectedConversation)}
+                          </p>
+                        </div>
                       </div>
                       <div className="flex flex-wrap gap-2 text-xs">
                         <Badge text={queueLabel(selectedConversation.fila)} tone={selectedConversation.fila === 'renovacao' ? 'violet' : selectedConversation.fila === 'email' ? 'sky' : 'blue'} />
@@ -3518,9 +3554,12 @@ function ConversationCard({
               <Check size={13} />
             </button>
           )}
-          <button type="button" onClick={onClick} className="min-w-0 flex-1 text-left">
-            <p className="truncate text-sm font-semibold text-slate-900">{displayConversationName(item)}</p>
-            <p className="mt-1 truncate text-xs text-slate-500">{contactPhone(item)}</p>
+          <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+            <ContactAvatar item={item} />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">{displayConversationName(item)}</p>
+              <p className="mt-1 truncate text-xs text-slate-500">{contactPhone(item)}</p>
+            </div>
           </button>
           <div className="flex shrink-0 items-center gap-1.5">
             {!hasCrmCustomer && onSaveContact && (
@@ -3643,7 +3682,10 @@ function ConversationMiniCard({
         )}
         <button type="button" onClick={onClick} draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd} className={`w-full py-3 text-left ${onCheckToggle ? 'pl-7 pr-3' : 'px-3'}`}>
           <div className="flex items-center justify-between gap-2">
-            <p className="truncate text-sm font-semibold">{displayConversationName(item)}</p>
+            <div className="flex min-w-0 items-center gap-2">
+              <ContactAvatar item={item} size="sm" />
+              <p className="truncate text-sm font-semibold">{displayConversationName(item)}</p>
+            </div>
             <div className="flex items-center gap-2">
               {unreadCount > 0 && <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${selected ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700'}`}>{unreadCount}</span>}
               {human ? <UserRound size={14} /> : <Bot size={14} />}
