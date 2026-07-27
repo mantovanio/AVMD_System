@@ -2316,6 +2316,13 @@ export default function ChatInboxCRM() {
     return activeConversations.filter(matchesOperationalFilters)
   }, [activeConversations, queueFilter, humanFilter, humanOverrideIds, aguardandoFilter])
 
+  const hiddenIncomingByFilters = useMemo(() => (
+    activeConversations.filter(item => (
+      item.ultima_mensagem_direcao === 'incoming'
+      && !matchesOperationalFilters(item)
+    )).length
+  ), [activeConversations, queueFilter, humanFilter, humanOverrideIds, aguardandoFilter])
+
   const filteredClosedConversations = useMemo(() => (
     closedConversations.filter(matchesOperationalFilters)
   ), [closedConversations, queueFilter, humanFilter, humanOverrideIds])
@@ -2500,6 +2507,25 @@ export default function ChatInboxCRM() {
               {showClosedConversations ? `Ocultar encerradas (${filteredClosedConversations.length})` : `Mostrar encerradas (${filteredClosedConversations.length})`}
             </button>
           </div>
+          {hiddenIncomingByFilters > 0 && (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <span>
+                {hiddenIncomingByFilters} conversa{hiddenIncomingByFilters > 1 ? 's' : ''} com mensagem recebida
+                {hiddenIncomingByFilters > 1 ? ' estão ocultas' : ' está oculta'} pelos filtros atuais.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setQueueFilter('todas')
+                  setHumanFilter('todos')
+                  setAguardandoFilter(false)
+                }}
+                className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                Exibir todas
+              </button>
+            </div>
+          )}
         </div>
       </div>
       {error ? (
