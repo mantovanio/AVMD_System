@@ -300,13 +300,15 @@ function buildCancelarNfseXml(
   const cancelamentoId = `cancelamento${numeroNfse.replace(/\D/g, '')}`
   const unsigned = `<e:CancelarNfseEnvio xmlns:e="http://www.ginfes.com.br/servico_cancelar_nfse_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><Pedido><tipos:InfPedidoCancelamento Id="${escapeXml(cancelamentoId)}"><tipos:IdentificacaoNfse><tipos:Numero>${escapeXml(numeroNfse)}</tipos:Numero><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal><tipos:CodigoMunicipio>${escapeXml(codigoMunicipio)}</tipos:CodigoMunicipio></tipos:IdentificacaoNfse><tipos:CodigoCancelamento>${escapeXml(codigoCancelamento)}</tipos:CodigoCancelamento></tipos:InfPedidoCancelamento></Pedido></e:CancelarNfseEnvio>`
   const envioXml = signXmlElement(unsigned, "//*[local-name()='InfPedidoCancelamento']", certPem, keyPem)
+  const cabecalhoParam = `<?xml version="1.0" encoding="UTF-8"?>${cabecalhoXml}`
+  const envioParam = `<?xml version="1.0" encoding="UTF-8"?>${envioXml}`
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
   <soap:Body>
     <ns1:CancelarNfseV3>
-      <arg0>${cabecalhoXml}</arg0>
-      <arg1>${envioXml}</arg1>
+      <arg0>${escapeXmlForParam(cabecalhoParam)}</arg0>
+      <arg1>${escapeXmlForParam(envioParam)}</arg1>
     </ns1:CancelarNfseV3>
   </soap:Body>
 </soap:Envelope>`
