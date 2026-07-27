@@ -5347,6 +5347,14 @@ export default function Comercial() {
   }
 
   function renderVendaDetalhesLateral(v: VendaRow) {
+    const valorBruto = Number(v.valor_venda ?? 0)
+    const desconto = Number((v as unknown as { desconto?: number }).desconto ?? 0)
+    const valorPago = Math.max(0, valorBruto - desconto)
+    const formaPagamento = (v.metadata as { forma_pagamento?: string } | null)?.forma_pagamento ?? '—'
+    const pagamentoStatus = STATUS_PAGAMENTO_LABEL[v.status_pagamento] ?? v.status_pagamento ?? '—'
+    const pagamentoData = formatVendaDate(v.data_pagamento)
+    const tipoVenda = v.tipo_venda ? capitalize(v.tipo_venda) : '—'
+    const tipoEmissao = v.tipo_emissao ? capitalize(v.tipo_emissao.replace(/_/g, ' ')) : '—'
     const detalhes = [
       ['Pedido', v.pedido_numero ?? '—'],
       ['Protocolo', v.protocolo_numero ?? '—'],
@@ -5355,7 +5363,17 @@ export default function Comercial() {
       ['Telefone', v.telefone_faturamento ?? '—'],
       ['E-mail', v.email_faturamento ?? '—'],
       ['Produto', descricaoProdutoVenda(v)],
+      ['Tipo de venda', tipoVenda],
+      ['Tipo de emissão', tipoEmissao],
+      ['Valor bruto', formatCurrency(valorBruto)],
+      ['Desconto concedido', formatCurrency(desconto)],
+      ['Valor pago', formatCurrency(valorPago)],
+      ['Status pagamento', pagamentoStatus],
+      ['Forma pagamento', formaPagamento],
+      ['Data pagamento', pagamentoData],
       ['Link emissão', getVendaExtra(v, 'link_atendimento') || '—'],
+      ['Status venda', STATUS_VENDA_LABEL[v.status_venda] ?? v.status_venda],
+      ['Valor em aberto', v.status_pagamento === 'pago' ? formatCurrency(0) : formatCurrency(valorPago)],
       ['Vendedor', v.vendedor_id ? (vendedorNomes.get(v.vendedor_id) ?? '—') : (v.nome_parceiro_safeweb || '—')],
       ['Agente validador', getVendaExtra(v, 'agente_validador') || (v.agente_registro_id ? agentesRegistro.find(a => a.id === v.agente_registro_id)?.nome ?? '—' : '—')],
       ['Usuário criação', getVendaExtra(v, 'usuario_criacao') || '—'],
