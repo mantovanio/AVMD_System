@@ -298,7 +298,7 @@ function buildCancelarNfseXml(
 ): string {
   const cabecalhoXml = buildCabecalhoXml()
   const cancelamentoId = `cancelamento${numeroNfse.replace(/\D/g, '')}`
-  const unsigned = `<CancelarNfseEnvio xmlns="http://www.ginfes.com.br/servico_cancelar_nfse_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><Pedido><tipos:InfPedidoCancelamento Id="${escapeXml(cancelamentoId)}"><tipos:IdentificacaoNfse><tipos:Numero>${escapeXml(numeroNfse)}</tipos:Numero><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal><tipos:CodigoMunicipio>${escapeXml(codigoMunicipio)}</tipos:CodigoMunicipio></tipos:IdentificacaoNfse><tipos:CodigoCancelamento>${escapeXml(codigoCancelamento)}</tipos:CodigoCancelamento></tipos:InfPedidoCancelamento></Pedido></CancelarNfseEnvio>`
+  const unsigned = `<e:CancelarNfseEnvio xmlns:e="http://www.ginfes.com.br/servico_cancelar_nfse_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><Pedido><tipos:InfPedidoCancelamento Id="${escapeXml(cancelamentoId)}"><tipos:IdentificacaoNfse><tipos:Numero>${escapeXml(numeroNfse)}</tipos:Numero><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal><tipos:CodigoMunicipio>${escapeXml(codigoMunicipio)}</tipos:CodigoMunicipio></tipos:IdentificacaoNfse><tipos:CodigoCancelamento>${escapeXml(codigoCancelamento)}</tipos:CodigoCancelamento></tipos:InfPedidoCancelamento></Pedido></e:CancelarNfseEnvio>`
   const envioXml = signXmlElement(unsigned, "//*[local-name()='InfPedidoCancelamento']", certPem, keyPem)
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -603,7 +603,7 @@ export async function cancelarNFSeEmitida(
   if (!numeroNfse || numeroNfse.startsWith('MOCK-')) {
     return { ok: false, error: 'A nota não possui número fiscal válido para cancelamento na prefeitura.' }
   }
-  if (!/^[1-5]$/.test(input.codigoCancelamento)) {
+  if (!/^000[1-5]$/.test(input.codigoCancelamento)) {
     return { ok: false, error: 'Código de cancelamento fiscal inválido.' }
   }
   if (!input.justificativa.trim()) {

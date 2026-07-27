@@ -451,11 +451,11 @@ type NfseOverrideModal = {
 const VENDAS_LISTA_LIMITE_INICIAL = 500
 const VENDAS_REFRESH_PAGAMENTO_MS = 60_000
 const NFSE_CANCEL_REASONS = [
-  { codigo: '1', justificativa: 'Erro na emissão da NFS-e' },
-  { codigo: '2', justificativa: 'Serviço não prestado ao cliente' },
-  { codigo: '3', justificativa: 'Erro de assinatura ou autorização da NFS-e' },
-  { codigo: '4', justificativa: 'NFS-e emitida em duplicidade' },
-  { codigo: '5', justificativa: 'Erro no processamento ou preenchimento dos dados fiscais' },
+  { codigo: '0001', justificativa: 'Erro na emissão da NFS-e' },
+  { codigo: '0002', justificativa: 'Serviço não prestado ao cliente' },
+  { codigo: '0003', justificativa: 'Erro de assinatura ou autorização da NFS-e' },
+  { codigo: '0004', justificativa: 'NFS-e emitida em duplicidade' },
+  { codigo: '0005', justificativa: 'Erro no processamento ou preenchimento dos dados fiscais' },
 ] as const
 
 type CobrancaModal = {
@@ -8501,7 +8501,7 @@ export default function Comercial() {
                           </tr>
                           <tr className="bg-gray-50/70 dark:bg-gray-950/30">
                             <td colSpan={6} className="px-4 py-2.5">
-                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-7">
                               <button
                                 type="button"
                                 onClick={() => visualizarNfseOficial(nota)}
