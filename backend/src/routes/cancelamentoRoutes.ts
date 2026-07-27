@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { AivenSqlClient } from '../db/aivenClient.js'
 import { readJson, writeJson } from '../utils/http.js'
 import { CancelamentoRepository } from '../repositories/cancelamentoRepository.js'
 import { CommercialRepository } from '../repositories/commercialRepository.js'
@@ -17,6 +18,7 @@ export async function handleCancelamentoRoutes(
   res: ServerResponse,
   cancelamentoRepo: CancelamentoRepository,
   commercialRepo: CommercialRepository,
+  db: AivenSqlClient,
   corsOrigin: string,
 ) {
   const method = req.method ?? ''
@@ -27,6 +29,19 @@ export async function handleCancelamentoRoutes(
 
     if (!body.venda_id || !body.motivo || !body.cancelado_por) {
       writeJson(res, 400, { ok: false, error: 'venda_id, motivo e cancelado_por sao obrigatorios.' }, corsOrigin)
+      return true
+    }
+
+    const adminCheck = await db.query<{ id: string }>(
+      `select id from profiles
+       where id = $1::uuid
+         and perfil = 'admin'
+         and status = 'ativo'
+       limit 1`,
+      [body.cancelado_por],
+    )
+    if (!adminCheck.rows[0]) {
+      writeJson(res, 403, { ok: false, error: 'Apenas administradores podem cancelar vendas.' }, corsOrigin)
       return true
     }
 

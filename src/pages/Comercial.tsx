@@ -5616,7 +5616,8 @@ export default function Comercial() {
 
   async function excluirVenda(id: string) {
     if (!confirm('Excluir esta venda? Esta ação não pode ser desfeita.')) return
-    const response = await fetch(getApiUrl(`/comercial/vendas/${id}`), { method: 'DELETE' })
+    const adminProfileId = profile?.perfil === 'admin' ? profile.id : ''
+    const response = await fetch(getApiUrl(`/comercial/vendas/${id}?admin_profile_id=${encodeURIComponent(adminProfileId)}`), { method: 'DELETE' })
     if (!response.ok) {
       const data = await response.json().catch(() => null) as { error?: string } | null
       showMsg(data?.error ?? 'Não foi possível excluir a venda. Use cancelamento ou ajuste de protocolo.', 'err')

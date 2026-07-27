@@ -9,6 +9,7 @@ import { promisify } from 'node:util'
 import { readJson, writeJson } from '../utils/http.js'
 import { CatalogRepository } from '../repositories/catalogRepository.js'
 import { RenovacaoRepository } from '../repositories/renovacaoRepository.js'
+import type { AivenSqlClient } from '../db/aivenClient.js'
 
 type SafewebImportJob = {
   id: string
@@ -346,7 +347,7 @@ async function processSafewebImportJob(
   }
 }
 
-export async function handleCatalogRoutes(req: IncomingMessage, res: ServerResponse, repo: CatalogRepository, renovacaoRepo: RenovacaoRepository | null, corsOrigin: string): Promise<boolean> {
+export async function handleCatalogRoutes(req: IncomingMessage, res: ServerResponse, repo: CatalogRepository, renovacaoRepo: RenovacaoRepository | null, db: AivenSqlClient, corsOrigin: string): Promise<boolean> {
   const method = req.method ?? ''
   const url = req.url ?? ''
 
@@ -796,6 +797,23 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   const vendaDeleteMatch = url.match(/^\/api\/comercial\/vendas\/([^/]+)$/)
   if (method === 'DELETE' && vendaDeleteMatch) {
     try {
+      const adminProfileId = parsedUrl.searchParams.get('admin_profile_id')
+      if (!adminProfileId) {
+        writeJson(res, 403, { ok: false, error: 'admin_profile_id é obrigatório para excluir vendas.' }, corsOrigin)
+        return true
+      }
+      const adminCheck = await db.query<{ id: string }>(
+        `select id from profiles
+         where id = $1::uuid
+           and perfil = 'admin'
+           and status = 'ativo'
+         limit 1`,
+        [adminProfileId],
+      )
+      if (!adminCheck.rows[0]) {
+        writeJson(res, 403, { ok: false, error: 'Apenas administradores podem excluir vendas.' }, corsOrigin)
+        return true
+      }
       await repo.deleteVenda(vendaDeleteMatch[1])
       writeJson(res, 200, { ok: true }, corsOrigin)
     } catch (error) {

@@ -214,14 +214,14 @@ const server = createServer(async (req, res) => {
     )
     if (handledChat) return
 
-    const handledCatalog = await handleCatalogRoutes(req, res, catalogRepository, renovacaoRepository, config.corsOrigin)
+    const handledCatalog = await handleCatalogRoutes(req, res, catalogRepository, renovacaoRepository, db, config.corsOrigin)
     if (handledCatalog) return
 
     const handledCommercial = await handleCommercialRoutes(req, res, commercialRepository, config.corsOrigin, checkoutPaymentService)
     if (handledCommercial) return
 
     const cancelamentoRepository = new CancelamentoRepository(db)
-    const handledCancelamento = await handleCancelamentoRoutes(req, res, cancelamentoRepository, commercialRepository, config.corsOrigin)
+    const handledCancelamento = await handleCancelamentoRoutes(req, res, cancelamentoRepository, commercialRepository, db, config.corsOrigin)
     if (handledCancelamento) return
 
     const handledIntegration = await handleIntegrationRoutes(
