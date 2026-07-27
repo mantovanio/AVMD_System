@@ -811,7 +811,6 @@ export default function Parceiros() {
                       })),
                   ]}
                 />
-                <TextField label="Senha acesso" value={form.senha_acesso} onChange={v => updateField('senha_acesso', v)} placeholder="Informe a senha do Parceiro" />
                 <TextField label="Email acesso" value={form.email_acesso} onChange={v => updateField('email_acesso', v)} placeholder="Informe o email de acesso" />
                 <TextField label="DDD" value={form.ddd} onChange={v => updateField('ddd', v)} placeholder="DDD" />
                 <TextField label="Telefone" value={form.telefone} onChange={v => updateField('telefone', v)} placeholder="Telefone" />

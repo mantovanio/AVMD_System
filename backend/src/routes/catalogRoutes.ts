@@ -797,6 +797,7 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   const vendaDeleteMatch = url.match(/^\/api\/comercial\/vendas\/([^/]+)$/)
   if (method === 'DELETE' && vendaDeleteMatch) {
     try {
+      const parsedUrl = new URL(req.url ?? url, 'http://localhost')
       const adminProfileId = parsedUrl.searchParams.get('admin_profile_id')
       if (!adminProfileId) {
         writeJson(res, 403, { ok: false, error: 'admin_profile_id é obrigatório para excluir vendas.' }, corsOrigin)
