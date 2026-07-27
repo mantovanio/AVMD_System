@@ -36,8 +36,7 @@ export async function handleCancelamentoRoutes(
       return true
     }
 
-    const vendas = await commercialRepo.listSales({ limit: 200 }) as Array<Record<string, unknown>>
-    const venda = vendas.find(v => v.id === body.venda_id)
+    const venda = await commercialRepo.getSaleById(body.venda_id)
     if (!venda) {
       writeJson(res, 404, { ok: false, error: 'Venda nao encontrada.' }, corsOrigin)
       return true

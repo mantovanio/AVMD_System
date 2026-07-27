@@ -136,6 +136,21 @@ export class CommercialRepository {
     })
   }
 
+  async getSaleById(id: string) {
+    const result = await this.db.query(`
+      select
+        v.*,
+        case when cb.id is null then null else jsonb_build_object('nome', cb.nome, 'cpf_cnpj', cb.cpf_cnpj) end as cadastros_base,
+        case when pa.id is null then null else jsonb_build_object('nome', pa.nome) end as pontos_atendimento
+      from vendas_certificados v
+      left join cadastros_base cb on cb.id = v.cadastro_base_id
+      left join pontos_atendimento pa on pa.id = v.ponto_atendimento_id
+      where v.id = $1::uuid
+      limit 1
+    `, [id])
+    return result.rows[0] ?? null
+  }
+
   async updateSaleStatus(input: UpdateCommercialSaleStatusInput) {
     const result = await this.db.query<{ id: string; status_venda: string }>(`
       update vendas_certificados

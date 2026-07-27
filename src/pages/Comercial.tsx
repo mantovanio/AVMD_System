@@ -9631,22 +9631,27 @@ export default function Comercial() {
               <button type="button" onClick={async () => {
                 if (!cancelForm.motivo.trim()) { showMsg('Informe o motivo do cancelamento.'); return }
                 setCancelSaving(true)
-                const result = await cancelarVenda({
-                  venda_id: cancelandoVenda.id,
-                  motivo: cancelForm.motivo.trim(),
-                  dentro_prazo_30d: cancelForm.dentro_prazo_30d,
-                  custo_operacional: cancelForm.custo_operacional,
-                  observacoes: cancelForm.observacoes.trim() || undefined,
-                  cancelado_por: profile?.id ?? '',
-                })
-                setCancelSaving(false)
-                if (result) {
-                  showMsg('Venda cancelada com sucesso!', 'ok')
-                  setCancelandoVenda(null)
-                  setCancelForm({ motivo: '', dentro_prazo_30d: true, custo_operacional: 0, observacoes: '' })
-                  setVendasV2(prev => prev.map(v => v.id === cancelandoVenda.id ? { ...v, status_venda: 'cancelado' } : v))
-                } else {
-                  showMsg('Erro ao cancelar venda. Tente novamente.')
+                try {
+                  const result = await cancelarVenda({
+                    venda_id: cancelandoVenda.id,
+                    motivo: cancelForm.motivo.trim(),
+                    dentro_prazo_30d: cancelForm.dentro_prazo_30d,
+                    custo_operacional: cancelForm.custo_operacional,
+                    observacoes: cancelForm.observacoes.trim() || undefined,
+                    cancelado_por: profile?.id ?? '',
+                  })
+                  if (result) {
+                    showMsg('Venda cancelada com sucesso!', 'ok')
+                    setCancelandoVenda(null)
+                    setCancelForm({ motivo: '', dentro_prazo_30d: true, custo_operacional: 0, observacoes: '' })
+                    setVendasV2(prev => prev.map(v => v.id === cancelandoVenda.id ? { ...v, status_venda: 'cancelado' } : v))
+                  } else {
+                    showMsg('Erro ao cancelar venda. Tente novamente.', 'err')
+                  }
+                } catch (err) {
+                  showMsg(err instanceof Error ? err.message : 'Erro ao cancelar venda. Tente novamente.', 'err')
+                } finally {
+                  setCancelSaving(false)
                 }
               }} disabled={cancelSaving || !cancelForm.motivo.trim()}
                 className="px-5 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
