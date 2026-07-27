@@ -21,7 +21,6 @@ import {
   Smile,
   StopCircle,
   Save,
-  Trash2,
   User,
   UserCheck,
   UserPlus,
@@ -1523,11 +1522,15 @@ export default function ChatInboxCRM() {
   }
 
   async function deleteConversation(conversationId: string) {
-    if (!confirm('Tem certeza que deseja apagar esta conversa?')) return
+    if (!confirm('Arquivar esta conversa? O histórico será preservado e ela voltará para a caixa quando o cliente enviar uma nova mensagem.')) return
     try {
-      const response = await fetch(getApiUrl(`/chat/crm/conversations/${conversationId}`), { method: 'DELETE' })
+      const response = await fetch(getApiUrl(`/chat/crm/conversations/${conversationId}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kanban_status: 'arquivado' }),
+      })
       const data = await response.json()
-      if (!data.ok) throw new Error(data.error || 'Falha ao apagar conversa')
+      if (!data.ok) throw new Error(data.error || 'Falha ao arquivar conversa')
       await loadConversations(false)
       if (selectedId === conversationId) setSelectedId(null)
     } catch (err) {
@@ -1563,15 +1566,19 @@ export default function ChatInboxCRM() {
   async function bulkDeleteSelectedConversations() {
     const ids = Array.from(selectedConversationIds)
     if (ids.length === 0) return
-    if (!confirm(`Tem certeza que deseja apagar ${ids.length} conversa${ids.length > 1 ? 's' : ''}? Essa acao nao pode ser desfeita.`)) return
+    if (!confirm(`Arquivar ${ids.length} conversa${ids.length > 1 ? 's' : ''}? Os históricos serão preservados.`)) return
     try {
-      const response = await fetch(getApiUrl('/chat/crm/conversations/bulk'), {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
-      })
-      const data = await response.json()
-      if (!data.ok) throw new Error(data.error || 'Falha ao apagar conversas selecionadas')
+      const results = await Promise.all(ids.map(async id => {
+        const response = await fetch(getApiUrl(`/chat/crm/conversations/${id}`), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kanban_status: 'arquivado' }),
+        })
+        const data = await response.json()
+        if (!data.ok) throw new Error(data.error || 'Falha ao arquivar conversa')
+        return data
+      }))
+      if (results.length !== ids.length) throw new Error('Nem todas as conversas foram arquivadas.')
       clearConversationSelection()
       await loadConversations(false)
       if (selectedId && ids.includes(selectedId)) setSelectedId(null)
@@ -3415,7 +3422,7 @@ function BulkActionBar({
           onClick={onDelete}
           className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
         >
-          <Trash2 size={13} /> Apagar selecionadas
+          <Save size={13} /> Arquivar selecionadas
         </button>
       </div>
     </div>
@@ -3507,9 +3514,9 @@ function ConversationCard({
                   onDelete()
                 }}
                 className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-                title="Apagar conversa"
+                title="Arquivar conversa preservando o histórico"
               >
-                <Trash2 size={14} />
+                <Save size={14} />
               </button>
             )}
           </div>
@@ -3614,8 +3621,8 @@ function ConversationMiniCard({
           {onDelete && (
             <button type="button" onClick={event => { event.stopPropagation(); onDelete() }}
               className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-slate-500 shadow-sm hover:bg-red-50 hover:text-red-600"
-              title="Apagar conversa">
-              <Trash2 size={13} />
+              title="Arquivar conversa preservando o histórico">
+              <Save size={13} />
             </button>
           )}
         </div>
