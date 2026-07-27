@@ -4606,12 +4606,14 @@ export default function Comercial() {
     }
 
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-      .map(node => node.outerHTML)
+      .map(node => node instanceof HTMLLinkElement
+        ? `<link rel="stylesheet" href="${node.href}" />`
+        : node.outerHTML)
       .join('\n')
     const markup = renderToStaticMarkup(
       <NfseDocumentPreview
         {...buildNfsePreviewProps(venda, nota)}
-        className="mx-auto w-[1180px]"
+        className="nfse-print-root mx-auto"
       />
     )
 
@@ -4620,20 +4622,48 @@ export default function Comercial() {
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
+    <base href="${window.location.origin}/" />
     <title>NFS-e ${nota.numero_nf ?? 'sem-numero'}</title>
     ${styles}
     <style>
-      body { margin: 0; padding: 24px; background: #f3f4f6; }
+      @page { size: A4 portrait; margin: 8mm; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; background: #f3f4f6; }
+      body { padding: 16px; font-family: Arial, Helvetica, sans-serif; }
+      .nfse-print-root {
+        width: min(100%, 194mm) !important;
+        margin: 0 auto !important;
+        border-radius: 0 !important;
+      }
+      .nfse-print-root > div { min-width: 0 !important; width: 100% !important; }
+      .nfse-print-root img { display: block; max-width: 100%; }
       @media print {
-        body { padding: 0; background: #ffffff; }
+        html, body { width: 100%; min-height: auto; background: #ffffff; }
+        body { padding: 0; }
+        .nfse-print-root {
+          width: 100% !important;
+          border-radius: 0 !important;
+          box-shadow: none !important;
+          overflow: visible !important;
+          break-inside: avoid;
+        }
       }
     </style>
   </head>
   <body>
     ${markup}
     <script>
-      window.onload = function () {
-        setTimeout(function () { window.print(); }, 250);
+      window.onload = async function () {
+        var images = Array.from(document.images);
+        await Promise.all(images.map(function (image) {
+          if (image.complete) return Promise.resolve();
+          return new Promise(function (resolve) {
+            image.addEventListener('load', resolve, { once: true });
+            image.addEventListener('error', resolve, { once: true });
+          });
+        }));
+        if (document.fonts && document.fonts.ready) await document.fonts.ready;
+        setTimeout(function () { window.print(); }, 150);
       };
     </script>
   </body>
