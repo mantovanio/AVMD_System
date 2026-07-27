@@ -58,6 +58,7 @@ import { getApiUrl } from '@/lib/api'
 import { getProductProfile } from '@/lib/checkout'
 import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenCommercialVendasByDocumento, getAivenTitularByCpf, updateAivenCommercialSaleStatus, updateAivenCommercialSalePaymentStatus, updateVenda, updateVendaPaymentMethod, type CancelamentoVendaInput, type UpdateVendaInput } from '@/lib/commercialAiven'
 import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
+import { sendWhatsApp as sendWhatsAppDirect } from '@/lib/renovacoesApi'
 import { useAuth } from '@/contexts/AuthContext'
 import { canChangePayment, canChangeProtocol, canDeleteSale, canReleaseEmission, hasPerfil, isAdminProfile } from '@/lib/security'
 import { buscarCep } from '@/lib/cep'
@@ -4687,6 +4688,15 @@ export default function Comercial() {
     openNfsePrintWindow(venda, nota)
   }
 
+  function visualizarNfseOficial(nota: NfseEmitida) {
+    const url = nota.pdf_url?.trim()
+    if (!url) {
+      showMsg('O PDF oficial da prefeitura ainda não está disponível para esta nota.', 'err')
+      return
+    }
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   async function encaminharNfsePorEmail(venda: VendaRow, nota: NfseEmitida) {
     const email = venda.email_faturamento?.trim()
     if (!email) {
@@ -4728,9 +4738,18 @@ export default function Comercial() {
   }
 
   async function encaminharNfsePorWhatsApp(venda: VendaRow, nota: NfseEmitida) {
-    const telefone = venda.telefone_faturamento?.trim()
+    const telefone = (
+      String((venda.metadata as Record<string, unknown> | null)?.telefone_atendimento ?? '').trim()
+      || venda.telefone_faturamento
+      || (venda.cadastros_base as { telefone?: string } | null)?.telefone
+      || ''
+    ).trim()
     if (!telefone) {
-      showMsg('Informe o telefone com WhatsApp do tomador antes de encaminhar a nota.', 'err')
+      showMsg('Informe o telefone do atendimento/tomador antes de encaminhar a nota.', 'err')
+      return
+    }
+    if (!nota.pdf_url?.trim()) {
+      showMsg('O PDF oficial da prefeitura ainda não está disponível para envio.', 'err')
       return
     }
 
@@ -4745,22 +4764,13 @@ export default function Comercial() {
       }
     )
 
-    const { error } = await queueWhatsAppMessage({
-      to: telefone,
-      body,
-      payload: {
-        venda_id: venda.id,
-        nfse_id: nota.id,
-        tipo: 'nfse_encaminhamento',
-      },
-    })
-
-    if (error) {
-      showMsg(`Não foi possível encaminhar a nota por WhatsApp: ${error}`, 'err')
+    const result = await sendWhatsAppDirect(telefone, body, { canal: 'atendimento' })
+    if (!result.ok) {
+      showMsg(`Não foi possível enviar a nota pelo número de atendimento: ${result.error ?? 'falha na integração'}`, 'err')
       return
     }
 
-    showMsg('A nota foi encaminhada para a fila de WhatsApp.', 'ok')
+    showMsg(`Nota enviada pelo WhatsApp de atendimento para ${telefone}.`, 'ok')
   }
 
   async function excluirRegistroNfse(venda: VendaRow, nota: NfseEmitida) {
@@ -8422,11 +8432,20 @@ export default function Comercial() {
                             <div className="flex flex-wrap items-center justify-end gap-2">
                               <button
                                 type="button"
+                                onClick={() => visualizarNfseOficial(nota)}
+                                disabled={!nota.pdf_url}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-950/20"
+                              >
+                                <Eye size={12} />
+                                Visualizar oficial
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => baixarNfsePdf(vendaNfseModal.venda, nota)}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
                               >
                                 <Download size={12} />
-                                PDF
+                                Imprimir/baixar
                               </button>
                               {nota.pdf_url && (
                                 <button type="button" onClick={() => window.open(nota.pdf_url!, '_blank')}
