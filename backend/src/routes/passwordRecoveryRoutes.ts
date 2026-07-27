@@ -99,7 +99,7 @@ async function ensureAdminProfile(profileRepository: ProfileRepository, adminPro
   return admin && admin.perfil === 'admin' && admin.status === 'ativo' ? admin : null
 }
 
-function shouldEnforceSharedEmailGuard(profile: { perfil: string }) {
+function shouldEnforceSharedEmailGuard(profile: { perfil?: string | null }) {
   return profile.perfil === 'usuario'
 }
 
@@ -109,7 +109,7 @@ async function sendRecoveryCode(
   passwordRecoveryRepository: PasswordRecoveryRepository,
   passwordRecoveryAuditRepository: PasswordRecoveryAuditRepository,
   outboxRepository: CommunicationOutboxRepository,
-  profile: { id: string; nome: string; email: string | null; clerk_user_id: string | null; status: string },
+  profile: { id: string; nome: string; email: string | null; clerk_user_id: string | null; status: string; perfil: string },
   email: string,
   req?: IncomingMessage,
   origin = 'password_recovery_manual_approval',
