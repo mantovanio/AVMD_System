@@ -4626,7 +4626,7 @@ export default function Comercial() {
     <title>NFS-e ${nota.numero_nf ?? 'sem-numero'}</title>
     ${styles}
     <style>
-      @page { size: A4 portrait; margin: 8mm; }
+      @page { size: A4 portrait; margin: 6mm; }
       * { box-sizing: border-box; }
       html, body { margin: 0; min-height: 100%; background: #f3f4f6; }
       body { padding: 16px; font-family: Arial, Helvetica, sans-serif; }
@@ -4641,7 +4641,8 @@ export default function Comercial() {
         html, body { width: 100%; min-height: auto; background: #ffffff; }
         body { padding: 0; }
         .nfse-print-root {
-          width: 100% !important;
+          width: 116.28% !important;
+          zoom: 0.86;
           border-radius: 0 !important;
           box-shadow: none !important;
           overflow: visible !important;

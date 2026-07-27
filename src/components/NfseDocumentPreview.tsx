@@ -45,16 +45,16 @@ function Row({
   className?: string
 }) {
   return (
-    <div className={cn('border-r border-gray-500 last:border-r-0 px-2 py-1.5 min-h-[42px]', className)}>
-      <div className="text-[11px] text-gray-700">{label}</div>
-      <div className="text-[12px] font-medium text-gray-950 leading-snug whitespace-pre-wrap">{value || '—'}</div>
+    <div className={cn('border-r border-gray-500 last:border-r-0 px-1.5 py-1 min-h-[30px]', className)}>
+      <div className="text-[9px] leading-tight text-gray-700">{label}</div>
+      <div className="text-[10px] font-medium text-gray-950 leading-tight whitespace-pre-wrap">{value || '—'}</div>
     </div>
   )
 }
 
 function SectionTitle({ children }: { children: string }) {
   return (
-    <div className="bg-[#9f9f9f] border-t border-b border-black px-2 py-1.5 text-[15px] font-medium text-center text-black">
+    <div className="bg-[#9f9f9f] border-t border-b border-black px-2 py-1 text-[12px] leading-tight font-medium text-center text-black">
       {children}
     </div>
   )
@@ -82,20 +82,20 @@ export default function NfseDocumentPreview({
             <img
               src="/brasao-sao-bernardo.jpg"
               alt="Brasão do Município de São Bernardo do Campo"
-              className="h-[108px] w-[118px] object-contain"
+              className="h-[76px] w-[94px] object-contain"
             />
           </div>
           <div className="flex flex-col justify-center border-r border-black px-3 py-2 text-center">
-            <div className="text-[16px] font-medium uppercase">{data.cabecalhoMunicipio}</div>
-            <div className="mt-1 text-[18px] font-medium uppercase">{data.cabecalhoSecretaria}</div>
-            <div className="mt-2 text-[18px] font-medium uppercase leading-tight">{layout.titulo}</div>
+            <div className="text-[12px] font-medium uppercase">{data.cabecalhoMunicipio}</div>
+            <div className="mt-0.5 text-[14px] font-medium uppercase">{data.cabecalhoSecretaria}</div>
+            <div className="mt-1 text-[14px] font-medium uppercase leading-tight">{layout.titulo}</div>
           </div>
           <div className="flex flex-col justify-center border-r border-black px-3 py-2 text-center">
-            <div className="text-[20px] leading-tight">Número da<br />NFS-e</div>
-            <div className="mt-3 text-[22px] font-medium leading-none">{data.numeroNf}</div>
+            <div className="text-[15px] leading-tight">Número da<br />NFS-e</div>
+            <div className="mt-1.5 text-[18px] font-medium leading-none">{data.numeroNf}</div>
           </div>
           <div className="flex items-center justify-center p-2">
-            <QRCodeSVG value={verificacaoUrl} size={96} level="M" marginSize={0} />
+            <QRCodeSVG value={verificacaoUrl} size={72} level="M" marginSize={0} />
           </div>
         </div>
 
@@ -113,7 +113,7 @@ export default function NfseDocumentPreview({
               <img
                 src={logoUrl || '/logo-certiid.png'}
                 alt="Logo CERTIID"
-                className="max-h-[92px] max-w-[126px] object-contain"
+                className="max-h-[62px] max-w-[112px] object-contain"
               />
             ) : null}
           </div>
@@ -155,12 +155,12 @@ export default function NfseDocumentPreview({
         </div>
 
         <SectionTitle>{layout.bloco_servico_titulo}</SectionTitle>
-        <div className="border-b border-gray-600 px-3 py-3 min-h-[132px]">
-          <div className="whitespace-pre-wrap text-[12px] leading-relaxed text-gray-900">{data.discriminacaoServicos}</div>
+        <div className="border-b border-gray-600 px-2 py-1.5 min-h-[76px]">
+          <div className="whitespace-pre-wrap text-[10px] leading-snug text-gray-900">{data.discriminacaoServicos}</div>
         </div>
 
         <SectionTitle>Codigo do Servico / Atividade</SectionTitle>
-        <div className="border-b border-gray-600 px-3 py-2 text-[11px] font-medium text-gray-900">
+        <div className="border-b border-gray-600 px-2 py-1.5 text-[9px] leading-tight font-medium text-gray-900">
           {data.codigoServico}
         </div>
 
@@ -204,9 +204,9 @@ export default function NfseDocumentPreview({
           </div>
         </div>
 
-        <div className="border-t border-gray-600 px-3 py-2">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Avisos</div>
-          <div className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-gray-900">{data.avisos}</div>
+        <div className="border-t border-gray-600 px-2 py-1.5">
+          <div className="text-[9px] font-semibold text-gray-600">Avisos</div>
+          <div className="mt-0.5 whitespace-pre-wrap text-[9px] leading-tight text-gray-900">{data.avisos}</div>
         </div>
       </div>
     </div>
