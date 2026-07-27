@@ -171,6 +171,27 @@ async function persistIncomingMedia(
     let base64 = pickString(message, 'base64', 'data')
     if (!base64) base64 = pickString(messagePayload, 'base64', 'data')
     if (!base64) base64 = deepFindString(entry[1], ['base64', 'data'])
+
+    if (!base64) {
+      const instanceName = pickString(rawPayload, 'instance', 'instanceName')
+        || pickString(data, 'instance', 'instanceName')
+      const instance = [config.evolutionAtendimento, config.evolutionCertiid]
+        .find(item => item.instanceName === instanceName)
+      if (instance?.baseUrl && instance.apiToken && instance.instanceName) {
+        const response = await fetch(
+          `${instance.baseUrl.replace(/\/$/, '')}/chat/getBase64FromMediaMessage/${instance.instanceName}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', apikey: instance.apiToken },
+            body: JSON.stringify({ message: data ?? rawPayload, convertToMp4: false }),
+          },
+        )
+        if (response.ok) {
+          const result = await response.json().catch(() => null) as JsonRecord | null
+          base64 = deepFindString(result, ['base64', 'data'])
+        }
+      }
+    }
     if (!base64) return
 
     const mimeType = pickString(messagePayload, 'mimetype', 'mimeType') || pickString(message, 'mimetype', 'mimeType') || fallbackMimeType || 'application/octet-stream'
@@ -186,7 +207,13 @@ async function persistIncomingMedia(
     saveFile(storedPath, buffer)
 
     const convResult = await db.query<{ id: string }>(
-      `SELECT id FROM crm_chat_conversations WHERE document_key = $1 ORDER BY updated_at DESC LIMIT 1`,
+      `SELECT id
+         FROM crm_chat_conversations
+        WHERE document_key = $1
+           OR fn_normalize_phone_br(document_key) = fn_normalize_phone_br($1)
+           OR fn_normalize_phone_br(telefone) = fn_normalize_phone_br($1)
+        ORDER BY updated_at DESC
+        LIMIT 1`,
       [conversationJid],
     )
     const convUuid = convResult.rows[0]?.id
