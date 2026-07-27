@@ -35,6 +35,7 @@ import { CommunicationOutboxRepository } from './repositories/communicationOutbo
 import { CommunicationEventRepository } from './repositories/communicationEventRepository.js'
 import { ConfigRepository } from './repositories/configRepository.js'
 import { FileRepository } from './repositories/fileRepository.js'
+import { PasswordRecoveryAuditRepository } from './repositories/passwordRecoveryAuditRepository.js'
 import { PasswordRecoveryRepository } from './repositories/passwordRecoveryRepository.js'
 import { ScheduleAutomationRepository } from './repositories/scheduleAutomationRepository.js'
 import { OutboxProcessor } from './services/outboxProcessor.js'
@@ -74,6 +75,7 @@ const communicationOutboxRepository = new CommunicationOutboxRepository(db)
 const communicationEventRepository = new CommunicationEventRepository(db)
 const configRepository = new ConfigRepository(db)
 const fileRepository = new FileRepository(db)
+const passwordRecoveryAuditRepository = new PasswordRecoveryAuditRepository(db)
 const passwordRecoveryRepository = new PasswordRecoveryRepository(db)
 const scheduleAutomationRepository = new ScheduleAutomationRepository(db)
 const permissoesRepository = new PermissoesRepository(db)
@@ -118,6 +120,7 @@ const server = createServer(async (req, res) => {
       res,
       profileRepository,
       passwordRecoveryRepository,
+      passwordRecoveryAuditRepository,
       communicationOutboxRepository,
       config.clerkSecretKey,
       config.corsOrigin,

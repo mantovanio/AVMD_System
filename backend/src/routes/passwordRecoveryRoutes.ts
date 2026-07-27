@@ -2,6 +2,7 @@ import { createClerkClient } from '@clerk/backend'
 import { randomInt, randomUUID, createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
+import type { PasswordRecoveryAuditRepository } from '../repositories/passwordRecoveryAuditRepository.js'
 import type { PasswordRecoveryRepository } from '../repositories/passwordRecoveryRepository.js'
 import type { ProfileRepository } from '../repositories/profileRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
@@ -58,6 +59,39 @@ function isClerkNotFoundError(error: unknown) {
 function clerkUserHasEmail(user: ClerkUserLike, email: string) {
   const normalizedEmail = normalizeEmail(email)
   return user.emailAddresses?.some(item => normalizeEmail(item.emailAddress ?? '') === normalizedEmail) ?? false
+}
+
+function getRequestSource(req: IncomingMessage) {
+  return String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0]?.trim() || null
+}
+
+function getUserAgent(req: IncomingMessage) {
+  return String(req.headers['user-agent'] ?? '').trim() || null
+}
+
+async function findEmailRisk(
+  clerkClient: ReturnType<typeof createClerkClient>,
+  profile: { id: string; email: string | null; nome: string; clerk_user_id: string | null; status: string },
+  email: string,
+): Promise<{ blocked: boolean; reason: string | null; clerkUserId: string | null }> {
+  if (profile.status !== 'ativo') {
+    return { blocked: true, reason: 'Conta inativa ou bloqueada.', clerkUserId: null }
+  }
+
+  const normalizedEmail = normalizeEmail(email)
+  const clerkUsers = await clerkClient.users.getUserList({ emailAddress: [normalizedEmail], limit: 5 })
+  const matchedUsers = clerkUsers.data.filter(user => clerkUserHasEmail(user, normalizedEmail))
+
+  if (matchedUsers.length > 1) {
+    return { blocked: true, reason: 'E-mail compartilhado ou duplicado no Clerk. Confirme a identidade com o administrador.', clerkUserId: null }
+  }
+
+  const clerkUserId = matchedUsers[0]?.id ?? null
+  if (profile.clerk_user_id && clerkUserId && profile.clerk_user_id !== clerkUserId) {
+    return { blocked: true, reason: 'Vínculo do perfil com o Clerk está inconsistente. Confirme com o administrador.', clerkUserId: null }
+  }
+
+  return { blocked: false, reason: null, clerkUserId }
 }
 
 function buildClerkUsername(email: string) {
@@ -150,6 +184,7 @@ export async function handlePasswordRecoveryRoutes(
   res: ServerResponse,
   profileRepository: ProfileRepository,
   passwordRecoveryRepository: PasswordRecoveryRepository,
+  passwordRecoveryAuditRepository: PasswordRecoveryAuditRepository,
   outboxRepository: CommunicationOutboxRepository,
   clerkSecretKey: string,
   corsOrigin: string,
@@ -169,6 +204,15 @@ export async function handlePasswordRecoveryRoutes(
 
     const profile = await profileRepository.findByEmail(email)
     if (!profile) {
+      await passwordRecoveryAuditRepository.create({
+        email,
+        action: 'request',
+        status: 'blocked',
+        reason: 'Conta não encontrada.',
+        source: 'password_recovery_request',
+        ipAddress: getRequestSource(req),
+        userAgent: getUserAgent(req),
+      })
       writeJson(res, 404, { ok: false, error: 'Conta não encontrada.' }, corsOrigin)
       return true
     }
@@ -176,7 +220,25 @@ export async function handlePasswordRecoveryRoutes(
     const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
 
     try {
-      await syncClerkUser(clerkClient, profileRepository, profile.id, email, profile.nome, profile.clerk_user_id)
+      const risk = await findEmailRisk(clerkClient, profile, email)
+      if (risk.blocked) {
+        await passwordRecoveryAuditRepository.create({
+          profileId: profile.id,
+          email,
+          action: 'request',
+          status: 'requires_confirmation',
+          reason: risk.reason,
+          source: 'password_recovery_request',
+          ipAddress: getRequestSource(req),
+          userAgent: getUserAgent(req),
+          clerkUserId: profile.clerk_user_id,
+          metadata: { profile_status: profile.status },
+        })
+        writeJson(res, 428, { ok: false, error: risk.reason ?? 'Confirmação extra necessária para continuar.' }, corsOrigin)
+        return true
+      }
+
+      const clerkUserId = risk.clerkUserId ?? await syncClerkUser(clerkClient, profileRepository, profile.id, email, profile.nome, profile.clerk_user_id)
       const recoveryCode = buildRecoveryCode()
       const tokenHash = hashRecoveryCode(recoveryCode)
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
@@ -203,9 +265,36 @@ export async function handlePasswordRecoveryRoutes(
         },
       })
 
+      await passwordRecoveryAuditRepository.create({
+        profileId: profile.id,
+        email,
+        action: 'request',
+        status: 'sent',
+        source: 'password_recovery_request',
+        ipAddress: getRequestSource(req),
+        userAgent: getUserAgent(req),
+        clerkUserId,
+        metadata: {
+          profile_status: profile.status,
+          clerk_user_id: clerkUserId,
+        },
+      })
+
       writeJson(res, 200, { ok: true, email: maskEmail(email) }, corsOrigin)
       return true
     } catch (error) {
+      await passwordRecoveryAuditRepository.create({
+        profileId: profile.id,
+        email,
+        action: 'request',
+        status: 'blocked',
+        reason: error instanceof Error ? error.message : String(error),
+        source: 'password_recovery_request',
+        ipAddress: getRequestSource(req),
+        userAgent: getUserAgent(req),
+        clerkUserId: profile.clerk_user_id,
+        metadata: { profile_status: profile.status },
+      })
       writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
       return true
     }
@@ -229,6 +318,15 @@ export async function handlePasswordRecoveryRoutes(
 
     const profile = await profileRepository.findByEmail(email)
     if (!profile) {
+      await passwordRecoveryAuditRepository.create({
+        email,
+        action: 'verify',
+        status: 'blocked',
+        reason: 'Conta não encontrada.',
+        source: 'password_recovery_verify',
+        ipAddress: getRequestSource(req),
+        userAgent: getUserAgent(req),
+      })
       writeJson(res, 404, { ok: false, error: 'Conta não encontrada.' }, corsOrigin)
       return true
     }
@@ -236,17 +334,54 @@ export async function handlePasswordRecoveryRoutes(
     const tokenHash = hashRecoveryCode(code)
     const token = await passwordRecoveryRepository.findValidByTokenHash(tokenHash)
     if (!token || token.profile_id !== profile.id) {
+      await passwordRecoveryAuditRepository.create({
+        profileId: profile.id,
+        email,
+        action: 'verify',
+        status: 'blocked',
+        reason: 'Código inválido ou expirado.',
+        source: 'password_recovery_verify',
+        ipAddress: getRequestSource(req),
+        userAgent: getUserAgent(req),
+        clerkUserId: profile.clerk_user_id,
+      })
       writeJson(res, 400, { ok: false, error: 'Código inválido ou expirado.' }, corsOrigin)
       return true
     }
 
     const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
     try {
-      await syncClerkUser(clerkClient, profileRepository, profile.id, email, profile.nome, profile.clerk_user_id)
-      const resolvedProfile = await profileRepository.findById(profile.id)
-      const clerkUserId = resolvedProfile?.clerk_user_id
+      const risk = await findEmailRisk(clerkClient, profile, email)
+      if (risk.blocked) {
+        await passwordRecoveryAuditRepository.create({
+          profileId: profile.id,
+          email,
+          action: 'verify',
+          status: 'requires_confirmation',
+          reason: risk.reason,
+          source: 'password_recovery_verify',
+          ipAddress: getRequestSource(req),
+          userAgent: getUserAgent(req),
+          clerkUserId: profile.clerk_user_id,
+          metadata: { profile_status: profile.status },
+        })
+        writeJson(res, 428, { ok: false, error: risk.reason ?? 'Confirmação extra necessária para continuar.' }, corsOrigin)
+        return true
+      }
 
+      const clerkUserId = risk.clerkUserId ?? await syncClerkUser(clerkClient, profileRepository, profile.id, email, profile.nome, profile.clerk_user_id)
       if (!clerkUserId) {
+        await passwordRecoveryAuditRepository.create({
+          profileId: profile.id,
+          email,
+          action: 'verify',
+          status: 'blocked',
+          reason: 'Conta vinculada não encontrada no Clerk.',
+          source: 'password_recovery_verify',
+          ipAddress: getRequestSource(req),
+          userAgent: getUserAgent(req),
+          clerkUserId: profile.clerk_user_id,
+        })
         writeJson(res, 400, { ok: false, error: 'Conta vinculada não encontrada no Clerk.' }, corsOrigin)
         return true
       }
@@ -257,8 +392,30 @@ export async function handlePasswordRecoveryRoutes(
         signOutOfOtherSessions: true,
       })
       await passwordRecoveryRepository.consume(token.id)
+      await passwordRecoveryAuditRepository.create({
+        profileId: profile.id,
+        email,
+        action: 'verify',
+        status: 'verified',
+        source: 'password_recovery_verify',
+        ipAddress: getRequestSource(req),
+        userAgent: getUserAgent(req),
+        clerkUserId,
+        metadata: { profile_status: profile.status },
+      })
       writeJson(res, 200, { ok: true }, corsOrigin)
     } catch (error) {
+      await passwordRecoveryAuditRepository.create({
+        profileId: profile.id,
+        email,
+        action: 'verify',
+        status: 'blocked',
+        reason: error instanceof Error ? error.message : String(error),
+        source: 'password_recovery_verify',
+        ipAddress: getRequestSource(req),
+        userAgent: getUserAgent(req),
+        clerkUserId: profile.clerk_user_id,
+      })
       writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
     }
     return true
