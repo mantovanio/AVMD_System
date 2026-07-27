@@ -2554,15 +2554,15 @@ export default function Renovacoes() {
           const r = listagem.find(item => item.id === selectedRowId)
           if (!r) return null
           const actions: ActionBarAction[] = [
-            { key: 'renovado', icon: <Check size={13} />, label: r.status === 'convertido' ? 'Desmarcar' : 'Renovado', tooltip: 'Marcar como renovado (convertido)', onClick: () => void marcarRenovado(r), variant: 'green' as const },
-            { key: 'nao_renovado', icon: <X size={13} />, label: r.status === 'perdido' ? 'Desmarcar' : 'Não renovado', tooltip: 'Marcar como não renovado (perdido)', onClick: () => void marcarNaoRenovado(r), variant: 'red' as const },
-            { key: 'whatsapp', icon: <Send size={13} />, label: 'WhatsApp', tooltip: 'Enviar mensagem WhatsApp para o cliente', onClick: () => void enviarWhatsApp(r), disabled: !r.telefone, variant: 'green' as const },
-            ...(canEditCadastro ? [{ key: 'editar', icon: <Pencil size={13} />, label: 'Editar', tooltip: 'Editar dados do cadastro do cliente', onClick: () => abrirEditarContato(r), variant: 'amber' as const }] as ActionBarAction[] : []),
-            { key: 'email', icon: <Mail size={13} />, label: 'E-mail', tooltip: 'Enviar e-mail de renovação para o cliente', onClick: () => void enviarEmail(r), disabled: !r.email, variant: 'blue' as const },
-            { key: 'kanban', icon: <Users size={13} />, label: 'Kanban', tooltip: 'Criar lead no Kanban de vendas', onClick: () => void criarLeadKanban(r), variant: 'purple' as const },
-            { key: 'chat', icon: <MessageSquare size={13} />, label: 'Chat', tooltip: 'Abrir conversa no Chat CRM', onClick: () => openChat(r), disabled: !r.telefone, variant: 'green' as const },
-            { key: 'cancelar', icon: <Bell size={13} />, label: 'Cancelar avisos', tooltip: 'Cancelar follow-ups agendados', onClick: () => void cancelarFollowUps(r.id), variant: 'default' as const },
-            ...(isAdmin ? [{ key: 'excluir', icon: <Trash2 size={13} />, label: 'Excluir', tooltip: 'Excluir permanentemente este registro', onClick: () => void excluirRenovacao(r), variant: 'red' as const }] as ActionBarAction[] : []),
+            { key: 'renovado', icon: <Check size={13} />, label: r.status === 'convertido' ? 'Desmarcar' : 'Renovado', tooltip: 'Marcar como renovado (convertido)', onClick: () => void marcarRenovado(r), variant: 'green' as const, group: 'status' },
+            { key: 'nao_renovado', icon: <X size={13} />, label: r.status === 'perdido' ? 'Desmarcar' : 'Não renovado', tooltip: 'Marcar como não renovado (perdido)', onClick: () => void marcarNaoRenovado(r), variant: 'red' as const, group: 'status' },
+            { key: 'whatsapp', icon: <Send size={13} />, label: 'WhatsApp', tooltip: 'Enviar mensagem WhatsApp para o cliente', onClick: () => void enviarWhatsApp(r), disabled: !r.telefone, variant: 'green' as const, group: 'comunicacao' },
+            ...(canEditCadastro ? [{ key: 'editar', icon: <Pencil size={13} />, label: 'Editar', tooltip: 'Editar dados do cadastro do cliente', onClick: () => abrirEditarContato(r), variant: 'amber' as const, group: 'cadastro' }] as ActionBarAction[] : []),
+            { key: 'email', icon: <Mail size={13} />, label: 'E-mail', tooltip: 'Enviar e-mail de renovação para o cliente', onClick: () => void enviarEmail(r), disabled: !r.email, variant: 'blue' as const, group: 'comunicacao' },
+            { key: 'kanban', icon: <Users size={13} />, label: 'Kanban', tooltip: 'Criar lead no Kanban de vendas', onClick: () => void criarLeadKanban(r), variant: 'purple' as const, group: 'comercial' },
+            { key: 'chat', icon: <MessageSquare size={13} />, label: 'Chat', tooltip: 'Abrir conversa no Chat CRM', onClick: () => openChat(r), disabled: !r.telefone, variant: 'green' as const, group: 'comunicacao' },
+            { key: 'cancelar', icon: <Bell size={13} />, label: 'Cancelar avisos', tooltip: 'Cancelar follow-ups agendados', onClick: () => void cancelarFollowUps(r.id), variant: 'default' as const, group: 'automacao' },
+            ...(isAdmin ? [{ key: 'excluir', icon: <Trash2 size={13} />, label: 'Excluir', tooltip: 'Excluir permanentemente este registro', onClick: () => void excluirRenovacao(r), variant: 'red' as const, group: 'admin' }] as ActionBarAction[] : []),
           ]
           return (
             <div className="rounded-2xl border border-blue-100/80 dark:border-blue-900/30 bg-gradient-to-b from-blue-50/30 to-transparent dark:from-blue-950/10 dark:to-transparent p-2 sm:p-3">

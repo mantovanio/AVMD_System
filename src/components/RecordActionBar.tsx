@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -9,6 +9,7 @@ export interface ActionBarAction {
   tooltip?: string
   onClick: () => void
   variant?: 'default' | 'blue' | 'green' | 'amber' | 'purple' | 'red'
+  group?: string
   disabled?: boolean
   hidden?: boolean
 }
@@ -33,6 +34,7 @@ const variantClasses: Record<string, string> = {
 
 export function RecordActionBar({ recordName, recordBadge, actions, onClose, className, children }: RecordActionBarProps) {
   const visibleActions = actions.filter(a => !a.hidden)
+  let lastGroup: string | undefined
 
   return (
     <div className={cn(
@@ -55,23 +57,29 @@ export function RecordActionBar({ recordName, recordBadge, actions, onClose, cla
       <div className="hidden w-px h-8 bg-blue-200 dark:bg-blue-900/40 shrink-0 sm:block" />
 
       <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
-        {visibleActions.map(action => (
-          <button
-              key={action.key}
-              type="button"
-              onClick={action.onClick}
-              disabled={action.disabled}
-              title={action.tooltip ?? action.label}
-              className={cn(
-              'inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border text-sm font-medium transition-colors shadow-sm',
-              'disabled:opacity-40 disabled:cursor-not-allowed',
-              variantClasses[action.variant ?? 'default'],
-              )}
-            >
-            {action.icon}
-            <span className="hidden md:inline">{action.label}</span>
-          </button>
-        ))}
+        {visibleActions.map(action => {
+          const shouldSplit = lastGroup !== undefined && action.group && action.group !== lastGroup
+          lastGroup = action.group
+          return (
+            <Fragment key={action.key}>
+              {shouldSplit && <span className="hidden sm:block w-px h-8 bg-blue-200 dark:bg-blue-900/40 shrink-0 mx-1" />}
+              <button
+                type="button"
+                onClick={action.onClick}
+                disabled={action.disabled}
+                title={action.tooltip ?? action.label}
+                className={cn(
+                  'inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border text-sm font-medium transition-colors shadow-sm',
+                  'disabled:opacity-40 disabled:cursor-not-allowed',
+                  variantClasses[action.variant ?? 'default'],
+                )}
+              >
+                {action.icon}
+                <span className="hidden md:inline">{action.label}</span>
+              </button>
+            </Fragment>
+          )
+        })}
         {children}
       </div>
 
