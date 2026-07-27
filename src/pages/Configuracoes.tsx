@@ -103,6 +103,21 @@ type ModalSenha = { userId: string; nome: string } | null
 type ModalVincularConta = { profileId: string; nome: string; email: string } | null
 type ModalNovoUsuario = { aberto: boolean }
 type PasswordCheckState = 'pendente' | 'verificado' | 'sem_vinculo' | 'nao_encontrado'
+type RecoveryAuditItem = {
+  id: number
+  profile_id: string | null
+  email: string
+  status: string
+  reason: string | null
+  source: string | null
+  clerk_user_id: string | null
+  decision_note: string | null
+  approved_by_profile_id: string | null
+  approved_at: string | null
+  created_at: string
+  metadata: Record<string, unknown> | null
+  profile?: { id: string; nome: string; email: string | null; perfil: PerfilAcesso; status: string } | null
+}
 const ADMIN_INITIAL_PASSWORD = '1234qwer'
 
 function validateStrongPassword(value: string) {
@@ -593,6 +608,11 @@ function AbaUsuarios() {
   const [parceiros, setParceiros]   = useState<Parceiro[]>([])
   const [tabelas, setTabelas]       = useState<TabelaPreco[]>([])
   const [lojas, setLojas]           = useState<LojaMarketplace[]>([])
+  const [recoveryAudits, setRecoveryAudits] = useState<RecoveryAuditItem[]>([])
+  const [recoveryLoading, setRecoveryLoading] = useState(false)
+  const [recoveryActionId, setRecoveryActionId] = useState<number | null>(null)
+  const [recoveryDecisionNote, setRecoveryDecisionNote] = useState('')
+  const [recoveryError, setRecoveryError] = useState<string | null>(null)
   const [loading, setLoading]       = useState(true)
   const [editingId, setEditingId]   = useState<string | null>(null)
   const [editForm, setEditForm]     = useState<UserEditForm | null>(null)
@@ -661,9 +681,34 @@ function AbaUsuarios() {
     setLoading(false)
   }, [])
 
+  const loadRecoveryAudits = useCallback(async () => {
+    if (!myProfile?.id || !isAdmin) return
+    setRecoveryLoading(true)
+    setRecoveryError(null)
+    try {
+      const response = await fetch(getApiUrl('/admin/password-recovery/audit'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_profile_id: myProfile.id, limit: 25, offset: 0 }),
+      })
+      const data = await response.json().catch(() => null) as { ok?: boolean; auditoria?: RecoveryAuditItem[]; error?: string } | null
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error ?? 'Falha ao carregar fila de recuperação.')
+      }
+      setRecoveryAudits(data.auditoria ?? [])
+    } catch (error) {
+      setRecoveryError(error instanceof Error ? error.message : 'Falha ao carregar fila de recuperação.')
+    } finally {
+      setRecoveryLoading(false)
+    }
+  }, [isAdmin, myProfile?.id])
+
   useEffect(() => {
-    if (isAdmin) void load()
-  }, [isAdmin, load])
+    if (isAdmin) {
+      void load()
+      void loadRecoveryAudits()
+    }
+  }, [isAdmin, load, loadRecoveryAudits])
 
   function getAuthUserId(user: Profile) {
     return user.id
@@ -717,6 +762,60 @@ function AbaUsuarios() {
       body: JSON.stringify({ status: novoStatus }),
     })
     void load()
+  }
+
+  async function approveRecovery(auditId: number) {
+    if (!myProfile?.id) return
+    setRecoveryActionId(auditId)
+    setRecoveryError(null)
+    try {
+      const response = await fetch(getApiUrl('/admin/password-recovery/approve'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_profile_id: myProfile.id,
+          audit_id: auditId,
+          decision_note: recoveryDecisionNote.trim() || null,
+        }),
+      })
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error ?? 'Falha ao aprovar recuperação.')
+      }
+      setRecoveryDecisionNote('')
+      await loadRecoveryAudits()
+    } catch (error) {
+      setRecoveryError(error instanceof Error ? error.message : 'Falha ao aprovar recuperação.')
+    } finally {
+      setRecoveryActionId(null)
+    }
+  }
+
+  async function rejectRecovery(auditId: number) {
+    if (!myProfile?.id) return
+    setRecoveryActionId(auditId)
+    setRecoveryError(null)
+    try {
+      const response = await fetch(getApiUrl('/admin/password-recovery/reject'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_profile_id: myProfile.id,
+          audit_id: auditId,
+          decision_note: recoveryDecisionNote.trim() || null,
+        }),
+      })
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error ?? 'Falha ao rejeitar recuperação.')
+      }
+      setRecoveryDecisionNote('')
+      await loadRecoveryAudits()
+    } catch (error) {
+      setRecoveryError(error instanceof Error ? error.message : 'Falha ao rejeitar recuperação.')
+    } finally {
+      setRecoveryActionId(null)
+    }
   }
 
   async function excluirUsuario() {
@@ -1226,6 +1325,117 @@ function AbaUsuarios() {
 
       {/* ── Lista de usuários ── */}
       <div className="space-y-4">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 md:p-5 space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-gray-800 dark:text-gray-200">Aprovação de recuperação de senha</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Pendências com e-mail duplicado ou suspeito ficam aqui para o administrador decidir antes do envio do código.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadRecoveryAudits()}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              <RotateCcw size={13} className={recoveryLoading ? 'animate-spin' : ''} />
+              Atualizar fila
+            </button>
+          </div>
+
+          {recoveryError && (
+            <p className="text-xs text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+              {recoveryError}
+            </p>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 items-end">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-500 dark:text-gray-400">Observação do administrador</span>
+              <input
+                type="text"
+                value={recoveryDecisionNote}
+                onChange={e => setRecoveryDecisionNote(e.target.value)}
+                placeholder="Ex.: cliente confirmado por WhatsApp, liberar manualmente"
+                className="border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </label>
+            <div className="text-xs text-gray-500 dark:text-gray-400 lg:text-right">
+              Itens pendentes: <strong className="text-gray-800 dark:text-gray-200">{recoveryAudits.length}</strong>
+            </div>
+          </div>
+
+          {recoveryLoading ? (
+            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-2">
+              <Loader2 size={16} className="animate-spin" />
+              Carregando fila de recuperação...
+            </div>
+          ) : recoveryAudits.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30 p-4 text-sm text-gray-500 dark:text-gray-400">
+              Nenhuma solicitação pendente no momento.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recoveryAudits.map(item => (
+                <div key={item.id} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30 p-4 space-y-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                        {item.profile?.nome ?? 'Perfil não vinculado'}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {item.email} · origem: {item.source ?? 'não informada'}
+                      </p>
+                    </div>
+                    <span className={cn(
+                      'px-2 py-1 rounded-full text-[11px] font-semibold',
+                      item.status === 'requires_confirmation'
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                        : item.status === 'sent'
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                          : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+                    )}>
+                      {item.status}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-gray-600 dark:text-gray-300">
+                    <div className="rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 px-3 py-2">
+                      <span className="block text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Motivo</span>
+                      <p className="mt-1">{item.reason ?? '—'}</p>
+                    </div>
+                    <div className="rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 px-3 py-2">
+                      <span className="block text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Criado em</span>
+                      <p className="mt-1">{new Date(item.created_at).toLocaleString('pt-BR')}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void approveRecovery(item.id)}
+                      disabled={recoveryActionId === item.id}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-xs font-medium transition-colors"
+                    >
+                      {recoveryActionId === item.id ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />}
+                      Aprovar e enviar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void rejectRecovery(item.id)}
+                      disabled={recoveryActionId === item.id}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white text-xs font-medium transition-colors"
+                    >
+                      {recoveryActionId === item.id ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+                      Rejeitar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-semibold text-gray-800 dark:text-gray-200">Usuários do Sistema</h2>
