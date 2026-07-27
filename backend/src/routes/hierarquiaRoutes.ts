@@ -179,6 +179,8 @@ export async function handleHierarquiaRoutes(
       documento_tipo: string
       valor: number
       ativo?: boolean
+      parent_participante_tipo?: 'profile' | 'parceiro'
+      papel_recebedor?: string | null
     }>(req)
     if (!body.profile_id || !body.escopo || !body.tipo_calculo || !body.documento_tipo) {
       writeJson(res, 400, { ok: false, error: 'profile_id, escopo, tipo_calculo e documento_tipo são obrigatórios' }, corsOrigin)

@@ -3315,6 +3315,7 @@ type ProfileH = {
   nivel_hierarquia: number; parent_profile_id: string | null
   ponto_atendimento_id: string | null; link_loja: string | null; supervisao_pct: number
   tipo_vinculo?: string | null; vinculo_nome?: string | null
+  participante_tipo?: 'profile' | 'parceiro'; selection_id?: string
 }
 type FaixaH = {
   id: string; profile_id: string; tipo_comissao: string; faixa: string
@@ -3358,6 +3359,8 @@ type RepasseRegraH = {
   valor: number
   ativo: boolean
   parent_nome?: string | null
+  parent_parceiro_id?: string | null
+  papel_recebedor?: string | null
 }
 type TabelaPrecoItemResumoH = {
   id: string
@@ -3741,7 +3744,9 @@ function ModeloComercialPanel({
   function editarRepasse(regra: RepasseRegraH) {
     setEditingRepasseId(regra.id)
     setRepasseForm({
-      parent_profile_id: regra.parent_profile_id,
+      parent_profile_id: regra.parent_parceiro_id
+        ? `parceiro:${regra.parent_parceiro_id}:${regra.papel_recebedor ?? 'parceiro'}`
+        : `profile:${regra.parent_profile_id}:${regra.papel_recebedor ?? 'vendedor'}`,
       escopo: regra.escopo,
       tipo_calculo: regra.tipo_calculo,
       valor: String(regra.valor ?? ''),
@@ -3751,12 +3756,15 @@ function ModeloComercialPanel({
   async function salvarRepasse() {
     if (!repasseForm.parent_profile_id || !repasseForm.valor.trim()) return
     setSavingRepasse(true)
+    const [participanteTipo, participanteId, papelRecebedor] = repasseForm.parent_profile_id.split(':')
     const response = await fetch(getApiUrl('/hierarquia/repasses'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: editingRepasseId,
-        parent_profile_id: repasseForm.parent_profile_id,
+        parent_profile_id: participanteId,
+        parent_participante_tipo: participanteTipo,
+        papel_recebedor: papelRecebedor,
         child_profile_id: profile.id,
         ponto_atendimento_id: pontoId,
         escopo: escopoCascata,
@@ -3875,7 +3883,9 @@ function ModeloComercialPanel({
                       <select value={repasseForm.parent_profile_id} onChange={e => setRepasseForm(p => ({ ...p, parent_profile_id: e.target.value }))} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="">Quem recebe</option>
                         {perfisElegiveis.map(item => (
-                          <option key={item.id} value={item.id}>{item.nome} · {PAPEL_PARTICIPANTE_LABEL[item.tipo_vinculo ?? item.perfil] ?? item.tipo_vinculo ?? item.perfil}</option>
+                          <option key={item.selection_id ?? `${item.id}:${item.tipo_vinculo ?? item.perfil}`} value={item.selection_id ?? `profile:${item.id}:${item.tipo_vinculo ?? item.perfil}`}>
+                            {item.nome} · {PAPEL_PARTICIPANTE_LABEL[item.tipo_vinculo ?? item.perfil] ?? item.tipo_vinculo ?? item.perfil}
+                          </option>
                         ))}
                       </select>
                       <select value={escopoCascata} disabled className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 text-gray-600">

@@ -81,6 +81,8 @@ export type RepasseRegraRow = {
   updated_at: string
   parent_nome?: string | null
   child_nome?: string | null
+  parent_parceiro_id?: string | null
+  papel_recebedor?: string | null
 }
 
 export type TabelaPrecoItemResumoRow = {
@@ -159,17 +161,59 @@ export class HierarquiaRepository {
   }
 
   async getAvailableCommissionParticipants(): Promise<ProfileHierarquiaRow[]> {
-    const result = await this.db.query<ProfileHierarquiaRow>(`
+    const profiles = await this.db.query<ProfileHierarquiaRow>(`
       SELECT ${PROFILE_COLS}, tipo_vinculo, vinculo_nome
       FROM profiles
       WHERE status = 'ativo'
-        AND (
-          perfil IN ('agente_registro', 'vendedor')
-          OR tipo_vinculo IN ('agente_registro', 'vendedor', 'parceiro', 'contador')
-        )
+        AND parceiro_id IS NULL
+        AND (perfil IN ('agente_registro', 'vendedor')
+          OR tipo_vinculo IN ('agente_registro', 'vendedor', 'parceiro', 'contador'))
       ORDER BY nome
     `)
-    return result.rows
+    const parceiros = await this.db.query<{
+      id: string
+      nome: string
+      tipo_parceiro: string | null
+      metadata: Record<string, unknown> | null
+    }>(`
+      SELECT id, nome, tipo_parceiro, metadata
+      FROM parceiros
+      WHERE status = 'ativo'
+      ORDER BY nome
+    `)
+    const opcoesParceiros = parceiros.rows.flatMap(parceiro => {
+      const adicionais = Array.isArray(parceiro.metadata?.papeis_adicionais)
+        ? parceiro.metadata.papeis_adicionais.filter(value => typeof value === 'string') as string[]
+        : []
+      const principal = parceiro.tipo_parceiro === 'contador'
+        ? 'contador'
+        : parceiro.tipo_parceiro === 'vendedor'
+          ? 'vendedor'
+          : parceiro.tipo_parceiro === 'ar' || parceiro.tipo_parceiro === 'pa_emissor' || parceiro.tipo_parceiro === 'pa_controle_total'
+            ? 'agente_registro'
+            : 'parceiro'
+      return [...new Set([principal, ...adicionais])].map(papel => ({
+        id: parceiro.id,
+        nome: parceiro.nome,
+        email: null,
+        perfil: papel,
+        status: 'ativo',
+        nivel_hierarquia: 0,
+        parent_profile_id: null,
+        ponto_atendimento_id: null,
+        link_loja: null,
+        supervisao_pct: 0,
+        tipo_vinculo: papel,
+        vinculo_nome: parceiro.nome,
+        participante_tipo: 'parceiro',
+        selection_id: `parceiro:${parceiro.id}:${papel}`,
+      }))
+    })
+    return [...profiles.rows.map(item => ({
+      ...item,
+      participante_tipo: 'profile',
+      selection_id: `profile:${item.id}:${item.tipo_vinculo ?? item.perfil}`,
+    })), ...opcoesParceiros] as ProfileHierarquiaRow[]
   }
 
   async linkAgenteAoPonto(profileId: string, pontoId: string): Promise<void> {
@@ -420,7 +464,9 @@ export class HierarquiaRepository {
 
   async listRepasseRules(childProfileId: string, pontoId: string): Promise<RepasseRegraRow[]> {
     const result = await this.db.query<RepasseRegraRow>(
-      `SELECT r.*, pp.nome AS parent_nome, cp.nome AS child_nome
+      `SELECT r.*, pp.nome AS parent_nome, cp.nome AS child_nome,
+              pp.parceiro_id AS parent_parceiro_id,
+              r.metadata->>'papel_recebedor' AS papel_recebedor
        FROM perfil_repasse_regras r
        JOIN profiles pp ON pp.id = r.parent_profile_id
        JOIN profiles cp ON cp.id = r.child_profile_id
@@ -441,7 +487,31 @@ export class HierarquiaRepository {
     tipo_calculo: 'fixa' | 'percentual'
     valor: number
     ativo?: boolean
+    parent_participante_tipo?: 'profile' | 'parceiro'
+    papel_recebedor?: string | null
   }): Promise<RepasseRegraRow> {
+    if (input.parent_participante_tipo === 'parceiro') {
+      const parceiro = await this.db.query<{ nome: string; email: string | null }>(
+        `SELECT nome, email FROM parceiros WHERE id = $1 AND status = 'ativo' LIMIT 1`,
+        [input.parent_profile_id],
+      )
+      if (!parceiro.rows[0]) throw new Error('O parceiro selecionado não está ativo ou não foi encontrado.')
+      const perfilExistente = await this.db.query<{ id: string }>(
+        `SELECT id FROM profiles WHERE parceiro_id = $1 AND status = 'ativo' ORDER BY created_at ASC LIMIT 1`,
+        [input.parent_profile_id],
+      )
+      if (perfilExistente.rows[0]) {
+        input.parent_profile_id = perfilExistente.rows[0].id
+      } else {
+        const perfilCriado = await this.db.query<{ id: string }>(
+          `INSERT INTO profiles (nome, perfil, status, tipo_vinculo, parceiro_id, vinculo_nome, permissoes)
+           VALUES ($1, 'vendedor', 'ativo', $2, $3, $1, '{}'::jsonb)
+           RETURNING id`,
+          [parceiro.rows[0].nome, input.papel_recebedor ?? 'parceiro', input.parent_profile_id],
+        )
+        input.parent_profile_id = perfilCriado.rows[0].id
+      }
+    }
     if (input.escopo === 'validacao') {
       throw new Error('A comissão de validação é única e deve ser configurada diretamente no agente validador.')
     }
@@ -476,10 +546,11 @@ export class HierarquiaRepository {
              tipo_calculo = $4,
              valor = $5,
              ativo = $6,
+             metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('papel_recebedor', $8::text),
              updated_at = now()
          WHERE id = $1 AND child_profile_id = $7
          RETURNING *`,
-        [input.id, input.parent_profile_id, input.escopo, input.tipo_calculo, input.valor, input.ativo ?? true, input.child_profile_id],
+        [input.id, input.parent_profile_id, input.escopo, input.tipo_calculo, input.valor, input.ativo ?? true, input.child_profile_id, input.papel_recebedor ?? null],
       )
       return result.rows[0]
     }
@@ -487,14 +558,15 @@ export class HierarquiaRepository {
     const result = await this.db.query<RepasseRegraRow>(
       `INSERT INTO perfil_repasse_regras
          (parent_profile_id, child_profile_id, ponto_atendimento_id, escopo, tipo_calculo, valor, ativo, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, '{}'::jsonb)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, jsonb_build_object('papel_recebedor', $8::text))
        ON CONFLICT (parent_profile_id, child_profile_id, ponto_atendimento_id, escopo)
        DO UPDATE SET tipo_calculo = excluded.tipo_calculo,
                      valor = excluded.valor,
                      ativo = excluded.ativo,
+                     metadata = perfil_repasse_regras.metadata || excluded.metadata,
                      updated_at = now()
        RETURNING *`,
-      [input.parent_profile_id, input.child_profile_id, input.ponto_atendimento_id, input.escopo, input.tipo_calculo, input.valor, input.ativo ?? true],
+      [input.parent_profile_id, input.child_profile_id, input.ponto_atendimento_id, input.escopo, input.tipo_calculo, input.valor, input.ativo ?? true, input.papel_recebedor ?? null],
     )
     return result.rows[0]
   }
