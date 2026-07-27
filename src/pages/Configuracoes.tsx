@@ -3314,6 +3314,7 @@ type ProfileH = {
   id: string; nome: string; email: string | null; perfil: string; status: string
   nivel_hierarquia: number; parent_profile_id: string | null
   ponto_atendimento_id: string | null; link_loja: string | null; supervisao_pct: number
+  tipo_vinculo?: string | null; vinculo_nome?: string | null
 }
 type FaixaH = {
   id: string; profile_id: string; tipo_comissao: string; faixa: string
@@ -3377,7 +3378,13 @@ const ESCOPO_REMUNERACAO_LABEL: Record<'validacao' | 'venda', string> = { valida
 const ESCOPO_REPASSE_LABEL: Record<'validacao' | 'venda' | 'margem_revenda', string> = { validacao: 'Validação', venda: 'Venda', margem_revenda: 'Margem de revenda' }
 const TIPO_CALCULO_LABEL: Record<'fixa' | 'percentual', string> = { fixa: 'Valor fixo', percentual: 'Percentual' }
 const DOCUMENTO_TIPO_LABEL: Record<'geral' | 'cpf' | 'cnpj', string> = { geral: 'Geral', cpf: 'CPF', cnpj: 'CNPJ' }
-const MODO_OPERACAO_LABEL: Record<'comissao' | 'revenda', string> = { comissao: 'Comissão', revenda: 'Revenda' }
+const MODO_OPERACAO_LABEL: Record<'comissao' | 'revenda', string> = { comissao: 'Integrado', revenda: 'Revenda' }
+const PAPEL_PARTICIPANTE_LABEL: Record<string, string> = {
+  agente_registro: 'Agente de registro',
+  vendedor: 'Vendedor',
+  parceiro: 'Parceiro',
+  contador: 'Contador',
+}
 
 function FaixasPanel({ profileId, onClose }: { profileId: string; onClose: () => void }) {
   const [faixas, setFaixas] = useState<FaixaH[]>([])
@@ -3639,6 +3646,7 @@ function ModeloComercialPanel({
   const [itensTabela, setItensTabela] = useState<TabelaPrecoItemResumoH[]>([])
   const [precosBase, setPrecosBase] = useState<RevendaPrecoBaseH[]>([])
   const [repasses, setRepasses] = useState<RepasseRegraH[]>([])
+  const [participantes, setParticipantes] = useState<ProfileH[]>([])
   const [savingPreco, setSavingPreco] = useState(false)
   const [savingRepasse, setSavingRepasse] = useState(false)
   const [editingPrecoId, setEditingPrecoId] = useState<string | null>(null)
@@ -3651,27 +3659,32 @@ function ModeloComercialPanel({
     valor: '',
   })
 
-  const perfisElegiveis = allProfiles.filter(item => item.id !== profile.id && (item.perfil === 'agente_registro' || item.perfil === 'vendedor'))
+  const perfisElegiveis = (participantes.length ? participantes : allProfiles).filter(item => item.id !== profile.id)
+  const escopoCascata = modoOperacao === 'revenda' ? 'margem_revenda' : 'venda'
+  const repassesCascata = repasses.filter(regra => regra.escopo === escopoCascata)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [modeloResp, itensResp, precosResp, repassesResp] = await Promise.all([
+    const [modeloResp, itensResp, precosResp, repassesResp, participantesResp] = await Promise.all([
       fetch(getApiUrl(`/hierarquia/modelo-comercial/${profile.id}/${pontoId}`)),
       fetch(getApiUrl('/hierarquia/tabela-itens')),
       fetch(getApiUrl(`/hierarquia/revenda-precos/${profile.id}/${pontoId}`)),
       fetch(getApiUrl(`/hierarquia/repasses/${profile.id}/${pontoId}`)),
+      fetch(getApiUrl('/hierarquia/participantes-remuneracao')),
     ])
-    const [modeloData, itensData, precosData, repassesData] = await Promise.all([
+    const [modeloData, itensData, precosData, repassesData, participantesData] = await Promise.all([
       modeloResp.json(),
       itensResp.json(),
       precosResp.json(),
       repassesResp.json(),
+      participantesResp.json(),
     ])
     setModeloAtual((modeloData.modelo ?? null) as ModeloNegocioH | null)
     setModoOperacao(((modeloData.modelo?.modo_operacao as 'comissao' | 'revenda' | undefined) ?? 'comissao'))
     setItensTabela((itensData.itens ?? []) as TabelaPrecoItemResumoH[])
     setPrecosBase((precosData.precos ?? []) as RevendaPrecoBaseH[])
     setRepasses((repassesData.regras ?? []) as RepasseRegraH[])
+    setParticipantes((participantesData.profiles ?? []) as ProfileH[])
     setLoading(false)
   }, [profile.id, pontoId])
 
@@ -3738,7 +3751,7 @@ function ModeloComercialPanel({
   async function salvarRepasse() {
     if (!repasseForm.parent_profile_id || !repasseForm.valor.trim()) return
     setSavingRepasse(true)
-    await fetch(getApiUrl('/hierarquia/repasses'), {
+    const response = await fetch(getApiUrl('/hierarquia/repasses'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3746,14 +3759,20 @@ function ModeloComercialPanel({
         parent_profile_id: repasseForm.parent_profile_id,
         child_profile_id: profile.id,
         ponto_atendimento_id: pontoId,
-        escopo: repasseForm.escopo,
+        escopo: escopoCascata,
         tipo_calculo: repasseForm.tipo_calculo,
         valor: Number(repasseForm.valor),
         ativo: true,
       }),
     })
+    const data = await response.json()
+    if (!response.ok) {
+      window.alert(data.error ?? 'Não foi possível salvar a remuneração.')
+      setSavingRepasse(false)
+      return
+    }
     setEditingRepasseId(null)
-    setRepasseForm({ parent_profile_id: '', escopo: 'margem_revenda', tipo_calculo: 'percentual', valor: '' })
+    setRepasseForm({ parent_profile_id: '', escopo: escopoCascata, tipo_calculo: 'percentual', valor: '' })
     setSavingRepasse(false)
     void load()
   }
@@ -3769,7 +3788,7 @@ function ModeloComercialPanel({
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800">
           <div>
             <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2"><Network size={15} className="text-amber-600" /> Modelo Comercial</h3>
-            <p className="text-xs text-gray-500 mt-1">Defina se este perfil opera por comissão ou por revenda neste ponto.</p>
+            <p className="text-xs text-gray-500 mt-1">Defina o modelo e distribua as remunerações entre os participantes.</p>
           </div>
           <button type="button" title="Fechar" onClick={onClose}><X size={16} className="text-gray-400" /></button>
         </div>
@@ -3784,7 +3803,7 @@ function ModeloComercialPanel({
                   </div>
                   <div className="flex items-center gap-2">
                     <select value={modoOperacao} onChange={e => setModoOperacao(e.target.value as 'comissao' | 'revenda')} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="comissao">Comissão</option>
+                      <option value="comissao">Integrado</option>
                       <option value="revenda">Revenda</option>
                     </select>
                     <button type="button" onClick={() => void salvarModelo()} disabled={savingModelo} className="px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
@@ -3795,9 +3814,9 @@ function ModeloComercialPanel({
                 </div>
               </div>
 
-              {modoOperacao === 'revenda' && (
+              {(modoOperacao === 'revenda' || modoOperacao === 'comissao') && (
                 <>
-                  <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-4">
+                  <div className={`${modoOperacao === 'revenda' ? '' : 'hidden'} rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-4`}>
                     <div>
                       <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Preço base da revenda</p>
                       <p className="text-xs text-gray-500">Esse é o custo base do perfil por produto. O valor cobrado acima disso vira margem de revenda.</p>
@@ -3835,12 +3854,13 @@ function ModeloComercialPanel({
 
                   <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-4">
                     <div>
-                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Repasses da estrutura</p>
-                      <p className="text-xs text-gray-500">Define quanto este perfil repassa para quem está acima dele ou na estrutura dele, inclusive sobre a margem de revenda.</p>
+                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Remunerações em cascata da venda</p>
+                      <p className="text-xs text-gray-500">{modoOperacao === 'revenda' ? 'O ganho fixo da Certifast fica travado. As remunerações saem somente da margem restante.' : 'As remunerações são calculadas sobre o preço total da venda. O saldo permanece com a Certifast.'}</p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">A validação não entra nesta cascata: existe apenas uma comissão, paga ao agente que efetivamente validar o pedido.</p>
                     </div>
                     <div className="space-y-2">
-                      {repasses.length === 0 && <p className="text-xs text-gray-400">Nenhuma regra de repasse configurada.</p>}
-                      {repasses.map(regra => (
+                      {repassesCascata.length === 0 && <p className="text-xs text-gray-400">Nenhuma remuneração de venda configurada para este modelo.</p>}
+                      {repassesCascata.map(regra => (
                         <div key={regra.id} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{regra.parent_nome ?? 'Perfil superior'} · {ESCOPO_REPASSE_LABEL[regra.escopo]}</p>
@@ -3855,13 +3875,11 @@ function ModeloComercialPanel({
                       <select value={repasseForm.parent_profile_id} onChange={e => setRepasseForm(p => ({ ...p, parent_profile_id: e.target.value }))} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="">Quem recebe</option>
                         {perfisElegiveis.map(item => (
-                          <option key={item.id} value={item.id}>{item.nome} · {item.perfil === 'agente_registro' ? 'Agente' : 'Vendedor'}</option>
+                          <option key={item.id} value={item.id}>{item.nome} · {PAPEL_PARTICIPANTE_LABEL[item.tipo_vinculo ?? item.perfil] ?? item.tipo_vinculo ?? item.perfil}</option>
                         ))}
                       </select>
-                      <select value={repasseForm.escopo} onChange={e => setRepasseForm(p => ({ ...p, escopo: e.target.value as 'validacao' | 'venda' | 'margem_revenda' }))} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="margem_revenda">Margem de revenda</option>
-                        <option value="venda">Venda</option>
-                        <option value="validacao">Validação</option>
+                      <select value={escopoCascata} disabled className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 text-gray-600">
+                        <option value={escopoCascata}>{modoOperacao === 'revenda' ? 'Margem da revenda' : 'Preço da venda'}</option>
                       </select>
                       <select value={repasseForm.tipo_calculo} onChange={e => setRepasseForm(p => ({ ...p, tipo_calculo: e.target.value as 'fixa' | 'percentual' }))} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="percentual">Percentual</option>
@@ -3874,7 +3892,7 @@ function ModeloComercialPanel({
                         {savingRepasse ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                         {editingRepasseId ? 'Salvar repasse' : 'Adicionar repasse'}
                       </button>
-                      {editingRepasseId && <button type="button" onClick={() => { setEditingRepasseId(null); setRepasseForm({ parent_profile_id: '', escopo: 'margem_revenda', tipo_calculo: 'percentual', valor: '' }) }} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Cancelar</button>}
+                      {editingRepasseId && <button type="button" onClick={() => { setEditingRepasseId(null); setRepasseForm({ parent_profile_id: '', escopo: escopoCascata, tipo_calculo: 'percentual', valor: '' }) }} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Cancelar</button>}
                     </div>
                   </div>
                 </>

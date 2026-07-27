@@ -1014,15 +1014,36 @@ export class CatalogRepository {
   }
 
   private async buildEstruturaComercialSnapshot(input: Record<string, unknown>) {
-    const vendedorId = typeof input.vendedor_id === 'string' ? input.vendedor_id : null
+    const vendedorInformadoId = typeof input.vendedor_id === 'string' ? input.vendedor_id : null
+    const parceiroInformadoId = typeof input.contador_id === 'string' ? input.contador_id : null
     const pontoId = typeof input.ponto_atendimento_id === 'string' ? input.ponto_atendimento_id : null
     const itemId = typeof input.tabela_preco_item_id === 'string' ? input.tabela_preco_item_id : null
     const valorVenda = Number(input.valor_venda ?? 0)
+    let vendedorId = vendedorInformadoId
+    let origemParticipante = vendedorInformadoId ? 'vendedor' : 'sem_participante'
+
+    if (!vendedorId && parceiroInformadoId) {
+      const perfilVinculado = await this.db.query<{ id: string; tipo_vinculo: string | null }>(
+        `select id, tipo_vinculo
+         from profiles
+         where parceiro_id = $1
+           and status = 'ativo'
+         order by
+           case when tipo_vinculo in ('contador', 'parceiro', 'vendedor') then 0 else 1 end,
+           created_at asc
+         limit 1`,
+        [parceiroInformadoId],
+      )
+      vendedorId = perfilVinculado.rows[0]?.id ?? null
+      origemParticipante = perfilVinculado.rows[0]?.tipo_vinculo ?? 'parceiro_sem_perfil'
+    }
 
     if (!vendedorId || !pontoId) {
       return {
         modo_operacao: 'comissao',
-        origem: 'sem_vendedor_ou_ponto',
+        modelo_comercial: 'integrado',
+        origem: !pontoId ? 'sem_ponto' : origemParticipante,
+        parceiro_id: parceiroInformadoId,
       }
     }
 
@@ -1039,13 +1060,6 @@ export class CatalogRepository {
     )
 
     const modoOperacao = modelo.rows[0]?.modo_operacao ?? 'comissao'
-    if (modoOperacao !== 'revenda') {
-      return {
-        modo_operacao: 'comissao',
-        vendedor_id: vendedorId,
-        ponto_atendimento_id: pontoId,
-      }
-    }
 
     const precoBaseRow = itemId
       ? await this.db.query<{
@@ -1069,9 +1083,17 @@ export class CatalogRepository {
         )
       : { rows: [] }
 
-    const precoBase = Number(precoBaseRow.rows[0]?.valor_base ?? 0)
-    const margemBruta = Number((valorVenda - precoBase).toFixed(2))
-    const margemRevenda = margemBruta > 0 ? margemBruta : 0
+    const precoBase = modoOperacao === 'revenda' ? Number(precoBaseRow.rows[0]?.valor_base ?? 0) : 0
+    if (modoOperacao === 'revenda' && !precoBaseRow.rows[0]) {
+      throw new Error('A venda foi bloqueada: falta configurar o ganho fixo da Certifast para este produto na revenda.')
+    }
+    if (modoOperacao === 'revenda' && valorVenda < precoBase) {
+      throw new Error('A venda foi bloqueada: o valor de venda é menor que o ganho fixo da Certifast.')
+    }
+    const baseCalculo = modoOperacao === 'revenda'
+      ? Number((valorVenda - precoBase).toFixed(2))
+      : valorVenda
+    const escopoCascata = modoOperacao === 'revenda' ? 'margem_revenda' : 'venda'
 
     const repasses = await this.db.query<{
       id: string
@@ -1086,16 +1108,16 @@ export class CatalogRepository {
        join profiles p on p.id = r.parent_profile_id
        where r.child_profile_id = $1
          and r.ponto_atendimento_id = $2
-         and r.escopo = 'margem_revenda'
+         and r.escopo = $3
          and r.ativo = true
        order by p.nome asc, r.created_at asc`,
-      [vendedorId, pontoId],
+      [vendedorId, pontoId, escopoCascata],
     )
 
     const repassesCalculados = repasses.rows.map(row => {
       const valorRegra = Number(row.valor ?? 0)
       const valorCalculado = row.tipo_calculo === 'percentual'
-        ? Number(((margemRevenda * valorRegra) / 100).toFixed(2))
+        ? Number(((baseCalculo * valorRegra) / 100).toFixed(2))
         : valorRegra
       return {
         regra_id: row.id,
@@ -1109,17 +1131,28 @@ export class CatalogRepository {
     })
 
     const totalRepasse = Number(repassesCalculados.reduce((acc, row) => acc + Number(row.valor_calculado || 0), 0).toFixed(2))
-    const liquidoRevendedor = Number((margemRevenda - totalRepasse).toFixed(2))
+    if (totalRepasse > baseCalculo) {
+      throw new Error(
+        `A venda foi bloqueada: as remunerações somam R$ ${totalRepasse.toFixed(2)}, acima da base disponível de R$ ${baseCalculo.toFixed(2)}.`,
+      )
+    }
+    const saldoEstrutura = Number((baseCalculo - totalRepasse).toFixed(2))
 
     return {
-      modo_operacao: 'revenda',
+      modo_operacao: modoOperacao,
+      modelo_comercial: modoOperacao === 'revenda' ? 'revenda' : 'integrado',
       vendedor_id: vendedorId,
+      parceiro_id: parceiroInformadoId,
+      origem_participante: origemParticipante,
       ponto_atendimento_id: pontoId,
       tabela_preco_item_id: itemId,
       valor_venda: valorVenda,
       preco_base: precoBase,
-      margem_revenda: margemRevenda,
-      liquido_revendedor: liquidoRevendedor,
+      base_calculo_comissoes: baseCalculo,
+      margem_revenda: modoOperacao === 'revenda' ? baseCalculo : null,
+      liquido_revendedor: modoOperacao === 'revenda' ? saldoEstrutura : null,
+      valor_certifast: modoOperacao === 'revenda' ? precoBase : saldoEstrutura,
+      saldo_estrutura: saldoEstrutura,
       preco_base_regra_id: precoBaseRow.rows[0]?.regra_id ?? null,
       produto_nome: precoBaseRow.rows[0]?.produto_nome ?? null,
       tabela_nome: precoBaseRow.rows[0]?.tabela_nome ?? null,

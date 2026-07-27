@@ -11,6 +11,8 @@ export type ProfileHierarquiaRow = {
   ponto_atendimento_id: string | null
   link_loja: string | null
   supervisao_pct: number
+  tipo_vinculo?: string | null
+  vinculo_nome?: string | null
 }
 
 export type FaixaPerfilRow = {
@@ -151,6 +153,20 @@ export class HierarquiaRepository {
       SELECT ${PROFILE_COLS} FROM profiles
       WHERE perfil = 'vendedor' AND status = 'ativo'
         AND parent_profile_id IS NULL
+      ORDER BY nome
+    `)
+    return result.rows
+  }
+
+  async getAvailableCommissionParticipants(): Promise<ProfileHierarquiaRow[]> {
+    const result = await this.db.query<ProfileHierarquiaRow>(`
+      SELECT ${PROFILE_COLS}, tipo_vinculo, vinculo_nome
+      FROM profiles
+      WHERE status = 'ativo'
+        AND (
+          perfil IN ('agente_registro', 'vendedor')
+          OR tipo_vinculo IN ('agente_registro', 'vendedor', 'parceiro', 'contador')
+        )
       ORDER BY nome
     `)
     return result.rows
@@ -426,6 +442,32 @@ export class HierarquiaRepository {
     valor: number
     ativo?: boolean
   }): Promise<RepasseRegraRow> {
+    if (input.escopo === 'validacao') {
+      throw new Error('A comissão de validação é única e deve ser configurada diretamente no agente validador.')
+    }
+    if (!Number.isFinite(Number(input.valor)) || Number(input.valor) < 0) {
+      throw new Error('O valor da remuneração deve ser maior ou igual a zero.')
+    }
+    if (input.tipo_calculo === 'percentual' && Number(input.valor) > 100) {
+      throw new Error('O percentual individual não pode ultrapassar 100%.')
+    }
+    const percentuais = await this.db.query<{ total: number }>(
+      `SELECT COALESCE(SUM(valor), 0) AS total
+       FROM perfil_repasse_regras
+       WHERE child_profile_id = $1
+         AND ponto_atendimento_id = $2
+         AND escopo = $3
+         AND tipo_calculo = 'percentual'
+         AND ativo = true
+         AND ($4::uuid IS NULL OR id <> $4::uuid)`,
+      [input.child_profile_id, input.ponto_atendimento_id, input.escopo, input.id ?? null],
+    )
+    if (
+      input.tipo_calculo === 'percentual'
+      && Number(percentuais.rows[0]?.total ?? 0) + Number(input.valor) > 100
+    ) {
+      throw new Error('A soma das comissões percentuais desta cascata não pode ultrapassar 100%.')
+    }
     if (input.id) {
       const result = await this.db.query<RepasseRegraRow>(
         `UPDATE perfil_repasse_regras

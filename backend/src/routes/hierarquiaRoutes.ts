@@ -38,6 +38,12 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
+  if (method === 'GET' && pathname === '/api/hierarquia/participantes-remuneracao') {
+    const rows = await repo.getAvailableCommissionParticipants()
+    writeJson(res, 200, { ok: true, profiles: rows }, corsOrigin)
+    return true
+  }
+
   const faixasMatch = route(pathname, '/api/hierarquia/faixas/([\w-]+)')
   if (method === 'GET' && faixasMatch) {
     const rows = await repo.getFaixasForProfile(faixasMatch[1])
@@ -232,8 +238,12 @@ export async function handleHierarquiaRoutes(
       writeJson(res, 400, { ok: false, error: 'parent_profile_id, child_profile_id, ponto_atendimento_id, escopo e tipo_calculo são obrigatórios' }, corsOrigin)
       return true
     }
-    const regra = await repo.saveRepasseRule(body)
-    writeJson(res, 200, { ok: true, regra }, corsOrigin)
+    try {
+      const regra = await repo.saveRepasseRule(body)
+      writeJson(res, 200, { ok: true, regra }, corsOrigin)
+    } catch (error) {
+      writeJson(res, 400, { ok: false, error: error instanceof Error ? error.message : 'Não foi possível salvar a remuneração.' }, corsOrigin)
+    }
     return true
   }
 
