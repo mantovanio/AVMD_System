@@ -158,6 +158,7 @@ export default function Parceiros() {
   const [filtroSeg, setFiltroSeg] = useState<Parceiro['segmento'] | 'todos'>('todos')
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const formRef = useRef<HTMLDivElement>(null)
   const [form, setForm] = useState<NovoParceiro>(EMPTY)
   const [salvando, setSalvando] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
@@ -363,6 +364,7 @@ export default function Parceiros() {
     setEditingId(null)
     setForm({ ...EMPTY })
     setShowForm(true)
+    window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
   }
 
   function abrirEditar(parceiro: Parceiro) {
@@ -428,6 +430,7 @@ export default function Parceiros() {
       metadata: parceiro.metadata ?? {},
     })
     setShowForm(true)
+    window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
   }
 
   async function salvar() {
@@ -763,7 +766,7 @@ export default function Parceiros() {
         )}
 
         {showForm && (
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-5">
+          <div ref={formRef} className="scroll-mt-4 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-5">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
