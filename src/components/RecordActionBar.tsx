@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { useMemo, useState, type ReactNode } from 'react'
+import { ChevronDown, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export interface ActionBarAction {
@@ -34,6 +34,7 @@ const variantClasses: Record<string, string> = {
 
 export function RecordActionBar({ recordName, recordBadge, actions, onClose, className, children }: RecordActionBarProps) {
   const visibleActions = actions.filter(a => !a.hidden)
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
   const groupLabel: Record<string, string> = {
     status: 'Status',
     cadastro: 'Cadastro',
@@ -42,15 +43,18 @@ export function RecordActionBar({ recordName, recordBadge, actions, onClose, cla
     automacao: 'Automação',
     admin: 'Admin',
   }
-  const grouped: Array<{ group?: string; items: ActionBarAction[] }> = []
-  for (const action of visibleActions) {
-    const current = grouped[grouped.length - 1]
-    if (!current || current.group !== action.group) {
-      grouped.push({ group: action.group, items: [action] })
-    } else {
-      current.items.push(action)
+  const grouped = useMemo(() => {
+    const groups: Array<{ group?: string; items: ActionBarAction[] }> = []
+    for (const action of visibleActions) {
+      const current = groups[groups.length - 1]
+      if (!current || current.group !== action.group) {
+        groups.push({ group: action.group, items: [action] })
+      } else {
+        current.items.push(action)
+      }
     }
-  }
+    return groups
+  }, [visibleActions])
 
   return (
     <div className={cn(
@@ -74,13 +78,18 @@ export function RecordActionBar({ recordName, recordBadge, actions, onClose, cla
 
       <div className="flex flex-col gap-1.5 flex-1 min-w-0">
         {grouped.map(group => (
-          <div key={group.group ?? `group-${group.items[0]?.key}`} className="flex flex-wrap items-center gap-1.5">
+          <div key={group.group ?? `group-${group.items[0]?.key}`} className="flex flex-wrap items-start gap-1.5">
             {group.group && (
-              <span className="mr-0.5 inline-flex items-center rounded-full border border-blue-200 bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-blue-600 dark:border-blue-900/40 dark:bg-gray-950 dark:text-blue-400">
+              <button
+                type="button"
+                onClick={() => setOpenGroups(prev => ({ ...prev, [group.group as string]: !prev[group.group as string] }))}
+                className="mr-0.5 inline-flex items-center gap-1 rounded-full border border-blue-200 bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-blue-600 dark:border-blue-900/40 dark:bg-gray-950 dark:text-blue-400"
+              >
                 {groupLabel[group.group] ?? group.group}
-              </span>
+                <ChevronDown size={10} className={cn('transition-transform', openGroups[group.group] && 'rotate-180')} />
+              </button>
             )}
-            {group.items.map(action => (
+            {(group.group ? openGroups[group.group] : true) && group.items.map(action => (
               <button
                 key={action.key}
                 type="button"
