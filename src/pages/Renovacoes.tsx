@@ -2561,7 +2561,7 @@ export default function Renovacoes() {
             { key: 'email', icon: <Mail size={13} />, label: 'E-mail', tooltip: 'Enviar e-mail de renovação para o cliente', onClick: () => void enviarEmail(r), disabled: !r.email, variant: 'blue' as const, group: 'comunicacao' },
             { key: 'kanban', icon: <Users size={13} />, label: 'Kanban', tooltip: 'Criar lead no Kanban de vendas', onClick: () => void criarLeadKanban(r), variant: 'purple' as const, group: 'comercial' },
             { key: 'chat', icon: <MessageSquare size={13} />, label: 'Chat', tooltip: 'Abrir conversa no Chat CRM', onClick: () => openChat(r), disabled: !r.telefone, variant: 'green' as const, group: 'comunicacao' },
-            { key: 'cancelar', icon: <Bell size={13} />, label: 'Cancelar avisos', tooltip: 'Cancelar follow-ups agendados', onClick: () => void cancelarFollowUps(r.id), variant: 'default' as const, group: 'automacao' },
+            { key: 'cancelar', icon: <Bell size={13} />, label: 'Cancelar avisos', tooltip: 'Cancelar follow-ups agendados', onClick: () => void cancelarFollowUps(r.id), variant: 'red' as const, group: 'automacao' },
             ...(isAdmin ? [{ key: 'excluir', icon: <Trash2 size={13} />, label: 'Excluir', tooltip: 'Excluir permanentemente este registro', onClick: () => void excluirRenovacao(r), variant: 'red' as const, group: 'admin' }] as ActionBarAction[] : []),
           ]
           return (
