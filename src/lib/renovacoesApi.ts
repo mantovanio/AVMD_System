@@ -38,6 +38,15 @@ export async function fetchRenovacoes(
   return data.renovacoes ?? []
 }
 
+function normalizeRenovacaoMoney(value: unknown): number | null {
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return null
+  if (amount >= 1000 && amount < 10000 && amount % 100 === 0) {
+    return Number((amount / 100).toFixed(2))
+  }
+  return Number(amount.toFixed(2))
+}
+
 export async function createRenovacao(record: Omit<RenovacaoV2, 'id' | 'created_at' | 'dias_restantes' | 'prioridade'>): Promise<RenovacaoV2> {
   const data = await apiFetch<{ ok: boolean; renovacao: RenovacaoV2 }>('/renovacoes', {
     method: 'POST',
@@ -275,9 +284,11 @@ export function enrichRenovacao(r: RenovacaoV2): RenovacaoV2 {
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
   const venc = new Date(dateStr + 'T00:00:00'); venc.setHours(0, 0, 0, 0)
   const dias = Math.round((venc.getTime() - hoje.getTime()) / 86400000)
+  const valor = Number(r.valor)
   return {
     ...r,
     data_vencimento: dateStr,
+    valor: normalizeRenovacaoMoney(valor),
     dias_restantes: dias,
     prioridade: dias <= 7 ? 'urgente' : dias <= 15 ? 'media' : 'normal',
   }

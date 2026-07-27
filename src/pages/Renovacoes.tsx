@@ -459,7 +459,15 @@ function downloadSpreadsheetTemplate() {
 }
 
 function fmtCurrency(v: number | null) {
-  return v ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'
+  const amount = Number(v)
+  return Number.isFinite(amount) && amount > 0
+    ? amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+    : '—'
+}
+
+function toMoneyNumber(value: unknown): number {
+  const amount = Number(value)
+  return Number.isFinite(amount) ? amount : 0
 }
 
 // ── component ─────────────────────────────────────────────────
@@ -829,7 +837,7 @@ export default function Renovacoes() {
       tipo_certificado:  r.tipo_certificado,
       dias_restantes:    Math.max(0, dias),
       data_vencimento:   new Date(r.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR'),
-      valor:             fmtCurrency(r.valor),
+      valor:             fmtCurrency(toMoneyNumber(r.valor)),
       pedido:            r.pedido ?? '',
       protocolo:         r.protocolo ?? '',
       cpf:               r.cpf ?? '',
@@ -1553,7 +1561,7 @@ export default function Renovacoes() {
   const tableMinWidth = Math.max(RENOVACOES_MIN_TABLE_WIDTH, totalResizableWidth + 52)
   const kpis = {
     total:      lista.length,
-    potencial:  lista.reduce((s, r) => s + (r.valor ?? 0), 0),
+    potencial:  lista.reduce((s, r) => s + toMoneyNumber(r.valor), 0),
     urgentes:   lista.filter(r => r.prioridade === 'urgente').length,
     contatados: lista.filter(r => r.status === 'contatado').length,
     disparados: lista.filter(r => r.status_disparo === 'enviado' || !!r.ultimo_lembrete).length,

@@ -1,6 +1,15 @@
 import type { AivenSqlClient } from '../db/aivenClient.js'
 import { normalizePhoneBR } from '../utils/phone.js'
 
+function normalizeRenovacaoValue(value: unknown): number | null {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return null
+  if (parsed >= 1000 && parsed < 10000 && parsed % 100 === 0) {
+    return Number((parsed / 100).toFixed(2))
+  }
+  return Number(parsed.toFixed(2))
+}
+
 export interface RenovacaoRow {
   id: string
   pedido: string | null
@@ -48,6 +57,13 @@ export type UpdateRenovacaoInput = Partial<Omit<RenovacaoRow, 'id' | 'created_at
 
 export class RenovacaoRepository {
   constructor(private readonly db: AivenSqlClient) {}
+
+  private normalizeRow(row: RenovacaoRow): RenovacaoRow {
+    return {
+      ...row,
+      valor: normalizeRenovacaoValue(row.valor),
+    }
+  }
 
   private readonly listColumns = [
     'id',
@@ -197,7 +213,7 @@ export class RenovacaoRepository {
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     )
-    return result.rows
+    return result.rows.map(row => this.normalizeRow(row))
   }
   async findOperacionais(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
     const params: unknown[] = []
@@ -219,7 +235,7 @@ export class RenovacaoRepository {
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     )
-    return result.rows
+    return result.rows.map(row => this.normalizeRow(row))
   }
 
   async findVencidas(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
@@ -264,7 +280,7 @@ export class RenovacaoRepository {
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     )
-    return result.rows
+    return result.rows.map(row => this.normalizeRow(row))
   }
 
   async findHistorico(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
@@ -384,7 +400,7 @@ export class RenovacaoRepository {
         input.email ?? null,
         input.telefone ?? null,
         input.tipo_certificado,
-        input.valor ?? null,
+        normalizeRenovacaoValue(input.valor),
         input.status ?? 'pendente',
         input.renovado ?? false,
         input.observacoes ?? null,
@@ -420,7 +436,7 @@ export class RenovacaoRepository {
           input.email ?? null,
           input.telefone ?? null,
           input.tipo_certificado,
-          input.valor ?? null,
+          normalizeRenovacaoValue(input.valor),
           input.status ?? 'pendente',
           input.renovado ?? false,
           input.observacoes ?? null,
