@@ -794,7 +794,23 @@ export default function Parceiros() {
                 <TextField label="CNPJ/CPF" value={form.cpf_cnpj} onChange={v => updateField('cpf_cnpj', v)} />
                 <TextField label="Razão Social/Nome *" value={form.razao_social} onChange={v => { updateField('razao_social', v); updateField('nome', v ?? '') }} placeholder="Informe a razão social" className="md:col-span-2" />
                 <TextField label="Nome Fantasia" value={form.nome_fantasia} onChange={v => updateField('nome_fantasia', v)} placeholder="Informe o nome fantasia" className="md:col-span-2" />
-                <TextField label="Id Local Atendimento" value={form.id_local_atendimento} onChange={v => updateField('id_local_atendimento', v)} />
+                <SelectField
+                  label="Local de Atendimento"
+                  value={form.id_local_atendimento}
+                  onChange={v => updateField('id_local_atendimento', v)}
+                  options={[
+                    { value: '', label: 'Selecione um ponto cadastrado' },
+                    ...(form.id_local_atendimento && !pontos.some(p => p.id === form.id_local_atendimento)
+                      ? [{ value: form.id_local_atendimento, label: `Código anterior: ${form.id_local_atendimento}` }]
+                      : []),
+                    ...pontos
+                      .filter(p => p.status === 'ativo')
+                      .map(p => ({
+                        value: p.id,
+                        label: `${p.nome}${p.codigo ? ` · ${p.codigo}` : ''}${p.cidade ? ` · ${p.cidade}/${p.uf ?? ''}` : ''}`,
+                      })),
+                  ]}
+                />
                 <TextField label="Senha acesso" value={form.senha_acesso} onChange={v => updateField('senha_acesso', v)} placeholder="Informe a senha do Parceiro" />
                 <TextField label="Email acesso" value={form.email_acesso} onChange={v => updateField('email_acesso', v)} placeholder="Informe o email de acesso" />
                 <TextField label="DDD" value={form.ddd} onChange={v => updateField('ddd', v)} placeholder="DDD" />
