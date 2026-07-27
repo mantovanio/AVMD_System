@@ -214,16 +214,62 @@ function extractNestedObject(value: unknown) {
 
 function partyFromPayload(payload: Record<string, unknown>, key: 'tomador' | 'emitente'): Partial<PreviewParty> {
   const data = extractNestedObject(payload[key])
-  return {
-    nome: String(data.nome ?? ''),
-    documento: String(data.documento ?? ''),
-    inscricaoMunicipal: String(data.inscricao_municipal ?? ''),
-    telefone: String(data.telefone ?? ''),
-    email: String(data.email ?? ''),
-    endereco: String(data.endereco ?? ''),
-    complemento: String(data.complemento ?? ''),
-    municipio: String(data.municipio ?? ''),
-  }
+  const result: Partial<PreviewParty> = {}
+  const values: Array<[keyof PreviewParty, unknown]> = [
+    ['nome', data.nome],
+    ['documento', data.documento],
+    ['inscricaoMunicipal', data.inscricao_municipal],
+    ['telefone', data.telefone],
+    ['email', data.email],
+    ['endereco', data.endereco],
+    ['complemento', data.complemento],
+    ['municipio', data.municipio],
+  ]
+  values.forEach(([field, value]) => {
+    const text = String(value ?? '').trim()
+    if (text) result[field] = text
+  })
+  return result
+}
+
+function partyFromGinfesRps(payload: Record<string, unknown>, key: 'tomador' | 'prestador'): Partial<PreviewParty> {
+  const data = extractNestedObject(payload[key])
+  const contato = extractNestedObject(data.contato)
+  const endereco = extractNestedObject(data.endereco)
+  const cpfCnpj = extractNestedObject(data.cpfCnpj)
+  const result: Partial<PreviewParty> = {}
+  const nome = String(data.razaoSocial ?? '').trim()
+  const documento = String(cpfCnpj.cnpj ?? cpfCnpj.cpf ?? '').trim()
+  const inscricaoMunicipal = String(data.inscricaoMunicipal ?? '').trim()
+  const telefone = String(contato.telefone ?? '').trim()
+  const email = String(contato.email ?? '').trim()
+  const complemento = String(endereco.complemento ?? '').trim()
+  const enderecoCompleto = formatAddress([
+    String(endereco.endereco ?? ''),
+    String(endereco.numero ?? ''),
+    String(endereco.bairro ?? ''),
+    endereco.cep ? `CEP ${String(endereco.cep)}` : '',
+  ])
+
+  if (nome) result.nome = nome
+  if (documento) result.documento = documento
+  if (inscricaoMunicipal) result.inscricaoMunicipal = inscricaoMunicipal
+  if (telefone) result.telefone = telefone
+  if (email) result.email = email
+  if (enderecoCompleto) result.endereco = enderecoCompleto
+  if (complemento) result.complemento = complemento
+  return result
+}
+
+function mergePreviewParties(...parties: Array<Partial<PreviewParty>>): Partial<PreviewParty> {
+  return parties.reduce<Partial<PreviewParty>>((merged, party) => {
+    Object.entries(party).forEach(([field, value]) => {
+      if (String(value ?? '').trim()) {
+        merged[field as keyof PreviewParty] = String(value)
+      }
+    })
+    return merged
+  }, {})
 }
 
 function currencyNumber(value: unknown) {
@@ -245,8 +291,14 @@ export function buildNfsePreviewData(params: {
   const servicoPayload = extractNestedObject(rpsPayload.servico)
   const notaMetadata = extractNestedObject(params.nota?.metadata)
   const fiscal = extractNestedObject(notaMetadata.fiscal)
-  const emitentePayload = partyFromPayload(notaPayload, 'emitente')
-  const tomadorPayload = partyFromPayload(notaPayload, 'tomador')
+  const emitentePayload = mergePreviewParties(
+    partyFromPayload(notaPayload, 'emitente'),
+    partyFromGinfesRps(rpsPayload, 'prestador'),
+  )
+  const tomadorPayload = mergePreviewParties(
+    partyFromPayload(notaPayload, 'tomador'),
+    partyFromGinfesRps(rpsPayload, 'tomador'),
+  )
 
   const prestadorBase = buildPreviewPartyFromConfig(params.configuracao)
   const tomadorBase = buildPreviewPartyFromVenda(params.venda)
