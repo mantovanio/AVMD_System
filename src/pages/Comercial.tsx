@@ -8554,7 +8554,10 @@ export default function Comercial() {
                                   className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/20"
                                 >
                                   <XCircle size={12} />
-                                  Cancelar NFS-e
+                                  <span className="flex flex-col items-center leading-tight">
+                                    <span>Cancelar</span>
+                                    <span className="whitespace-nowrap">NFS-e</span>
+                                  </span>
                                 </button>
                               )}
                               <button
