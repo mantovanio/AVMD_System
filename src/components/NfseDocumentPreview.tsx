@@ -6,6 +6,7 @@ import {
 } from '@/lib/nfse'
 import type { AgencyConfig } from '@/lib/agencyConfig'
 import type { NfseConfiguracao, NfseEmitida, VendaCertificado } from '@/types'
+import { QRCodeSVG } from 'qrcode.react'
 
 type Props = {
   modelo?: Partial<NfseModeloLayout> | null
@@ -44,16 +45,16 @@ function Row({
   className?: string
 }) {
   return (
-    <div className={cn('border-r border-gray-500 last:border-r-0 px-2 py-1.5 min-h-[46px]', className)}>
-      <div className="text-[10px] uppercase tracking-wide text-gray-600">{label}</div>
-      <div className="text-[11px] font-medium text-gray-900 leading-snug whitespace-pre-wrap">{value || '—'}</div>
+    <div className={cn('border-r border-gray-500 last:border-r-0 px-2 py-1.5 min-h-[42px]', className)}>
+      <div className="text-[11px] text-gray-700">{label}</div>
+      <div className="text-[12px] font-medium text-gray-950 leading-snug whitespace-pre-wrap">{value || '—'}</div>
     </div>
   )
 }
 
 function SectionTitle({ children }: { children: string }) {
   return (
-    <div className="bg-gray-300 border-t border-b border-gray-600 px-2 py-1 text-[11px] font-semibold text-center uppercase tracking-wide text-gray-900">
+    <div className="bg-[#9f9f9f] border-t border-b border-black px-2 py-1.5 text-[15px] font-medium text-center text-black">
       {children}
     </div>
   )
@@ -71,43 +72,30 @@ export default function NfseDocumentPreview({
 }: Props) {
   const layout = normalizeNfseModeloLayout(modelo)
   const data = buildNfsePreviewData({ modelo, configuracao, nota, venda, fallbackDiscriminacao, agency })
+  const verificacaoUrl = `https://nfse.ginfes.com.br/?numero=${encodeURIComponent(data.numeroNf)}&codigo=${encodeURIComponent(data.codigoVerificacao)}`
 
   return (
-    <div className={cn('rounded-2xl border border-gray-400 bg-white text-gray-950 shadow-sm overflow-hidden', className)}>
-      <div className="min-w-[760px] bg-white">
-        <div className="grid grid-cols-[92px_minmax(0,1fr)_138px_96px] border-b border-gray-600">
-          <div className="flex items-center justify-center border-r border-gray-600 p-2">
-            {layout.mostrar_logo ? (
-              <img
-                src={logoUrl ?? undefined}
-                alt="Logo da operacao"
-                className="h-14 w-14 object-contain"
-              />
-            ) : (
-              <div className="flex h-14 w-14 items-center justify-center rounded-full border border-gray-400 text-[10px] font-semibold text-gray-500">
-                SEM LOGO
-              </div>
-            )}
+    <div className={cn('border border-black bg-white text-black overflow-hidden', className)}>
+      <div className="min-w-[900px] bg-white">
+        <div className="grid grid-cols-[150px_minmax(0,1fr)_165px_125px] border-b border-black">
+          <div className="flex items-center justify-center border-r border-black p-2">
+            <img
+              src="/brasao-sao-bernardo.jpg"
+              alt="Brasão do Município de São Bernardo do Campo"
+              className="h-[108px] w-[118px] object-contain"
+            />
           </div>
-          <div className="border-r border-gray-600 px-3 py-2 text-center">
-            <div className="text-[11px] font-semibold uppercase">{data.cabecalhoMunicipio}</div>
-            <div className="text-[11px] font-semibold uppercase">{data.cabecalhoSecretaria}</div>
-            <div className="mt-2 text-[19px] font-medium uppercase leading-tight">{layout.titulo}</div>
-            <div className="text-[10px] uppercase tracking-wide text-gray-600">{layout.subtitulo}</div>
+          <div className="flex flex-col justify-center border-r border-black px-3 py-2 text-center">
+            <div className="text-[16px] font-medium uppercase">{data.cabecalhoMunicipio}</div>
+            <div className="mt-1 text-[18px] font-medium uppercase">{data.cabecalhoSecretaria}</div>
+            <div className="mt-2 text-[18px] font-medium uppercase leading-tight">{layout.titulo}</div>
           </div>
-          <div className="border-r border-gray-600 px-3 py-2 text-center">
-            <div className="text-[10px] uppercase tracking-wide text-gray-600">Numero da NFS-e</div>
-            <div className="mt-2 text-[28px] font-semibold leading-none">{data.numeroNf}</div>
+          <div className="flex flex-col justify-center border-r border-black px-3 py-2 text-center">
+            <div className="text-[20px] leading-tight">Número da<br />NFS-e</div>
+            <div className="mt-3 text-[22px] font-medium leading-none">{data.numeroNf}</div>
           </div>
           <div className="flex items-center justify-center p-2">
-            <div className="grid h-20 w-20 grid-cols-6 gap-[2px] rounded-sm border border-gray-500 bg-white p-1">
-              {Array.from({ length: 36 }).map((_, index) => (
-                <span
-                  key={index}
-                  className={cn('rounded-[1px]', index % 2 === 0 || index % 5 === 0 ? 'bg-gray-900' : 'bg-gray-200')}
-                />
-              ))}
-            </div>
+            <QRCodeSVG value={verificacaoUrl} size={96} level="M" marginSize={0} />
           </div>
         </div>
 
@@ -118,24 +106,36 @@ export default function NfseDocumentPreview({
           <Row label="Local da Prestacao" value={data.localPrestacao} />
         </div>
 
-        <SectionTitle>Dados do Prestador de Servicos</SectionTitle>
-        <div className="grid grid-cols-[1.3fr_1fr] border-b border-gray-500">
-          <Row label="Razao Social / Nome" value={data.prestador.nome} />
-          <Row label="Nome Fantasia" value={String(configuracao?.nome_fantasia_emitente?.trim() || (configuracao?.payload_reforma_tributaria as Record<string, unknown> | undefined)?.nome_fantasia || agency?.nome_agencia || configuracao?.identificador || '—')} />
-        </div>
-        <div className="grid grid-cols-[1fr_140px_1fr] border-b border-gray-500">
-          <Row label="CNPJ / CPF" value={data.prestador.documento} />
-          <Row label="Inscricao Municipal" value={data.prestador.inscricaoMunicipal} />
-          <Row label="Municipio" value={data.prestador.municipio} />
-        </div>
-        <div className="grid grid-cols-[1.3fr_1fr_1fr] border-b border-gray-500">
-          <Row label="Endereco e CEP" value={data.prestador.endereco} />
-          <Row label="Telefone" value={data.prestador.telefone} />
-          <Row label="E-mail" value={data.prestador.email} />
-        </div>
-        <div className="border-b border-gray-600 px-2 py-1.5 min-h-[38px]">
-          <div className="text-[10px] uppercase tracking-wide text-gray-600">Complemento</div>
-          <div className="text-[11px] font-medium text-gray-900">{data.prestador.complemento || '—'}</div>
+        <SectionTitle>Dados do Prestador de Serviços</SectionTitle>
+        <div className="grid grid-cols-[150px_minmax(0,1fr)] border-b border-black">
+          <div className="flex items-center justify-center border-r border-black bg-white p-3">
+            {layout.mostrar_logo ? (
+              <img
+                src={logoUrl || '/logo-certiid.png'}
+                alt="Logo CERTIID"
+                className="max-h-[92px] max-w-[126px] object-contain"
+              />
+            ) : null}
+          </div>
+          <div>
+            <div className="grid grid-cols-[180px_minmax(0,1fr)] border-b border-gray-500">
+              <Row label="Razão Social/Nome" value={data.prestador.nome} />
+              <Row label="Nome Fantasia" value={String(configuracao?.nome_fantasia_emitente?.trim() || (configuracao?.payload_reforma_tributaria as Record<string, unknown> | undefined)?.nome_fantasia || agency?.nome_agencia || configuracao?.identificador || '—')} />
+            </div>
+            <div className="grid grid-cols-[1fr_150px_1fr] border-b border-gray-500">
+              <Row label="CNPJ/CPF" value={data.prestador.documento} />
+              <Row label="Inscrição Municipal" value={data.prestador.inscricaoMunicipal} />
+              <Row label="Município" value={data.prestador.municipio} />
+            </div>
+            <div className="grid grid-cols-1 border-b border-gray-500">
+              <Row label="Endereço e CEP" value={data.prestador.endereco} />
+            </div>
+            <div className="grid grid-cols-[1fr_1fr_1.5fr]">
+              <Row label="Complemento" value={data.prestador.complemento} />
+              <Row label="Telefone" value={data.prestador.telefone} />
+              <Row label="e-mail" value={data.prestador.email} />
+            </div>
+          </div>
         </div>
 
         <SectionTitle>Dados do Tomador de Servicos</SectionTitle>

@@ -31,15 +31,15 @@ export type NfseAutomationSettings = {
 }
 
 export const DEFAULT_NFSE_MODELO: NfseModeloLayout = {
-  nome_modelo: 'Modelo CertiID Municipal',
-  titulo: 'NOTA FISCAL ELETRONICA DE SERVICOS - NFS-e',
-  subtitulo: 'Modelo visual inspirado no padrao municipal',
+  nome_modelo: 'Modelo oficial GINFES - São Bernardo do Campo',
+  titulo: 'NOTA FISCAL ELETRÔNICA DE SERVIÇO - NFS-e',
+  subtitulo: '',
   cor_primaria: '#6b7280',
   mostrar_logo: true,
   bloco_servico_titulo: 'Discriminacao dos Servicos',
   mensagem_destaque: 'Documento fiscal de servicos com layout institucional e campos padronizados.',
-  observacao_padrao: 'Confira os dados do tomador, a descricao do servico e a tributacao antes da emissao definitiva.',
-  rodape: 'Modelo visual interno para operacao fiscal e comercial da CertiID.',
+  observacao_padrao: '1- Uma via desta Nota Fiscal será enviada através do e-mail fornecido pelo Tomador dos Serviços.\n2- A autenticidade desta Nota Fiscal poderá ser verificada no site nfse.ginfes.com.br com a utilização do Código de Verificação.',
+  rodape: '3- Documento emitido por ME ou EPP optante pelo Simples Nacional. Não gera direito a crédito fiscal de ISS e IPI.',
 }
 
 export const DEFAULT_NFSE_AUTOMATION_SETTINGS: NfseAutomationSettings = {
@@ -49,6 +49,9 @@ export const DEFAULT_NFSE_AUTOMATION_SETTINGS: NfseAutomationSettings = {
   permitir_emissao_manual_fora_etapa: true,
   exigir_justificativa_fora_etapa: true,
 }
+
+const NFSE_AVISO_INSTITUCIONAL_CERTIID =
+  '4- A CERTIID é o braço comercial da CERTIFAST e oferece aos clientes produtos de certificação digital registrados e aprovados pelo ITI, por meio da Safeweb.'
 
 export function normalizeNfseModeloLayout(
   value: Partial<NfseModeloLayout> | null | undefined
@@ -238,6 +241,8 @@ export function buildNfsePreviewData(params: {
 }) {
   const modelo = normalizeNfseModeloLayout(params.modelo)
   const notaPayload = extractNestedObject(params.nota?.payload_envio)
+  const rpsPayload = extractNestedObject(notaPayload.rps)
+  const servicoPayload = extractNestedObject(rpsPayload.servico)
   const notaMetadata = extractNestedObject(params.nota?.metadata)
   const fiscal = extractNestedObject(notaMetadata.fiscal)
   const emitentePayload = partyFromPayload(notaPayload, 'emitente')
@@ -250,7 +255,7 @@ export function buildNfsePreviewData(params: {
   const valorIss = currencyNumber(params.nota?.valor_iss ?? (valorServicos * aliquotaIss) / 100)
 
   const discriminacaoServicos =
-    String(notaPayload.discriminacao_servicos ?? '').trim()
+    String(servicoPayload.discriminacao ?? notaPayload.discriminacao_servicos ?? '').trim()
     || String(notaMetadata.discriminacao_servicos ?? '').trim()
     || params.fallbackDiscriminacao?.trim()
     || buildNfseDiscriminacaoFromVenda(params.venda)
@@ -265,12 +270,22 @@ export function buildNfsePreviewData(params: {
   const competencia = dataEmissao.slice(0, 10)
   const codigoVerificacao = params.nota?.codigo_verificacao?.trim() || 'AGUARDANDO'
   const localPrestacao = String(fiscal.local_prestacao ?? params.configuracao?.municipio_nome ?? 'Nao informado')
-  const codigoServico = String(
-    notaPayload.codigo_servico_municipio
+  const itemServico = String(
+    servicoPayload.itemListaServico
+    ?? notaPayload.codigo_servico_municipio
     ?? fiscal.codigo_servico_municipio
     ?? params.configuracao?.codigo_servico_municipio
     ?? '1.03'
   )
+  const tributacaoMunicipal = String(
+    servicoPayload.codigoTributacaoMunicipio
+    ?? params.configuracao?.codigo_tributacao_municipio
+    ?? ''
+  )
+  const descricaoAtividade = itemServico === '17.02'
+    ? 'OUTRAS ATIVIDADES DE SERVIÇOS, PRESTADOS PRINCIPALMENTE ÀS EMPRESAS, NÃO ESPECIFICADAS'
+    : ''
+  const codigoServico = [itemServico, tributacaoMunicipal, descricaoAtividade].filter(Boolean).join(' / ').replace(' / OUTRAS', ' - OUTRAS')
 
   return {
     cabecalhoMunicipio,
@@ -306,7 +321,11 @@ export function buildNfsePreviewData(params: {
       nome: tomadorPayload.nome || tomadorBase.nome,
       documento: formatDocument(tomadorPayload.documento || tomadorBase.documento),
     },
-    avisos: `${modelo.observacao_padrao}\n${modelo.rodape}`.trim(),
+    avisos: [modelo.observacao_padrao, modelo.rodape, NFSE_AVISO_INSTITUCIONAL_CERTIID]
+      .map(texto => texto.trim())
+      .filter(Boolean)
+      .filter((texto, indice, lista) => lista.indexOf(texto) === indice)
+      .join('\n'),
   } satisfies NfsePreviewData
 }
 
