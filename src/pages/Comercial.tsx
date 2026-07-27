@@ -8477,7 +8477,12 @@ export default function Comercial() {
               <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
                 <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-800">
                   <div className="flex items-center justify-between gap-3">
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Prévia do corpo da nota</h4>
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Prévia interna dos dados fiscais</h4>
+                      <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                        Esta prévia serve apenas para conferência. O documento fiscal válido é o PDF oficial da prefeitura.
+                      </p>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setShowVendaNfsePreviewTelaCheia(true)}
