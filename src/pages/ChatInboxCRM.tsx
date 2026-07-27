@@ -694,6 +694,8 @@ export default function ChatInboxCRM() {
   const [conversationPreviews, setConversationPreviews] = useState<Record<string, CrmMessage[]>>({})
   const [agents, setAgents] = useState<AgentOption[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selectedIdRef = useRef<string | null>(null)
+  selectedIdRef.current = selectedId
   const [deepLinkPhone, setDeepLinkPhone] = useState<string | null>(() => {
     const phone = sessionStorage.getItem('crm:open-chat-phone')
     if (phone) sessionStorage.removeItem('crm:open-chat-phone')
@@ -999,7 +1001,7 @@ export default function ChatInboxCRM() {
       delete next[selectedConversation.id]
       return next
     })
-    setHumanMessage('')
+    setHumanMessage(localStorage.getItem(`crm-chat-draft:${selectedConversation.id}`) ?? '')
     setShowEmoji(false)
     setShowHumanResponsePanel(false)
     setShowHumanResponseDetails(false)
@@ -1989,7 +1991,6 @@ export default function ChatInboxCRM() {
       mensagem: displayText,
       created_at: tempCreatedAt,
     }])
-    setHumanMessage('')
     focusComposer()
 
     try {
@@ -2015,6 +2016,10 @@ export default function ChatInboxCRM() {
       const payload = await response.json() as { ok?: boolean; error?: string; messageId?: string }
       if (!response.ok || !payload.ok) throw new Error(payload.error ?? 'Nao foi possivel enviar a mensagem humana.')
 
+      localStorage.removeItem(`crm-chat-draft:${selectedConversation.id}`)
+      if (selectedIdRef.current === selectedConversation.id) {
+        setHumanMessage(current => current.trim() === text ? '' : current)
+      }
       setMessages(prev => prev.map(item => item.id === tempId ? { ...item, id: payload.messageId ?? tempId } : item))
       markConversationAsHuman(selectedConversation.id)
       fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}`), {
@@ -2026,7 +2031,10 @@ export default function ChatInboxCRM() {
       await loadMessages(selectedConversation.id, { background: true })
     } catch (err) {
       setMessages(prev => prev.filter(item => item.id !== tempId))
-      setHumanMessage(current => (current.trim().length > 0 ? current : text))
+      localStorage.setItem(`crm-chat-draft:${selectedConversation.id}`, text)
+      if (selectedIdRef.current === selectedConversation.id) {
+        setHumanMessage(current => (current.trim().length > 0 ? current : text))
+      }
       setActionError(`Falha no envio humano: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setSendingHumanMessage(false)
@@ -2930,7 +2938,14 @@ export default function ChatInboxCRM() {
                         <textarea
                           ref={composerRef}
                           value={humanMessage}
-                          onChange={event => setHumanMessage(event.target.value)}
+                          onChange={event => {
+                            const value = event.target.value
+                            setHumanMessage(value)
+                            if (selectedConversation) {
+                              if (value) localStorage.setItem(`crm-chat-draft:${selectedConversation.id}`, value)
+                              else localStorage.removeItem(`crm-chat-draft:${selectedConversation.id}`)
+                            }
+                          }}
                           onKeyDown={handleHumanComposerKeyDown}
                           onPaste={handleComposerPaste}
                           rows={2}
