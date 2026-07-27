@@ -119,6 +119,10 @@ cp -R dist/* "${FRONT_DIR}/"
 
 log "4) Instalando/atualizando service do backend"
 require_file "${APP_DIR}/ops/systemd/avmd-backend.service"
+mkdir -p "${APP_DIR}/storage/attachments"
+chown -R www-data:www-data "${APP_DIR}/storage"
+find "${APP_DIR}/storage" -type d -exec chmod 2775 {} +
+find "${APP_DIR}/storage" -type f -exec chmod 0664 {} +
 cp "${APP_DIR}/ops/systemd/avmd-backend.service" "/etc/systemd/system/${SERVICE_NAME}.service"
 systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}"
