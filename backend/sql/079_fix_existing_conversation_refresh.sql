@@ -65,12 +65,6 @@ UPDATE crm_chat_conversations c
    SET ultima_mensagem = latest.mensagem,
        ultima_mensagem_direcao = latest.direction,
        ultima_interacao_em = latest.created_at,
-       kanban_status = CASE
-         WHEN latest.direction = 'incoming'
-              AND lower(COALESCE(c.kanban_status, '')) IN ('resolvido', 'arquivado', 'arquivada', 'encerrado', 'encerrada', 'finalizado')
-           THEN 'iniciou_conversa'
-         ELSE c.kanban_status
-       END,
        updated_at = NOW()
   FROM latest
  WHERE c.id = latest.conversation_id
