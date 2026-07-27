@@ -683,7 +683,9 @@ function AbaUsuarios() {
       perfil: editForm.perfil,
       status: editForm.status,
       tipo_vinculo: editForm.tipo_vinculo,
-      parceiro_id: editForm.tipo_vinculo === 'parceiro' && editForm.parceiro_id ? editForm.parceiro_id : null,
+      parceiro_id: ['parceiro', 'contador', 'vendedor', 'agente_registro'].includes(editForm.tipo_vinculo) && editForm.parceiro_id
+        ? editForm.parceiro_id
+        : null,
       vinculo_nome: editForm.vinculo_nome.trim() || null,
       documento: editForm.documento.trim() || null,
       telefone: editForm.telefone.trim() || null,
@@ -767,8 +769,9 @@ function AbaUsuarios() {
         const perfil = value as PerfilAcesso
         next.permissoes = DEFAULT_PERMISSIONS[perfil]
       }
-      if (key === 'tipo_vinculo' && value !== 'parceiro') {
+      if (key === 'tipo_vinculo' && !['parceiro', 'contador', 'vendedor', 'agente_registro'].includes(String(value))) {
         next.parceiro_id = ''
+        next.vinculo_nome = ''
       }
       return next
     })
@@ -1356,18 +1359,34 @@ function AbaUsuarios() {
                         ))}
                       </select>
                     </label>
-                    {editForm.tipo_vinculo === 'parceiro' ? (
+                    {['parceiro', 'contador', 'vendedor', 'agente_registro'].includes(editForm.tipo_vinculo) ? (
                       <label className="flex flex-col gap-1">
-                        <span className="text-xs text-gray-500 dark:text-gray-400">Parceiro vinculado</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Nome do vínculo</span>
                         <select value={editForm.parceiro_id} onChange={e => {
                           const parceiro = parceiros.find(p => p.id === e.target.value)
                           updateEdit('parceiro_id', e.target.value)
                           if (parceiro) updateEdit('vinculo_nome', parceiro.nome)
                         }}
                           className="border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                          <option value="">Selecione...</option>
-                          {parceiros.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                          <option value="">Selecione um cadastro compatível...</option>
+                          {parceiros.filter(parceiro => {
+                            if (parceiro.status !== 'ativo') return false
+                            const adicionais = Array.isArray(parceiro.metadata?.papeis_adicionais)
+                              ? parceiro.metadata.papeis_adicionais as string[]
+                              : []
+                            if (editForm.tipo_vinculo === 'agente_registro') {
+                              return ['ar', 'pa_controle_total', 'pa_emissor'].includes(parceiro.tipo_parceiro ?? '') || adicionais.includes('agente_registro')
+                            }
+                            if (editForm.tipo_vinculo === 'contador') return parceiro.tipo_parceiro === 'contador' || adicionais.includes('contador')
+                            if (editForm.tipo_vinculo === 'vendedor') return parceiro.tipo_parceiro === 'vendedor' || adicionais.includes('vendedor')
+                            return true
+                          }).map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.nome}{p.cpf_cnpj ? ` · ${p.cpf_cnpj}` : ''}
+                            </option>
+                          ))}
                         </select>
+                        <span className="text-[11px] text-gray-400">A lista vem do cadastro de Parceiros e respeita os papéis marcados.</span>
                       </label>
                     ) : (
                       <ConfigInput label="Nome do vínculo" value={editForm.vinculo_nome} onChange={v => updateEdit('vinculo_nome', v)} placeholder="Nome do AR, vendedor ou contador" />
