@@ -766,13 +766,22 @@ export default function Parceiros() {
         )}
 
         {showForm && (
-          <div ref={formRef} className="scroll-mt-4 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 space-y-5">
+          <>
+          <button
+            type="button"
+            aria-label="Fechar edição"
+            onClick={() => { setShowForm(false); setEditingId(null); setForm({ ...EMPTY }) }}
+            className="fixed inset-0 z-40 cursor-default bg-black/50 backdrop-blur-[1px]"
+          />
+          <div ref={formRef} role="dialog" aria-modal="true" className="fixed inset-x-3 top-3 bottom-3 z-50 mx-auto max-w-6xl overflow-y-auto bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-2xl space-y-5 md:inset-x-8 md:top-6 md:bottom-6">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                   {editingId ? 'Editar Parceiro' : 'Cadastro Completo do Parceiro'}
                 </h3>
-                <p className="text-xs text-gray-500 mt-0.5">Gestão completa do parceiro, mensageria, bloqueios, gestores e dados bancários.</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {editingId ? `Registro selecionado: ${form.razao_social ?? form.nome}` : 'Novo registro de parceiro'}
+                </p>
               </div>
               <button type="button" title="Fechar" onClick={() => { setShowForm(false); setEditingId(null); setForm({ ...EMPTY }) }}>
                 <X size={16} className="text-gray-400" />
@@ -990,6 +999,7 @@ export default function Parceiros() {
               </button>
             </div>
           </div>
+          </>
         )}
 
         {error && (
