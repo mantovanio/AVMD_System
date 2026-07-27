@@ -304,10 +304,10 @@ function buildCancelarNfseXml(
   return `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
   <soap:Body>
-    <ns1:CancelarNfseV3>
+    <ns1:CancelarNfseV4>
       <arg0>${escapeXmlForParam(cabecalhoXml)}</arg0>
       <arg1>${escapeXmlForParam(envioXml)}</arg1>
-    </ns1:CancelarNfseV3>
+    </ns1:CancelarNfseV4>
   </soap:Body>
 </soap:Envelope>`
 }
