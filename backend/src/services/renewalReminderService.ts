@@ -84,6 +84,14 @@ export class RenewalReminderService {
       const email = row.email?.trim() ?? ''
 
       if (!phone && !email) {
+        await this.db.query(
+          `UPDATE renovacoes
+              SET status_disparo = 'cadastro_incompleto',
+                  ultimo_lembrete = COALESCE(ultimo_lembrete, NOW()),
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [row.id],
+        )
         skipped++
         continue
       }

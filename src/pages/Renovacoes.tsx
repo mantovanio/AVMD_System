@@ -487,7 +487,7 @@ export default function Renovacoes() {
   const [hasMore, setHasMore]       = useState(false)
   const [error, setError]           = useState<string | null>(null)
   const [filtro, setFiltro]         = useState<PrioridadeRenovacao | 'todos'>('todos')
-  const [filtroEnvio, setFiltroEnvio] = useState<'todos' | 'enviado' | 'nao_enviado'>('todos')
+  const [filtroEnvio, setFiltroEnvio] = useState<'todos' | 'enviado' | 'nao_enviado' | 'cadastro_incompleto'>('todos')
   const [filtroCanal, setFiltroCanal] = useState<'todos' | 'email' | 'whatsapp'>('todos')
   const [visao, setVisao]           = useState<'operacional' | 'vencidas' | 'futuras' | 'historico'>('operacional')
   const [busca, setBusca]           = useState('')
@@ -1542,7 +1542,8 @@ export default function Renovacoes() {
     const disparado = r.status_disparo === 'enviado' || !!r.ultimo_lembrete
     const matchEnvio = filtroEnvio === 'todos'
       || (filtroEnvio === 'enviado' && disparado)
-      || (filtroEnvio === 'nao_enviado' && !disparado)
+      || (filtroEnvio === 'nao_enviado' && !(r.status_disparo === 'enviado' || !!r.ultimo_lembrete))
+      || (filtroEnvio === 'cadastro_incompleto' && r.status_disparo === 'cadastro_incompleto')
     const matchCanal = filtroCanal === 'todos'
       || (filtroCanal === 'email' && !!r.enviou_email)
       || (filtroCanal === 'whatsapp' && !!r.enviou_whatsapp)
@@ -1873,8 +1874,9 @@ export default function Renovacoes() {
           <div className="w-px bg-gray-200 dark:bg-gray-700 self-stretch mx-1 hidden sm:block" />
 
           {([
-            { key: 'nao_enviado' as const, label: 'Não Disparados', icon: Send, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800/30', count: lista.filter(r => !(r.status_disparo === 'enviado' || r.ultimo_lembrete)).length },
+            { key: 'nao_enviado' as const, label: 'Não Disparados', icon: Send, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800/30', count: lista.filter(r => r.status_disparo !== 'enviado' && r.status_disparo !== 'cadastro_incompleto' && !r.ultimo_lembrete).length },
             { key: 'enviado' as const, label: 'Já Disparados', icon: Send, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/10', count: lista.filter(r => r.status_disparo === 'enviado' || !!r.ultimo_lembrete).length },
+            { key: 'cadastro_incompleto' as const, label: 'Cadastro incompleto', icon: AlertTriangle, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/10', count: lista.filter(r => r.status_disparo === 'cadastro_incompleto').length },
           ]).map(item => {
             const Icon = item.icon
             return (
@@ -2688,11 +2690,13 @@ export default function Renovacoes() {
                 ) : listagem.map(r => {
                   const pCfg    = PRIORIDADE_CONFIG[r.prioridade]
                   const sCfg    = STATUS_CONFIG[r.status]
-                  const disparoAtivo = r.status_disparo === 'enviado' || !!r.ultimo_lembrete
-                  const statusDisparoLabel = disparoAtivo ? 'Enviado' : 'Pendente'
-                  const ultimoEnvioLabel = r.ultimo_lembrete
-                    ? new Date(r.ultimo_lembrete).toLocaleString('pt-BR')
-                    : '—'
+                      const disparoAtivo = r.status_disparo === 'enviado' || !!r.ultimo_lembrete
+                      const statusDisparoLabel =
+                        r.status_disparo === 'cadastro_incompleto' ? 'Cadastro incompleto' :
+                        disparoAtivo ? 'Enviado' : 'Pendente'
+                      const ultimoEnvioLabel = r.ultimo_lembrete
+                        ? new Date(r.ultimo_lembrete).toLocaleString('pt-BR')
+                        : '—'
                   const busy    = updatingId === r.id || sendingId === r.id
                   const sel     = selectedIds.has(r.id)
 
@@ -2802,7 +2806,9 @@ export default function Renovacoes() {
                       <td className="px-3 py-3 whitespace-nowrap overflow-hidden" style={{ width: `${columnWidths.statusDisparo}px` }}>
                         <span className={cn(
                           'px-2 py-0.5 rounded-full text-xs font-medium',
-                          disparoAtivo
+                          r.status_disparo === 'cadastro_incompleto'
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                            : disparoAtivo
                             ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
                             : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
                         )}>
