@@ -50,6 +50,7 @@ import {
   buildNfseDiscriminacaoFromVenda,
   DEFAULT_NFSE_AUTOMATION_SETTINGS,
   isNfseEmissionAllowed,
+  NFSE_AVISO_INSTITUCIONAL_CERTIID,
   normalizeNfseAutomationSettings,
   type NfseAutomationSettings,
 } from '@/lib/nfse'
@@ -4714,7 +4715,7 @@ export default function Comercial() {
 
     const subject = renderTemplate('Sua NFS-e {{numero_nf}} da CertiID', values)
     const body = renderTemplate(
-      'Olá, {{cliente}}.\n\nSua NFS-e {{numero_nf}} foi registrada no valor de {{valor}}.\nCódigo de verificação: {{codigo_verificacao}}.\nAcesse o documento por aqui: {{link_documento}}\n\nAtenciosamente,\nEquipe CertiID',
+      `Olá, {{cliente}}.\n\nSua NFS-e {{numero_nf}} foi registrada no valor de {{valor}}.\nCódigo de verificação: {{codigo_verificacao}}.\nAcesse o documento por aqui: {{link_documento}}\n\n${NFSE_AVISO_INSTITUCIONAL_CERTIID}\n\nAtenciosamente,\nEquipe CERTIID`,
       values
     )
 
@@ -4754,7 +4755,7 @@ export default function Comercial() {
     }
 
     const body = renderTemplate(
-      'Olá, {{cliente}}. Sua NFS-e {{numero_nf}} foi registrada no valor de {{valor}}. Código de verificação: {{codigo_verificacao}}. Acesse o documento aqui: {{link_documento}}',
+      `Olá, {{cliente}}. Sua NFS-e {{numero_nf}} foi registrada no valor de {{valor}}. Código de verificação: {{codigo_verificacao}}. Acesse o documento aqui: {{link_documento}}\n\n${NFSE_AVISO_INSTITUCIONAL_CERTIID}`,
       {
         cliente: venda.nome_faturamento?.trim() || venda.cadastros_base?.nome?.trim() || 'Cliente',
         numero_nf: nota.numero_nf ?? 'em processamento',

@@ -50,8 +50,8 @@ export const DEFAULT_NFSE_AUTOMATION_SETTINGS: NfseAutomationSettings = {
   exigir_justificativa_fora_etapa: true,
 }
 
-const NFSE_AVISO_INSTITUCIONAL_CERTIID =
-  '4- A CERTIID é o braço comercial da CERTIFAST e oferece aos clientes produtos de certificação digital registrados e aprovados pelo ITI, por meio da Safeweb.'
+export const NFSE_AVISO_INSTITUCIONAL_CERTIID =
+  'A CERTIID oferece aos clientes produtos vinculados à AC Safeweb e é o braço comercial da AR CERTIFAST Certificação Digital Ltda., que opera com a Certisign e oferece aos clientes produtos de certificação digital registrados e aprovados ICP-Brasil.'
 
 export function normalizeNfseModeloLayout(
   value: Partial<NfseModeloLayout> | null | undefined
