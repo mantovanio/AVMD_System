@@ -6368,32 +6368,57 @@ export default function Comercial() {
               </div>
 
               {showVendaFiltrosExtras && (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 pt-3 border-t border-gray-100 dark:border-gray-800">
-                  <TextInput label="Data Inicial" type="date" value={vendaFilters.dataInicial}
-                    onChange={v => setVendaFilters(p => ({ ...p, dataInicial: v, filtroData: 'personalizado' }))} />
-                  <TextInput label="Data Final" type="date" value={vendaFilters.dataFinal}
-                    onChange={v => setVendaFilters(p => ({ ...p, dataFinal: v, filtroData: 'personalizado' }))} />
-                  <TextInput label="PA/Emissor" value={vendaFilters.pa}
-                    onChange={v => setVendaFilters(p => ({ ...p, pa: v }))} />
-                  <TextInput label="Pedido" value={vendaFilters.pedido}
-                    onChange={v => setVendaFilters(p => ({ ...p, pedido: v }))} />
-                  <TextInput label="Protocolo" value={vendaFilters.protocolo}
-                    onChange={v => setVendaFilters(p => ({ ...p, protocolo: v }))} />
-                  <div className="flex items-end gap-2">
-                    <button type="button" onClick={() => setTab('agenda')}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors">
-                      <Calendar size={14} /> Agenda
-                    </button>
-                    <button type="button" onClick={() => setVendaFilters(EMPTY_VENDA_FILTERS)}
-                      className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700">
-                      <X size={12} /> Limpar
-                    </button>
+                <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-12 gap-2.5 items-end">
+                    <div className="xl:col-span-2">
+                      <TextInput label="Data Inicial" type="date" value={vendaFilters.dataInicial}
+                        onChange={v => setVendaFilters(p => ({ ...p, dataInicial: v, filtroData: 'personalizado' }))} />
+                    </div>
+                    <div className="xl:col-span-2">
+                      <TextInput label="Data Final" type="date" value={vendaFilters.dataFinal}
+                        onChange={v => setVendaFilters(p => ({ ...p, dataFinal: v, filtroData: 'personalizado' }))} />
+                    </div>
+                    <div className="xl:col-span-2">
+                      <TextInput label="PA/Emissor" value={vendaFilters.pa}
+                        onChange={v => setVendaFilters(p => ({ ...p, pa: v }))} />
+                    </div>
+                    <div className="xl:col-span-2">
+                      <TextInput label="Pedido" value={vendaFilters.pedido}
+                        onChange={v => setVendaFilters(p => ({ ...p, pedido: v }))} />
+                    </div>
+                    <div className="xl:col-span-2">
+                      <TextInput label="Protocolo" value={vendaFilters.protocolo}
+                        onChange={v => setVendaFilters(p => ({ ...p, protocolo: v }))} />
+                    </div>
+                    <div className="flex flex-wrap items-end gap-2 xl:col-span-2">
+                      <button type="button" onClick={() => setTab('agenda')}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors">
+                        <Calendar size={14} /> Agenda
+                      </button>
+                      <button type="button" onClick={() => setVendaFilters(EMPTY_VENDA_FILTERS)}
+                        className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700">
+                        <X size={12} /> Limpar
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
 
               {showVendaAcoesExtras && (
-                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100 dark:border-gray-800">
+                <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs font-medium uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">
+                      Ações rápidas
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowVendaAcoesExtras(false)}
+                      className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    >
+                      Ocultar ações
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
                   {nfseAutomationSettings.permitir_emissao_lote_comercial && (
                     <VendaActionBtn
                       icon={FileText}
@@ -6405,6 +6430,7 @@ export default function Comercial() {
                   <VendaActionBtn icon={List}       label="Protocolos em Lote"  onClick={() => openFeatureNotice('Protocolos em lote', 'A emissão unitária já existe, mas o processamento em lote ainda precisa de regras de validação e fila operacional.', 'Próximo bloco: desenhar fila segura para operações em massa.')} />
                   <VendaActionBtn icon={UserCheck}  label="Consulta CPF PSBio"  onClick={() => openFeatureNotice('Consulta CPF PSBio', 'Essa ação depende de integração externa específica. O botão foi mantido como referência operacional do fluxo.', 'Entrará na fase de integrações externas reais.')} />
                   <VendaActionBtn icon={Download}   label="Exportar CSV"        onClick={exportarCSV} />
+                  </div>
                 </div>
               )}
             </div>
