@@ -5564,7 +5564,7 @@ export default function Comercial() {
       <div>
         {/* ── VENDAS ─────────────────────────────────────────── */}
         {tab === 'vendas' && (
-          <div className="space-y-4">
+          <div className="relative space-y-4">
             {paymentRuntime.modo_teste_geral && (
               <div className="flex items-center gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-2.5 text-sm text-amber-700 dark:text-amber-300">
                 <AlertCircle size={15} className="shrink-0" />
@@ -6496,7 +6496,8 @@ export default function Comercial() {
                 ...(canReleaseEmission(profile, v) ? [{ key: 'liberar', icon: <Unlock size={13} />, label: 'Liberar', tooltip: 'Liberar emissão quando há pendência fiscal', onClick: () => void liberarEmissao(v), variant: 'green' as const }] : []),
               ]
               return (
-                <div className="mt-4 mb-4 rounded-2xl border border-blue-100/80 dark:border-blue-900/30 bg-gradient-to-b from-blue-50/30 to-transparent dark:from-blue-950/10 dark:to-transparent p-2 sm:p-3">
+                <div className="pointer-events-none absolute left-4 right-4 top-[92px] z-40 xl:right-[24rem]">
+                  <div className="pointer-events-auto rounded-2xl border border-blue-100/80 dark:border-blue-900/30 bg-white/95 dark:bg-gray-950/95 backdrop-blur-md shadow-[0_20px_50px_rgba(15,23,42,0.18)] p-2 sm:p-3">
                   <RecordActionBar
                     recordName={clienteNome}
                     recordBadge={
@@ -6509,6 +6510,7 @@ export default function Comercial() {
                     actions={actions}
                     onClose={() => setSelectedRowId(null)}
                   />
+                  </div>
                 </div>
               )
             })()}
