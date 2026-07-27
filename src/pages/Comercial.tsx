@@ -895,6 +895,10 @@ export default function Comercial() {
   const [showVendaAcoesExtras, setShowVendaAcoesExtras] = useState(false)
   const [selectedIds, setSelectedIds]           = useState<Set<string>>(new Set())
   const [selectedRowId, setSelectedRowId]       = useState<string | null>(null)
+  const [selectedVendaNfse, setSelectedVendaNfse] = useState<{ loading: boolean; notas: NfseEmitida[] }>({
+    loading: false,
+    notas: [],
+  })
   const [nfseAutomationSettings, setNfseAutomationSettings] = useState<NfseAutomationSettings>(DEFAULT_NFSE_AUTOMATION_SETTINGS)
   const vendaAutomationSnapshotRef = useRef<Map<string, VendaAutomationSnapshot>>(new Map())
   const agendaAutomationSnapshotRef = useRef<Record<string, StatusAgendamentoValidacao | null>>({})
@@ -905,6 +909,28 @@ export default function Comercial() {
   const [paginaAtual, setPaginaAtual]           = useState(1)
   const [vendaColumns, setVendaColumns] = useState<VendaColumn[]>(DEFAULT_VENDA_COLUMNS)
   const resizingVendaColumnRef = useRef<{ key: VendaColumnKey; startX: number; startWidth: number } | null>(null)
+
+  useEffect(() => {
+    if (!selectedRowId) {
+      setSelectedVendaNfse({ loading: false, notas: [] })
+      return
+    }
+
+    let active = true
+    setSelectedVendaNfse({ loading: true, notas: [] })
+    fetch(getApiUrl(`/nfse/venda/${selectedRowId}`))
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('Falha ao consultar a NFS-e')))
+      .then(data => {
+        if (active) setSelectedVendaNfse({ loading: false, notas: (data.notas ?? []) as NfseEmitida[] })
+      })
+      .catch(() => {
+        if (active) setSelectedVendaNfse({ loading: false, notas: [] })
+      })
+
+    return () => {
+      active = false
+    }
+  }, [selectedRowId])
 
   // ── cancelamento state ────────────────────────────────────────
   const [cancelandoVenda, setCancelandoVenda] = useState<VendaRow | null>(null)
@@ -5355,6 +5381,15 @@ export default function Comercial() {
     const pagamentoData = formatVendaDate(v.data_pagamento)
     const tipoVenda = v.tipo_venda ? capitalize(v.tipo_venda) : '—'
     const tipoEmissao = v.tipo_emissao ? capitalize(v.tipo_emissao.replace(/_/g, ' ')) : '—'
+    const notaFiscal = selectedVendaNfse.notas.find(nota =>
+      Boolean(nota.numero_nf) && ['processado', 'emitida'].includes(String(nota.status_nf).toLowerCase())
+    ) ?? selectedVendaNfse.notas[0] ?? null
+    const retornoPrefeitura = notaFiscal ? getNfsePrefeituraStatus(notaFiscal) : null
+    const payloadEnvioNfse = (notaFiscal?.payload_envio ?? {}) as Record<string, unknown>
+    const protocoloPrefeitura = pickTextFromObject(payloadEnvioNfse, ['protocolo', 'numero_protocolo', 'protocolo_nfse'])
+    const rpsNfse = pickTextFromObject((notaFiscal?.metadata ?? {}) as Record<string, unknown>, ['numero_rps'])
+    const notaProcessada = Boolean(notaFiscal?.numero_nf)
+      && ['processado', 'emitida'].includes(String(notaFiscal?.status_nf ?? '').toLowerCase())
     const detalhes = [
       ['Pedido', v.pedido_numero ?? '—'],
       ['Protocolo', v.protocolo_numero ?? '—'],
@@ -5424,6 +5459,35 @@ export default function Comercial() {
                   </a>
                 )}
               </div>
+            </div>
+            <div className={cn(
+              'rounded-xl border px-4 py-3',
+              notaProcessada
+                ? 'border-emerald-200 bg-emerald-50/80 dark:border-emerald-900/50 dark:bg-emerald-950/20'
+                : notaFiscal?.status_nf === 'erro'
+                  ? 'border-red-200 bg-red-50/80 dark:border-red-900/50 dark:bg-red-950/20'
+                  : 'border-amber-200 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/20',
+            )}>
+              <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Retorno da prefeitura — NFS-e</p>
+              {selectedVendaNfse.loading ? (
+                <p className="mt-2 text-sm font-medium text-gray-600 dark:text-gray-300">Consultando retorno fiscal...</p>
+              ) : notaFiscal ? (
+                <div className="mt-2 space-y-1.5 text-sm text-gray-700 dark:text-gray-200">
+                  <p className="font-semibold">
+                    {notaProcessada ? `NFS-e ${notaFiscal.numero_nf} processada` : retornoPrefeitura?.status}
+                  </p>
+                  <p>Status: {capitalize(notaFiscal.status_nf)}</p>
+                  <p>RPS: {rpsNfse || '—'}</p>
+                  <p>Protocolo GINFES: {protocoloPrefeitura || '—'}</p>
+                  <p>Código de verificação: {notaFiscal.codigo_verificacao || '—'}</p>
+                  <p>Valor: {formatCurrency(Number(notaFiscal.valor_servico ?? 0))}</p>
+                  {!notaProcessada && retornoPrefeitura?.detalhes && (
+                    <p className="break-words text-xs text-gray-600 dark:text-gray-400">{retornoPrefeitura.detalhes}</p>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm font-medium text-gray-600 dark:text-gray-300">Nenhuma NFS-e vinculada a esta venda.</p>
+              )}
             </div>
             <div className="grid gap-3">
               {detalhes.map(([label, value]) => (
