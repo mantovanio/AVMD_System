@@ -246,6 +246,18 @@ function normalizePhoneBR(raw: string | null | undefined): string | null {
   return `+${digits}`
 }
 
+function parseMoneyBR(raw: string | null | undefined): number | null {
+  if (!raw) return null
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const normalized = trimmed
+    .replace(/[R$\s]/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.')
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 function buildShortLink(path: string, fallback?: string | null): string {
   try {
     const apiBaseUrl = getApiBaseUrl()
@@ -321,6 +333,23 @@ const COLUMN_ALIASES: Record<string, string> = {
   'nome cliente': 'cliente',
   'nome do cliente': 'cliente',
   'status do pedido': 'status',
+  'telefone': 'telefone',
+  'telefone do titular': 'telefone',
+  'telefone da empresa': 'telefone',
+  'telefone celular': 'telefone',
+  'celular': 'telefone',
+  'whatsapp': 'telefone',
+  'fone': 'telefone',
+  'tel': 'telefone',
+  'valor venda': 'valor',
+  'valor da venda': 'valor',
+  'valor_venda': 'valor',
+  'preco': 'valor',
+  'preço': 'valor',
+  'preco venda': 'valor',
+  'preço venda': 'valor',
+  'valor total': 'valor',
+  'total': 'valor',
 }
 
 function cleanHeader(header: string): string {
@@ -1420,7 +1449,7 @@ export default function Renovacoes() {
       data_vencimento: parseBrDate(r.data_vencimento), cliente: r.cliente,
       email: r.email || null, telefone: normalizePhoneBR(r.telefone),
       tipo_certificado: r.produto || r.tipo_certificado || 'Não especificado',
-      valor: r.valor ? parseFloat(r.valor.replace(',', '.')) : null,
+      valor: parseMoneyBR(r.valor),
       cpf: r.cpf || null, cnpj: r.cnpj || null, razao_social: r.razao_social || null,
       agr: r.agr || null, vendedor: r.vendedor || null, contador: r.contador || null,
       status: 'pendente' as StatusRenovacao, renovado: false,
