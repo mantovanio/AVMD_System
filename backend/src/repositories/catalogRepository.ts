@@ -174,7 +174,7 @@ export class CatalogRepository {
     const result = await this.db.query(
       `select id, cadastro_base_id, nome_faturamento, documento_faturamento,
               email_faturamento, telefone_faturamento, logradouro, numero,
-              complemento, bairro, cidade, uf, cep, ibge, inscricao_municipal,
+              complemento, bairro, cidade, uf, cep, metadata->>'ibge' as ibge, inscricao_municipal,
               inscricao_estadual, valor_venda, iss_retido, observacoes
        from vendas_certificados
        where id = $1::uuid`,

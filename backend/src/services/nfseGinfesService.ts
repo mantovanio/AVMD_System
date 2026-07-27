@@ -449,6 +449,22 @@ export async function emitirNFSeGinfes(
   repo: CatalogRepository,
   vendaId: string,
 ): Promise<GinfesResult> {
+  const nfseExistentes = await repo.listNfseByVenda(vendaId) as Array<Record<string, unknown>>
+  const nfseFiscalExistente = nfseExistentes.find(item => {
+    const status = String(item.status_nf ?? '').toLowerCase()
+    const numero = String(item.numero_nf ?? '')
+    const payload = (item.payload_envio ?? {}) as Record<string, unknown>
+    const protocolo = String(payload.protocolo ?? '')
+    return !['erro', 'cancelada', 'cancelado'].includes(status)
+      && (Boolean(protocolo) || (Boolean(numero) && !numero.startsWith('MOCK-')))
+  })
+  if (nfseFiscalExistente) {
+    return {
+      ok: false,
+      error: `A venda já possui uma NFS-e fiscal vinculada (${String(nfseFiscalExistente.numero_nf ?? nfseFiscalExistente.id)}).`,
+    }
+  }
+
   const rawConfig = await repo.getActiveNfseConfiguracao()
   if (!rawConfig) return { ok: false, error: 'Nenhuma configuracao fiscal ativa encontrada.' }
   const config = rawConfig as Record<string, unknown>
