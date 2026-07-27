@@ -45,6 +45,13 @@ export type CreateCancelamentoInput = {
   estorno_realizado?: boolean
   observacoes?: string | null
   cancelado_por: string
+  venda_snapshot?: {
+    pedido_numero?: string | null
+    protocolo_numero?: string | null
+    cliente_nome?: string | null
+    documento?: string | null
+    status_venda?: string | null
+  } | null
 }
 
 export class CancelamentoRepository {
@@ -170,12 +177,12 @@ export class CancelamentoRepository {
         )
         select
           'cancelamento',
-          v.id,
-          v.pedido_numero,
-          v.protocolo_numero,
-          coalesce(cb.nome, v.nome_faturamento),
-          coalesce(v.documento_faturamento, cb.cpf_cnpj),
-          v.status_venda,
+          $1::uuid,
+          $13::text,
+          $14::text,
+          $15::text,
+          $16::text,
+          $17::text,
           $2::text,
           $3::uuid,
           $4::uuid,
@@ -190,10 +197,8 @@ export class CancelamentoRepository {
             'estorno_realizado', $11::boolean,
             'observacoes', $12::text
           )
-        from vendas_certificados v
-        left join cadastros_base cb on cb.id = v.cadastro_base_id
-        left join profiles p on p.id = $4::uuid
-        where v.id = $1::uuid`,
+        from profiles p
+        where p.id = $4::uuid`,
         [
           input.venda_id,
           input.motivo,
@@ -207,6 +212,11 @@ export class CancelamentoRepository {
           input.estorno_gateway_ref ?? null,
           input.estorno_realizado ?? false,
           input.observacoes ?? null,
+          input.venda_snapshot?.pedido_numero ?? null,
+          input.venda_snapshot?.protocolo_numero ?? null,
+          input.venda_snapshot?.cliente_nome ?? null,
+          input.venda_snapshot?.documento ?? null,
+          input.venda_snapshot?.status_venda ?? null,
         ],
       )
 

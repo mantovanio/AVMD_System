@@ -43,6 +43,7 @@ export async function handleCancelamentoRoutes(
     }
 
     const v = venda as Record<string, unknown>
+    const cadastrosBase = v.cadastros_base as { nome?: string } | null | undefined
     const valorVenda = Number(v.valor_venda ?? 0)
     const comissaoVendedorValor = Number(v.comissao_vendedor_valor ?? 0)
     const comissaoAgenteValor = Number(v.comissao_agente_valor ?? 0)
@@ -64,6 +65,13 @@ export async function handleCancelamentoRoutes(
       estorno_realizado: false,
       observacoes: body.observacoes ?? null,
       cancelado_por: body.cancelado_por,
+      venda_snapshot: {
+        pedido_numero: (v.pedido_numero as string | null | undefined) ?? null,
+        protocolo_numero: (v.protocolo_numero as string | null | undefined) ?? null,
+        cliente_nome: cadastrosBase?.nome ?? (v.nome_faturamento as string | null | undefined) ?? null,
+        documento: (v.documento_faturamento as string | null | undefined) ?? null,
+        status_venda: (v.status_venda as string | null | undefined) ?? null,
+      },
     })
 
     writeJson(res, 200, { ok: true, cancelamento: cancelamentoAtomico }, corsOrigin)

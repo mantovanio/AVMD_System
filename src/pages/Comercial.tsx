@@ -9631,20 +9631,23 @@ export default function Comercial() {
               <button type="button" onClick={async () => {
                 if (!cancelForm.motivo.trim()) { showMsg('Informe o motivo do cancelamento.'); return }
                 setCancelSaving(true)
+                const vendaId = cancelandoVenda.id
+                const payload = {
+                  venda_id: vendaId,
+                  motivo: cancelForm.motivo.trim(),
+                  dentro_prazo_30d: cancelForm.dentro_prazo_30d,
+                  custo_operacional: cancelForm.custo_operacional,
+                  observacoes: cancelForm.observacoes.trim() || undefined,
+                  cancelado_por: profile?.id ?? '',
+                }
+                setCancelandoVenda(null)
+                setCancelForm({ motivo: '', dentro_prazo_30d: true, custo_operacional: 0, observacoes: '' })
+                showMsg('Cancelamento em processamento...', 'ok')
                 try {
-                  const result = await cancelarVenda({
-                    venda_id: cancelandoVenda.id,
-                    motivo: cancelForm.motivo.trim(),
-                    dentro_prazo_30d: cancelForm.dentro_prazo_30d,
-                    custo_operacional: cancelForm.custo_operacional,
-                    observacoes: cancelForm.observacoes.trim() || undefined,
-                    cancelado_por: profile?.id ?? '',
-                  })
+                  const result = await cancelarVenda(payload)
                   if (result) {
                     showMsg('Venda cancelada com sucesso!', 'ok')
-                    setCancelandoVenda(null)
-                    setCancelForm({ motivo: '', dentro_prazo_30d: true, custo_operacional: 0, observacoes: '' })
-                    setVendasV2(prev => prev.map(v => v.id === cancelandoVenda.id ? { ...v, status_venda: 'cancelado' } : v))
+                    setVendasV2(prev => prev.map(v => v.id === vendaId ? { ...v, status_venda: 'cancelado' } : v))
                   } else {
                     showMsg('Erro ao cancelar venda. Tente novamente.', 'err')
                   }
