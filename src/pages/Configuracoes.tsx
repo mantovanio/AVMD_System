@@ -833,6 +833,9 @@ function AbaUsuarios() {
   }
 
   function startEdit(u: Profile) {
+    const vinculoFallback = u.vinculo_nome?.trim()
+      || parceiros.find(p => p.id === u.parceiro_id)?.nome
+      || ''
     setEditingId(u.id)
     setEditErro(null)
     setEditForm({
@@ -842,7 +845,7 @@ function AbaUsuarios() {
       status: u.status,
       tipo_vinculo: u.tipo_vinculo ?? 'usuario_comum',
       parceiro_id: u.parceiro_id ?? '',
-      vinculo_nome: u.vinculo_nome ?? '',
+      vinculo_nome: vinculoFallback,
       documento: u.documento ?? '',
       telefone: u.telefone ?? '',
       cidade: u.cidade ?? '',
@@ -1575,7 +1578,7 @@ function AbaUsuarios() {
                         <select value={editForm.parceiro_id} onChange={e => {
                           const parceiro = parceiros.find(p => p.id === e.target.value)
                           updateEdit('parceiro_id', e.target.value)
-                          if (parceiro) updateEdit('vinculo_nome', parceiro.nome)
+                          updateEdit('vinculo_nome', parceiro?.nome ?? '')
                         }}
                           className="border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                           <option value="">Selecione um cadastro compatível...</option>
