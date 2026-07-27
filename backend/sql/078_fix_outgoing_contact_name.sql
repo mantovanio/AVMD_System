@@ -5,6 +5,7 @@ DO $migration$
 DECLARE
   function_definition text;
   old_fragment text;
+  legacy_fragment text;
   new_fragment text;
 BEGIN
   SELECT pg_get_functiondef('fn_sync_communication_event()'::regprocedure)
@@ -47,11 +48,45 @@ $old$;
   END IF;
 $new$;
 
-  IF strpos(function_definition, old_fragment) = 0 THEN
+  legacy_fragment := $legacy$
+  v_cliente_nome := COALESCE(
+    NULLIF(TRIM(NEW.payload->>'customer_name'), ''),
+    NULLIF(v_existing_nome, ''),
+    NULLIF(v_sender_name, '')
+  );
+$legacy$;
+
+  IF strpos(function_definition, old_fragment) > 0 THEN
+    function_definition := replace(function_definition, old_fragment, new_fragment);
+  ELSIF strpos(function_definition, legacy_fragment) > 0 THEN
+    function_definition := replace(
+      function_definition,
+      legacy_fragment,
+      $replacement$
+  IF NOT v_is_from_me THEN
+    v_cliente_nome := COALESCE(
+      NULLIF(TRIM(NEW.payload->>'customer_name'), ''),
+      NULLIF(TRIM(NEW.payload->>'contact_name'), ''),
+      NULLIF(TRIM(NEW.payload->>'cliente_nome'), ''),
+      NULLIF(v_existing_nome, ''),
+      NULLIF(v_sender_name, '')
+    );
+  ELSE
+    v_cliente_nome := COALESCE(
+      NULLIF(TRIM(NEW.payload->>'customer_name'), ''),
+      NULLIF(TRIM(NEW.payload->>'contact_name'), ''),
+      NULLIF(TRIM(NEW.payload->>'cliente_nome'), ''),
+      NULLIF(TRIM(NEW.payload->>'from_name'), ''),
+      NULLIF(v_existing_nome, '')
+    );
+  END IF;
+$replacement$
+    );
+  ELSE
     RAISE EXCEPTION 'Trecho de nome do cliente nao localizado em fn_sync_communication_event.';
   END IF;
 
-  EXECUTE replace(function_definition, old_fragment, new_fragment);
+  EXECUTE function_definition;
 END;
 $migration$;
 
