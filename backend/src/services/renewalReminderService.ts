@@ -27,6 +27,7 @@ type RenewalRow = {
   data_vencimento: string
   valor: number | null
   ultimo_lembrete: string | null
+  status_disparo: string | null
 }
 
 export class RenewalReminderService {
@@ -61,7 +62,7 @@ export class RenewalReminderService {
 
   async processReminders(): Promise<{ queued: number; skipped: number }> {
     const rows = await this.db.query<RenewalRow>(
-      `SELECT id, cliente, email, telefone, tipo_certificado, data_vencimento, valor, ultimo_lembrete
+      `SELECT id, cliente, email, telefone, tipo_certificado, data_vencimento, valor, ultimo_lembrete, status_disparo
        FROM renovacoes
        WHERE deleted_at IS NULL
          AND renovado = false
@@ -141,9 +142,12 @@ export class RenewalReminderService {
       }
 
       await this.db.query(
-        `UPDATE renovacoes SET ultimo_lembrete = NOW(), status = 'contatado',
-         enviou_whatsapp = enviou_whatsapp OR $2, enviou_email = enviou_email OR $3,
-         updated_at = NOW() WHERE id = $1`,
+        `UPDATE renovacoes SET ultimo_lembrete = NOW(),
+         status_disparo = 'enviado',
+         enviou_whatsapp = enviou_whatsapp OR $2,
+         enviou_email = enviou_email OR $3,
+         updated_at = NOW()
+         WHERE id = $1`,
         [row.id, !!phone, !!email],
       )
 

@@ -21,6 +21,7 @@ export interface RenovacaoRow {
   vendedor: string | null
   contador: string | null
   ultimo_lembrete: string | null
+  status_disparo: string | null
   enviou_email: boolean
   enviou_whatsapp: boolean
   venda_certificado_id: string | null
@@ -68,6 +69,7 @@ export class RenovacaoRepository {
     'vendedor',
     'contador',
     'ultimo_lembrete',
+    'status_disparo',
     'enviou_email',
     'enviou_whatsapp',
     'created_at',

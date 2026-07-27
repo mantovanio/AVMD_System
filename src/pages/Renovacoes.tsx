@@ -931,8 +931,8 @@ export default function Renovacoes() {
     const result = await apiSendWhatsApp(r.telefone, body, { canal: 'atendimento', buttons })
     if (!result.ok) { setSendingId(null); showMsg('Erro WhatsApp: ' + result.error, 'err'); return }
     const agora = new Date().toISOString()
-    await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora, enviou_whatsapp: true })
-    setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora, enviou_whatsapp: true } : x))
+    await apiUpdateRenovacao(r.id, { ultimo_lembrete: agora, status_disparo: 'enviado', enviou_whatsapp: true })
+    setLista(prev => prev.map(x => x.id === r.id ? { ...x, ultimo_lembrete: agora, status_disparo: 'enviado', enviou_whatsapp: true } : x))
     await criarLeadKanban(r)
     void queueWhatsAppFollowUp({
       to: r.telefone,
@@ -964,8 +964,8 @@ export default function Renovacoes() {
     if (emailResult.error) { setSendingId(null); showMsg('Erro e-mail: ' + emailResult.error, 'err'); return }
     const agora = new Date().toISOString()
     const waOk = !waResult.error
-    await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora, enviou_email: true, enviou_whatsapp: waOk })
-    setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora, enviou_email: true, enviou_whatsapp: waOk } : x))
+    await apiUpdateRenovacao(r.id, { ultimo_lembrete: agora, status_disparo: 'enviado', enviou_email: true, enviou_whatsapp: waOk })
+    setLista(prev => prev.map(x => x.id === r.id ? { ...x, ultimo_lembrete: agora, status_disparo: 'enviado', enviou_email: true, enviou_whatsapp: waOk } : x))
     await criarLeadKanban(r)
     if (r.telefone) {
       void queueWhatsAppFollowUp({
@@ -1026,8 +1026,8 @@ export default function Renovacoes() {
       if (result.ok) {
         enviados++
         const agora = new Date().toISOString()
-        await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora, enviou_whatsapp: true })
-        setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora, enviou_whatsapp: true } : x))
+        await apiUpdateRenovacao(r.id, { ultimo_lembrete: agora, status_disparo: 'enviado', enviou_whatsapp: true })
+        setLista(prev => prev.map(x => x.id === r.id ? { ...x, ultimo_lembrete: agora, status_disparo: 'enviado', enviou_whatsapp: true } : x))
         void criarLeadKanban(r).catch(() => {})
         void queueWhatsAppFollowUp({
           to: r.telefone!,
@@ -1076,11 +1076,11 @@ export default function Renovacoes() {
     const agora = new Date().toISOString()
     await Promise.all(alvos.map(r =>
       Promise.all([
-        apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora, enviou_email: true }),
+        apiUpdateRenovacao(r.id, { ultimo_lembrete: agora, status_disparo: 'enviado', enviou_email: true }),
         criarLeadKanban(r).catch(() => {}),
       ])
     ))
-    setLista(prev => prev.map(x => alvos.some(a => a.id === x.id) ? { ...x, status: 'contatado', ultimo_lembrete: agora, enviou_email: true } : x))
+    setLista(prev => prev.map(x => alvos.some(a => a.id === x.id) ? { ...x, ultimo_lembrete: agora, status_disparo: 'enviado', enviou_email: true } : x))
     setBulkSending(false)
     showMsg(`${alvos.length} e-mails enfileirados.`)
   }
@@ -1142,8 +1142,8 @@ export default function Renovacoes() {
       if (result.ok) {
         enviados++
         const agora = new Date().toISOString()
-        await apiUpdateRenovacao(r.id, { status: 'contatado', ultimo_lembrete: agora, enviou_whatsapp: true })
-        setLista(prev => prev.map(x => x.id === r.id ? { ...x, status: 'contatado', ultimo_lembrete: agora, enviou_whatsapp: true } : x))
+        await apiUpdateRenovacao(r.id, { ultimo_lembrete: agora, status_disparo: 'enviado', enviou_whatsapp: true })
+        setLista(prev => prev.map(x => x.id === r.id ? { ...x, ultimo_lembrete: agora, status_disparo: 'enviado', enviou_whatsapp: true } : x))
         void queueWhatsAppFollowUp({
           to: r.telefone!,
           canal: 'atendimento',
@@ -1527,9 +1527,10 @@ export default function Renovacoes() {
 
   const listagem = lista.filter(r => {
     const matchFiltro = filtro === 'todos' || r.prioridade === filtro
+    const disparado = r.status_disparo === 'enviado' || !!r.ultimo_lembrete
     const matchEnvio = filtroEnvio === 'todos'
-      || (filtroEnvio === 'enviado' && !!r.ultimo_lembrete)
-      || (filtroEnvio === 'nao_enviado' && !r.ultimo_lembrete)
+      || (filtroEnvio === 'enviado' && disparado)
+      || (filtroEnvio === 'nao_enviado' && !disparado)
     const matchCanal = filtroCanal === 'todos'
       || (filtroCanal === 'email' && !!r.enviou_email)
       || (filtroCanal === 'whatsapp' && !!r.enviou_whatsapp)
@@ -1551,7 +1552,7 @@ export default function Renovacoes() {
     potencial:  lista.reduce((s, r) => s + (r.valor ?? 0), 0),
     urgentes:   lista.filter(r => r.prioridade === 'urgente').length,
     contatados: lista.filter(r => r.status === 'contatado').length,
-    disparados: lista.filter(r => !!r.ultimo_lembrete).length,
+    disparados: lista.filter(r => r.status_disparo === 'enviado' || !!r.ultimo_lembrete).length,
   }
   const operacionais = visao === 'operacional'
   const janelaLabel =
@@ -1860,8 +1861,8 @@ export default function Renovacoes() {
           <div className="w-px bg-gray-200 dark:bg-gray-700 self-stretch mx-1 hidden sm:block" />
 
           {([
-            { key: 'nao_enviado' as const, label: 'Não Disparados', icon: Send, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800/30', count: lista.filter(r => !r.ultimo_lembrete).length },
-            { key: 'enviado' as const, label: 'Já Disparados', icon: Send, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/10', count: lista.filter(r => !!r.ultimo_lembrete).length },
+            { key: 'nao_enviado' as const, label: 'Não Disparados', icon: Send, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800/30', count: lista.filter(r => !(r.status_disparo === 'enviado' || r.ultimo_lembrete)).length },
+            { key: 'enviado' as const, label: 'Já Disparados', icon: Send, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/10', count: lista.filter(r => r.status_disparo === 'enviado' || !!r.ultimo_lembrete).length },
           ]).map(item => {
             const Icon = item.icon
             return (
@@ -2764,7 +2765,7 @@ export default function Renovacoes() {
                         onClick={() => setSelectedRowId(selectedRowId === r.id ? null : r.id)}>
                         <span className="flex items-center gap-1.5">
                           <span className="truncate block">{r.cliente}</span>
-                          {!!r.ultimo_lembrete && (
+                          {(r.status_disparo === 'enviado' || !!r.ultimo_lembrete) && (
                             <span className="shrink-0 text-purple-500 dark:text-purple-400" aria-label="Mensagem já disparada">
                               <Send size={10} />
                             </span>
