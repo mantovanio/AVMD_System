@@ -94,6 +94,84 @@ async function findEmailRisk(
   return { blocked: false, reason: null, clerkUserId }
 }
 
+async function ensureAdminProfile(profileRepository: ProfileRepository, adminProfileId: string) {
+  const admin = await profileRepository.findById(adminProfileId)
+  return admin && admin.perfil === 'admin' && admin.status === 'ativo' ? admin : null
+}
+
+function shouldEnforceSharedEmailGuard(profile: { perfil: string }) {
+  return profile.perfil === 'usuario'
+}
+
+async function sendRecoveryCode(
+  clerkSecretKey: string,
+  profileRepository: ProfileRepository,
+  passwordRecoveryRepository: PasswordRecoveryRepository,
+  passwordRecoveryAuditRepository: PasswordRecoveryAuditRepository,
+  outboxRepository: CommunicationOutboxRepository,
+  profile: { id: string; nome: string; email: string | null; clerk_user_id: string | null; status: string },
+  email: string,
+  req?: IncomingMessage,
+  origin = 'password_recovery_manual_approval',
+  skipRiskCheck = false,
+) {
+  const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
+  let clerkUserId: string | null = null
+
+  if (!skipRiskCheck && shouldEnforceSharedEmailGuard(profile)) {
+    const risk = await findEmailRisk(clerkClient, profile, email)
+    if (risk.blocked) {
+      throw new Error(risk.reason ?? 'Confirmação extra necessária para continuar.')
+    }
+    clerkUserId = risk.clerkUserId ?? await syncClerkUser(clerkClient, profileRepository, profile.id, email, profile.nome, profile.clerk_user_id)
+  } else {
+    clerkUserId = await syncClerkUser(clerkClient, profileRepository, profile.id, email, profile.nome, profile.clerk_user_id)
+  }
+
+  const recoveryCode = buildRecoveryCode()
+  const tokenHash = hashRecoveryCode(recoveryCode)
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+
+  await passwordRecoveryRepository.create({
+    profileId: profile.id,
+    email,
+    tokenHash,
+    expiresAt,
+  })
+
+  const recoveryEmail = buildRecoveryEmail(profile.nome, recoveryCode)
+  await outboxRepository.create({
+    channel: 'email',
+    provider: 'email_smtp',
+    to_address: email,
+    subject: recoveryEmail.subject,
+    body: recoveryEmail.body,
+    payload: {
+      context: 'password_recovery',
+      profile_id: profile.id,
+      email,
+      code: recoveryCode,
+      origin,
+    },
+  })
+
+  await passwordRecoveryAuditRepository.create({
+    profileId: profile.id,
+    email,
+    action: 'request',
+    status: 'sent',
+    source: origin,
+    ipAddress: req ? getRequestSource(req) : null,
+    userAgent: req ? getUserAgent(req) : null,
+    clerkUserId,
+    metadata: {
+      profile_status: profile.status,
+      clerk_user_id: clerkUserId,
+      origin,
+    },
+  })
+}
+
 function buildClerkUsername(email: string) {
   const base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'usuario'
   return `${base}${randomInt(100000, 1000000)}`.slice(0, 24)
@@ -220,8 +298,9 @@ export async function handlePasswordRecoveryRoutes(
     const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
 
     try {
-      const risk = await findEmailRisk(clerkClient, profile, email)
-      if (risk.blocked) {
+      const enforceGuard = shouldEnforceSharedEmailGuard(profile)
+      const risk = enforceGuard ? await findEmailRisk(clerkClient, profile, email) : { blocked: false, reason: null, clerkUserId: null }
+      if (enforceGuard && risk.blocked) {
         await passwordRecoveryAuditRepository.create({
           profileId: profile.id,
           email,
@@ -232,7 +311,7 @@ export async function handlePasswordRecoveryRoutes(
           ipAddress: getRequestSource(req),
           userAgent: getUserAgent(req),
           clerkUserId: profile.clerk_user_id,
-          metadata: { profile_status: profile.status },
+          metadata: { profile_status: profile.status, enforce_guard: true },
         })
         writeJson(res, 428, { ok: false, error: risk.reason ?? 'Confirmação extra necessária para continuar.' }, corsOrigin)
         return true
@@ -277,6 +356,7 @@ export async function handlePasswordRecoveryRoutes(
         metadata: {
           profile_status: profile.status,
           clerk_user_id: clerkUserId,
+          enforce_guard: enforceGuard,
         },
       })
 
@@ -351,8 +431,9 @@ export async function handlePasswordRecoveryRoutes(
 
     const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
     try {
-      const risk = await findEmailRisk(clerkClient, profile, email)
-      if (risk.blocked) {
+      const enforceGuard = shouldEnforceSharedEmailGuard(profile)
+      const risk = enforceGuard ? await findEmailRisk(clerkClient, profile, email) : { blocked: false, reason: null, clerkUserId: null }
+      if (enforceGuard && risk.blocked) {
         await passwordRecoveryAuditRepository.create({
           profileId: profile.id,
           email,
@@ -363,7 +444,7 @@ export async function handlePasswordRecoveryRoutes(
           ipAddress: getRequestSource(req),
           userAgent: getUserAgent(req),
           clerkUserId: profile.clerk_user_id,
-          metadata: { profile_status: profile.status },
+          metadata: { profile_status: profile.status, enforce_guard: true },
         })
         writeJson(res, 428, { ok: false, error: risk.reason ?? 'Confirmação extra necessária para continuar.' }, corsOrigin)
         return true
@@ -401,7 +482,7 @@ export async function handlePasswordRecoveryRoutes(
         ipAddress: getRequestSource(req),
         userAgent: getUserAgent(req),
         clerkUserId,
-        metadata: { profile_status: profile.status },
+        metadata: { profile_status: profile.status, enforce_guard: enforceGuard },
       })
       writeJson(res, 200, { ok: true }, corsOrigin)
     } catch (error) {
@@ -418,6 +499,102 @@ export async function handlePasswordRecoveryRoutes(
       })
       writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
     }
+    return true
+  }
+
+  if (req.method === 'POST' && req.url === '/api/admin/password-recovery/audit') {
+    const body = await readJson<{ admin_profile_id?: string; limit?: number; offset?: number }>(req)
+    if (!body.admin_profile_id) {
+      writeJson(res, 400, { ok: false, error: 'admin_profile_id é obrigatório.' }, corsOrigin)
+      return true
+    }
+    const admin = await ensureAdminProfile(profileRepository, body.admin_profile_id)
+    if (!admin) {
+      writeJson(res, 403, { ok: false, error: 'Apenas administradores podem acessar esta fila.' }, corsOrigin)
+      return true
+    }
+    const auditoria = await passwordRecoveryAuditRepository.listPending(body.limit ?? 50, body.offset ?? 0)
+    writeJson(res, 200, { ok: true, auditoria }, corsOrigin)
+    return true
+  }
+
+  if (req.method === 'POST' && req.url === '/api/admin/password-recovery/approve') {
+    const body = await readJson<{ admin_profile_id?: string; audit_id?: number; decision_note?: string }>(req)
+    if (!body.admin_profile_id || !body.audit_id) {
+      writeJson(res, 400, { ok: false, error: 'admin_profile_id e audit_id são obrigatórios.' }, corsOrigin)
+      return true
+    }
+    const admin = await ensureAdminProfile(profileRepository, body.admin_profile_id)
+    if (!admin) {
+      writeJson(res, 403, { ok: false, error: 'Apenas administradores podem aprovar recuperação.' }, corsOrigin)
+      return true
+    }
+    const audit = await passwordRecoveryAuditRepository.findById(Number(body.audit_id))
+    if (!audit || audit.status !== 'requires_confirmation' || !audit.profile_id) {
+      writeJson(res, 404, { ok: false, error: 'Pendência não encontrada.' }, corsOrigin)
+      return true
+    }
+    const profile = await profileRepository.findById(audit.profile_id)
+    if (!profile) {
+      writeJson(res, 404, { ok: false, error: 'Perfil associado não encontrado.' }, corsOrigin)
+      return true
+    }
+    if (!profile.email) {
+      writeJson(res, 400, { ok: false, error: 'Perfil sem e-mail cadastrado.' }, corsOrigin)
+      return true
+    }
+    try {
+      await sendRecoveryCode(
+        clerkSecretKey,
+        profileRepository,
+        passwordRecoveryRepository,
+        passwordRecoveryAuditRepository,
+        outboxRepository,
+        profile,
+        profile.email,
+        undefined,
+        'password_recovery_admin_approval',
+        true,
+      )
+      await passwordRecoveryAuditRepository.approve({
+        id: audit.id,
+        approvedByProfileId: admin.id,
+        decisionNote: body.decision_note ?? null,
+      })
+      writeJson(res, 200, { ok: true }, corsOrigin)
+    } catch (error) {
+      await passwordRecoveryAuditRepository.reject({
+        id: audit.id,
+        rejectedByProfileId: admin.id,
+        decisionNote: error instanceof Error ? error.message : String(error),
+      })
+      writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
+    }
+    return true
+  }
+
+  if (req.method === 'POST' && req.url === '/api/admin/password-recovery/reject') {
+    const body = await readJson<{ admin_profile_id?: string; audit_id?: number; decision_note?: string }>(req)
+    if (!body.admin_profile_id || !body.audit_id) {
+      writeJson(res, 400, { ok: false, error: 'admin_profile_id e audit_id são obrigatórios.' }, corsOrigin)
+      return true
+    }
+    const admin = await ensureAdminProfile(profileRepository, body.admin_profile_id)
+    if (!admin) {
+      writeJson(res, 403, { ok: false, error: 'Apenas administradores podem rejeitar recuperação.' }, corsOrigin)
+      return true
+    }
+    const audit = await passwordRecoveryAuditRepository.findById(Number(body.audit_id))
+    if (!audit || audit.status !== 'requires_confirmation') {
+      writeJson(res, 404, { ok: false, error: 'Pendência não encontrada.' }, corsOrigin)
+      return true
+    }
+    await passwordRecoveryAuditRepository.reject({
+      id: audit.id,
+      rejectedByProfileId: admin.id,
+      decisionNote: body.decision_note ?? null,
+    })
+    writeJson(res, 200, { ok: true }, corsOrigin)
     return true
   }
 
