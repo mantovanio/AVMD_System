@@ -427,6 +427,14 @@ type VendaNfseModal = {
   notas: NfseEmitida[]
 } | null
 
+type NfseCancelModal = {
+  venda: VendaRow
+  nota: NfseEmitida
+  codigo: string
+  justificativa: string
+  observacao: string
+} | null
+
 type VendaAutomationSnapshot = {
   pago: boolean
   status_venda: StatusVendaCertificado
@@ -442,6 +450,13 @@ type NfseOverrideModal = {
 
 const VENDAS_LISTA_LIMITE_INICIAL = 500
 const VENDAS_REFRESH_PAGAMENTO_MS = 60_000
+const NFSE_CANCEL_REASONS = [
+  { codigo: '1', justificativa: 'Erro na emissão da NFS-e' },
+  { codigo: '2', justificativa: 'Serviço não prestado ao cliente' },
+  { codigo: '3', justificativa: 'Erro de assinatura ou autorização da NFS-e' },
+  { codigo: '4', justificativa: 'NFS-e emitida em duplicidade' },
+  { codigo: '5', justificativa: 'Erro no processamento ou preenchimento dos dados fiscais' },
+] as const
 
 type CobrancaModal = {
   vendaId: string
@@ -1063,6 +1078,8 @@ export default function Comercial() {
   const [loadingVendaNfse, setLoadingVendaNfse]             = useState(false)
   const [vendaNfseModal, setVendaNfseModal]                 = useState<VendaNfseModal>(null)
   const [showVendaNfsePreviewTelaCheia, setShowVendaNfsePreviewTelaCheia] = useState(false)
+  const [nfseCancelModal, setNfseCancelModal] = useState<NfseCancelModal>(null)
+  const [cancelandoNfse, setCancelandoNfse] = useState(false)
   const [agencyConfig, setAgencyConfig] = useState<AgencyConfig>(DEFAULT_AGENCY_CONFIG)
   const [nfseConfiguracaoAtiva, setNfseConfiguracaoAtiva] = useState<NfseConfiguracao | null>(null)
   const [nfseOverrideModal, setNfseOverrideModal] = useState<NfseOverrideModal>(null)
@@ -4802,6 +4819,58 @@ export default function Comercial() {
     }
   }
 
+  function abrirCancelamentoNfse(venda: VendaRow, nota: NfseEmitida) {
+    const motivoInicial = NFSE_CANCEL_REASONS[0]
+    setNfseCancelModal({
+      venda,
+      nota,
+      codigo: motivoInicial.codigo,
+      justificativa: motivoInicial.justificativa,
+      observacao: '',
+    })
+  }
+
+  async function confirmarCancelamentoNfse() {
+    if (!nfseCancelModal || cancelandoNfse) return
+    if (!nfseCancelModal.justificativa.trim()) {
+      showMsg('Selecione uma justificativa para o cancelamento fiscal.', 'err')
+      return
+    }
+
+    setCancelandoNfse(true)
+    try {
+      const response = await fetch(getApiUrl(`/nfse/${nfseCancelModal.nota.id}/cancelar`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          codigo_cancelamento: nfseCancelModal.codigo,
+          justificativa: nfseCancelModal.justificativa,
+          observacao: nfseCancelModal.observacao.trim() || null,
+          cancelado_por: profile?.id ?? null,
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || !data.ok || !data.nfse) {
+        throw new Error(data.error || 'A prefeitura não confirmou o cancelamento.')
+      }
+
+      const notaAtualizada = data.nfse as NfseEmitida
+      setVendaNfseModal(prev => prev
+        ? { ...prev, notas: prev.notas.map(item => item.id === notaAtualizada.id ? notaAtualizada : item) }
+        : prev)
+      setSelectedVendaNfse(prev => ({
+        ...prev,
+        notas: prev.notas.map(item => item.id === notaAtualizada.id ? notaAtualizada : item),
+      }))
+      setNfseCancelModal(null)
+      showMsg(`NFS-e ${notaAtualizada.numero_nf ?? ''} cancelada e confirmada pela prefeitura.`, 'ok')
+    } catch (error) {
+      showMsg(error instanceof Error ? error.message : 'Erro ao cancelar a NFS-e.', 'err')
+    } finally {
+      setCancelandoNfse(false)
+    }
+  }
+
   async function fetchConfiguracaoFiscalAtiva() {
     const r = await fetch(getApiUrl('/nfse/configuracao')).catch(() => null)
     const data = r?.ok ? await r.json().then(d => d.configuracao) : null
@@ -8478,6 +8547,16 @@ export default function Comercial() {
                                 <MessageCircle size={12} />
                                 WhatsApp
                               </button>
+                              {['emitida', 'processado'].includes(nota.status_nf) && !isNfseMock(nota) && (
+                                <button
+                                  type="button"
+                                  onClick={() => abrirCancelamentoNfse(vendaNfseModal.venda, nota)}
+                                  className="inline-flex w-full items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/20"
+                                >
+                                  <XCircle size={12} />
+                                  Cancelar NFS-e
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => void excluirRegistroNfse(vendaNfseModal.venda, nota)}
@@ -8533,6 +8612,97 @@ export default function Comercial() {
               </div>
             </div>
           </FlowModal>
+        )}
+
+        {nfseCancelModal && createPortal(
+          <FlowModal
+            open
+            title={`Cancelar NFS-e ${nfseCancelModal.nota.numero_nf ?? ''}`.trim()}
+            subtitle="O pedido será enviado à prefeitura e a nota só será marcada como cancelada após a confirmação oficial."
+            onClose={() => { if (!cancelandoNfse) setNfseCancelModal(null) }}
+            className="z-[10020]"
+            contentClassName="max-w-2xl"
+          >
+            <div className="max-h-[85vh] overflow-y-auto p-6 space-y-5">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+                <div className="flex items-start gap-2">
+                  <AlertCircle size={17} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Cancelamento fiscal definitivo</p>
+                    <p className="mt-1 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+                      Esta operação cancela a NFS-e na GINFES. Ela não cancela automaticamente a venda nem realiza reembolso ao cliente.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <InfoCardMini label="Nota fiscal" value={nfseCancelModal.nota.numero_nf ?? '—'} />
+                <InfoCardMini label="Cliente" value={nfseCancelModal.venda.nome_faturamento ?? nfseCancelModal.venda.cadastros_base?.nome ?? '—'} />
+                <InfoCardMini label="Valor" value={formatCurrency(nfseCancelModal.nota.valor_servico ?? 0)} />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Justificativa do cancelamento *
+                </label>
+                <select
+                  value={nfseCancelModal.codigo}
+                  onChange={event => {
+                    const reason = NFSE_CANCEL_REASONS.find(item => item.codigo === event.target.value) ?? NFSE_CANCEL_REASONS[0]
+                    setNfseCancelModal(prev => prev ? {
+                      ...prev,
+                      codigo: reason.codigo,
+                      justificativa: reason.justificativa,
+                    } : prev)
+                  }}
+                  disabled={cancelandoNfse}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800"
+                >
+                  {NFSE_CANCEL_REASONS.map(reason => (
+                    <option key={reason.codigo} value={reason.codigo}>{reason.justificativa}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-gray-500">Código fiscal enviado à prefeitura: {nfseCancelModal.codigo}</p>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Observação complementar
+                </label>
+                <textarea
+                  value={nfseCancelModal.observacao}
+                  onChange={event => setNfseCancelModal(prev => prev ? { ...prev, observacao: event.target.value } : prev)}
+                  disabled={cancelandoNfse}
+                  rows={3}
+                  maxLength={500}
+                  placeholder="Inclua detalhes internos para auditoria, se necessário."
+                  className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setNfseCancelModal(null)}
+                  disabled={cancelandoNfse}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void confirmarCancelamentoNfse()}
+                  disabled={cancelandoNfse}
+                  className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                >
+                  {cancelandoNfse ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+                  {cancelandoNfse ? 'Aguardando prefeitura...' : 'Confirmar cancelamento fiscal'}
+                </button>
+              </div>
+            </div>
+          </FlowModal>,
+          document.body,
         )}
 
         {nfseOverrideModal && (

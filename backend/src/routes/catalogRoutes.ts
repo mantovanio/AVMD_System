@@ -1112,6 +1112,35 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
     return true
   }
 
+  const nfseCancelMatch = url.match(/^\/api\/nfse\/([^/]+)\/cancelar$/)
+  if (method === 'POST' && nfseCancelMatch) {
+    const body = await readJson<{
+      codigo_cancelamento?: string
+      justificativa?: string
+      observacao?: string | null
+      cancelado_por?: string | null
+    }>(req)
+    if (!body.codigo_cancelamento || !body.justificativa?.trim()) {
+      writeJson(res, 400, { ok: false, error: 'codigo_cancelamento e justificativa são obrigatórios.' }, corsOrigin)
+      return true
+    }
+    try {
+      const { cancelarNFSeEmitida } = await import('../services/nfseGinfesService.js')
+      const result = await cancelarNFSeEmitida(repo, {
+        nfseId: nfseCancelMatch[1],
+        codigoCancelamento: body.codigo_cancelamento,
+        justificativa: body.justificativa,
+        observacao: body.observacao,
+        canceladoPor: body.cancelado_por,
+      })
+      writeJson(res, result.ok ? 200 : 422, result, corsOrigin)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao cancelar NFS-e.'
+      writeJson(res, 500, { ok: false, error: message }, corsOrigin)
+    }
+    return true
+  }
+
   const nfseDeleteMatch = url.match(/^\/api\/nfse\/([^/]+)$/)
   if (method === 'DELETE' && nfseDeleteMatch) {
     const deleted = await repo.deleteNfse(nfseDeleteMatch[1])

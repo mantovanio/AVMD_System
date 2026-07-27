@@ -286,6 +286,32 @@ function buildConsultarNfsePorRpsXml(numeroRps: number, serie: string, tipo: num
 </soap:Envelope>`
 }
 
+function buildCancelarNfseXml(
+  numeroNfse: string,
+  codigoCancelamento: string,
+  cnpj: string,
+  im: string,
+  codigoMunicipio: string,
+  namespace: string,
+  certPem: string,
+  keyPem: string,
+): string {
+  const cabecalhoXml = buildCabecalhoXml()
+  const cancelamentoId = `cancelamento${numeroNfse.replace(/\D/g, '')}`
+  const unsigned = `<CancelarNfseEnvio xmlns="http://www.ginfes.com.br/servico_cancelar_nfse_envio_v03.xsd" xmlns:tipos="http://www.ginfes.com.br/tipos_v03.xsd"><Pedido><tipos:InfPedidoCancelamento Id="${escapeXml(cancelamentoId)}"><tipos:IdentificacaoNfse><tipos:Numero>${escapeXml(numeroNfse)}</tipos:Numero><tipos:Cnpj>${escapeXml(cnpj)}</tipos:Cnpj><tipos:InscricaoMunicipal>${escapeXml(im)}</tipos:InscricaoMunicipal><tipos:CodigoMunicipio>${escapeXml(codigoMunicipio)}</tipos:CodigoMunicipio></tipos:IdentificacaoNfse><tipos:CodigoCancelamento>${escapeXml(codigoCancelamento)}</tipos:CodigoCancelamento></tipos:InfPedidoCancelamento></Pedido></CancelarNfseEnvio>`
+  const envioXml = signXmlElement(unsigned, "//*[local-name()='InfPedidoCancelamento']", certPem, keyPem)
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="${namespace}">
+  <soap:Body>
+    <ns1:CancelarNfseV3>
+      <arg0>${cabecalhoXml}</arg0>
+      <arg1>${envioXml}</arg1>
+    </ns1:CancelarNfseV3>
+  </soap:Body>
+</soap:Envelope>`
+}
+
 function parseMensagensRetorno(xml: string): Array<{ codigo: string; mensagem: string; correcao: string }> {
   const decodedXml = xml
     .replace(/&lt;/g, '<')
@@ -464,6 +490,146 @@ export async function consultarNfsePorRps(
   } finally {
     agent.destroy()
   }
+}
+
+export async function cancelarNfseGinfes(
+  config: GinfesConfig,
+  numeroNfse: string,
+  codigoCancelamento: string,
+  pfxBuffer: Buffer,
+): Promise<GinfesResult & { dataHora?: string }> {
+  const agent = createMtlsAgent(pfxBuffer, config.certificadoSenha)
+  const { certPem, keyPem } = extractCertFromPfx(pfxBuffer, config.certificadoSenha)
+  const xml = buildCancelarNfseXml(
+    numeroNfse,
+    codigoCancelamento,
+    config.cnpjPrestador,
+    config.inscricaoMunicipal,
+    config.codigoMunicipio,
+    soapNamespace(config.wsdlUrl),
+    certPem,
+    keyPem,
+  )
+
+  try {
+    const response = await sendSoap(config.wsdlUrl, xml, agent)
+    const mensagens = parseMensagensRetorno(response)
+    if (mensagens.length > 0) {
+      return {
+        ok: false,
+        mensagens,
+        rawResponse: response,
+        error: mensagens.map(m => `${m.codigo}: ${m.mensagem}`).join('; '),
+      }
+    }
+
+    const sucesso = extractTag(response, 'Sucesso').toLowerCase()
+    if (!['true', '1'].includes(sucesso)) {
+      return { ok: false, error: 'A prefeitura não confirmou o cancelamento da NFS-e.', rawResponse: response }
+    }
+
+    return {
+      ok: true,
+      numeroNf: numeroNfse,
+      dataHora: extractTag(response, 'DataHora') || undefined,
+      rawResponse: response,
+      message: `NFS-e ${numeroNfse} cancelada e confirmada pela prefeitura.`,
+    }
+  } finally {
+    agent.destroy()
+  }
+}
+
+function resolveGinfesRuntimeConfig(rawConfig: Record<string, unknown>): { config?: GinfesConfig; pfxBuffer?: Buffer; error?: string } {
+  const payload = (rawConfig.payload_reforma_tributaria ?? {}) as Record<string, unknown>
+  const ambiente = String(rawConfig.ambiente ?? 'homologacao').trim()
+  if (ambiente === 'producao' && process.env.NFSE_PRODUCAO_HABILITADA !== 'true') {
+    return { error: 'Operação fiscal em produção bloqueada. Habilite NFSE_PRODUCAO_HABILITADA=true.' }
+  }
+  const wsdlUrl = String(
+    ambiente === 'producao'
+      ? payload.ginfes_wsdl_producao
+      : payload.ginfes_wsdl_homologacao ?? payload.gissonline_wsdl_url,
+  ).trim()
+  if (!wsdlUrl) return { error: 'WSDL do GINFES não configurado.' }
+
+  const pfxPath = String(rawConfig.certificado_pfx_path ?? '').trim()
+  const certificadoSenha = String(rawConfig.certificado_senha ?? '').trim()
+  if (!pfxPath) return { error: 'Caminho do certificado A1 não configurado.' }
+  if (!certificadoSenha) return { error: 'Senha do certificado A1 não configurada.' }
+  const absPfxPath = pfxPath.startsWith('/') ? pfxPath : join('/opt/avmd/AVMD_System/storage', pfxPath)
+  if (!existsSync(absPfxPath)) return { error: `Certificado A1 não encontrado em ${absPfxPath}.` }
+
+  return {
+    pfxBuffer: readFileSync(absPfxPath),
+    config: {
+      wsdlUrl,
+      cnpjPrestador: String(rawConfig.cnpj_emitente ?? '').replace(/\D/g, ''),
+      inscricaoMunicipal: String(rawConfig.inscricao_municipal ?? '').replace(/\D/g, ''),
+      codigoMunicipio: String(rawConfig.municipio_codigo_ibge ?? ''),
+      naturezaOperacao: String(rawConfig.natureza_operacao ?? '1'),
+      regimeEspecial: String(rawConfig.regime_especial ?? ''),
+      simplesNacional: Boolean(rawConfig.simples_nacional),
+      incentivoFiscal: Boolean(rawConfig.incentivo_fiscal),
+      tipoRps: String(rawConfig.tipo_rps ?? '1'),
+      serieRps: String(rawConfig.serie_rps ?? '1'),
+      numeroRpsAtual: Number(rawConfig.numero_rps_atual ?? 1),
+      codigoServicoMunicipio: String(rawConfig.codigo_servico_municipio ?? ''),
+      codigoTributacaoMunicipio: String(rawConfig.codigo_tributacao_municipio ?? ''),
+      cnae: String(rawConfig.cnae ?? ''),
+      aliquotaIss: Number(rawConfig.aliquota_iss ?? 0),
+      certificadoPfxPath: absPfxPath,
+      certificadoSenha,
+    },
+  }
+}
+
+export async function cancelarNFSeEmitida(
+  repo: CatalogRepository,
+  input: {
+    nfseId: string
+    codigoCancelamento: string
+    justificativa: string
+    observacao?: string | null
+    canceladoPor?: string | null
+  },
+): Promise<GinfesResult & { nfse?: unknown }> {
+  const nota = await repo.getNfseById(input.nfseId) as Record<string, unknown> | null
+  if (!nota) return { ok: false, error: 'NFS-e não encontrada.' }
+  if (!['emitida', 'processado'].includes(String(nota.status_nf ?? '').toLowerCase())) {
+    return { ok: false, error: 'Somente uma NFS-e emitida e ativa pode ser cancelada.' }
+  }
+  const numeroNfse = String(nota.numero_nf ?? '').trim()
+  if (!numeroNfse || numeroNfse.startsWith('MOCK-')) {
+    return { ok: false, error: 'A nota não possui número fiscal válido para cancelamento na prefeitura.' }
+  }
+  if (!/^[1-5]$/.test(input.codigoCancelamento)) {
+    return { ok: false, error: 'Código de cancelamento fiscal inválido.' }
+  }
+  if (!input.justificativa.trim()) {
+    return { ok: false, error: 'A justificativa do cancelamento é obrigatória.' }
+  }
+
+  const rawConfig = await repo.getActiveNfseConfiguracao() as Record<string, unknown> | null
+  if (!rawConfig) return { ok: false, error: 'Nenhuma configuração fiscal ativa encontrada.' }
+  const runtime = resolveGinfesRuntimeConfig(rawConfig)
+  if (!runtime.config || !runtime.pfxBuffer) return { ok: false, error: runtime.error ?? 'Configuração GINFES incompleta.' }
+
+  const result = await cancelarNfseGinfes(runtime.config, numeroNfse, input.codigoCancelamento, runtime.pfxBuffer)
+  if (!result.ok || !result.rawResponse) return result
+
+  const updated = await repo.markNfseCancelled(input.nfseId, {
+    codigo: input.codigoCancelamento,
+    justificativa: input.justificativa.trim(),
+    observacao: input.observacao?.trim() || null,
+    canceladoPor: input.canceladoPor?.trim() || null,
+    dataHora: result.dataHora ?? null,
+    rawResponse: result.rawResponse,
+  })
+  if (!updated) {
+    return { ok: false, error: 'A prefeitura confirmou, mas o CRM não conseguiu atualizar o status da nota.', rawResponse: result.rawResponse }
+  }
+  return { ...result, nfse: updated }
 }
 
 export async function emitirNFSeGinfes(

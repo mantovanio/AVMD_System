@@ -102,6 +102,14 @@ export class CatalogRepository {
     return result.rows
   }
 
+  async getNfseById(id: string) {
+    const result = await this.db.query(
+      `select * from nfse_emitidas where id = $1::uuid limit 1`,
+      [id],
+    )
+    return result.rows[0] ?? null
+  }
+
   async listSalesByDocumento(documento: string, input: { viewer_profile_id?: string | null; viewer_perfil?: string | null; limit?: number } = {}) {
     const limit = Math.min(Math.max(Number(input.limit || 500), 1), 5000)
     const digits = String(documento ?? '').replace(/\D/g, '')
@@ -199,6 +207,48 @@ export class CatalogRepository {
       [protocolo, updates.numero_nf, updates.codigo_verificacao, updates.status_nf],
     )
     return result.rows[0]?.id ?? null
+  }
+
+  async markNfseCancelled(id: string, cancellation: {
+    codigo: string
+    justificativa: string
+    observacao: string | null
+    canceladoPor: string | null
+    dataHora: string | null
+    rawResponse: string
+  }) {
+    const result = await this.db.query(
+      `update nfse_emitidas
+          set status_nf = 'cancelada',
+              payload_retorno = coalesce(payload_retorno, '{}'::jsonb) || jsonb_build_object(
+                'cancelamento_prefeitura', jsonb_build_object(
+                  'sucesso', true,
+                  'codigo', $2::text,
+                  'justificativa', $3::text,
+                  'observacao', $4::text,
+                  'cancelado_por', $5::text,
+                  'data_hora_prefeitura', $6::text,
+                  'recebido_em', now(),
+                  'resposta_xml', $7::text
+                )
+              ),
+              metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+                'cancelamento_fiscal', jsonb_build_object(
+                  'codigo', $2::text,
+                  'justificativa', $3::text,
+                  'observacao', $4::text,
+                  'cancelado_por', $5::text,
+                  'confirmado_em', now()
+                )
+              ),
+              updated_at = now()
+        where id = $1::uuid
+          and status_nf in ('emitida', 'processado')
+        returning *`,
+      [id, cancellation.codigo, cancellation.justificativa, cancellation.observacao,
+        cancellation.canceladoPor, cancellation.dataHora, cancellation.rawResponse],
+    )
+    return result.rows[0] ?? null
   }
 
   // ── Certificados ─────────────────────────────────────────────────────

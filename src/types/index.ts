@@ -1083,7 +1083,7 @@ export interface OrdemPagamento {
 
 // ── nfse ──────────────────────────────────────────────────────
 export type AmbienteNfse = 'homologacao' | 'producao_restrita' | 'producao'
-export type StatusNfse   = 'pendente' | 'emitida' | 'erro' | 'cancelada'
+export type StatusNfse   = 'pendente' | 'enviado' | 'processado' | 'emitida' | 'erro' | 'cancelada'
 export type ProvedorNfse = 'nacional' | 'gissonline' | 'ginfes' | 'municipal'
 
 export interface NfseConfiguracao {
