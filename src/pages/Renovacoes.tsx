@@ -477,7 +477,7 @@ export default function Renovacoes() {
   const [filtro, setFiltro]         = useState<PrioridadeRenovacao | 'todos'>('todos')
   const [filtroEnvio, setFiltroEnvio] = useState<'todos' | 'enviado' | 'nao_enviado'>('todos')
   const [filtroCanal, setFiltroCanal] = useState<'todos' | 'email' | 'whatsapp'>('todos')
-  const [visao, setVisao]           = useState<'operacional' | 'historico'>('operacional')
+  const [visao, setVisao]           = useState<'operacional' | 'vencidas' | 'futuras' | 'historico'>('operacional')
   const [busca, setBusca]           = useState('')
   const [filtroDataInicio, setFiltroDataInicio] = useState('')
   const [filtroDataFim, setFiltroDataFim] = useState('')
@@ -603,7 +603,7 @@ export default function Renovacoes() {
     try {
       const rows = await apiFetchRenovacoes(visao, 30, RENOVACOES_PAGE_SIZE, 0, profile?.id ?? null, profile?.perfil ?? null)
       setLista(rows.map(enrichRenovacao))
-      setHasMore(rows.length >= RENOVACOES_PAGE_SIZE)
+      setHasMore(rows.length >= RENOVACOES_PAGE_SIZE && visao === 'operacional')
       setSelectedIds(new Set())
       setError(null)
     } catch (err) {
@@ -614,7 +614,7 @@ export default function Renovacoes() {
   }, [visao, profile?.id, profile?.perfil])
 
   const carregarMaisRenovacoes = useCallback(async () => {
-    if (loading || loadingMore || !hasMore) return
+    if (visao !== 'operacional' || loading || loadingMore || !hasMore) return
     setLoadingMore(true)
     try {
       const rows = await apiFetchRenovacoes(visao, 30, RENOVACOES_PAGE_SIZE, lista.length, profile?.id ?? null, profile?.perfil ?? null)
@@ -1554,7 +1554,11 @@ export default function Renovacoes() {
     disparados: lista.filter(r => !!r.ultimo_lembrete).length,
   }
   const operacionais = visao === 'operacional'
-  const janelaLabel = operacionais ? 'Janela operacional (30 dias)' : 'Arquivo de históricos'
+  const janelaLabel =
+    visao === 'operacional' ? 'Janela operacional: próximos 30 dias' :
+    visao === 'vencidas' ? 'Janela de vencidas: últimos 30 dias' :
+    visao === 'futuras' ? 'Janela de futuras: após 30 dias' :
+    'Arquivo de históricos'
 
   const waTemplates    = templates.filter(t => t.channel === 'whatsapp')
   const emailTemplates = templates.filter(t => t.channel === 'email')
@@ -1898,6 +1902,8 @@ export default function Renovacoes() {
         <div className="flex flex-wrap items-center gap-2">
           {[
             { key: 'operacional' as const, label: 'Operacional (30 dias)' },
+            { key: 'vencidas' as const, label: 'Vencidas' },
+            { key: 'futuras' as const, label: 'Futuras' },
             { key: 'historico' as const, label: 'Histórico' },
           ].map(item => (
             <button

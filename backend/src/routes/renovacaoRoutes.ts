@@ -34,9 +34,13 @@ export async function handleRenovacaoRoutes(
   if (method === 'GET' && parsedUrl.pathname === '/api/renovacoes') {
     const rows = scope === 'historico'
       ? await renovacaoRepo.findHistorico(safeDays, safeLimit, safeOffset, viewerProfileId, viewerPerfil)
-      : scope === 'todos'
-        ? await renovacaoRepo.findAll(safeLimit, safeOffset, viewerProfileId, viewerPerfil)
-        : await renovacaoRepo.findOperacionais(safeDays, safeLimit, safeOffset, viewerProfileId, viewerPerfil)
+      : scope === 'vencidas'
+        ? await renovacaoRepo.findVencidas(safeDays, safeLimit, safeOffset, viewerProfileId, viewerPerfil)
+        : scope === 'futuras'
+          ? await renovacaoRepo.findFuturas(safeDays, safeLimit, safeOffset, viewerProfileId, viewerPerfil)
+          : scope === 'todos'
+            ? await renovacaoRepo.findAll(safeLimit, safeOffset, viewerProfileId, viewerPerfil)
+            : await renovacaoRepo.findOperacionais(safeDays, safeLimit, safeOffset, viewerProfileId, viewerPerfil)
     writeJson(res, 200, { ok: true, renovacoes: rows }, corsOrigin)
     return true
   }

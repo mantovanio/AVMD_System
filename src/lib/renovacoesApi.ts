@@ -19,7 +19,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 // ── Renovações ────────────────────────────────────────────────
 
 export async function fetchRenovacoes(
-  scope: 'operacional' | 'historico' | 'todos' = 'operacional',
+  scope: 'operacional' | 'vencidas' | 'futuras' | 'historico' | 'todos' = 'operacional',
   days = 30,
   limit = 500,
   offset = 0,

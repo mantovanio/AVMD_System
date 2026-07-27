@@ -210,7 +210,53 @@ export class RenovacaoRepository {
        WHERE r.deleted_at IS NULL
          AND coalesce(r.renovado, false) = false
          AND r.status NOT IN ('convertido', 'perdido')
-         AND r.data_vencimento >= (CURRENT_DATE - ($${params.length - 2} || ' days')::interval)
+         AND r.data_vencimento::date >= CURRENT_DATE
+         AND r.data_vencimento::date <= (CURRENT_DATE + ($${params.length - 2} || ' days')::interval)
+       ${viewerFilter}
+       ORDER BY r.data_vencimento ASC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    )
+    return result.rows
+  }
+
+  async findVencidas(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
+    const params: unknown[] = []
+    let viewerFilter = ''
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin'].includes(viewerPerfil)) {
+      params.push(viewerProfileId)
+      viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
+    }
+    params.push(janelaDias, limit, offset)
+    const result = await this.db.query<RenovacaoRow>(
+      `SELECT ${this.listColumns} FROM renovacoes r
+       WHERE r.deleted_at IS NULL
+         AND coalesce(r.renovado, false) = false
+         AND r.status NOT IN ('convertido', 'perdido')
+         AND r.data_vencimento::date < CURRENT_DATE
+         AND r.data_vencimento::date >= (CURRENT_DATE - ($${params.length - 2} || ' days')::interval)
+       ${viewerFilter}
+       ORDER BY r.data_vencimento DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    )
+    return result.rows
+  }
+
+  async findFuturas(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
+    const params: unknown[] = []
+    let viewerFilter = ''
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin'].includes(viewerPerfil)) {
+      params.push(viewerProfileId)
+      viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
+    }
+    params.push(janelaDias, limit, offset)
+    const result = await this.db.query<RenovacaoRow>(
+      `SELECT ${this.listColumns} FROM renovacoes r
+       WHERE r.deleted_at IS NULL
+         AND coalesce(r.renovado, false) = false
+         AND r.status NOT IN ('convertido', 'perdido')
+         AND r.data_vencimento::date > (CURRENT_DATE + ($${params.length - 2} || ' days')::interval)
        ${viewerFilter}
        ORDER BY r.data_vencimento ASC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
