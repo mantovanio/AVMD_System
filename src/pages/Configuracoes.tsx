@@ -63,6 +63,7 @@ const ADMIN_ONLY_TABS: Tab[] = ['fiscal', 'permissoes']
 
 const PERFIL_LABEL: Record<PerfilAcesso, string> = {
   admin:           'Administrador',
+  supervisor_chat: 'Supervisor do Chat',
   agente_registro: 'Agente de Registro',
   vendedor:        'Vendedor / Parceiro',
   usuario:         'Usuário',
@@ -70,6 +71,7 @@ const PERFIL_LABEL: Record<PerfilAcesso, string> = {
 
 const PERFIL_COLOR: Record<PerfilAcesso, string> = {
   admin:           'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  supervisor_chat: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
   agente_registro: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   vendedor:        'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   usuario:         'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
@@ -1245,6 +1247,7 @@ function AbaUsuarios() {
                   title="Perfil de acesso" aria-label="Perfil de acesso"
                   className="w-full border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="admin">Administrador</option>
+                  <option value="supervisor_chat">Supervisor do Chat</option>
                   <option value="agente_registro">Agente de Registro</option>
                   <option value="vendedor">Vendedor / Parceiro</option>
                   <option value="usuario">Usuário</option>
@@ -1565,6 +1568,7 @@ function AbaUsuarios() {
                       <select value={editForm.perfil} onChange={e => updateEdit('perfil', e.target.value as PerfilAcesso)}
                         className="border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="admin">Administrador</option>
+                        <option value="supervisor_chat">Supervisor do Chat</option>
                         <option value="agente_registro">Agente de Registro</option>
                         <option value="vendedor">Vendedor / Parceiro</option>
                         <option value="usuario">Usuário</option>

@@ -31,13 +31,14 @@ export const PAGE_PERMISSIONS: { id: PermissaoPagina; label: string; description
 
 export const DEFAULT_PERMISSIONS: Record<PerfilAcesso, PermissaoPagina[]> = {
   admin: PAGE_PERMISSIONS.map(p => p.id),
+  supervisor_chat: ['chat'],
   agente_registro: ['dashboard', 'comercial', 'clientes', 'chat', 'renovacoes'],
   vendedor: ['dashboard', 'comercial', 'clientes', 'parceiros', 'relatorios'],
   usuario: ['dashboard', 'relatorios', 'chat'],
 }
 
 const RESTRICTED_PAGE_PROFILES: Partial<Record<PermissaoPagina, PerfilAcesso[]>> = {
-  chat: ['admin', 'agente_registro', 'usuario'],
+  chat: ['admin', 'supervisor_chat', 'agente_registro', 'usuario'],
 }
 
 const LEGACY_REQUIRED_PERMISSIONS: Partial<Record<PerfilAcesso, PermissaoPagina[]>> = {
@@ -55,6 +56,7 @@ function normalizePermissions(
 
 export const PERFIL_LABEL: Record<PerfilAcesso, string> = {
   admin: 'Administrador',
+  supervisor_chat: 'Supervisor do Chat',
   agente_registro: 'Agente de Registro',
   vendedor: 'Vendedor',
   usuario: 'Usuário',
