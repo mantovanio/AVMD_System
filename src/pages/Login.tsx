@@ -397,10 +397,7 @@ export default function Login() {
 
                   <div className="mt-6 pt-6 border-t border-white/15 text-center">
                     <p className="text-sm text-white/80">
-                      Não tem conta?{' '}
-                      <button type="button" onClick={() => { setLoginError(null); setView('register') }} className="text-white font-semibold hover:underline">
-                        Criar conta
-                      </button>
+                      O acesso ao sistema é criado e liberado exclusivamente pelo administrador.
                     </p>
                   </div>
                 </>
