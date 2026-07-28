@@ -24,7 +24,12 @@ export class ProfileRepository {
 
   async findAll(): Promise<ProfileRow[]> {
     const result = await this.db.query<ProfileRow>(
-      "SELECT * FROM profiles WHERE coalesce(tipo_vinculo, '') <> 'cliente_portal' ORDER BY created_at ASC",
+      `SELECT *
+         FROM profiles
+        WHERE coalesce(tipo_vinculo, '') <> 'cliente_portal'
+          AND status <> 'removido'
+          AND coalesce(metadata->>'finance_only', 'false') <> 'true'
+        ORDER BY created_at ASC`,
     )
     return result.rows
   }

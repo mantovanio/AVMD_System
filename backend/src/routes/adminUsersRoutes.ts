@@ -263,9 +263,9 @@ export async function handleAdminUsersRoutes(
 
       if (profile) {
         await profileRepository.update(profile.id, {
-          status: 'inativo',
+          status: 'removido',
           clerk_user_id: null,
-          observacoes: [profile.observacoes?.trim(), 'Conta desativada pelo administrador.'].filter(Boolean).join(' '),
+          observacoes: [profile.observacoes?.trim(), 'Acesso removido pelo administrador; histórico preservado.'].filter(Boolean).join(' '),
         })
       }
       writeJson(res, 200, { ok: true }, corsOrigin)

@@ -575,8 +575,8 @@ export class HierarquiaRepository {
         input.parent_profile_id = perfilExistente.rows[0].id
       } else {
         const perfilCriado = await this.db.query<{ id: string }>(
-          `INSERT INTO profiles (nome, perfil, status, tipo_vinculo, parceiro_id, vinculo_nome, permissoes)
-           VALUES ($1, 'vendedor', 'ativo', $2, $3, $1, '{}'::jsonb)
+          `INSERT INTO profiles (nome, perfil, status, tipo_vinculo, parceiro_id, vinculo_nome, permissoes, metadata)
+           VALUES ($1, 'vendedor', 'ativo', $2, $3, $1, '{}'::jsonb, '{"finance_only":true,"origem":"repasse_comercial"}'::jsonb)
            RETURNING id`,
           [parceiro.rows[0].nome, input.papel_recebedor ?? 'parceiro', input.parent_profile_id],
         )
