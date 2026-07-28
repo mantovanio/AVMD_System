@@ -238,6 +238,8 @@ export async function handleHierarquiaRoutes(
       ponto_atendimento_id: string
       modo_operacao: 'comissao' | 'revenda'
       aliquota_imposto?: number
+      imposto_modo?: 'fixo' | 'simples_anexo_iii'
+      simples_rbt12?: number | null
       ativo?: boolean
     }>(req)
     if (!body.profile_id || !body.ponto_atendimento_id || !body.modo_operacao) {

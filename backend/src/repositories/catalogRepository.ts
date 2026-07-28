@@ -1,6 +1,20 @@
 import { randomUUID } from 'node:crypto'
 import type { AivenSqlClient } from '../db/aivenClient.js'
 
+function calcularAliquotaEfetivaAnexoIII(rbt12: number): number {
+  if (!Number.isFinite(rbt12) || rbt12 <= 0) return 6
+  const faixas = [
+    { limite: 180_000, nominal: 6, deducao: 0 },
+    { limite: 360_000, nominal: 11.2, deducao: 9_360 },
+    { limite: 720_000, nominal: 13.5, deducao: 17_640 },
+    { limite: 1_800_000, nominal: 16, deducao: 35_640 },
+    { limite: 3_600_000, nominal: 21, deducao: 125_640 },
+    { limite: 4_800_000, nominal: 33, deducao: 648_000 },
+  ]
+  const faixa = faixas.find(item => rbt12 <= item.limite) ?? faixas[faixas.length - 1]
+  return Number((((rbt12 * (faixa.nominal / 100)) - faixa.deducao) / rbt12 * 100).toFixed(4))
+}
+
 export class CatalogRepository {
   constructor(private readonly db: AivenSqlClient) {}
 
@@ -1019,7 +1033,7 @@ export class CatalogRepository {
     const pontoId = typeof input.ponto_atendimento_id === 'string' ? input.ponto_atendimento_id : null
     const itemId = typeof input.tabela_preco_item_id === 'string' ? input.tabela_preco_item_id : null
     const valorVenda = Number(input.valor_venda ?? 0)
-    const aliquotaPadrao = 9
+    const aliquotaPadrao = 7.8
     let vendedorId = vendedorInformadoId
     let origemParticipante = vendedorInformadoId ? 'vendedor' : 'sem_participante'
 
@@ -1056,8 +1070,10 @@ export class CatalogRepository {
     const modelo = await this.db.query<{
       modo_operacao: 'comissao' | 'revenda'
       aliquota_imposto: number
+      imposto_modo: 'fixo' | 'simples_anexo_iii'
+      simples_rbt12: number | null
     }>(
-      `select modo_operacao, aliquota_imposto
+      `select modo_operacao, aliquota_imposto, imposto_modo, simples_rbt12
        from perfil_modelos_negocio
        where profile_id = $1
          and ponto_atendimento_id = $2
@@ -1067,7 +1083,11 @@ export class CatalogRepository {
     )
 
     const modoOperacao = modelo.rows[0]?.modo_operacao ?? 'comissao'
-    const aliquotaImposto = Number(modelo.rows[0]?.aliquota_imposto ?? aliquotaPadrao)
+    const impostoModo = modelo.rows[0]?.imposto_modo ?? 'fixo'
+    const simplesRbt12 = Number(modelo.rows[0]?.simples_rbt12 ?? 0)
+    const aliquotaImposto = impostoModo === 'simples_anexo_iii'
+      ? calcularAliquotaEfetivaAnexoIII(simplesRbt12)
+      : Number(modelo.rows[0]?.aliquota_imposto ?? aliquotaPadrao)
     const impostoValor = Number(((valorVenda * aliquotaImposto) / 100).toFixed(2))
     const valorAposImposto = Number((valorVenda - impostoValor).toFixed(2))
 
@@ -1157,6 +1177,9 @@ export class CatalogRepository {
       tabela_preco_item_id: itemId,
       valor_venda: valorVenda,
       aliquota_imposto: aliquotaImposto,
+      imposto_modo: impostoModo,
+      simples_anexo: impostoModo === 'simples_anexo_iii' ? 'III' : null,
+      simples_rbt12: impostoModo === 'simples_anexo_iii' ? simplesRbt12 : null,
       imposto_valor: impostoValor,
       imposto_retido_valor: impostoValor,
       valor_apos_imposto: valorAposImposto,

@@ -3590,6 +3590,8 @@ type ModeloNegocioH = {
   ponto_atendimento_id: string | null
   modo_operacao: 'comissao' | 'revenda'
   aliquota_imposto: number
+  imposto_modo: 'fixo' | 'simples_anexo_iii'
+  simples_rbt12: number | null
   ativo: boolean
 }
 type RevendaPrecoBaseH = {
@@ -3898,7 +3900,9 @@ function ModeloComercialPanel({
   const [loading, setLoading] = useState(true)
   const [savingModelo, setSavingModelo] = useState(false)
   const [modoOperacao, setModoOperacao] = useState<'comissao' | 'revenda'>('comissao')
-  const [aliquotaImposto, setAliquotaImposto] = useState('9')
+  const [aliquotaImposto, setAliquotaImposto] = useState('7.8')
+  const [impostoModo, setImpostoModo] = useState<'fixo' | 'simples_anexo_iii'>('fixo')
+  const [simplesRbt12, setSimplesRbt12] = useState('')
   const [modeloAtual, setModeloAtual] = useState<ModeloNegocioH | null>(null)
   const [itensTabela, setItensTabela] = useState<TabelaPrecoItemResumoH[]>([])
   const [precosBase, setPrecosBase] = useState<RevendaPrecoBaseH[]>([])
@@ -3938,7 +3942,9 @@ function ModeloComercialPanel({
     ])
     setModeloAtual((modeloData.modelo ?? null) as ModeloNegocioH | null)
     setModoOperacao(((modeloData.modelo?.modo_operacao as 'comissao' | 'revenda' | undefined) ?? 'comissao'))
-    setAliquotaImposto(String(modeloData.modelo?.aliquota_imposto ?? 9))
+    setAliquotaImposto(String(modeloData.modelo?.aliquota_imposto ?? 7.8))
+    setImpostoModo(modeloData.modelo?.imposto_modo === 'simples_anexo_iii' ? 'simples_anexo_iii' : 'fixo')
+    setSimplesRbt12(String(modeloData.modelo?.simples_rbt12 ?? ''))
     setItensTabela((itensData.itens ?? []) as TabelaPrecoItemResumoH[])
     setPrecosBase((precosData.precos ?? []) as RevendaPrecoBaseH[])
     setRepasses((repassesData.regras ?? []) as RepasseRegraH[])
@@ -3958,6 +3964,8 @@ function ModeloComercialPanel({
         ponto_atendimento_id: pontoId,
         modo_operacao: modoOperacao,
         aliquota_imposto: Number(aliquotaImposto || 0),
+        imposto_modo: impostoModo,
+        simples_rbt12: impostoModo === 'simples_anexo_iii' ? Number(simplesRbt12 || 0) : null,
         ativo: true,
       }),
     })
@@ -4070,13 +4078,28 @@ function ModeloComercialPanel({
                       <option value="comissao">Integrado</option>
                       <option value="revenda">Revenda</option>
                     </select>
-                    <label className="flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2">
-                      <span className="text-xs text-gray-500 whitespace-nowrap">Imposto efetivo</span>
-                      <input type="number" min={0} max={100} step="0.01" value={aliquotaImposto}
-                        onChange={e => setAliquotaImposto(e.target.value)}
-                        className="w-20 bg-transparent text-sm text-right outline-none" />
-                      <span className="text-sm text-gray-500">%</span>
-                    </label>
+                    <select value={impostoModo} onChange={e => setImpostoModo(e.target.value as 'fixo' | 'simples_anexo_iii')} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800">
+                      <option value="fixo">Imposto fixo</option>
+                      <option value="simples_anexo_iii">Simples — Anexo III</option>
+                    </select>
+                    {impostoModo === 'fixo' ? (
+                      <label className="flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2">
+                        <span className="text-xs text-gray-500 whitespace-nowrap">Alíquota efetiva</span>
+                        <input type="number" min={0} max={100} step="0.01" value={aliquotaImposto}
+                          onChange={e => setAliquotaImposto(e.target.value)}
+                          className="w-20 bg-transparent text-sm text-right outline-none" />
+                        <span className="text-sm text-gray-500">%</span>
+                      </label>
+                    ) : (
+                      <label className="flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2">
+                        <span className="text-xs text-gray-500 whitespace-nowrap">RBT12</span>
+                        <span className="text-sm text-gray-500">R$</span>
+                        <input type="number" min={0} step="0.01" value={simplesRbt12}
+                          onChange={e => setSimplesRbt12(e.target.value)}
+                          placeholder="Receita dos últimos 12 meses"
+                          className="w-40 bg-transparent text-sm text-right outline-none" />
+                      </label>
+                    )}
                     <button type="button" onClick={() => void salvarModelo()} disabled={savingModelo} className="px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
                       {savingModelo ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                       Salvar modo
