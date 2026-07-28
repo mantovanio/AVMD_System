@@ -1743,6 +1743,11 @@ export class CommercialRepository {
 
   async saveParceiro(input: Record<string, unknown>) {
     const id = (input.id as string | null)?.trim() || randomUUID()
+    const dataAtivacao = typeof input.data_ativacao === 'string' && input.data_ativacao.trim()
+      ? input.data_ativacao.trim()
+      : typeof input.desde === 'string' && input.desde.trim()
+        ? input.desde.trim()
+        : null
     const fields = [
       'codigo_parceiro','cpf_cnpj','nome','razao_social','nome_fantasia','responsavel',
       'id_local_atendimento','senha_acesso','email_acesso','ddd','telefone','email',
@@ -1757,7 +1762,11 @@ export class CommercialRepository {
       'cnpj_cpf_titular','titular_conta','chave_pix','centro_custo_id',
       'segmento','status','emissoes_mes','receita_mes','desde','metadata',
     ]
-    const vals = fields.map(f => f === 'metadata' ? JSON.stringify(input[f] ?? {}) : input[f] ?? null)
+    const vals = fields.map(f => {
+      if (f === 'metadata') return JSON.stringify(input[f] ?? {})
+      if (f === 'data_ativacao' || f === 'desde') return dataAtivacao
+      return input[f] ?? null
+    })
     const colList = fields.join(', ')
     const placeholders = fields.map((field, i) => `$${i + 2}${field === 'metadata' ? '::jsonb' : ''}`).join(', ')
     const updates = fields.map((f, i) => `${f} = excluded.${f}`).join(', ')

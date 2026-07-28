@@ -261,10 +261,12 @@ export async function handleAdminUsersRoutes(
         }
       }
 
-      if (profile?.clerk_user_id) {
-        await profileRepository.deleteByClerkId(profile.clerk_user_id)
-      } else {
-        await profileRepository.deleteByClerkId(clerkUserId)
+      if (profile) {
+        await profileRepository.update(profile.id, {
+          status: 'inativo',
+          clerk_user_id: null,
+          observacoes: [profile.observacoes?.trim(), 'Conta desativada pelo administrador.'].filter(Boolean).join(' '),
+        })
       }
       writeJson(res, 200, { ok: true }, corsOrigin)
     } catch (error) {
