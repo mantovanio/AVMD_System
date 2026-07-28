@@ -758,11 +758,40 @@ export async function handleChatRoutes(
     const remoteJid = documentKey ? `${documentKey}@s.whatsapp.net` : ''
     const [crmResult, evolutionResult] = await Promise.all([
       db.query<any>(
-        `SELECT id, conversation_id, document_key, external_message_id, direction, sender_type, sender_name, mensagem, mime_type, file_name, media_url, delivery_status, delivered_at, read_at, status_updated_at, created_at
-         FROM crm_chat_messages
-         WHERE (conversation_id::text = $1 OR document_key = $2 OR document_key = $3)
-         ORDER BY created_at ASC`,
-        [searchKey, documentKey, remoteJid.replace(/@.+$/, '')],
+        `SELECT
+           m.id,
+           m.conversation_id,
+           m.document_key,
+           m.external_message_id,
+           m.direction,
+           m.sender_type,
+           m.sender_name,
+           m.mensagem,
+           m.mime_type,
+           m.file_name,
+           CASE
+             WHEN m.media_url ~* '(^https?://)?mmg\\.whatsapp\\.net/'
+              AND media_event.id IS NOT NULL
+             THEN '/api/chat/event-media/' || media_event.id::text || '?profile_id=' || $4
+             ELSE m.media_url
+           END AS media_url,
+           m.delivery_status,
+           m.delivered_at,
+           m.read_at,
+           m.status_updated_at,
+           m.created_at
+         FROM crm_chat_messages m
+         LEFT JOIN LATERAL (
+           SELECT e.id
+           FROM communication_events e
+           WHERE e.source = 'evolution'
+             AND e.external_id = m.external_message_id
+           ORDER BY e.created_at DESC
+           LIMIT 1
+         ) media_event ON true
+         WHERE (m.conversation_id::text = $1 OR m.document_key = $2 OR m.document_key = $3)
+         ORDER BY m.created_at ASC`,
+        [searchKey, documentKey, remoteJid.replace(/@.+$/, ''), viewerId],
       ),
       db.query<any>(
         `SELECT id, event_type, payload, created_at, source
