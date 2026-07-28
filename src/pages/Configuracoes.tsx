@@ -65,8 +65,8 @@ const PERFIL_LABEL: Record<PerfilAcesso, string> = {
   admin:           'Administrador',
   supervisor_chat: 'Supervisor do Chat',
   agente_registro: 'Agente de Registro',
-  vendedor:        'Parceiro Vendedor',
-  usuario:         'Usuário',
+  vendedor:        'Funcionário',
+  usuario:         'Funcionário',
 }
 
 const PERFIL_COLOR: Record<PerfilAcesso, string> = {
@@ -607,6 +607,7 @@ function AbaUsuarios() {
   const isAdmin = isAdminProfile(myProfile)
 
   const [users, setUsers]           = useState<Profile[]>([])
+  const [perfilFiltro, setPerfilFiltro] = useState<'todos' | 'admin' | 'funcionario' | 'agente_registro' | 'supervisor_chat'>('todos')
   const [parceiros, setParceiros]   = useState<Parceiro[]>([])
   const [tabelas, setTabelas]       = useState<TabelaPreco[]>([])
   const [lojas, setLojas]           = useState<LojaMarketplace[]>([])
@@ -662,6 +663,12 @@ function AbaUsuarios() {
   const [criandoUser, setCriandoUser] = useState(false)
   const [criadoOk, setCriadoOk]       = useState(false)
   const [criadoErro, setCriadoErro]   = useState<string | null>(null)
+
+  const usersFiltrados = users.filter(user => {
+    if (perfilFiltro === 'todos') return true
+    if (perfilFiltro === 'funcionario') return user.perfil === 'usuario' || user.perfil === 'vendedor'
+    return user.perfil === perfilFiltro
+  })
 
   function showMsgU(msg: string, type: 'ok' | 'err' = 'err') {
     setToastU({ msg, type })
@@ -1247,10 +1254,9 @@ function AbaUsuarios() {
                   title="Perfil de acesso" aria-label="Perfil de acesso"
                   className="w-full border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="admin">Administrador</option>
-                  <option value="supervisor_chat">Supervisor do Chat</option>
+                  <option value="usuario">Funcionário</option>
                   <option value="agente_registro">Agente de Registro</option>
-                  <option value="vendedor">Parceiro Vendedor</option>
-                  <option value="usuario">Usuário</option>
+                  <option value="supervisor_chat">Supervisor do Chat</option>
                 </select>
               </div>
               {/* ── Guia do perfil selecionado ── */}
@@ -1269,7 +1275,7 @@ function AbaUsuarios() {
               )}
               {novoPerfil === 'usuario' && (
                 <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 p-3">
-                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Usuário — acesso de leitura</p>
+                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Funcionário — acesso operacional</p>
                   <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
                     Pode consultar informações do sistema, mas não lança vendas nem altera cadastros. Não há configurações adicionais necessárias.
                   </p>
@@ -1442,21 +1448,51 @@ function AbaUsuarios() {
           )}
         </div>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold text-gray-800 dark:text-gray-200">Usuários do Sistema</h2>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+            <h2 className="font-semibold text-gray-800 dark:text-gray-200">Usuários e acessos do sistema</h2>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Aqui aparecem apenas usuários internos da plataforma. Clientes do portal são gerenciados na tela de Clientes.
+              O perfil define o acesso à plataforma. Parceiro, vendedor e contador são vínculos comerciais separados.
             </p>
+            </div>
+            <button type="button" onClick={abrirNovoUsuario}
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors">
+              <UserPlus size={14} /> Novo usuário
+            </button>
           </div>
-          <button type="button" onClick={abrirNovoUsuario}
-            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors">
-            <UserPlus size={14} /> Novo usuário
-          </button>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar usuários por perfil de acesso">
+            {([
+              ['todos', 'Todos'],
+              ['admin', 'Administrador'],
+              ['funcionario', 'Funcionário'],
+              ['agente_registro', 'Agente de Registro'],
+              ['supervisor_chat', 'Supervisor do Chat'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setPerfilFiltro(value)}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors',
+                  perfilFiltro === value
+                    ? 'border-blue-600 bg-blue-600 text-white'
+                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:border-blue-300 hover:text-blue-600',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="space-y-3">
-          {users.map(u => (
+          {usersFiltrados.length === 0 && (
+            <div className="rounded-xl border border-dashed border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/40 p-6 text-center text-sm text-gray-500 dark:text-gray-400">
+              Nenhum usuário encontrado neste perfil de acesso.
+            </div>
+          )}
+          {usersFiltrados.map(u => (
             <div key={u.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
               {(() => {
                 const parceiroVinculado = parceiros.find(p => p.id === u.parceiro_id) ?? null
@@ -1568,10 +1604,12 @@ function AbaUsuarios() {
                       <select value={editForm.perfil} onChange={e => updateEdit('perfil', e.target.value as PerfilAcesso)}
                         className="border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="admin">Administrador</option>
-                        <option value="supervisor_chat">Supervisor do Chat</option>
+                        <option value="usuario">Funcionário</option>
                         <option value="agente_registro">Agente de Registro</option>
-                        <option value="vendedor">Parceiro Vendedor</option>
-                        <option value="usuario">Usuário</option>
+                        <option value="supervisor_chat">Supervisor do Chat</option>
+                        {editForm.perfil === 'vendedor' && (
+                          <option value="vendedor">Funcionário (perfil legado)</option>
+                        )}
                       </select>
                     </label>
                     <label className="flex flex-col gap-1">
