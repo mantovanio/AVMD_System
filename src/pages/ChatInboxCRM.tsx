@@ -3546,7 +3546,6 @@ function ConversationCard({
   item,
   selected,
   onClick,
-  human,
   unreadCount = 0,
   closed = false,
   onArchive,
@@ -3567,7 +3566,6 @@ function ConversationCard({
   checked?: boolean
   onCheckToggle?: (event: React.MouseEvent<HTMLButtonElement>) => void
 }) {
-    const urgency = getUrgencyMeta(item, human)
     const hasCrmCustomer = hasRegisteredCustomer(item)
     const selectedClass = selected
       ? 'border-sky-200 bg-sky-50 shadow-[0_10px_24px_rgba(14,116,144,0.08)]'
@@ -3637,37 +3635,15 @@ function ConversationCard({
             )}
           </div>
         </div>
-        <button type="button" onClick={onClick} className="mt-2 w-full text-left">
-          <div className="flex shrink-0 items-center gap-2">
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${selected ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>{queueLabel(item.fila)}</span>
-            {unreadCount > 0 && (
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">{unreadCount}</span>
-            )}
-            <span className={selected ? 'text-sky-600' : 'text-slate-400'}>{human ? <UserRound size={14} /> : <Bot size={14} />}</span>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {urgency && <Badge text={urgency.label} tone={urgency.tone} />}
-            {!hasCrmCustomer && <Badge text="Contato sem cadastro" tone="amber" />}
-            {closed && <Badge text="Encerrada" tone="slate" />}
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[11px] text-slate-500">
-            <div>
-              <p className="uppercase tracking-wide text-slate-400">Etapa</p>
-              <p className="mt-0.5 font-medium text-slate-700">{statusLabel(normalizeKanbanStatus(item.kanban_status))}</p>
-            </div>
-            <div>
-              <p className="uppercase tracking-wide text-slate-400">Ultima interacao</p>
-              <p className="mt-0.5 font-medium text-slate-700">{formatRelative(item.ultima_interacao_em)}</p>
-            </div>
-            <div>
-              <p className="uppercase tracking-wide text-slate-400">Modo</p>
-              <p className="mt-0.5 font-medium text-slate-700">{human ? 'Humano' : 'IA'}</p>
-            </div>
-            <div>
-              <p className="uppercase tracking-wide text-slate-400">Origem</p>
-              <p className="mt-0.5 font-medium text-slate-700">{item.document_key ? 'CRM' : 'WhatsApp'}</p>
-            </div>
-          </div>
+        <button type="button" onClick={onClick} className="mt-2 flex w-full items-center gap-2 text-left">
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${selected ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>
+            {queueLabel(item.fila)}
+          </span>
+          {unreadCount > 0 && (
+            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">{unreadCount} nova{unreadCount > 1 ? 's' : ''}</span>
+          )}
+          {closed && <Badge text="Encerrada" tone="slate" />}
+          <span className="ml-auto text-[10px] font-medium text-slate-400">{formatRelative(item.ultima_interacao_em)}</span>
         </button>
       </div>
     )
