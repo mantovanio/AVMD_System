@@ -3594,6 +3594,29 @@ type ModeloNegocioH = {
   simples_rbt12: number | null
   ativo: boolean
 }
+
+function parseNumeroComVirgula(value: string): number {
+  const compact = value.trim().replace(/\s/g, '')
+  const normalized = compact.includes(',')
+    ? compact.replace(/\./g, '').replace(',', '.')
+    : compact
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function calcularAliquotaAnexoIII(rbt12: number): number {
+  if (!Number.isFinite(rbt12) || rbt12 <= 0) return 0
+  const faixas = [
+    { limite: 180_000, nominal: 6, deducao: 0 },
+    { limite: 360_000, nominal: 11.2, deducao: 9_360 },
+    { limite: 720_000, nominal: 13.5, deducao: 17_640 },
+    { limite: 1_800_000, nominal: 16, deducao: 35_640 },
+    { limite: 3_600_000, nominal: 21, deducao: 125_640 },
+    { limite: 4_800_000, nominal: 33, deducao: 648_000 },
+  ]
+  const faixa = faixas.find(item => rbt12 <= item.limite) ?? faixas[faixas.length - 1]
+  return (((rbt12 * (faixa.nominal / 100)) - faixa.deducao) / rbt12) * 100
+}
 type RevendaPrecoBaseH = {
   id: string
   profile_id: string
@@ -3923,6 +3946,8 @@ function ModeloComercialPanel({
   const perfisElegiveis = (participantes.length ? participantes : allProfiles).filter(item => item.id !== profile.id)
   const escopoCascata = modoOperacao === 'revenda' ? 'margem_revenda' : 'venda'
   const repassesCascata = repasses.filter(regra => regra.escopo === escopoCascata)
+  const rbt12Informado = parseNumeroComVirgula(simplesRbt12)
+  const aliquotaCalculada = calcularAliquotaAnexoIII(rbt12Informado)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -3965,7 +3990,7 @@ function ModeloComercialPanel({
         modo_operacao: modoOperacao,
         aliquota_imposto: Number(aliquotaImposto || 0),
         imposto_modo: impostoModo,
-        simples_rbt12: impostoModo === 'simples_anexo_iii' ? Number(simplesRbt12 || 0) : null,
+        simples_rbt12: impostoModo === 'simples_anexo_iii' ? rbt12Informado : null,
         ativo: true,
       }),
     })
@@ -4094,7 +4119,7 @@ function ModeloComercialPanel({
                       <label className="flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2">
                         <span className="text-xs text-gray-500 whitespace-nowrap">RBT12</span>
                         <span className="text-sm text-gray-500">R$</span>
-                        <input type="number" min={0} step="0.01" value={simplesRbt12}
+                        <input type="text" inputMode="decimal" value={simplesRbt12}
                           onChange={e => setSimplesRbt12(e.target.value)}
                           placeholder="Receita dos últimos 12 meses"
                           className="w-40 bg-transparent text-sm text-right outline-none" />
@@ -4106,6 +4131,11 @@ function ModeloComercialPanel({
                     </button>
                   </div>
                 </div>
+                {impostoModo === 'simples_anexo_iii' && rbt12Informado > 0 && (
+                  <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
+                    Alíquota efetiva calculada pelo Anexo III: <strong>{aliquotaCalculada.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}%</strong>
+                  </div>
+                )}
               </div>
 
               {(modoOperacao === 'revenda' || modoOperacao === 'comissao') && (
