@@ -1,5 +1,5 @@
 import { createClerkClient } from '@clerk/backend'
-import { randomInt, randomUUID, createHash } from 'node:crypto'
+import { randomInt, createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
 import type { PasswordRecoveryAuditRepository } from '../repositories/passwordRecoveryAuditRepository.js'
@@ -49,13 +49,6 @@ function getClerkErrorMessage(error: unknown, fallback = 'Falha ao processar aç
     ?? fallback
 }
 
-function isClerkNotFoundError(error: unknown) {
-  const payload = error as ClerkErrorLike | undefined
-  const status = payload?.status
-  const message = `${payload?.message ?? ''} ${payload?.errors?.map(err => `${err.longMessage ?? err.long_message ?? err.message ?? ''}`).join(' ') ?? ''}`.toLowerCase()
-  return status === 404 || message.includes('no user was found with id') || message.includes('not found')
-}
-
 function clerkUserHasEmail(user: ClerkUserLike, email: string) {
   const normalizedEmail = normalizeEmail(email)
   return user.emailAddresses?.some(item => normalizeEmail(item.emailAddress ?? '') === normalizedEmail) ?? false
@@ -77,6 +70,9 @@ async function findEmailRisk(
   if (profile.status !== 'ativo') {
     return { blocked: true, reason: 'Conta inativa ou bloqueada.', clerkUserId: null }
   }
+  if (!profile.clerk_user_id) {
+    return { blocked: true, reason: 'Recuperação disponível somente para usuário interno com conta de acesso vinculada.', clerkUserId: null }
+  }
 
   const normalizedEmail = normalizeEmail(email)
   const clerkUsers = await clerkClient.users.getUserList({ emailAddress: [normalizedEmail], limit: 5 })
@@ -87,6 +83,9 @@ async function findEmailRisk(
   }
 
   const clerkUserId = matchedUsers[0]?.id ?? null
+  if (!clerkUserId) {
+    return { blocked: true, reason: 'E-mail não confirmado na conta de acesso do usuário.', clerkUserId: null }
+  }
   if (profile.clerk_user_id && clerkUserId && profile.clerk_user_id !== clerkUserId) {
     return { blocked: true, reason: 'Vínculo do perfil com o Clerk está inconsistente. Confirme com o administrador.', clerkUserId: null }
   }
@@ -99,10 +98,6 @@ async function ensureAdminProfile(profileRepository: ProfileRepository, adminPro
   return admin && admin.perfil === 'admin' && admin.status === 'ativo' ? admin : null
 }
 
-function shouldEnforceSharedEmailGuard(profile: { perfil?: string | null }) {
-  return profile.perfil === 'usuario'
-}
-
 async function sendRecoveryCode(
   clerkSecretKey: string,
   profileRepository: ProfileRepository,
@@ -113,20 +108,14 @@ async function sendRecoveryCode(
   email: string,
   req?: IncomingMessage,
   origin = 'password_recovery_manual_approval',
-  skipRiskCheck = false,
+  _skipRiskCheck = false,
 ) {
   const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
-  let clerkUserId: string | null = null
-
-  if (!skipRiskCheck && shouldEnforceSharedEmailGuard(profile)) {
-    const risk = await findEmailRisk(clerkClient, profile, email)
-    if (risk.blocked) {
-      throw new Error(risk.reason ?? 'Confirmação extra necessária para continuar.')
-    }
-    clerkUserId = risk.clerkUserId ?? await syncClerkUser(clerkClient, profileRepository, profile.id, email, profile.nome, profile.clerk_user_id)
-  } else {
-    clerkUserId = await syncClerkUser(clerkClient, profileRepository, profile.id, email, profile.nome, profile.clerk_user_id)
+  const risk = await findEmailRisk(clerkClient, profile, email)
+  if (risk.blocked || !risk.clerkUserId) {
+    throw new Error(risk.reason ?? 'Recuperação bloqueada para este cadastro.')
   }
+  const clerkUserId = risk.clerkUserId
 
   const recoveryCode = buildRecoveryCode()
   const tokenHash = hashRecoveryCode(recoveryCode)
@@ -172,17 +161,6 @@ async function sendRecoveryCode(
   })
 }
 
-function buildClerkUsername(email: string) {
-  const base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'usuario'
-  return `${base}${randomInt(100000, 1000000)}`.slice(0, 24)
-}
-
-function buildTemporaryStrongPassword() {
-  const stamp = Date.now().toString(36)
-  const rand = randomInt(100000, 999999)
-  return `Tmp#${stamp}${rand}aA1!`
-}
-
 function buildRecoveryCode() {
   return String(randomInt(0, 1000000)).padStart(6, '0')
 }
@@ -208,55 +186,6 @@ Se você não solicitou essa alteração, desconsidere esta mensagem.`,
   }
 }
 
-async function syncClerkUser(
-  clerkClient: ReturnType<typeof createClerkClient>,
-  profileRepository: ProfileRepository,
-  profileId: string,
-  email: string,
-  nome: string,
-  currentClerkUserId: string | null,
-) {
-  const recoveryEmail = normalizeEmail(email)
-  let clerkUserId: string | null = null
-
-  if (currentClerkUserId) {
-    try {
-      const linkedUser = await clerkClient.users.getUser(currentClerkUserId)
-      if (clerkUserHasEmail(linkedUser, recoveryEmail)) {
-        clerkUserId = linkedUser.id
-      }
-    } catch (error) {
-      if (!isClerkNotFoundError(error)) {
-        throw error
-      }
-    }
-  }
-
-  if (!clerkUserId) {
-    const clerkUsers = await clerkClient.users.getUserList({ emailAddress: [recoveryEmail], limit: 1 })
-    const clerkUser = clerkUsers.data.find(user => clerkUserHasEmail(user, recoveryEmail))
-    clerkUserId = clerkUser?.id ?? null
-  }
-
-  if (!clerkUserId) {
-    const [firstNameRaw, ...lastNameParts] = nome.trim().split(/\s+/)
-    const createdUser = await clerkClient.users.createUser({
-      emailAddress: [recoveryEmail],
-      username: buildClerkUsername(recoveryEmail),
-      password: buildTemporaryStrongPassword(),
-      firstName: firstNameRaw || 'Usuario',
-      lastName: lastNameParts.join(' ').trim() || undefined,
-    })
-    clerkUserId = createdUser.id
-  }
-
-  if (currentClerkUserId !== clerkUserId) {
-    await profileRepository.update(profileId, { clerk_user_id: clerkUserId })
-  }
-
-  return clerkUserId
-}
-
 export async function handlePasswordRecoveryRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -280,7 +209,7 @@ export async function handlePasswordRecoveryRoutes(
       return true
     }
 
-    const profile = await profileRepository.findByEmail(email)
+    const profile = await profileRepository.findInternalAccessByEmail(email)
     if (!profile) {
       await passwordRecoveryAuditRepository.create({
         email,
@@ -298,9 +227,8 @@ export async function handlePasswordRecoveryRoutes(
     const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
 
     try {
-      const enforceGuard = shouldEnforceSharedEmailGuard(profile)
-      const risk = enforceGuard ? await findEmailRisk(clerkClient, profile, email) : { blocked: false, reason: null, clerkUserId: null }
-      if (enforceGuard && risk.blocked) {
+      const risk = await findEmailRisk(clerkClient, profile, email)
+      if (risk.blocked || !risk.clerkUserId) {
         await passwordRecoveryAuditRepository.create({
           profileId: profile.id,
           email,
@@ -311,13 +239,13 @@ export async function handlePasswordRecoveryRoutes(
           ipAddress: getRequestSource(req),
           userAgent: getUserAgent(req),
           clerkUserId: profile.clerk_user_id,
-          metadata: { profile_status: profile.status, enforce_guard: true },
+          metadata: { profile_status: profile.status, internal_access_only: true },
         })
         writeJson(res, 428, { ok: false, error: risk.reason ?? 'Confirmação extra necessária para continuar.' }, corsOrigin)
         return true
       }
 
-      const clerkUserId = risk.clerkUserId ?? await syncClerkUser(clerkClient, profileRepository, profile.id, email, profile.nome, profile.clerk_user_id)
+      const clerkUserId = risk.clerkUserId
       const recoveryCode = buildRecoveryCode()
       const tokenHash = hashRecoveryCode(recoveryCode)
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
@@ -356,7 +284,7 @@ export async function handlePasswordRecoveryRoutes(
         metadata: {
           profile_status: profile.status,
           clerk_user_id: clerkUserId,
-          enforce_guard: enforceGuard,
+          internal_access_only: true,
         },
       })
 
@@ -396,7 +324,7 @@ export async function handlePasswordRecoveryRoutes(
       return true
     }
 
-    const profile = await profileRepository.findByEmail(email)
+    const profile = await profileRepository.findInternalAccessByEmail(email)
     if (!profile) {
       await passwordRecoveryAuditRepository.create({
         email,
@@ -431,9 +359,8 @@ export async function handlePasswordRecoveryRoutes(
 
     const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
     try {
-      const enforceGuard = shouldEnforceSharedEmailGuard(profile)
-      const risk = enforceGuard ? await findEmailRisk(clerkClient, profile, email) : { blocked: false, reason: null, clerkUserId: null }
-      if (enforceGuard && risk.blocked) {
+      const risk = await findEmailRisk(clerkClient, profile, email)
+      if (risk.blocked || !risk.clerkUserId) {
         await passwordRecoveryAuditRepository.create({
           profileId: profile.id,
           email,
@@ -450,7 +377,7 @@ export async function handlePasswordRecoveryRoutes(
         return true
       }
 
-      const clerkUserId = risk.clerkUserId ?? await syncClerkUser(clerkClient, profileRepository, profile.id, email, profile.nome, profile.clerk_user_id)
+      const clerkUserId = risk.clerkUserId
       if (!clerkUserId) {
         await passwordRecoveryAuditRepository.create({
           profileId: profile.id,
@@ -482,7 +409,7 @@ export async function handlePasswordRecoveryRoutes(
         ipAddress: getRequestSource(req),
         userAgent: getUserAgent(req),
         clerkUserId,
-        metadata: { profile_status: profile.status, enforce_guard: enforceGuard },
+        metadata: { profile_status: profile.status, internal_access_only: true },
       })
       writeJson(res, 200, { ok: true }, corsOrigin)
     } catch (error) {

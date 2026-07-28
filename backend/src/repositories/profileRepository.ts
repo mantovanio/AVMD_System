@@ -17,6 +17,7 @@ export type ProfileRow = {
   permissoes: string[] | null
   created_at: string
   updated_at: string
+  metadata?: Record<string, unknown> | null
 }
 
 export class ProfileRepository {
@@ -53,6 +54,22 @@ export class ProfileRepository {
   async findByEmail(email: string): Promise<ProfileRow | null> {
     const result = await this.db.query<ProfileRow>(
       'SELECT * FROM profiles WHERE email = $1 LIMIT 1',
+      [email],
+    )
+    return result.rows[0] ?? null
+  }
+
+  async findInternalAccessByEmail(email: string): Promise<ProfileRow | null> {
+    const result = await this.db.query<ProfileRow>(
+      `SELECT *
+         FROM profiles
+        WHERE lower(email) = lower($1)
+          AND status = 'ativo'
+          AND clerk_user_id IS NOT NULL
+          AND coalesce(tipo_vinculo, '') <> 'cliente_portal'
+          AND coalesce(metadata->>'finance_only', 'false') <> 'true'
+        ORDER BY updated_at DESC
+        LIMIT 1`,
       [email],
     )
     return result.rows[0] ?? null
