@@ -1561,15 +1561,17 @@ export default function Comercial() {
     }
 
     if (profile?.perfil === 'vendedor') {
-      return parceiros.filter(parceiro => (
-        [
+      return parceiros.filter(parceiro => {
+        const isGestorDoParceiro = [
           parceiro.gestor_1_id,
           parceiro.gestor_2_id,
           parceiro.gestor_3_id,
           parceiro.gestor_4_id,
           parceiro.gestor_5_id,
         ].includes(currentUserId)
-      ))
+        const isParceiroVendedor = parceiro.tipo_parceiro === 'vendedor'
+        return isGestorDoParceiro || isParceiroVendedor
+      })
     }
 
     return parceiros
