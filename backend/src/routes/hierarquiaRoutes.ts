@@ -19,7 +19,7 @@ export async function handleHierarquiaRoutes(
 
   if (!pathname.startsWith('/api/hierarquia')) return false
 
-  const pontoMatch = route(pathname, '/api/hierarquia/ponto/([\w-]+)')
+  const pontoMatch = route(pathname, '/api/hierarquia/ponto/([^/]+)')
   if (method === 'GET' && pontoMatch) {
     const rows = await repo.getTreeForPonto(pontoMatch[1])
     writeJson(res, 200, { ok: true, profiles: rows }, corsOrigin)
@@ -47,35 +47,35 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
-  const faixasMatch = route(pathname, '/api/hierarquia/faixas/([\w-]+)')
+  const faixasMatch = route(pathname, '/api/hierarquia/faixas/([^/]+)')
   if (method === 'GET' && faixasMatch) {
     const rows = await repo.getFaixasForProfile(faixasMatch[1])
     writeJson(res, 200, { ok: true, faixas: rows }, corsOrigin)
     return true
   }
 
-  const remuneracaoMatch = route(pathname, '/api/hierarquia/remuneracao/([\w-]+)/([\w-]+)')
+  const remuneracaoMatch = route(pathname, '/api/hierarquia/remuneracao/([^/]+)/([^/]+)')
   if (method === 'GET' && remuneracaoMatch) {
     const rows = await repo.listRemuneracaoRules(remuneracaoMatch[1], remuneracaoMatch[2])
     writeJson(res, 200, { ok: true, regras: rows }, corsOrigin)
     return true
   }
 
-  const modeloMatch = route(pathname, '/api/hierarquia/modelo-comercial/([\w-]+)/([\w-]+)')
+  const modeloMatch = route(pathname, '/api/hierarquia/modelo-comercial/([^/]+)/([^/]+)')
   if (method === 'GET' && modeloMatch) {
     const modelo = await repo.getModeloNegocio(modeloMatch[1], modeloMatch[2])
     writeJson(res, 200, { ok: true, modelo }, corsOrigin)
     return true
   }
 
-  const precosBaseMatch = route(pathname, '/api/hierarquia/revenda-precos/([\w-]+)/([\w-]+)')
+  const precosBaseMatch = route(pathname, '/api/hierarquia/revenda-precos/([^/]+)/([^/]+)')
   if (method === 'GET' && precosBaseMatch) {
     const precos = await repo.listRevendaPriceBases(precosBaseMatch[1], precosBaseMatch[2])
     writeJson(res, 200, { ok: true, precos }, corsOrigin)
     return true
   }
 
-  const repassesMatch = route(pathname, '/api/hierarquia/repasses/([\w-]+)/([\w-]+)')
+  const repassesMatch = route(pathname, '/api/hierarquia/repasses/([^/]+)/([^/]+)')
   if (method === 'GET' && repassesMatch) {
     const regras = await repo.listRepasseRules(repassesMatch[1], repassesMatch[2])
     writeJson(res, 200, { ok: true, regras }, corsOrigin)
@@ -177,7 +177,7 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
-  const configMatch = route(pathname, '/api/hierarquia/profile/([\w-]+)/config')
+  const configMatch = route(pathname, '/api/hierarquia/profile/([^/]+)/config')
   if (method === 'PATCH' && configMatch) {
     const body = await readJson<{ supervisao_pct?: number; link_loja?: string | null }>(req)
     await repo.updateProfileConfig(configMatch[1], body)
@@ -293,28 +293,28 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
-  const deleteFaixaMatch = route(pathname, '/api/hierarquia/faixas/([\w-]+)/([\w-]+)')
+  const deleteFaixaMatch = route(pathname, '/api/hierarquia/faixas/([^/]+)/([^/]+)')
   if (method === 'DELETE' && deleteFaixaMatch) {
     await repo.deleteFaixa(deleteFaixaMatch[1], deleteFaixaMatch[2])
     writeJson(res, 200, { ok: true }, corsOrigin)
     return true
   }
 
-  const deleteRemuneracaoMatch = route(pathname, '/api/hierarquia/remuneracao/([\w-]+)/([\w-]+)')
+  const deleteRemuneracaoMatch = route(pathname, '/api/hierarquia/remuneracao/([^/]+)/([^/]+)')
   if (method === 'DELETE' && deleteRemuneracaoMatch) {
     await repo.deleteRemuneracaoRule(deleteRemuneracaoMatch[1], deleteRemuneracaoMatch[2])
     writeJson(res, 200, { ok: true }, corsOrigin)
     return true
   }
 
-  const deletePrecoBaseMatch = route(pathname, '/api/hierarquia/revenda-precos/([\w-]+)/([\w-]+)')
+  const deletePrecoBaseMatch = route(pathname, '/api/hierarquia/revenda-precos/([^/]+)/([^/]+)')
   if (method === 'DELETE' && deletePrecoBaseMatch) {
     await repo.deleteRevendaPriceBase(deletePrecoBaseMatch[1], deletePrecoBaseMatch[2])
     writeJson(res, 200, { ok: true }, corsOrigin)
     return true
   }
 
-  const deleteRepasseMatch = route(pathname, '/api/hierarquia/repasses/([\w-]+)/([\w-]+)')
+  const deleteRepasseMatch = route(pathname, '/api/hierarquia/repasses/([^/]+)/([^/]+)')
   if (method === 'DELETE' && deleteRepasseMatch) {
     await repo.deleteRepasseRule(deleteRepasseMatch[1], deleteRepasseMatch[2])
     writeJson(res, 200, { ok: true }, corsOrigin)
