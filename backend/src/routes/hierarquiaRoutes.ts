@@ -85,6 +85,17 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
+  if (method === 'GET' && pathname.startsWith('/api/hierarquia/vendedor-acesso/')) {
+    const vendedorId = pathname.split('/').pop() ?? ''
+    if (!vendedorId) {
+      writeJson(res, 400, { ok: false, error: 'vendedorId obrigatório' }, corsOrigin)
+      return true
+    }
+    const row = await repo.getVendedorAgenteAccess(vendedorId)
+    writeJson(res, 200, { ok: true, access: row }, corsOrigin)
+    return true
+  }
+
   if (method !== 'POST' && method !== 'PATCH' && method !== 'DELETE') return false
 
   if (method === 'POST' && pathname === '/api/hierarquia/agente/vincular') {
@@ -122,17 +133,6 @@ export async function handleHierarquiaRoutes(
       return true
     }
     writeJson(res, 200, { ok: true }, corsOrigin)
-    return true
-  }
-
-  if (method === 'GET' && pathname.startsWith('/api/hierarquia/vendedor-acesso/')) {
-    const vendedorId = pathname.split('/').pop() ?? ''
-    if (!vendedorId) {
-      writeJson(res, 400, { ok: false, error: 'vendedorId obrigatório' }, corsOrigin)
-      return true
-    }
-    const row = await repo.getVendedorAgenteAccess(vendedorId)
-    writeJson(res, 200, { ok: true, access: row }, corsOrigin)
     return true
   }
 
