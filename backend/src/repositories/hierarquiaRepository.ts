@@ -47,6 +47,7 @@ export type ModeloNegocioRow = {
   profile_id: string
   ponto_atendimento_id: string | null
   modo_operacao: 'comissao' | 'revenda'
+  aliquota_imposto: number
   ativo: boolean
   metadata: Record<string, unknown> | null
   created_at: string
@@ -450,18 +451,20 @@ export class HierarquiaRepository {
     profile_id: string
     ponto_atendimento_id: string
     modo_operacao: 'comissao' | 'revenda'
+    aliquota_imposto?: number
     ativo?: boolean
   }): Promise<ModeloNegocioRow> {
     const result = await this.db.query<ModeloNegocioRow>(
       `INSERT INTO perfil_modelos_negocio
-         (profile_id, ponto_atendimento_id, modo_operacao, ativo, metadata)
-       VALUES ($1, $2, $3, $4, '{}'::jsonb)
+         (profile_id, ponto_atendimento_id, modo_operacao, aliquota_imposto, ativo, metadata)
+       VALUES ($1, $2, $3, $4, $5, '{}'::jsonb)
        ON CONFLICT (profile_id, ponto_atendimento_id)
        DO UPDATE SET modo_operacao = excluded.modo_operacao,
+                     aliquota_imposto = excluded.aliquota_imposto,
                      ativo = excluded.ativo,
                      updated_at = now()
        RETURNING *`,
-      [input.profile_id, input.ponto_atendimento_id, input.modo_operacao, input.ativo ?? true],
+      [input.profile_id, input.ponto_atendimento_id, input.modo_operacao, input.aliquota_imposto ?? 9, input.ativo ?? true],
     )
     return result.rows[0]
   }

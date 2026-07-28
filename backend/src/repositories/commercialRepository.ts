@@ -69,6 +69,7 @@ export type SaveCommercialAgendaInput = {
 type VendaRemuneracaoContext = {
   valor_venda: number | null
   cpf_cnpj: string | null
+  metadata: Record<string, unknown> | null
 }
 
 type RemuneracaoSnapshot = {
@@ -1360,15 +1361,43 @@ export class CommercialRepository {
       pontoId: input.ponto_atendimento_id,
       escopo: 'validacao',
       documentoTipo,
-      baseCalculo: vendaContext?.valor_venda ?? 0,
+      baseCalculo: this.resolveBaseComissaoVenda(vendaContext),
     })
     const snapshotVenda = await this.resolveRemuneracaoSnapshot({
       profileId: input.agente_registro_id,
       pontoId: input.ponto_atendimento_id,
       escopo: 'venda',
       documentoTipo,
-      baseCalculo: vendaContext?.valor_venda ?? 0,
+      baseCalculo: this.resolveBaseComissaoVenda(vendaContext),
     })
+    let estruturaAtualizadaVenda: Record<string, unknown> | null = null
+    if (snapshotValidacao && vendaContext?.metadata) {
+      const vendaMetadata = this.asObject(vendaContext.metadata)
+      const estruturaAtual = this.asObject(vendaMetadata.estrutura_comercial)
+      if (Object.keys(estruturaAtual).length > 0) {
+        const repasseAnterior = this.asObject(estruturaAtual.repasse_validacao)
+        const saldoAtual = Number(estruturaAtual.saldo_estrutura ?? 0)
+        const saldoAntesValidacao = Number(
+          estruturaAtual.saldo_estrutura_antes_validacao
+          ?? (saldoAtual + Number(repasseAnterior.valor_calculado ?? 0)),
+        )
+        const novoSaldo = Number((saldoAntesValidacao - snapshotValidacao.valor_calculado).toFixed(2))
+        if (novoSaldo < 0) {
+          throw new Error(
+            `Agendamento bloqueado: a comissão de validação de R$ ${snapshotValidacao.valor_calculado.toFixed(2)} excede o saldo disponível de R$ ${saldoAntesValidacao.toFixed(2)}.`,
+          )
+        }
+        estruturaAtualizadaVenda = {
+          ...estruturaAtual,
+          saldo_estrutura_antes_validacao: saldoAntesValidacao,
+          repasse_validacao: { ...snapshotValidacao, profile_id: input.agente_registro_id },
+          saldo_estrutura: novoSaldo,
+          liquido_revendedor: estruturaAtual.modo_operacao === 'revenda' ? novoSaldo : estruturaAtual.liquido_revendedor,
+          margem_revenda: estruturaAtual.modo_operacao === 'revenda' ? novoSaldo : estruturaAtual.margem_revenda,
+          valor_certifast: estruturaAtual.modo_operacao === 'revenda' ? estruturaAtual.valor_certifast : novoSaldo,
+        }
+      }
+    }
     const metadata = JSON.stringify({
       origem: 'comercial_aiven',
       remuneracao_validacao: snapshotValidacao,
@@ -1412,6 +1441,16 @@ export class CommercialRepository {
     `, [agendaId, input.vendaId, input.agente_registro_id, input.ponto_atendimento_id, input.data_agendada, input.tipo_atendimento ?? null, input.observacoes ?? null, input.status_agendamento, metadata])
     const agenda = result.rows[0] ?? { id: agendaId }
 
+    if (estruturaAtualizadaVenda) {
+      await this.db.query(
+        `update vendas_certificados
+         set metadata = jsonb_set(coalesce(metadata, '{}'::jsonb), '{estrutura_comercial}', $2::jsonb, true),
+             updated_at = now()
+         where id = $1`,
+        [input.vendaId, JSON.stringify(estruturaAtualizadaVenda)],
+      )
+    }
+
     if (snapshotVenda) {
       await this.db.query(
         `update vendas_certificados
@@ -1449,7 +1488,7 @@ export class CommercialRepository {
 
   private async getVendaRemuneracaoContext(vendaId: string): Promise<VendaRemuneracaoContext | null> {
     const result = await this.db.query<VendaRemuneracaoContext>(
-      `select v.valor_venda, cb.cpf_cnpj
+      `select v.valor_venda, v.metadata, cb.cpf_cnpj
        from vendas_certificados v
        left join cadastros_base cb on cb.id = v.cadastro_base_id
        where v.id = $1
@@ -1457,6 +1496,17 @@ export class CommercialRepository {
       [vendaId],
     )
     return result.rows[0] ?? null
+  }
+
+  private resolveBaseComissaoVenda(venda: VendaRemuneracaoContext | null): number {
+    if (!venda) return 0
+    const metadata = this.asObject(venda.metadata)
+    const estrutura = this.asObject(metadata.estrutura_comercial)
+    const snapshotBase = Number(estrutura.base_calculo_comissoes)
+    if (Number.isFinite(snapshotBase) && snapshotBase >= 0) return snapshotBase
+    const valorVenda = Number(venda.valor_venda ?? 0)
+    const aliquota = Number(estrutura.aliquota_imposto ?? 9)
+    return Number((valorVenda - (valorVenda * aliquota / 100)).toFixed(2))
   }
 
   private resolveDocumentoTipo(documento: string | null): 'geral' | 'cpf' | 'cnpj' {
@@ -2013,7 +2063,7 @@ export class CommercialRepository {
   }) {
     const from = input.from?.trim() || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
     const to = input.to?.trim() || new Date().toISOString()
-    const canViewAll = input.viewer_perfil === 'admin'
+    const canViewAll = ['admin', 'superadmin'].includes(input.viewer_perfil)
     const targetProfileId = canViewAll && input.target_profile_id?.trim()
       ? input.target_profile_id.trim()
       : input.viewer_profile_id
@@ -2040,7 +2090,14 @@ export class CommercialRepository {
                 v.desconto, v.comissao_vendedor_valor, v.vendedor_id, v.metadata, cb.iss_retido as cliente_iss_retido
          from vendas_certificados v
          left join cadastros_base cb on cb.id = v.cadastro_base_id
-         where v.vendedor_id = $1
+         where (
+               v.vendedor_id = $1::uuid
+               OR EXISTS (
+                 SELECT 1
+                 FROM jsonb_array_elements(coalesce(v.metadata#>'{estrutura_comercial,repasses}', '[]'::jsonb)) repasse
+                 WHERE repasse->>'parent_profile_id' = $1::text
+               )
+             )
            and v.created_at >= $2::timestamptz
            and v.created_at <= $3::timestamptz
            and coalesce(v.status_venda, '') != 'cancelado'
@@ -2080,9 +2137,17 @@ export class CommercialRepository {
       const estrutura = this.asObject(metadata.estrutura_comercial)
       const modoOperacao = String(estrutura.modo_operacao ?? 'comissao')
       const liquidoRevenda = Number(estrutura.liquido_revendedor ?? 0)
-      const comissao = modoOperacao === 'revenda'
-        ? liquidoRevenda
-        : Number(row.comissao_vendedor_valor ?? 0)
+      const repasses = Array.isArray(estrutura.repasses) ? estrutura.repasses : []
+      const repassesDoPerfil = repasses
+        .map(item => this.asObject(item))
+        .filter(item => String(item.parent_profile_id ?? '') === targetProfileId)
+      const valorRepasses = Number(repassesDoPerfil.reduce((acc, item) => acc + Number(item.valor_calculado ?? 0), 0).toFixed(2))
+      const valorPrincipal = row.vendedor_id === targetProfileId
+        ? (modoOperacao === 'revenda'
+            ? liquidoRevenda
+            : Number(estrutura.saldo_estrutura ?? row.comissao_vendedor_valor ?? 0))
+        : 0
+      const comissao = Number((valorPrincipal + valorRepasses).toFixed(2))
       const desconto = Number(row.desconto ?? 0)
       const impostoRetido = Number(estrutura.imposto_retido_valor ?? 0)
       return {
@@ -2130,7 +2195,7 @@ export class CommercialRepository {
       descontos_total: Number(vendas.reduce((acc, row) => acc + row.desconto, 0).toFixed(2)),
       imposto_retido_total: Number(linhas.reduce((acc, row) => acc + row.imposto_retido, 0).toFixed(2)),
     }
-    const totalReceber = Number((resumo.vendas_total_receber + resumo.validacoes_total_receber - resumo.imposto_retido_total).toFixed(2))
+    const totalReceber = Number((resumo.vendas_total_receber + resumo.validacoes_total_receber).toFixed(2))
 
     return {
       profile,

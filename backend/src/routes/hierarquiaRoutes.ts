@@ -237,6 +237,7 @@ export async function handleHierarquiaRoutes(
       profile_id: string
       ponto_atendimento_id: string
       modo_operacao: 'comissao' | 'revenda'
+      aliquota_imposto?: number
       ativo?: boolean
     }>(req)
     if (!body.profile_id || !body.ponto_atendimento_id || !body.modo_operacao) {

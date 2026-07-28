@@ -3589,6 +3589,7 @@ type ModeloNegocioH = {
   profile_id: string
   ponto_atendimento_id: string | null
   modo_operacao: 'comissao' | 'revenda'
+  aliquota_imposto: number
   ativo: boolean
 }
 type RevendaPrecoBaseH = {
@@ -3897,6 +3898,7 @@ function ModeloComercialPanel({
   const [loading, setLoading] = useState(true)
   const [savingModelo, setSavingModelo] = useState(false)
   const [modoOperacao, setModoOperacao] = useState<'comissao' | 'revenda'>('comissao')
+  const [aliquotaImposto, setAliquotaImposto] = useState('9')
   const [modeloAtual, setModeloAtual] = useState<ModeloNegocioH | null>(null)
   const [itensTabela, setItensTabela] = useState<TabelaPrecoItemResumoH[]>([])
   const [precosBase, setPrecosBase] = useState<RevendaPrecoBaseH[]>([])
@@ -3936,6 +3938,7 @@ function ModeloComercialPanel({
     ])
     setModeloAtual((modeloData.modelo ?? null) as ModeloNegocioH | null)
     setModoOperacao(((modeloData.modelo?.modo_operacao as 'comissao' | 'revenda' | undefined) ?? 'comissao'))
+    setAliquotaImposto(String(modeloData.modelo?.aliquota_imposto ?? 9))
     setItensTabela((itensData.itens ?? []) as TabelaPrecoItemResumoH[])
     setPrecosBase((precosData.precos ?? []) as RevendaPrecoBaseH[])
     setRepasses((repassesData.regras ?? []) as RepasseRegraH[])
@@ -3954,6 +3957,7 @@ function ModeloComercialPanel({
         profile_id: profile.id,
         ponto_atendimento_id: pontoId,
         modo_operacao: modoOperacao,
+        aliquota_imposto: Number(aliquotaImposto || 0),
         ativo: true,
       }),
     })
@@ -4066,6 +4070,13 @@ function ModeloComercialPanel({
                       <option value="comissao">Integrado</option>
                       <option value="revenda">Revenda</option>
                     </select>
+                    <label className="flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2">
+                      <span className="text-xs text-gray-500 whitespace-nowrap">Imposto efetivo</span>
+                      <input type="number" min={0} max={100} step="0.01" value={aliquotaImposto}
+                        onChange={e => setAliquotaImposto(e.target.value)}
+                        className="w-20 bg-transparent text-sm text-right outline-none" />
+                      <span className="text-sm text-gray-500">%</span>
+                    </label>
                     <button type="button" onClick={() => void salvarModelo()} disabled={savingModelo} className="px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
                       {savingModelo ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                       Salvar modo
@@ -4115,7 +4126,7 @@ function ModeloComercialPanel({
                   <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-4">
                     <div>
                       <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Remunerações em cascata da venda</p>
-                      <p className="text-xs text-gray-500">{modoOperacao === 'revenda' ? 'O ganho fixo da Certifast fica travado. As remunerações saem somente da margem restante.' : 'As remunerações são calculadas sobre o preço total da venda. O saldo permanece com a Certifast.'}</p>
+                      <p className="text-xs text-gray-500">{modoOperacao === 'revenda' ? 'A retenção fica travada. Todas as comissões usam o valor da venda após o imposto; o saldo vai ao revendedor.' : 'Todas as comissões usam o valor da venda após o imposto. O saldo permanece com a operação integrada.'}</p>
                       <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">A validação não entra nesta cascata: existe apenas uma comissão, paga ao agente que efetivamente validar o pedido.</p>
                     </div>
                     <div className="space-y-2">
@@ -4141,7 +4152,7 @@ function ModeloComercialPanel({
                         ))}
                       </select>
                       <select value={escopoCascata} disabled className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 text-gray-600">
-                        <option value={escopoCascata}>{modoOperacao === 'revenda' ? 'Margem da revenda' : 'Preço da venda'}</option>
+                        <option value={escopoCascata}>Venda após imposto</option>
                       </select>
                       <select value={repasseForm.tipo_calculo} onChange={e => setRepasseForm(p => ({ ...p, tipo_calculo: e.target.value as 'fixa' | 'percentual' }))} className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="percentual">Percentual</option>

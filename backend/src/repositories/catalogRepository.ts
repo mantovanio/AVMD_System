@@ -1019,6 +1019,7 @@ export class CatalogRepository {
     const pontoId = typeof input.ponto_atendimento_id === 'string' ? input.ponto_atendimento_id : null
     const itemId = typeof input.tabela_preco_item_id === 'string' ? input.tabela_preco_item_id : null
     const valorVenda = Number(input.valor_venda ?? 0)
+    const aliquotaPadrao = 9
     let vendedorId = vendedorInformadoId
     let origemParticipante = vendedorInformadoId ? 'vendedor' : 'sem_participante'
 
@@ -1039,9 +1040,14 @@ export class CatalogRepository {
     }
 
     if (!vendedorId || !pontoId) {
+      const impostoValor = Number(((valorVenda * aliquotaPadrao) / 100).toFixed(2))
       return {
         modo_operacao: 'comissao',
         modelo_comercial: 'integrado',
+        aliquota_imposto: aliquotaPadrao,
+        imposto_valor: impostoValor,
+        valor_apos_imposto: Number((valorVenda - impostoValor).toFixed(2)),
+        base_calculo_comissoes: Number((valorVenda - impostoValor).toFixed(2)),
         origem: !pontoId ? 'sem_ponto' : origemParticipante,
         parceiro_id: parceiroInformadoId,
       }
@@ -1049,8 +1055,9 @@ export class CatalogRepository {
 
     const modelo = await this.db.query<{
       modo_operacao: 'comissao' | 'revenda'
+      aliquota_imposto: number
     }>(
-      `select modo_operacao
+      `select modo_operacao, aliquota_imposto
        from perfil_modelos_negocio
        where profile_id = $1
          and ponto_atendimento_id = $2
@@ -1060,6 +1067,9 @@ export class CatalogRepository {
     )
 
     const modoOperacao = modelo.rows[0]?.modo_operacao ?? 'comissao'
+    const aliquotaImposto = Number(modelo.rows[0]?.aliquota_imposto ?? aliquotaPadrao)
+    const impostoValor = Number(((valorVenda * aliquotaImposto) / 100).toFixed(2))
+    const valorAposImposto = Number((valorVenda - impostoValor).toFixed(2))
 
     const precoBaseRow = itemId
       ? await this.db.query<{
@@ -1090,9 +1100,7 @@ export class CatalogRepository {
     if (modoOperacao === 'revenda' && valorVenda < precoBase) {
       throw new Error('A venda foi bloqueada: o valor de venda é menor que o ganho fixo da Certifast.')
     }
-    const baseCalculo = modoOperacao === 'revenda'
-      ? Number((valorVenda - precoBase).toFixed(2))
-      : valorVenda
+    const baseCalculo = valorAposImposto
     const escopoCascata = modoOperacao === 'revenda' ? 'margem_revenda' : 'venda'
 
     const repasses = await this.db.query<{
@@ -1131,12 +1139,13 @@ export class CatalogRepository {
     })
 
     const totalRepasse = Number(repassesCalculados.reduce((acc, row) => acc + Number(row.valor_calculado || 0), 0).toFixed(2))
-    if (totalRepasse > baseCalculo) {
+    const totalComprometido = Number((totalRepasse + (modoOperacao === 'revenda' ? precoBase : 0)).toFixed(2))
+    if (totalComprometido > baseCalculo) {
       throw new Error(
-        `A venda foi bloqueada: as remunerações somam R$ ${totalRepasse.toFixed(2)}, acima da base disponível de R$ ${baseCalculo.toFixed(2)}.`,
+        `A venda foi bloqueada: retenção e remunerações somam R$ ${totalComprometido.toFixed(2)}, acima do valor após imposto de R$ ${baseCalculo.toFixed(2)}.`,
       )
     }
-    const saldoEstrutura = Number((baseCalculo - totalRepasse).toFixed(2))
+    const saldoEstrutura = Number((baseCalculo - totalComprometido).toFixed(2))
 
     return {
       modo_operacao: modoOperacao,
@@ -1147,9 +1156,14 @@ export class CatalogRepository {
       ponto_atendimento_id: pontoId,
       tabela_preco_item_id: itemId,
       valor_venda: valorVenda,
+      aliquota_imposto: aliquotaImposto,
+      imposto_valor: impostoValor,
+      imposto_retido_valor: impostoValor,
+      valor_apos_imposto: valorAposImposto,
       preco_base: precoBase,
       base_calculo_comissoes: baseCalculo,
-      margem_revenda: modoOperacao === 'revenda' ? baseCalculo : null,
+      retencao_revenda: modoOperacao === 'revenda' ? precoBase : null,
+      margem_revenda: modoOperacao === 'revenda' ? saldoEstrutura : null,
       liquido_revendedor: modoOperacao === 'revenda' ? saldoEstrutura : null,
       valor_certifast: modoOperacao === 'revenda' ? precoBase : saldoEstrutura,
       saldo_estrutura: saldoEstrutura,
