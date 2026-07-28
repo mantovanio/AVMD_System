@@ -129,7 +129,7 @@ export class HierarquiaRepository {
         SELECT ${PROFILE_COLS}
         FROM profiles
         WHERE id IN (SELECT id FROM roots)
-          AND perfil = 'agente_registro'
+          AND (perfil = 'agente_registro' OR tipo_vinculo = 'agente_registro')
           AND status != 'removido'
         UNION ALL
         SELECT p.id, p.nome, p.email, p.perfil, p.status, p.nivel_hierarquia,
@@ -145,7 +145,7 @@ export class HierarquiaRepository {
 
   async getAvailableAgentes(pontoId?: string | null): Promise<ProfileHierarquiaRow[]> {
     const params: unknown[] = []
-    const filters = ["perfil = 'agente_registro'", "status = 'ativo'"]
+    const filters = ["(perfil = 'agente_registro' OR tipo_vinculo = 'agente_registro')", "status = 'ativo'"]
 
     if (pontoId) {
       params.push(pontoId)

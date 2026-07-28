@@ -4499,7 +4499,7 @@ function PontoHierarquiaPanel({ ponto, onClose }: { ponto: PontoAtendimento; onC
     void load()
   }
 
-  const agentes = profiles.filter(p => p.perfil === 'agente_registro')
+  const agentes = profiles.filter(p => p.perfil === 'agente_registro' || p.tipo_vinculo === 'agente_registro')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
