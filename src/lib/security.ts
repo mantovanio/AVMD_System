@@ -59,7 +59,7 @@ export const PERFIL_LABEL: Record<PerfilAcesso, string> = {
   supervisor_chat: 'Supervisor do Chat',
   agente_registro: 'Agente de Registro',
   vendedor: 'Vendedor',
-  usuario: 'Usuário',
+  usuario: 'Funcionário',
 }
 
 export function isProfileActive(profile: Profile | null | undefined) {

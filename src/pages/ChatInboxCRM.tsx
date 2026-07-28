@@ -930,6 +930,18 @@ export default function ChatInboxCRM() {
   }, [profile?.id])
 
   useEffect(() => {
+    if (!profile?.id) return
+    const timer = window.setInterval(() => {
+      void loadConversations(false)
+      if (selectedId) {
+        void loadMessages(selectedId, { background: true })
+      }
+    }, 10000)
+
+    return () => window.clearInterval(timer)
+  }, [profile?.id, selectedId])
+
+  useEffect(() => {
     let mounted = true
     void (async () => {
       setChatSettingsLoading(true)
@@ -1111,23 +1123,45 @@ export default function ChatInboxCRM() {
         if (pendingConversationReloadRef.current) clearTimeout(pendingConversationReloadRef.current)
         pendingConversationReloadRef.current = setTimeout(() => {
           void loadConversations(false)
-        }, 180)
+        }, 40)
       })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'crm_chat_messages' }, payload => {
           const nextRow = (payload.new ?? {}) as Record<string, unknown>
           const prevRow = (payload.old ?? {}) as Record<string, unknown>
           const conversationId = String((nextRow['conversation_id'] as string | undefined) ?? (prevRow['conversation_id'] as string | undefined) ?? '')
           const direction = String((nextRow['direction'] as string | undefined) ?? '')
-            if (payload.eventType === 'INSERT' && conversationId && direction === 'incoming' && conversationId !== selectedId) {
-              setUnreadCounts(prev => ({ ...prev, [conversationId]: (prev[conversationId] ?? 0) + 1 }))
+          if (payload.eventType === 'INSERT' && conversationId && direction === 'incoming' && conversationId !== selectedId) {
+            setUnreadCounts(prev => ({ ...prev, [conversationId]: (prev[conversationId] ?? 0) + 1 }))
+          }
+          if (selectedId && conversationId === selectedId) {
+            if (payload.eventType === 'INSERT' && nextRow.id) {
+              const immediateMessage = {
+                id: String(nextRow.id),
+                conversation_id: String(nextRow.conversation_id ?? conversationId),
+                document_key: String(nextRow.document_key ?? ''),
+                external_message_id: nextRow.external_message_id ? String(nextRow.external_message_id) : null,
+                direction: (nextRow.direction as DirectionType) ?? 'incoming',
+                sender_type: String(nextRow.sender_type ?? 'humano'),
+                sender_name: nextRow.sender_name ? String(nextRow.sender_name) : null,
+                mensagem: nextRow.mensagem ? String(nextRow.mensagem) : null,
+                mime_type: nextRow.mime_type ? String(nextRow.mime_type) : null,
+                file_name: nextRow.file_name ? String(nextRow.file_name) : null,
+                media_url: nextRow.media_url ? String(nextRow.media_url) : null,
+                delivery_status: nextRow.delivery_status ? String(nextRow.delivery_status) : null,
+                delivered_at: nextRow.delivered_at ? String(nextRow.delivered_at) : null,
+                read_at: nextRow.read_at ? String(nextRow.read_at) : null,
+                status_updated_at: nextRow.status_updated_at ? String(nextRow.status_updated_at) : null,
+                created_at: String(nextRow.created_at ?? new Date().toISOString()),
+                updated_at: String(nextRow.updated_at ?? new Date().toISOString()),
+              } as CrmMessage
+              setMessages(prev => mergeConversationMessages([...prev, immediateMessage]))
             }
-            if (selectedId && conversationId === selectedId) {
-              if (pendingMessageReloadRef.current) clearTimeout(pendingMessageReloadRef.current)
-              pendingMessageReloadRef.current = setTimeout(() => {
-                void loadMessages(selectedId, { background: true })
-              }, 120)
-            }
-          })
+            if (pendingMessageReloadRef.current) clearTimeout(pendingMessageReloadRef.current)
+            pendingMessageReloadRef.current = setTimeout(() => {
+              void loadMessages(selectedId, { background: true })
+            }, 40)
+          }
+        })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'communication_events' }, payload => {
           const nextRow = (payload.new ?? {}) as Record<string, unknown>
           const conversationId = String(nextRow.conversation_id ?? '')
