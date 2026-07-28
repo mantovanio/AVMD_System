@@ -1,3 +1,6 @@
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
 UPDATE profiles
 SET metadata = coalesce(metadata, '{}'::jsonb)
                || '{"finance_only":true,"origem":"repasse_comercial"}'::jsonb,
