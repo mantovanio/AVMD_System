@@ -125,6 +125,44 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
+  if (method === 'GET' && pathname.startsWith('/api/hierarquia/vendedor-acesso/')) {
+    const vendedorId = pathname.split('/').pop() ?? ''
+    if (!vendedorId) {
+      writeJson(res, 400, { ok: false, error: 'vendedorId obrigatório' }, corsOrigin)
+      return true
+    }
+    const row = await repo.getVendedorAgenteAccess(vendedorId)
+    writeJson(res, 200, { ok: true, access: row }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && pathname === '/api/hierarquia/vendedor-acesso') {
+    const body = await readJson<{ vendedor_id: string; agente_id?: string | null; ativo?: boolean }>(req)
+    if (!body.vendedor_id) {
+      writeJson(res, 400, { ok: false, error: 'vendedor_id obrigatório' }, corsOrigin)
+      return true
+    }
+    const row = await repo.saveVendedorAgenteAccess({
+      vendedor_id: body.vendedor_id,
+      agente_id: body.agente_id ?? null,
+      ativo: body.ativo ?? true,
+      metadata: { source: 'configuracoes_hierarquia' },
+    })
+    writeJson(res, 200, { ok: true, access: row }, corsOrigin)
+    return true
+  }
+
+  if (method === 'DELETE' && pathname.startsWith('/api/hierarquia/vendedor-acesso/')) {
+    const vendedorId = pathname.split('/').pop() ?? ''
+    if (!vendedorId) {
+      writeJson(res, 400, { ok: false, error: 'vendedorId obrigatório' }, corsOrigin)
+      return true
+    }
+    await repo.deleteVendedorAgenteAccess(vendedorId)
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
   if (method === 'POST' && pathname === '/api/hierarquia/vendedor/desvincular') {
     const body = await readJson<{ vendedorId: string }>(req)
     if (!body.vendedorId) {

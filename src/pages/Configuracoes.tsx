@@ -4169,7 +4169,7 @@ function ModeloComercialPanel({
 
 
 function ProfileNode({
-  profile, allProfiles, depth, pontoId, onRefresh, availableVendedores,
+  profile, allProfiles, depth, pontoId, onRefresh, availableVendedores, availableAgentes,
 }: {
   profile: ProfileH
   allProfiles: ProfileH[]
@@ -4177,6 +4177,7 @@ function ProfileNode({
   pontoId: string
   onRefresh: () => void
   availableVendedores: ProfileH[]
+  availableAgentes: ProfileH[]
 }) {
   const children = allProfiles.filter(p => p.parent_profile_id === profile.id)
   const [expanded, setExpanded] = useState(true)
@@ -4191,10 +4192,34 @@ function ProfileNode({
   const [savingConfig, setSavingConfig] = useState(false)
   const [addingChild, setAddingChild] = useState(false)
   const [removendo, setRemovendo] = useState(false)
+  const [vendedorAccess, setVendedorAccess] = useState<{ agente_id: string | null; ativo: boolean } | null>(null)
+  const [loadingAccess, setLoadingAccess] = useState(false)
+  const [savingAccess, setSavingAccess] = useState(false)
 
   const isAgente = profile.perfil === 'agente_registro'
+  const isVendedor = profile.perfil === 'vendedor'
   const canHaveChildren = depth < 3
   const indent = depth * 20
+
+  useEffect(() => {
+    if (!isVendedor) return
+    let alive = true
+    setLoadingAccess(true)
+    fetch(getApiUrl(`/hierarquia/vendedor-acesso/${profile.id}`))
+      .then(r => r.json())
+      .then(data => {
+        if (!alive) return
+        const access = data.access as { agente_id: string | null; ativo: boolean } | null
+        setVendedorAccess(access ? { agente_id: access.agente_id ?? null, ativo: Boolean(access.ativo) } : { agente_id: null, ativo: true })
+      })
+      .catch(() => {
+        if (alive) setVendedorAccess({ agente_id: null, ativo: true })
+      })
+      .finally(() => {
+        if (alive) setLoadingAccess(false)
+      })
+    return () => { alive = false }
+  }, [isVendedor, profile.id])
 
   async function salvarConfig() {
     setSavingConfig(true)
@@ -4219,6 +4244,19 @@ function ProfileNode({
     setAddingChild(false)
     setShowAddChild(false)
     setSelectedChild('')
+    onRefresh()
+  }
+
+  async function salvarAcessoVendedor(agenteId: string | null) {
+    if (!isVendedor) return
+    setSavingAccess(true)
+    await fetch(getApiUrl('/hierarquia/vendedor-acesso'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vendedor_id: profile.id, agente_id: agenteId }),
+    })
+    setVendedorAccess({ agente_id: agenteId, ativo: true })
+    setSavingAccess(false)
     onRefresh()
   }
 
@@ -4332,6 +4370,28 @@ function ProfileNode({
           </div>
         )}
 
+        {isVendedor && (
+          <div className="bg-white dark:bg-gray-900 px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1 min-w-64">
+              <span className="text-xs text-gray-500">Acesso operacional por agente</span>
+              <select
+                value={vendedorAccess?.agente_id ?? ''}
+                onChange={e => void salvarAcessoVendedor(e.target.value || null)}
+                disabled={loadingAccess || savingAccess}
+                className="border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+              >
+                <option value="">Todos os agentes</option>
+                {availableAgentes.map(a => (
+                  <option key={a.id} value={a.id}>{a.nome}</option>
+                ))}
+              </select>
+              <span className="text-[11px] text-gray-400">
+                Selecione um agente específico para restringir o atendimento, ou deixe em branco para liberar todos.
+              </span>
+            </div>
+          </div>
+        )}
+
         {showAddChild && (
           <div className="bg-white dark:bg-gray-900 px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex gap-2 items-end flex-wrap">
             <div className="flex flex-col gap-1 flex-1 min-w-48">
@@ -4355,7 +4415,7 @@ function ProfileNode({
 
       {expanded && children.map(child => (
         <ProfileNode key={child.id} profile={child} allProfiles={allProfiles} depth={depth + 1}
-          pontoId={pontoId} onRefresh={onRefresh} availableVendedores={availableVendedores} />
+          pontoId={pontoId} onRefresh={onRefresh} availableVendedores={availableVendedores} availableAgentes={availableAgentes} />
       ))}
 
       {showFaixas && <FaixasPanel profileId={profile.id} onClose={() => setShowFaixas(false)} />}
@@ -4432,7 +4492,7 @@ function PontoHierarquiaPanel({ ponto, onClose }: { ponto: PontoAtendimento; onC
           ) : (
             agentes.map(agente => (
               <ProfileNode key={agente.id} profile={agente} allProfiles={profiles} depth={0}
-                pontoId={ponto.id} onRefresh={load} availableVendedores={availableVendedores} />
+                pontoId={ponto.id} onRefresh={load} availableVendedores={availableVendedores} availableAgentes={availableAgentes} />
             ))
           )}
 

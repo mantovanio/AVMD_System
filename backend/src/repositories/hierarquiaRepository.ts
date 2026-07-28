@@ -85,6 +85,18 @@ export type RepasseRegraRow = {
   papel_recebedor?: string | null
 }
 
+export type VendedorAgenteAcessoRow = {
+  id: string
+  vendedor_id: string
+  agente_id: string | null
+  ativo: boolean
+  metadata: Record<string, unknown> | null
+  created_at: string
+  updated_at: string
+  vendedor_nome?: string | null
+  agente_nome?: string | null
+}
+
 export type TabelaPrecoItemResumoRow = {
   id: string
   tabela_preco_id: string
@@ -249,6 +261,38 @@ export class HierarquiaRepository {
        WHERE id = $1`,
       [vendedorId],
     )
+  }
+
+  async getVendedorAgenteAccess(vendedorId: string): Promise<VendedorAgenteAcessoRow | null> {
+    const result = await this.db.query<VendedorAgenteAcessoRow>(
+      `SELECT va.*, v.nome as vendedor_nome, a.nome as agente_nome
+         FROM vendedor_agente_acesso va
+         JOIN profiles v ON v.id = va.vendedor_id
+         LEFT JOIN profiles a ON a.id = va.agente_id
+        WHERE va.vendedor_id = $1
+        LIMIT 1`,
+      [vendedorId],
+    )
+    return result.rows[0] ?? null
+  }
+
+  async saveVendedorAgenteAccess(input: { vendedor_id: string; agente_id: string | null; ativo?: boolean; metadata?: Record<string, unknown> | null }): Promise<VendedorAgenteAcessoRow> {
+    const result = await this.db.query<VendedorAgenteAcessoRow>(
+      `INSERT INTO vendedor_agente_acesso (vendedor_id, agente_id, ativo, metadata)
+       VALUES ($1, $2, $3, $4::jsonb)
+       ON CONFLICT (vendedor_id)
+       DO UPDATE SET agente_id = excluded.agente_id,
+                     ativo = excluded.ativo,
+                     metadata = excluded.metadata,
+                     updated_at = now()
+       RETURNING *`,
+      [input.vendedor_id, input.agente_id, input.ativo ?? true, JSON.stringify(input.metadata ?? {})],
+    )
+    return result.rows[0]
+  }
+
+  async deleteVendedorAgenteAccess(vendedorId: string): Promise<void> {
+    await this.db.query('DELETE FROM vendedor_agente_acesso WHERE vendedor_id = $1', [vendedorId])
   }
 
   async updateProfileConfig(profileId: string, input: {
