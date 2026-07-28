@@ -1455,6 +1455,11 @@ function AbaUsuarios() {
         <div className="space-y-3">
           {users.map(u => (
             <div key={u.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+              {(() => {
+                const parceiroVinculado = parceiros.find(p => p.id === u.parceiro_id) ?? null
+                const nomeVinculo = u.vinculo_nome?.trim() || parceiroVinculado?.nome || ''
+                const vinculoInconsistente = Boolean(u.parceiro_id && parceiroVinculado && nomeVinculo !== parceiroVinculado.nome)
+                return (
               <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                   <div className={cn(
@@ -1468,6 +1473,15 @@ function AbaUsuarios() {
                   <div className="min-w-0">
                     <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{u.nome}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{u.email}</p>
+                    <p className="text-[11px] mt-0.5 text-gray-500 dark:text-gray-400 truncate">
+                      <span className="font-medium text-gray-600 dark:text-gray-300">Vínculo:</span>{' '}
+                      {nomeVinculo || '—'}
+                    </p>
+                    {vinculoInconsistente && (
+                      <p className="text-[11px] mt-0.5 text-amber-600 dark:text-amber-400">
+                        Vínculo salvo diferente do cadastro associado
+                      </p>
+                    )}
                     <p className="text-[11px] mt-0.5">
                       {u.clerk_user_id ? (
                         <span className="text-green-600 dark:text-green-400">Conta de login vinculada</span>
@@ -1538,6 +1552,8 @@ function AbaUsuarios() {
                   )}
                 </div>
               </div>
+                )
+              })()}
 
               {editingId === u.id && editForm && (
                 <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-4">
