@@ -29,8 +29,8 @@ const TIPO_PARCEIRO_OPTIONS: { value: TipoParceiro; label: string }[] = [
   { value: 'ar', label: 'AR' },
   { value: 'pa_controle_total', label: 'PA 100% Controle' },
   { value: 'pa_emissor', label: 'PA / Emissor' },
-  { value: 'contador', label: 'Contador' },
-  { value: 'vendedor', label: 'Vendedor' },
+  { value: 'contador', label: 'Parceiro Contador' },
+  { value: 'vendedor', label: 'Parceiro Vendedor' },
   { value: 'gestor', label: 'Gestor' },
   { value: 'ecommerce', label: 'E-Commerce' },
 ]
@@ -314,9 +314,9 @@ export default function Parceiros() {
       return {
         Status: parceiro.status === 'ativo' ? 'Ativo' : 'Inativo',
         'Tipo Parceiro': TIPO_PARCEIRO_OPTIONS.find(option => option.value === parceiro.tipo_parceiro)?.label ?? '',
-        Vendedor: roles.includes('vendedor') ? 'Sim' : 'Não',
+        'Parceiro Vendedor': roles.includes('vendedor') ? 'Sim' : 'Não',
         'Agente de Registro': roles.includes('agente_registro') ? 'Sim' : 'Não',
-        Contador: roles.includes('contador') ? 'Sim' : 'Não',
+        'Parceiro Contador': roles.includes('contador') ? 'Sim' : 'Não',
         'Bloqueado Vendas/Protocolo': parceiro.bloquear_vendas_protocolos ? 'Sim' : 'Não',
         'Código Parceiro': parceiro.codigo_parceiro ?? '',
         'CNPJ/CPF': parceiro.cpf_cnpj ?? '',
@@ -740,9 +740,9 @@ export default function Parceiros() {
                   <tr>
                     <th className="px-3 py-2 text-left">Parceiro</th>
                     <th className="px-3 py-2 text-left">CPF/CNPJ</th>
-                    <th className="px-3 py-2 text-center">Vendedor</th>
+                    <th className="px-3 py-2 text-center">Parceiro Vendedor</th>
                     <th className="px-3 py-2 text-center">Agente de Registro</th>
-                    <th className="px-3 py-2 text-center">Contador</th>
+                    <th className="px-3 py-2 text-center">Parceiro Contador</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -843,9 +843,9 @@ export default function Parceiros() {
                   <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Este parceiro também atua como:</p>
                   <div className="flex flex-wrap gap-4">
                     {([
-                      ['vendedor', 'Vendedor'],
+                      ['vendedor', 'Parceiro Vendedor'],
                       ['agente_registro', 'Agente de Registro'],
-                      ['contador', 'Contador'],
+                      ['contador', 'Parceiro Contador'],
                     ] as Array<[PapelParceiro, string]>).map(([role, label]) => {
                       const roles = Array.isArray(form.metadata?.papeis_adicionais) ? form.metadata.papeis_adicionais as PapelParceiro[] : []
                       return (
@@ -923,7 +923,7 @@ export default function Parceiros() {
             {editingId && (
               <Section title="Agentes de Registro Permitidos para este Parceiro">
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                  Essa regra limita quais agentes de registro poderão atender vendas e validações deste parceiro, vendedor ou contador.
+                  Essa regra limita quais agentes de registro poderão atender vendas e validações deste parceiro.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <SelectField

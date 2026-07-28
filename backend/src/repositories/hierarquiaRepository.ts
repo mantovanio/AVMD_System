@@ -162,13 +162,31 @@ export class HierarquiaRepository {
     return result.rows
   }
 
-  async getAvailableVendedores(): Promise<ProfileHierarquiaRow[]> {
+  async getAvailableVendedores(viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<ProfileHierarquiaRow[]> {
+    const params: unknown[] = []
+    const filters = ["perfil = 'vendedor'", "status = 'ativo'"]
+
+    if (viewerProfileId && viewerPerfil === 'agente_registro') {
+      params.push(viewerProfileId)
+      filters.push(`(
+        NOT EXISTS (
+          SELECT 1 FROM vendedor_agente_acesso va
+          WHERE va.vendedor_id = profiles.id
+        )
+        OR EXISTS (
+          SELECT 1 FROM vendedor_agente_acesso va
+          WHERE va.vendedor_id = profiles.id
+            AND va.ativo = true
+            AND (va.agente_id IS NULL OR va.agente_id = $${params.length}::uuid)
+        )
+      )`)
+    }
+
     const result = await this.db.query<ProfileHierarquiaRow>(`
       SELECT ${PROFILE_COLS} FROM profiles
-      WHERE perfil = 'vendedor' AND status = 'ativo'
-        AND parent_profile_id IS NULL
+      WHERE ${filters.join(' AND ')}
       ORDER BY nome
-    `)
+    `, params)
     return result.rows
   }
 

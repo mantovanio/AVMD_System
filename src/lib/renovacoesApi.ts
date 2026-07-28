@@ -247,6 +247,14 @@ export async function fetchProfiles(): Promise<Profile[]> {
   return data.profiles ?? []
 }
 
+export async function fetchVendedoresDisponiveis(viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<Profile[]> {
+  const params = new URLSearchParams()
+  if (viewerProfileId) params.set('viewerProfileId', viewerProfileId)
+  if (viewerPerfil) params.set('viewerPerfil', viewerPerfil)
+  const data = await apiFetch<{ ok: boolean; profiles: Profile[] }>(`/hierarquia/vendedores-disponiveis?${params.toString()}`)
+  return data.profiles ?? []
+}
+
 // ── Links Produtos ────────────────────────────────────────────
 
 export async function fetchLinks(): Promise<LinkProduto[]> {

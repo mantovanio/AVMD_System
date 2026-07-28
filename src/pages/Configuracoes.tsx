@@ -65,7 +65,7 @@ const PERFIL_LABEL: Record<PerfilAcesso, string> = {
   admin:           'Administrador',
   supervisor_chat: 'Supervisor do Chat',
   agente_registro: 'Agente de Registro',
-  vendedor:        'Vendedor / Parceiro',
+  vendedor:        'Parceiro Vendedor',
   usuario:         'Usuário',
 }
 
@@ -80,8 +80,8 @@ const PERFIL_COLOR: Record<PerfilAcesso, string> = {
 const TIPO_VINCULO_LABEL: Record<TipoVinculoUsuario, string> = {
   agente_registro: 'Agente de Registro',
   parceiro:        'Parceiro',
-  vendedor:        'Vendedor',
-  contador:        'Contador',
+  vendedor:        'Parceiro Vendedor',
+  contador:        'Parceiro Contador',
   usuario_comum:   'Usuário comum',
   cliente_portal:  'Cliente do portal',
 }
@@ -1208,7 +1208,7 @@ function AbaUsuarios() {
                 <div className="rounded-xl border border-blue-200 dark:border-blue-900/30 bg-blue-50 dark:bg-blue-950/20 p-3 space-y-1">
                   <p className="text-xs font-bold text-blue-700 dark:text-blue-300">Pronto para usar</p>
                   <p className="text-[11px] text-blue-600 dark:text-blue-400">
-                    <strong>{novoNome}</strong> já aparece como opção de Contador/Parceiro no lançamento de vendas.
+                    <strong>{novoNome}</strong> já aparece como opção de parceiro no lançamento de vendas.
                     {!novoLojaNome.trim() && ' Se quiser criar uma loja do marketplace depois, edite o usuário aqui em Configurações.'}
                   </p>
                 </div>
@@ -1249,7 +1249,7 @@ function AbaUsuarios() {
                   <option value="admin">Administrador</option>
                   <option value="supervisor_chat">Supervisor do Chat</option>
                   <option value="agente_registro">Agente de Registro</option>
-                  <option value="vendedor">Vendedor / Parceiro</option>
+                  <option value="vendedor">Parceiro Vendedor</option>
                   <option value="usuario">Usuário</option>
                 </select>
               </div>
@@ -1285,9 +1285,9 @@ function AbaUsuarios() {
               )}
               {novoPerfil === 'vendedor' && (
                 <div className="rounded-xl border border-blue-200 dark:border-blue-900/30 bg-blue-50/60 dark:bg-blue-950/20 p-3 space-y-2">
-                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">Vendedor / Parceiro</p>
+                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">Parceiro Vendedor</p>
                   <p className="text-[11px] text-blue-600 dark:text-blue-400 leading-relaxed">
-                    Aparece como opção de Contador/Parceiro no lançamento de vendas. Loja do Marketplace é opcional — configure agora ou depois na edição do usuário.
+                    Aparece como opção de parceiro no lançamento de vendas. Loja do Marketplace é opcional — configure agora ou depois na edição do usuário.
                   </p>
                   <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">Loja do Marketplace (opcional)</p>
                   <p className="text-[11px] text-blue-600 dark:text-blue-400">Configure a loja agora ou depois, na edição do usuário.</p>
@@ -1570,7 +1570,7 @@ function AbaUsuarios() {
                         <option value="admin">Administrador</option>
                         <option value="supervisor_chat">Supervisor do Chat</option>
                         <option value="agente_registro">Agente de Registro</option>
-                        <option value="vendedor">Vendedor / Parceiro</option>
+                        <option value="vendedor">Parceiro Vendedor</option>
                         <option value="usuario">Usuário</option>
                       </select>
                     </label>
@@ -1622,7 +1622,7 @@ function AbaUsuarios() {
                         <span className="text-[11px] text-gray-400">A lista vem do cadastro de Parceiros e respeita os papéis marcados.</span>
                       </label>
                     ) : (
-                      <ConfigInput label="Nome do vínculo" value={editForm.vinculo_nome} onChange={v => updateEdit('vinculo_nome', v)} placeholder="Nome do AR, vendedor ou contador" />
+                      <ConfigInput label="Nome do vínculo" value={editForm.vinculo_nome} onChange={v => updateEdit('vinculo_nome', v)} placeholder="Nome do parceiro vinculado" />
                     )}
                     <ConfigInput label="Documento" value={editForm.documento} onChange={v => updateEdit('documento', v)} placeholder="CPF, CNPJ ou código interno" />
                     <ConfigInput label="Telefone" value={editForm.telefone} onChange={v => updateEdit('telefone', v)} />
@@ -3636,9 +3636,9 @@ const DOCUMENTO_TIPO_LABEL: Record<'geral' | 'cpf' | 'cnpj', string> = { geral: 
 const MODO_OPERACAO_LABEL: Record<'comissao' | 'revenda', string> = { comissao: 'Integrado', revenda: 'Revenda' }
 const PAPEL_PARTICIPANTE_LABEL: Record<string, string> = {
   agente_registro: 'Agente de registro',
-  vendedor: 'Vendedor',
+  vendedor: 'Parceiro Vendedor',
   parceiro: 'Parceiro',
-  contador: 'Contador',
+  contador: 'Parceiro Contador',
 }
 
 function FaixasPanel({ profileId, onClose }: { profileId: string; onClose: () => void }) {
@@ -4282,7 +4282,7 @@ function ProfileNode({
 
   const levelColors = ['text-blue-600', 'text-emerald-600', 'text-violet-600', 'text-amber-600']
   const levelBg = ['bg-blue-50 dark:bg-blue-900/20', 'bg-emerald-50 dark:bg-emerald-900/20', 'bg-violet-50 dark:bg-violet-900/20', 'bg-amber-50 dark:bg-amber-900/20']
-  const levelLabel = isAgente ? 'Agente' : `Vendedor N${depth}`
+  const levelLabel = isAgente ? 'Agente' : `Parceiro N${depth}`
 
   return (
     <div style={{ marginLeft: `${indent}px` }}>
@@ -4426,6 +4426,7 @@ function ProfileNode({
 }
 
 function PontoHierarquiaPanel({ ponto, onClose }: { ponto: PontoAtendimento; onClose: () => void }) {
+  const { profile: myProfile } = useAuth()
   const [profiles, setProfiles] = useState<ProfileH[]>([])
   const [availableAgentes, setAvailableAgentes] = useState<ProfileH[]>([])
   const [availableVendedores, setAvailableVendedores] = useState<ProfileH[]>([])
@@ -4439,14 +4440,14 @@ function PontoHierarquiaPanel({ ponto, onClose }: { ponto: PontoAtendimento; onC
     const [treeResp, agentesResp, vendResp] = await Promise.all([
       fetch(getApiUrl(`/hierarquia/ponto/${ponto.id}`)),
       fetch(getApiUrl(`/hierarquia/agentes-disponiveis?pontoId=${ponto.id}`)),
-      fetch(getApiUrl('/hierarquia/vendedores-disponiveis')),
+      fetch(getApiUrl(`/hierarquia/vendedores-disponiveis?viewerProfileId=${encodeURIComponent(myProfile?.id ?? '')}&viewerPerfil=${encodeURIComponent(myProfile?.perfil ?? '')}`)),
     ])
     const [tree, ag, vd] = await Promise.all([treeResp.json(), agentesResp.json(), vendResp.json()])
     setProfiles((tree.profiles ?? []) as ProfileH[])
     setAvailableAgentes((ag.profiles ?? []) as ProfileH[])
     setAvailableVendedores((vd.profiles ?? []) as ProfileH[])
     setLoading(false)
-  }, [ponto.id])
+  }, [myProfile?.id, myProfile?.perfil, ponto.id])
 
   useEffect(() => { void load() }, [load])
 

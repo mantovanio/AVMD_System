@@ -31,7 +31,7 @@ import {
   criarLeadKanban as apiCriarLead,
   cancelarFollowUps as apiCancelarFollowUps,
   sendWhatsApp as apiSendWhatsApp,
-  fetchProfiles as apiFetchProfiles,
+  fetchVendedoresDisponiveis as apiFetchVendedoresDisponiveis,
   importRenovacoesToBase as apiImportToBase,
   importRenovacoesToCrm as apiImportToCrm,
   enrichRenovacao,
@@ -717,18 +717,18 @@ export default function Renovacoes() {
   const fetchLinks = useCallback(async () => {
     setLoadingLinks(true)
     try {
-      const [links, allProfiles] = await Promise.all([
+      const [links, vendedoresDisponiveis] = await Promise.all([
         apiFetchLinks(),
-        apiFetchProfiles(),
+        apiFetchVendedoresDisponiveis(profile?.id ?? null, profile?.perfil ?? null),
       ])
       setLinks(links)
-      setVendedores(allProfiles.filter(p => p.perfil === 'vendedor' || p.tipo_vinculo === 'vendedor'))
+      setVendedores(vendedoresDisponiveis.filter(p => p.perfil === 'vendedor' || p.tipo_vinculo === 'vendedor'))
     } catch (err) {
       logger.warn('Renovacoes', `Erro ao carregar links: ${err}`)
     } finally {
       setLoadingLinks(false)
     }
-  }, [])
+  }, [profile?.id, profile?.perfil])
 
   const fetchN8nWebhookUrl = useCallback(async () => {
     setN8nWebhookUrl(await apiFetchN8nWebhookUrl())

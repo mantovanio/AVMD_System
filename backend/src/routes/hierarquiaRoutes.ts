@@ -33,7 +33,10 @@ export async function handleHierarquiaRoutes(
   }
 
   if (method === 'GET' && pathname === '/api/hierarquia/vendedores-disponiveis') {
-    const rows = await repo.getAvailableVendedores()
+    const rows = await repo.getAvailableVendedores(
+      parsed.searchParams.get('viewerProfileId'),
+      parsed.searchParams.get('viewerPerfil'),
+    )
     writeJson(res, 200, { ok: true, profiles: rows }, corsOrigin)
     return true
   }
