@@ -1587,7 +1587,7 @@ function AbaUsuarios() {
                       <span className="text-xs text-gray-500 dark:text-gray-400">Vínculo do usuário</span>
                       <select value={editForm.tipo_vinculo} onChange={e => updateEdit('tipo_vinculo', e.target.value as TipoVinculoUsuario)}
                         className="border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        {Object.entries(TIPO_VINCULO_LABEL).map(([value, label]) => (
+                        {Object.entries(TIPO_VINCULO_LABEL).filter(([value]) => value !== 'parceiro').map(([value, label]) => (
                           <option key={value} value={value}>{label}</option>
                         ))}
                       </select>
