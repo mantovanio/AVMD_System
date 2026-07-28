@@ -3577,25 +3577,25 @@ function ConversationCard({
 
     return (
       <div className={`w-full rounded-2xl border px-4 py-3 text-left transition ${selectedClass}`}>
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           {onCheckToggle && (
             <button
               type="button"
               onClick={event => { event.stopPropagation(); onCheckToggle(event) }}
-              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${checked ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-300 bg-white text-transparent hover:border-sky-400'}`}
+              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${checked ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-300 bg-white text-transparent hover:border-sky-400'}`}
               title="Selecionar conversa"
             >
               <Check size={13} />
             </button>
           )}
-          <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+          <button type="button" onClick={onClick} className="flex min-w-[150px] flex-1 items-center gap-2.5 text-left">
             <ContactAvatar item={item} />
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-900">{displayConversationName(item)}</p>
-              <p className="mt-1 truncate text-xs text-slate-500">{contactPhone(item)}</p>
+              <p className="line-clamp-2 text-sm font-semibold leading-4 text-slate-900">{displayConversationName(item)}</p>
+              <p className="mt-1 whitespace-nowrap text-xs text-slate-500">{contactPhone(item)}</p>
             </div>
           </button>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
             {!hasCrmCustomer && onSaveContact && (
               <button
                 type="button"
