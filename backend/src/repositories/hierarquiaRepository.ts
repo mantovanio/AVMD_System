@@ -167,7 +167,22 @@ export class HierarquiaRepository {
 
   async getAvailableVendedores(viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<ProfileHierarquiaRow[]> {
     const params: unknown[] = []
-    const filters = ["perfil = 'vendedor'", "status = 'ativo'"]
+    const filters = [
+      "status = 'ativo'",
+      `(
+        perfil = 'vendedor'
+        OR tipo_vinculo = 'vendedor'
+        OR EXISTS (
+          SELECT 1
+          FROM parceiros parceiro_vendedor
+          WHERE parceiro_vendedor.id = profiles.parceiro_id
+            AND (
+              parceiro_vendedor.tipo_parceiro = 'vendedor'
+              OR COALESCE(parceiro_vendedor.metadata->'papeis_adicionais', '[]'::jsonb) ? 'vendedor'
+            )
+        )
+      )`,
+    ]
 
     if (viewerProfileId && viewerPerfil === 'agente_registro') {
       params.push(viewerProfileId)
@@ -198,6 +213,7 @@ export class HierarquiaRepository {
       SELECT ${PROFILE_COLS}, tipo_vinculo, vinculo_nome
       FROM profiles
       WHERE status = 'ativo'
+        AND COALESCE((metadata->>'finance_only')::boolean, false) = false
         AND parceiro_id IS NULL
         AND (perfil IN ('agente_registro', 'vendedor')
           OR tipo_vinculo IN ('agente_registro', 'vendedor', 'parceiro', 'contador'))
@@ -568,10 +584,44 @@ export class HierarquiaRepository {
       )
       if (!parceiro.rows[0]) throw new Error('O parceiro selecionado não está ativo ou não foi encontrado.')
       const perfilExistente = await this.db.query<{ id: string }>(
-        `SELECT id FROM profiles WHERE parceiro_id = $1 AND status = 'ativo' ORDER BY created_at ASC LIMIT 1`,
-        [input.parent_profile_id],
+        `SELECT p.id
+         FROM profiles p
+         WHERE p.status = 'ativo'
+           AND COALESCE((p.metadata->>'finance_only')::boolean, false) = false
+           AND (
+             p.parceiro_id = $1
+             OR (
+               p.parceiro_id IS NULL
+               AND (
+                 (NULLIF(trim($2::text), '') IS NOT NULL AND lower(trim(p.email)) = lower(trim($2::text)))
+                 OR lower(regexp_replace(trim(p.nome), '[^[:alnum:]]', '', 'g'))
+                    = lower(regexp_replace(trim($3::text), '[^[:alnum:]]', '', 'g'))
+               )
+             )
+           )
+         ORDER BY (p.parceiro_id = $1) DESC, p.created_at ASC
+         LIMIT 1`,
+        [input.parent_profile_id, parceiro.rows[0].email, parceiro.rows[0].nome],
       )
       if (perfilExistente.rows[0]) {
+        await this.db.query(
+          `UPDATE profiles
+           SET parceiro_id = COALESCE(parceiro_id, $2),
+               metadata = COALESCE(metadata, '{}'::jsonb)
+                 || jsonb_build_object(
+                   'cadastro_unico_multifuncao', true,
+                   'papeis_adicionais', (
+                     SELECT jsonb_agg(DISTINCT papel)
+                     FROM jsonb_array_elements_text(
+                       COALESCE(profiles.metadata->'papeis_adicionais', '[]'::jsonb)
+                       || jsonb_build_array($3::text)
+                     ) AS papeis(papel)
+                   )
+                 ),
+               updated_at = now()
+           WHERE id = $1`,
+          [perfilExistente.rows[0].id, input.parent_profile_id, input.papel_recebedor ?? 'parceiro'],
+        )
         input.parent_profile_id = perfilExistente.rows[0].id
       } else {
         const perfilCriado = await this.db.query<{ id: string }>(

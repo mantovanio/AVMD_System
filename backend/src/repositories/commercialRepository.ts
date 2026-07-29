@@ -1845,12 +1845,26 @@ export class CommercialRepository {
   async listOperationalReportFilters() {
     const [parceiros, vendedores, agentes] = await Promise.all([
       this.db.query(`
-        select nome as id, nome
-        from (
+        with nomes as (
           select distinct nullif(trim(nome_parceiro_safeweb), '') as nome from vendas_certificados
           union
           select distinct nullif(trim(nome), '') as nome from parceiros where status = 'ativo'
-        ) source where nome is not null order by nome asc
+        ),
+        canonicos as (
+          select distinct coalesce((
+            select menor.nome
+            from nomes menor
+            where lower(nomes.nome) = lower(menor.nome)
+               or lower(nomes.nome) like lower(menor.nome) || ' - %'
+            order by length(menor.nome), menor.nome
+            limit 1
+          ), nomes.nome) as nome
+          from nomes
+          where nomes.nome is not null
+        )
+        select nome as id, nome
+        from canonicos
+        order by nome asc
       `),
       this.db.query(`
         select nome as id, nome
@@ -1950,7 +1964,14 @@ export class CommercialRepository {
       else coalesce(nullif(trim(v.metadata->>'agente_registro_importado'), ''), agente.nome, 'Não informado')
     end`
 
-    addFilter('coalesce(nullif(trim(v.nome_parceiro_safeweb), \'\'), \'Não informado\') = ?', input.parceiro_id)
+    if (input.parceiro_id?.trim()) {
+      params.push(input.parceiro_id.trim())
+      const parceiroParam = `$${params.length}`
+      where.push(`(
+        lower(coalesce(nullif(trim(v.nome_parceiro_safeweb), ''), 'Não informado')) = lower(${parceiroParam})
+        or lower(coalesce(nullif(trim(v.nome_parceiro_safeweb), ''), 'Não informado')) like lower(${parceiroParam}) || ' - %'
+      )`)
+    }
     addFilter(`${sellerName} = ?`, input.vendedor_id)
     addFilter(`${agentName} = ?`, input.agente_registro_id)
     addFilter('coalesce(v.pedido_numero, \'\') ilike (\'%\' || ?::text || \'%\')', input.pedido)
