@@ -17,6 +17,7 @@ type CreateUserBody = {
     perfil: string
     tipo_vinculo: string
     permissoes?: string[]
+    metadata?: Record<string, unknown>
   }
 }
 
@@ -125,7 +126,7 @@ export async function handleAdminUsersRoutes(
   const body = await readJson<AdminUsersBody>(req)
 
   if (body.action === 'create_user') {
-    const { nome, email, senha, perfil, tipo_vinculo, permissoes } = body.payload
+    const { nome, email, senha, perfil, tipo_vinculo, permissoes, metadata } = body.payload
     const [firstNameRaw, ...rest] = nome.trim().split(/\s+/)
     const firstName = firstNameRaw || 'Usuario'
     const lastName = rest.join(' ').trim() || undefined
@@ -154,6 +155,7 @@ export async function handleAdminUsersRoutes(
         perfil,
         tipo_vinculo,
         permissoes: permissoes ?? [],
+        metadata: metadata ?? {},
       })
 
       writeJson(res, 200, { ok: true, userId: clerkUser.id }, corsOrigin)

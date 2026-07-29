@@ -249,6 +249,7 @@ function buildConversationVisibilitySql(conversationAlias: string, viewerAlias =
 
   return `(
     ${viewerAlias}.perfil IN ('admin', 'superadmin', 'supervisor_chat')
+    OR coalesce((${viewerAlias}.metadata->'funcoes_adicionais') ? 'supervisor_chat', false)
     OR ${assignedToViewer}
     OR (
       ${viewerAlias}.perfil = 'vendedor'

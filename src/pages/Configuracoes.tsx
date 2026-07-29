@@ -86,6 +86,10 @@ const TIPO_VINCULO_LABEL: Record<TipoVinculoUsuario, string> = {
   cliente_portal:  'Cliente do portal',
 }
 
+const FUNCOES_EXTRAS = [
+  { id: 'supervisor_chat', label: 'Supervisor do chat', description: 'Pode acompanhar e gerenciar conversas do chat ao vivo.' },
+] as const
+
 type UserEditForm = {
   nome: string
   email: string
@@ -99,6 +103,7 @@ type UserEditForm = {
   cidade: string
   observacoes: string
   permissoes: PermissaoPagina[]
+  funcoesAdicionais: string[]
 }
 
 type ModalSenha = { userId: string; nome: string } | null
@@ -746,6 +751,10 @@ function AbaUsuarios() {
       cidade: editForm.cidade.trim() || null,
       observacoes: editForm.observacoes.trim() || null,
       permissoes: editForm.perfil === 'admin' ? DEFAULT_PERMISSIONS.admin : editForm.permissoes,
+      metadata: {
+        ...(users.find(user => user.id === userId)?.metadata ?? {}),
+        funcoes_adicionais: editForm.funcoesAdicionais,
+      },
     }
     const response = await fetch(getApiUrl(`/profiles/${userId}`), {
       method: 'PUT',
@@ -860,6 +869,9 @@ function AbaUsuarios() {
       cidade: u.cidade ?? '',
       observacoes: u.observacoes ?? '',
       permissoes: u.permissoes && u.permissoes.length > 0 ? u.permissoes : DEFAULT_PERMISSIONS[u.perfil],
+      funcoesAdicionais: Array.isArray(u.metadata?.funcoes_adicionais)
+        ? (u.metadata?.funcoes_adicionais as string[]).map(item => String(item)).filter(Boolean)
+        : [],
     })
     setNovoTelefone('')
     fetch(getApiUrl(`/chat/user-conversation-access?user_id=${u.id}`))
@@ -1707,6 +1719,44 @@ function AbaUsuarios() {
                           </span>
                         </label>
                       ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Funções atribuídas ao usuário</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Essas funções ampliam o que o usuário pode fazer sem mudar o perfil principal.</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                      {FUNCOES_EXTRAS.map(funcao => {
+                        const marcada = editForm.funcoesAdicionais.includes(funcao.id)
+                        return (
+                          <label key={funcao.id}
+                            className={cn('border rounded-xl p-3 flex items-start gap-2 text-sm transition-colors cursor-pointer',
+                              marcada
+                                ? 'border-cyan-200 bg-cyan-50 dark:border-cyan-900 dark:bg-cyan-900/20'
+                                : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900')}>
+                            <input
+                              type="checkbox"
+                              checked={marcada}
+                              onChange={() => setEditForm(prev => {
+                                if (!prev) return prev
+                                const has = prev.funcoesAdicionais.includes(funcao.id)
+                                const funcoesAdicionais = has
+                                  ? prev.funcoesAdicionais.filter(item => item !== funcao.id)
+                                  : [...prev.funcoesAdicionais, funcao.id]
+                                return { ...prev, funcoesAdicionais }
+                              })}
+                              className="mt-0.5 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500" />
+                            <span>
+                              <span className="block text-xs font-medium text-gray-800 dark:text-gray-200">{funcao.label}</span>
+                              <span className="block text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{funcao.description}</span>
+                            </span>
+                          </label>
+                        )
+                      })}
                     </div>
                   </div>
 

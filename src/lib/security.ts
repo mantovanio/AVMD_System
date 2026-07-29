@@ -62,6 +62,16 @@ export const PERFIL_LABEL: Record<PerfilAcesso, string> = {
   usuario: 'Funcionário',
 }
 
+export function getProfileExtraFunctions(profile: Profile | null | undefined): string[] {
+  const raw = profile?.metadata?.funcoes_adicionais
+  return Array.isArray(raw) ? raw.map(item => String(item)).filter(Boolean) : []
+}
+
+export function hasExtraFunction(profile: Profile | null | undefined, funcao: string) {
+  if (!profile || !isProfileActive(profile)) return false
+  return getProfileExtraFunctions(profile).includes(funcao)
+}
+
 export function isProfileActive(profile: Profile | null | undefined) {
   return profile?.status === 'ativo'
 }

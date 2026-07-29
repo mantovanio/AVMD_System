@@ -529,6 +529,7 @@ export interface Profile {
   cidade: string | null
   observacoes: string | null
   permissoes: PermissaoPagina[] | null
+  metadata: Record<string, unknown> | null
   created_at: string
 }
 

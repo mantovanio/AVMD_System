@@ -20,6 +20,7 @@ type UpdateProfileBody = Partial<{
   cidade: string | null
   observacoes: string | null
   permissoes: string[] | null
+  metadata: Record<string, unknown> | null
 }>
 
 export async function handleProfileRoutes(

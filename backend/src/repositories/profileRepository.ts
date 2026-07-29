@@ -15,9 +15,9 @@ export type ProfileRow = {
   cidade: string | null
   observacoes: string | null
   permissoes: string[] | null
+  metadata?: Record<string, unknown> | null
   created_at: string
   updated_at: string
-  metadata?: Record<string, unknown> | null
 }
 
 export class ProfileRepository {
@@ -86,10 +86,11 @@ export class ProfileRepository {
     documento?: string | null
     telefone?: string | null
     cidade?: string | null
+    metadata?: Record<string, unknown> | null
   }): Promise<ProfileRow> {
     const result = await this.db.query<ProfileRow>(
-      `INSERT INTO profiles (clerk_user_id, nome, email, perfil, tipo_vinculo, permissoes, status, documento, telefone, cidade)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10)
+      `INSERT INTO profiles (clerk_user_id, nome, email, perfil, tipo_vinculo, permissoes, status, documento, telefone, cidade, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11::jsonb)
        RETURNING *`,
       [
         input.clerk_user_id ?? null,
@@ -102,6 +103,7 @@ export class ProfileRepository {
         input.documento ?? null,
         input.telefone ?? null,
         input.cidade ?? null,
+        JSON.stringify(input.metadata ?? {}),
       ],
     )
     return result.rows[0]
@@ -121,6 +123,7 @@ export class ProfileRepository {
     cidade: string | null
     observacoes: string | null
     permissoes: string[] | null
+    metadata: Record<string, unknown> | null
   }>): Promise<ProfileRow | null> {
     const sets: string[] = []
     const params: unknown[] = []
@@ -146,6 +149,10 @@ export class ProfileRepository {
     if (input.permissoes !== undefined) {
       sets.push(`permissoes = $${idx++}::jsonb`)
       params.push(JSON.stringify(input.permissoes ?? []))
+    }
+    if (input.metadata !== undefined) {
+      sets.push(`metadata = $${idx++}::jsonb`)
+      params.push(JSON.stringify(input.metadata ?? {}))
     }
 
     if (sets.length === 0) return this.findById(id)

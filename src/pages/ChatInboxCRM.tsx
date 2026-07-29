@@ -768,6 +768,7 @@ export default function ChatInboxCRM() {
   const [chatSettingsLoading, setChatSettingsLoading] = useState(true)
   const [showHumanResponsePanel, setShowHumanResponsePanel] = useState(false)
   const [showHumanResponseDetails, setShowHumanResponseDetails] = useState(false)
+  const [showContactDetails, setShowContactDetails] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(420)
   const [rightPanelWidth, setRightPanelWidth] = useState(330)
   const [isResizingLeft, setIsResizingLeft] = useState(false)
@@ -3055,111 +3056,147 @@ export default function ChatInboxCRM() {
                   <div className="space-y-4">
                     <PanelBlock title="Contato e histórico">
                       <div className="space-y-3">
-                        <label className="block space-y-1">
-                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Nome da pessoa</span>
-                          <input
-                            value={contactEdit.name}
-                            onChange={event => setContactEdit(prev => ({ ...prev, name: event.target.value }))}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                            placeholder="Nome do contato"
-                          />
-                        </label>
+                        <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Contato</p>
+                              <p className="truncate text-sm font-bold text-slate-900">{contactEdit.name || selectedConversation.nome_crm || selectedConversation.cliente_nome || 'Nao informado'}</p>
+                              <p className="mt-0.5 truncate text-xs text-slate-500">{contactEdit.company || selectedConversation.empresa_nome || 'Empresa nao informada'}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setShowContactDetails(prev => !prev)}
+                              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                            >
+                              {showContactDetails ? <ChevronDown size={13} className="rotate-180" /> : <ChevronDown size={13} />}
+                              {showContactDetails ? 'Ocultar detalhes' : 'Expandir detalhes'}
+                            </button>
+                          </div>
 
-                        <label className="block space-y-1">
-                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Nome da empresa</span>
-                          <input
-                            value={contactEdit.company}
-                            onChange={event => setContactEdit(prev => ({ ...prev, company: event.target.value }))}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                            placeholder="Razão social ou nome fantasia"
-                          />
-                        </label>
-
-                        <label className="block space-y-1">
-                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Telefone</span>
-                          <input
-                            value={contactEdit.phone}
-                            onChange={event => setContactEdit(prev => ({ ...prev, phone: event.target.value }))}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                            placeholder="5511999999999"
-                          />
-                        </label>
-
-                        <label className="block space-y-1">
-                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Email</span>
-                          <input
-                            value={contactEdit.email}
-                            onChange={event => setContactEdit(prev => ({ ...prev, email: event.target.value }))}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                            placeholder="Opcional"
-                          />
-                        </label>
-
-                        <label className="block space-y-1">
-                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Produto</span>
-                          <input
-                            value={contactEdit.product}
-                            onChange={event => setContactEdit(prev => ({ ...prev, product: event.target.value }))}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                            placeholder="Ex.: e-CPF A1"
-                          />
-                        </label>
-
-                        <label className="block space-y-1">
-                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Vencimento</span>
-                          <input
-                            type="date"
-                            value={contactEdit.expiration}
-                            onChange={event => setContactEdit(prev => ({ ...prev, expiration: event.target.value }))}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                          />
-                        </label>
-
-                        <label className="block space-y-1">
-                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Status CRM</span>
-                          <input
-                            value={contactEdit.status}
-                            onChange={event => setContactEdit(prev => ({ ...prev, status: event.target.value }))}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                            placeholder="conversando"
-                          />
-                        </label>
-
-                        <label className="block space-y-1">
-                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Observações</span>
-                          <textarea
-                            value={contactEdit.observations}
-                            onChange={event => setContactEdit(prev => ({ ...prev, observations: event.target.value }))}
-                            rows={4}
-                            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                            placeholder="Observações e histórico do contato"
-                          />
-                        </label>
-
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <button
-                            type="button"
-                            onClick={() => void saveContactDetails()}
-                            disabled={contactEditSaving || !selectedConversation}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-                          >
-                            {contactEditSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                            Salvar contato
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void sendContactCard()}
-                            disabled={sendingHumanMessage || !selectedConversation}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
-                          >
-                            <UserRound size={15} />
-                            Enviar contato
-                          </button>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+                              {selectedConversation.fila === 'email' ? 'Email' : 'WhatsApp'}
+                            </span>
+                            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
+                              {selectedConversation.contato_status || 'Sem status'}
+                            </span>
+                            {contactPhone(selectedConversation) && (
+                              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                                {contactPhone(selectedConversation)}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
-                        {contactEditError && (
-                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                            {contactEditError}
+                        {showContactDetails && (
+                          <div className="space-y-3">
+                            <label className="block space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Nome da pessoa</span>
+                              <input
+                                value={contactEdit.name}
+                                onChange={event => setContactEdit(prev => ({ ...prev, name: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                                placeholder="Nome do contato"
+                              />
+                            </label>
+
+                            <label className="block space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Nome da empresa</span>
+                              <input
+                                value={contactEdit.company}
+                                onChange={event => setContactEdit(prev => ({ ...prev, company: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                                placeholder="Razão social ou nome fantasia"
+                              />
+                            </label>
+
+                            <label className="block space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Telefone</span>
+                              <input
+                                value={contactEdit.phone}
+                                onChange={event => setContactEdit(prev => ({ ...prev, phone: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                                placeholder="5511999999999"
+                              />
+                            </label>
+
+                            <label className="block space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Email</span>
+                              <input
+                                value={contactEdit.email}
+                                onChange={event => setContactEdit(prev => ({ ...prev, email: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                                placeholder="Opcional"
+                              />
+                            </label>
+
+                            <label className="block space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Produto</span>
+                              <input
+                                value={contactEdit.product}
+                                onChange={event => setContactEdit(prev => ({ ...prev, product: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                                placeholder="Ex.: e-CPF A1"
+                              />
+                            </label>
+
+                            <label className="block space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Vencimento</span>
+                              <input
+                                type="date"
+                                value={contactEdit.expiration}
+                                onChange={event => setContactEdit(prev => ({ ...prev, expiration: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                              />
+                            </label>
+
+                            <label className="block space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Status CRM</span>
+                              <input
+                                value={contactEdit.status}
+                                onChange={event => setContactEdit(prev => ({ ...prev, status: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                                placeholder="conversando"
+                              />
+                            </label>
+
+                            <label className="block space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Observações</span>
+                              <textarea
+                                value={contactEdit.observations}
+                                onChange={event => setContactEdit(prev => ({ ...prev, observations: event.target.value }))}
+                                rows={4}
+                                className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                                placeholder="Observações e histórico do contato"
+                              />
+                            </label>
+
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <button
+                                type="button"
+                                onClick={() => void saveContactDetails()}
+                                disabled={contactEditSaving || !selectedConversation}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                              >
+                                {contactEditSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                                Salvar contato
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void sendContactCard()}
+                                disabled={sendingHumanMessage || !selectedConversation}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+                              >
+                                <UserRound size={15} />
+                                Enviar contato
+                              </button>
+                            </div>
+
+                            {contactEditError && (
+                              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                                {contactEditError}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
