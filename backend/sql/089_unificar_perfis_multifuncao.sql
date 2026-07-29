@@ -1,8 +1,6 @@
 -- Uma pessoa pode acumular os papéis de agente e vendedor sem ganhar outro usuário.
 -- Consolida os perfis financeiros auxiliares criados para Alice, Daniel e Renata.
 
-begin;
-
 create temporary table perfil_unificacao (
   duplicado_id uuid primary key,
   principal_id uuid not null,
@@ -54,5 +52,3 @@ set status = 'removido',
     updated_at = now()
 from perfil_unificacao mapa
 where duplicado.id = mapa.duplicado_id;
-
-commit;
