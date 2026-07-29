@@ -89,6 +89,7 @@ export interface Parceiro {
   tipo_parceiro: TipoParceiro | null
   data_ativacao: string | null
   data_desativacao: string | null
+  data_inicio?: string | null
   bloquear_vendas_protocolos: boolean
   nao_enviar_whatsapp_vendas: boolean
   nao_enviar_email_vendas: boolean
@@ -464,8 +465,8 @@ export interface CommunicationOutbox {
 }
 
 // ── auth / profiles ───────────────────────────────────────────
-export type PerfilAcesso = 'admin' | 'supervisor_chat' | 'usuario' | 'vendedor' | 'agente_registro'
-export type TipoVinculoUsuario = 'agente_registro' | 'parceiro' | 'vendedor' | 'contador' | 'usuario_comum' | 'cliente_portal'
+export type PerfilAcesso = 'admin' | 'supervisor_chat' | 'usuario' | 'vendedor' | 'revendedor' | 'agente_registro'
+export type TipoVinculoUsuario = 'agente_registro' | 'parceiro' | 'vendedor' | 'revendedor' | 'contador' | 'usuario_comum' | 'cliente_portal'
 
 export type NivelAcesso = 'nenhum' | 'visualizar' | 'editar' | 'admin'
 

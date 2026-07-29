@@ -477,6 +477,7 @@ export default function Parceiros() {
       chave_pix: cleanText(form.chave_pix),
       data_ativacao: form.data_ativacao || null,
       data_desativacao: form.data_desativacao || null,
+      data_inicio: form.data_ativacao || form.desde || null,
       banco_id: form.banco_id || null,
       centro_custo_id: form.centro_custo_id || null,
       gestor_1_id: form.gestor_1_id || null,

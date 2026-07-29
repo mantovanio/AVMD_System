@@ -34,6 +34,7 @@ export const DEFAULT_PERMISSIONS: Record<PerfilAcesso, PermissaoPagina[]> = {
   supervisor_chat: ['chat'],
   agente_registro: ['dashboard', 'comercial', 'clientes', 'chat', 'renovacoes'],
   vendedor: ['dashboard', 'comercial', 'clientes', 'parceiros', 'relatorios'],
+  revendedor: ['dashboard', 'comercial', 'clientes', 'parceiros', 'relatorios'],
   usuario: ['dashboard', 'relatorios', 'chat'],
 }
 
@@ -44,6 +45,7 @@ const RESTRICTED_PAGE_PROFILES: Partial<Record<PermissaoPagina, PerfilAcesso[]>>
 const LEGACY_REQUIRED_PERMISSIONS: Partial<Record<PerfilAcesso, PermissaoPagina[]>> = {
   agente_registro: ['clientes'],
   vendedor: ['clientes'],
+  revendedor: ['clientes'],
 }
 
 function normalizePermissions(
@@ -59,6 +61,7 @@ export const PERFIL_LABEL: Record<PerfilAcesso, string> = {
   supervisor_chat: 'Supervisor do Chat',
   agente_registro: 'Agente de Registro',
   vendedor: 'Vendedor',
+  revendedor: 'Revendedor',
   usuario: 'Funcionário',
 }
 
@@ -146,6 +149,7 @@ export function canPerformCommercialAction(
 
   switch (profile.perfil) {
     case 'vendedor':
+    case 'revendedor':
       return action === 'view'
         || action === 'manage_agenda'
         || action === 'issue_nfse'
@@ -170,7 +174,7 @@ export function canDeleteSale(profile: Profile | null | undefined, sale?: Commer
   return canPerformCommercialAction(profile, 'delete_sale', sale)
 }
 
-export function canChangeProtocol(profile: Profile | null | undefined, sale?: CommercialSaleLike | null) {
+export function canChangeProtocol(profile: Profile | null | undefined, _sale?: CommercialSaleLike | null) {
   if (!profile || !isProfileActive(profile)) return false
   if (profile.perfil === 'admin') return true
   return false
@@ -180,7 +184,7 @@ export function canChangePayment(profile: Profile | null | undefined, sale?: Com
   return canPerformCommercialAction(profile, 'change_payment', sale)
 }
 
-export function canReleaseEmission(profile: Profile | null | undefined, sale?: CommercialSaleLike | null) {
+export function canReleaseEmission(profile: Profile | null | undefined, _sale?: CommercialSaleLike | null) {
   if (!profile || !isProfileActive(profile)) return false
   if (profile.perfil === 'admin') return true
   return false

@@ -1743,11 +1743,13 @@ export class CommercialRepository {
 
   async saveParceiro(input: Record<string, unknown>) {
     const id = (input.id as string | null)?.trim() || randomUUID()
-    const dataAtivacao = typeof input.data_ativacao === 'string' && input.data_ativacao.trim()
-      ? input.data_ativacao.trim()
-      : typeof input.desde === 'string' && input.desde.trim()
-        ? input.desde.trim()
-        : null
+    const dataInicio = typeof input.data_inicio === 'string' && input.data_inicio.trim()
+      ? input.data_inicio.trim()
+      : typeof input.data_ativacao === 'string' && input.data_ativacao.trim()
+        ? input.data_ativacao.trim()
+        : typeof input.desde === 'string' && input.desde.trim()
+          ? input.desde.trim()
+          : null
     const fields = [
       'codigo_parceiro','cpf_cnpj','nome','razao_social','nome_fantasia','responsavel',
       'id_local_atendimento','senha_acesso','email_acesso','ddd','telefone','email',
@@ -1764,7 +1766,7 @@ export class CommercialRepository {
     ]
     const vals = fields.map(f => {
       if (f === 'metadata') return JSON.stringify(input[f] ?? {})
-      if (f === 'data_ativacao' || f === 'desde') return dataAtivacao
+      if (f === 'data_ativacao' || f === 'desde') return dataInicio
       return input[f] ?? null
     })
     const colList = fields.join(', ')

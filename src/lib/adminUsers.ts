@@ -28,6 +28,7 @@ const DEFAULT_VINCULO_BY_PERFIL: Record<PerfilAcesso, TipoVinculoUsuario> = {
   supervisor_chat: 'usuario_comum',
   agente_registro: 'agente_registro',
   vendedor: 'vendedor',
+  revendedor: 'revendedor',
   usuario: 'usuario_comum',
 }
 

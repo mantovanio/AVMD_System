@@ -66,6 +66,7 @@ const PERFIL_LABEL: Record<PerfilAcesso, string> = {
   supervisor_chat: 'Supervisor do Chat',
   agente_registro: 'Agente de Registro',
   vendedor:        'Funcionário',
+  revendedor:      'Revendedor',
   usuario:         'Funcionário',
 }
 
@@ -74,6 +75,7 @@ const PERFIL_COLOR: Record<PerfilAcesso, string> = {
   supervisor_chat: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
   agente_registro: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   vendedor:        'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  revendedor:      'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   usuario:         'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 }
 
@@ -81,6 +83,7 @@ const TIPO_VINCULO_LABEL: Record<TipoVinculoUsuario, string> = {
   agente_registro: 'Agente de Registro',
   parceiro:        'Parceiro',
   vendedor:        'Parceiro Vendedor',
+  revendedor:      'Parceiro Revendedor',
   contador:        'Parceiro Contador',
   usuario_comum:   'Usuário comum',
   cliente_portal:  'Cliente do portal',
@@ -742,7 +745,7 @@ function AbaUsuarios() {
       perfil: editForm.perfil,
       status: editForm.status,
       tipo_vinculo: editForm.tipo_vinculo,
-      parceiro_id: ['parceiro', 'contador', 'vendedor', 'agente_registro'].includes(editForm.tipo_vinculo) && editForm.parceiro_id
+      parceiro_id: ['parceiro', 'contador', 'vendedor', 'revendedor', 'agente_registro'].includes(editForm.tipo_vinculo) && editForm.parceiro_id
         ? editForm.parceiro_id
         : null,
       vinculo_nome: editForm.vinculo_nome.trim() || null,
@@ -1618,6 +1621,7 @@ function AbaUsuarios() {
                         <option value="admin">Administrador</option>
                         <option value="usuario">Funcionário</option>
                         <option value="agente_registro">Agente de Registro</option>
+                        <option value="revendedor">Revendedor</option>
                         <option value="supervisor_chat">Supervisor do Chat</option>
                         {editForm.perfil === 'vendedor' && (
                           <option value="vendedor">Funcionário (perfil legado)</option>
@@ -1642,7 +1646,7 @@ function AbaUsuarios() {
                         ))}
                       </select>
                     </label>
-                    {['parceiro', 'contador', 'vendedor', 'agente_registro'].includes(editForm.tipo_vinculo) ? (
+                    {['parceiro', 'contador', 'vendedor', 'revendedor', 'agente_registro'].includes(editForm.tipo_vinculo) ? (
                       <label className="flex flex-col gap-1">
                         <span className="text-xs text-gray-500 dark:text-gray-400">Nome do vínculo</span>
                         <select value={editForm.parceiro_id} onChange={e => {
@@ -1662,6 +1666,7 @@ function AbaUsuarios() {
                             }
                             if (editForm.tipo_vinculo === 'contador') return parceiro.tipo_parceiro === 'contador' || adicionais.includes('contador')
                             if (editForm.tipo_vinculo === 'vendedor') return parceiro.tipo_parceiro === 'vendedor' || adicionais.includes('vendedor')
+                            if (editForm.tipo_vinculo === 'revendedor') return parceiro.tipo_parceiro === 'vendedor' || adicionais.includes('vendedor') || adicionais.includes('revendedor')
                             return true
                           }).map(p => (
                             <option key={p.id} value={p.id}>
