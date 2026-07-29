@@ -1845,10 +1845,23 @@ export class CommercialRepository {
   async listOperationalReportFilters() {
     const [parceiros, vendedores, agentes] = await Promise.all([
       this.db.query(`
-        with nomes as (
+        with nomes_brutos as (
           select distinct nullif(trim(nome_parceiro_safeweb), '') as nome from vendas_certificados
           union
           select distinct nullif(trim(nome), '') as nome from parceiros where status = 'ativo'
+        ),
+        nomes as (
+          select distinct case
+            when lower(nome) like '%isabella de oliveira vidal%' then 'Isabella Vidal'
+            when lower(nome) like '%ingrid braz%' then 'Ingrid Braz Pinto'
+            when lower(nome) like '%alice maciel%' then 'Alice Maciel'
+            when lower(nome) like '%daniel%mantovan%' then 'Daniel Mantovan'
+            when lower(nome) like '%rogério carlos ribeiro%'
+              or lower(nome) like '%rogerio carlos ribeiro%' then 'Rogério Carlos Ribeiro'
+            else nome
+          end as nome
+          from nomes_brutos
+          where nome is not null
         ),
         canonicos as (
           select distinct coalesce((
@@ -1963,15 +1976,17 @@ export class CommercialRepository {
       when lower(trim(v.metadata->>'agente_registro_importado')) in ('renata mantovan', 'renata mantovan - certi id - renata') then 'Renata Mantovan'
       else coalesce(nullif(trim(v.metadata->>'agente_registro_importado'), ''), agente.nome, 'Não informado')
     end`
+    const partnerName = `case
+      when lower(trim(v.nome_parceiro_safeweb)) like '%isabella de oliveira vidal%' then 'Isabella Vidal'
+      when lower(trim(v.nome_parceiro_safeweb)) like '%ingrid braz%' then 'Ingrid Braz Pinto'
+      when lower(trim(v.nome_parceiro_safeweb)) like '%alice maciel%' then 'Alice Maciel'
+      when lower(trim(v.nome_parceiro_safeweb)) like '%daniel%mantovan%' then 'Daniel Mantovan'
+      when lower(trim(v.nome_parceiro_safeweb)) like '%rogério carlos ribeiro%'
+        or lower(trim(v.nome_parceiro_safeweb)) like '%rogerio carlos ribeiro%' then 'Rogério Carlos Ribeiro'
+      else coalesce(nullif(trim(v.nome_parceiro_safeweb), ''), 'Não informado')
+    end`
 
-    if (input.parceiro_id?.trim()) {
-      params.push(input.parceiro_id.trim())
-      const parceiroParam = `$${params.length}`
-      where.push(`(
-        lower(coalesce(nullif(trim(v.nome_parceiro_safeweb), ''), 'Não informado')) = lower(${parceiroParam})
-        or lower(coalesce(nullif(trim(v.nome_parceiro_safeweb), ''), 'Não informado')) like lower(${parceiroParam}) || ' - %'
-      )`)
-    }
+    addFilter(`${partnerName} = ?`, input.parceiro_id)
     addFilter(`${sellerName} = ?`, input.vendedor_id)
     addFilter(`${agentName} = ?`, input.agente_registro_id)
     addFilter('coalesce(v.pedido_numero, \'\') ilike (\'%\' || ?::text || \'%\')', input.pedido)
