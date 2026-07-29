@@ -111,6 +111,7 @@ export default function Relatorios() {
   const [protocolo, setProtocolo] = useState('')
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
+  const [filtersLoading, setFiltersLoading] = useState(false)
   const [error, setError] = useState('')
   const [report, setReport] = useState<OperationalReport | null>(null)
   const [savedReports, setSavedReports] = useState<SavedReport[]>(() => {
@@ -122,9 +123,17 @@ export default function Relatorios() {
   })
 
   const loadFilters = useCallback(async () => {
-    const response = await fetch(getApiUrl('/comercial/relatorios/operacionais/filtros'))
-    const data = await response.json()
-    if (response.ok) setFilters((data.filtros ?? EMPTY_FILTERS) as ReportFilters)
+    setFiltersLoading(true)
+    try {
+      const response = await fetch(getApiUrl('/comercial/relatorios/operacionais/filtros'))
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error ?? 'Não foi possível carregar os filtros.')
+      setFilters((data.filtros ?? EMPTY_FILTERS) as ReportFilters)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível carregar os filtros.')
+    } finally {
+      setFiltersLoading(false)
+    }
   }, [])
 
   const loadReport = useCallback(async () => {
@@ -164,10 +173,10 @@ export default function Relatorios() {
     return () => window.clearTimeout(timer)
   }, [loadFilters])
   useEffect(() => {
-    if (!profile) return
-    const timer = window.setTimeout(() => void loadReport(), 0)
+    if (!profile || !from || !to) return
+    const timer = window.setTimeout(() => void loadReport(), 450)
     return () => window.clearTimeout(timer)
-  }, [profile]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loadReport, profile, from, to])
 
   const statusOptions = tipo === 'vendas'
     ? ['rascunho', 'vendido', 'agendado', 'em_validacao', 'emitido', 'cancelado']
@@ -341,9 +350,9 @@ export default function Relatorios() {
           </div>
           <div><label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">De</label><input type="date" value={from} onChange={event => { setFrom(event.target.value); setPeriodo('personalizado') }} className="w-full border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800" /></div>
           <div><label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Até</label><input type="date" value={to} onChange={event => { setTo(event.target.value); setPeriodo('personalizado') }} className="w-full border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800" /></div>
-          <SelectFilter label="Parceiro" value={parceiroId} onChange={setParceiroId} options={filters.parceiros} />
-          <SelectFilter label="Vendedor" value={vendedorId} onChange={setVendedorId} options={filters.vendedores} />
-          <SelectFilter label="Agente de Registro" value={agenteId} onChange={setAgenteId} options={filters.agentes} />
+          <SelectFilter label={filtersLoading ? 'Parceiro (carregando...)' : 'Parceiro'} value={parceiroId} onChange={setParceiroId} options={filters.parceiros} />
+          <SelectFilter label={filtersLoading ? 'Vendedor (carregando...)' : 'Vendedor'} value={vendedorId} onChange={setVendedorId} options={filters.vendedores} />
+          <SelectFilter label={filtersLoading ? 'Agente (carregando...)' : 'Agente de Registro'} value={agenteId} onChange={setAgenteId} options={filters.agentes} />
           <div>
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Status</label>
             <select value={status} onChange={event => setStatus(event.target.value)} className="w-full border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800">
@@ -374,7 +383,7 @@ export default function Relatorios() {
             <button type="button" onClick={() => void loadReport()} className="text-gray-500 hover:text-blue-600"><RefreshCcw size={15} /></button>
           </div>
           {loading ? <div className="h-48 flex items-center justify-center text-gray-400"><Loader2 size={18} className="animate-spin mr-2" /> Gerando relatório...</div> : !report?.linhas.length ? <p className="py-12 text-center text-sm text-gray-400">Nenhum registro encontrado com os filtros informados.</p> : (
-            <ConfigurableTable storageKey={`relatorios-operacionais-${tipo}`} columns={detailColumns} rows={report.linhas} rowKey={row => row.id} />
+            <ConfigurableTable storageKey={`relatorios-operacionais-${tipo}`} columns={detailColumns} rows={report.linhas} rowKey={row => row.id} pageSize={100} />
           )}
         </section>
       </main>

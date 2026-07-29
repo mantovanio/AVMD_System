@@ -19,11 +19,13 @@ export function ConfigurableTable<T>({
   columns,
   rows,
   rowKey,
+  pageSize,
 }: {
   storageKey: string
   columns: ConfigurableColumn<T>[]
   rows: T[]
   rowKey: (row: T) => string
+  pageSize?: number
 }) {
   const defaultLayout = useMemo<SavedLayout>(() => ({
     order: columns.map(column => column.id),
@@ -41,6 +43,7 @@ export function ConfigurableTable<T>({
     }
   })
   const [filters, setFilters] = useState<Record<string, string>>({})
+  const [page, setPage] = useState(1)
   const draggedId = useRef<string | null>(null)
 
   useEffect(() => {
@@ -56,6 +59,15 @@ export function ConfigurableTable<T>({
     if (!filter) return true
     return String(column.accessor(row) ?? '').toLocaleLowerCase('pt-BR').includes(filter)
   })), [filters, orderedColumns, rows])
+  const totalPages = pageSize ? Math.max(1, Math.ceil(visibleRows.length / pageSize)) : 1
+  const currentPage = Math.min(page, totalPages)
+  const displayedRows = pageSize
+    ? visibleRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+    : visibleRows
+
+  useEffect(() => {
+    setPage(1)
+  }, [filters, rows])
 
   function moveColumn(targetId: string) {
     const sourceId = draggedId.current
@@ -89,7 +101,7 @@ export function ConfigurableTable<T>({
     <div>
       <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900">
         <span className="text-xs text-gray-500">{visibleRows.length} de {rows.length} registros</span>
-        <button type="button" onClick={() => { setLayout(defaultLayout); setFilters({}) }} className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600">
+        <button type="button" onClick={() => { setLayout(defaultLayout); setFilters({}); setPage(1) }} className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600">
           <RotateCcw size={13} /> Restaurar colunas
         </button>
       </div>
@@ -116,13 +128,30 @@ export function ConfigurableTable<T>({
               ))}
             </tr>
           </thead>
-          <tbody>{visibleRows.map(row => (
+          <tbody>{displayedRows.map(row => (
             <tr key={rowKey(row)} className="border-b border-gray-100 dark:border-gray-800/70 hover:bg-blue-50/40 dark:hover:bg-blue-950/20">
               {orderedColumns.map(column => <td key={column.id} className={`px-3 py-2 align-top overflow-hidden text-ellipsis ${column.className ?? ''}`} title={String(column.accessor(row) ?? '')}>{column.render ? column.render(row) : String(column.accessor(row) ?? '—')}</td>)}
             </tr>
           ))}</tbody>
         </table>
       </div>
+      {pageSize && totalPages > 1 && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-gray-100 dark:border-gray-800">
+          <span className="text-xs text-gray-500">
+            Página {currentPage} de {totalPages}
+          </span>
+          <div className="flex items-center gap-2">
+            <button type="button" disabled={currentPage <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}
+              className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs disabled:opacity-40">
+              Anterior
+            </button>
+            <button type="button" disabled={currentPage >= totalPages} onClick={() => setPage(value => Math.min(totalPages, value + 1))}
+              className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs disabled:opacity-40">
+              Próxima
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

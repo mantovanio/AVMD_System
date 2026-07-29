@@ -1858,15 +1858,23 @@ export class CommercialRepository {
           select distinct case
             when lower(trim(metadata->>'vendedor_importado')) in ('isabella de oliveira vidal - isabella', 'isabella de oliveira vidal') then 'Isabella Vidal'
             when lower(trim(metadata->>'vendedor_importado')) in ('ingrid braz pinto - vendedor - ingrid braz pinto', 'ingrid braz pinto - certi id - ingrid braz') then 'Ingrid Braz Pinto'
+            when lower(trim(metadata->>'vendedor_importado')) in ('alice maciel', 'alice maciel miranda xavier', 'alice maciel miranda xavier - alice maciel') then 'Alice Maciel'
+            when lower(trim(metadata->>'vendedor_importado')) in ('daniel mantovan', 'daniel morgado mantovan', 'daniel mantovan - certi id - daniel') then 'Daniel Mantovan'
+            when lower(trim(metadata->>'vendedor_importado')) in ('renata mantovan', 'renata mantovan - certi id - renata') then 'Renata Mantovan'
             else nullif(trim(metadata->>'vendedor_importado'), '')
           end as nome from vendas_certificados
           union
           select distinct case
             when lower(trim(p.nome)) in ('isabella de oliveira vidal', 'isabella vidal') then 'Isabella Vidal'
             when lower(trim(p.nome)) in ('ingrid braz', 'ingrid braz pinto') then 'Ingrid Braz Pinto'
+            when lower(trim(p.nome)) in ('alice maciel', 'alice maciel miranda xavier') then 'Alice Maciel'
+            when lower(trim(p.nome)) in ('daniel mantovan', 'daniel morgado mantovan') then 'Daniel Mantovan'
+            when lower(trim(p.nome)) = 'renata mantovan' then 'Renata Mantovan'
             else nullif(trim(p.nome), '')
           end as nome
-          from profiles p where p.perfil = 'vendedor' and p.status = 'ativo'
+          from profiles p
+          where (p.perfil = 'vendedor' or p.tipo_vinculo in ('vendedor', 'contador'))
+            and p.status = 'ativo'
         ) source where nome is not null order by nome asc
       `),
       this.db.query(`
@@ -1875,15 +1883,23 @@ export class CommercialRepository {
           select distinct case
             when lower(trim(metadata->>'agente_registro_importado')) in ('isabella de oliveira vidal', 'isabella vidal') then 'Isabella Vidal'
             when lower(trim(metadata->>'agente_registro_importado')) in ('ingrid braz', 'ingrid braz pinto') then 'Ingrid Braz Pinto'
+            when lower(trim(metadata->>'agente_registro_importado')) in ('alice maciel', 'alice maciel miranda xavier', 'alice maciel miranda xavier - alice maciel') then 'Alice Maciel'
+            when lower(trim(metadata->>'agente_registro_importado')) in ('daniel mantovan', 'daniel morgado mantovan', 'daniel mantovan - certi id - daniel') then 'Daniel Mantovan'
+            when lower(trim(metadata->>'agente_registro_importado')) in ('renata mantovan', 'renata mantovan - certi id - renata') then 'Renata Mantovan'
             else nullif(trim(metadata->>'agente_registro_importado'), '')
           end as nome from vendas_certificados
           union
           select distinct case
             when lower(trim(p.nome)) in ('isabella de oliveira vidal', 'isabella vidal') then 'Isabella Vidal'
             when lower(trim(p.nome)) in ('ingrid braz', 'ingrid braz pinto') then 'Ingrid Braz Pinto'
+            when lower(trim(p.nome)) in ('alice maciel', 'alice maciel miranda xavier') then 'Alice Maciel'
+            when lower(trim(p.nome)) in ('daniel mantovan', 'daniel morgado mantovan') then 'Daniel Mantovan'
+            when lower(trim(p.nome)) = 'renata mantovan' then 'Renata Mantovan'
             else nullif(trim(p.nome), '')
           end as nome
-          from profiles p where p.perfil = 'agente_registro' and p.status = 'ativo'
+          from profiles p
+          where (p.perfil = 'agente_registro' or p.tipo_vinculo = 'agente_registro')
+            and p.status = 'ativo'
         ) source where nome is not null order by nome asc
       `),
     ])
@@ -1920,19 +1936,25 @@ export class CommercialRepository {
     const sellerName = `case
       when lower(trim(v.metadata->>'vendedor_importado')) in ('isabella de oliveira vidal - isabella', 'isabella de oliveira vidal') then 'Isabella Vidal'
       when lower(trim(v.metadata->>'vendedor_importado')) in ('ingrid braz pinto - vendedor - ingrid braz pinto', 'ingrid braz pinto - certi id - ingrid braz') then 'Ingrid Braz Pinto'
+      when lower(trim(v.metadata->>'vendedor_importado')) in ('alice maciel', 'alice maciel miranda xavier', 'alice maciel miranda xavier - alice maciel') then 'Alice Maciel'
+      when lower(trim(v.metadata->>'vendedor_importado')) in ('daniel mantovan', 'daniel morgado mantovan', 'daniel mantovan - certi id - daniel') then 'Daniel Mantovan'
+      when lower(trim(v.metadata->>'vendedor_importado')) in ('renata mantovan', 'renata mantovan - certi id - renata') then 'Renata Mantovan'
       else coalesce(nullif(trim(v.metadata->>'vendedor_importado'), ''), vendedor.nome, 'Não informado')
     end`
     const agentName = `case
       when lower(trim(v.metadata->>'agente_registro_importado')) in ('isabella de oliveira vidal', 'isabella vidal') then 'Isabella Vidal'
       when lower(trim(v.metadata->>'agente_registro_importado')) in ('ingrid braz', 'ingrid braz pinto') then 'Ingrid Braz Pinto'
+      when lower(trim(v.metadata->>'agente_registro_importado')) in ('alice maciel', 'alice maciel miranda xavier', 'alice maciel miranda xavier - alice maciel') then 'Alice Maciel'
+      when lower(trim(v.metadata->>'agente_registro_importado')) in ('daniel mantovan', 'daniel morgado mantovan', 'daniel mantovan - certi id - daniel') then 'Daniel Mantovan'
+      when lower(trim(v.metadata->>'agente_registro_importado')) in ('renata mantovan', 'renata mantovan - certi id - renata') then 'Renata Mantovan'
       else coalesce(nullif(trim(v.metadata->>'agente_registro_importado'), ''), agente.nome, 'Não informado')
     end`
 
     addFilter('coalesce(nullif(trim(v.nome_parceiro_safeweb), \'\'), \'Não informado\') = ?', input.parceiro_id)
     addFilter(`${sellerName} = ?`, input.vendedor_id)
     addFilter(`${agentName} = ?`, input.agente_registro_id)
-    addFilter('v.pedido_numero ilike concat(\'%\', ?, \'%\')', input.pedido)
-    addFilter('v.protocolo_numero ilike concat(\'%\', ?, \'%\')', input.protocolo)
+    addFilter('coalesce(v.pedido_numero, \'\') ilike (\'%\' || ?::text || \'%\')', input.pedido)
+    addFilter('coalesce(v.protocolo_numero, \'\') ilike (\'%\' || ?::text || \'%\')', input.protocolo)
     const hasValidation = `(coalesce(nullif(trim(v.metadata->>'agente_registro_importado'), ''), agente.nome) is not null)`
     const validationStatus = `case
       when not ${hasValidation} then 'sem_solicitacao'
@@ -1945,7 +1967,7 @@ export class CommercialRepository {
     end`
     addFilter(tipo === 'vendas' ? 'v.status_venda = ?' : `${validationStatus} = ?`, input.status)
 
-    if (input.viewer_perfil !== 'admin') {
+    if (!['admin', 'superadmin'].includes(input.viewer_perfil)) {
       params.push(input.viewer_profile_id)
       where.push(`(v.vendedor_id = $${params.length}::uuid or coalesce(a.agente_registro_id, v.agente_registro_id) = $${params.length}::uuid)`)
     }
