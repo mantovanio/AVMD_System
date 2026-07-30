@@ -7910,6 +7910,20 @@ function calcularMargemLiquida(precoVenda: number, cfg: PrecificacaoConfig, meto
 function AbaPrecificacao() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [campos, setCampos] = useState({
+    custo_certificadora: '0',
+    custo_cartao: '0',
+    custo_token: '0',
+    custo_leitora: '0',
+    custo_suporte_operacional: '0',
+    gateway_taxa_percentual: '0',
+    gateway_taxa_fixa: '0',
+    comissao_agr_valor: '0',
+    comissao_vendedor_valor: '0',
+    comissao_indicador_valor: '0',
+    aliquota_imposto: '0',
+    margem_lucro_desejada: '0',
+  })
   const [cfg, setCfg] = useState<PrecificacaoConfig>({
     id: 'default',
     regime_operacional: 'REVENDA',
@@ -7941,7 +7955,23 @@ function AbaPrecificacao() {
       setLoading(true)
       const res = await fetch(getApiUrl('/hierarquia/precificacao-certificados'))
       const data = await res.json().catch(() => null) as { ok?: boolean; config?: PrecificacaoConfig } | null
-      if (data?.ok && data.config) setCfg(data.config)
+      if (data?.ok && data.config) {
+        setCfg(data.config)
+        setCampos({
+          custo_certificadora: String(data.config.custo_certificadora ?? 0),
+          custo_cartao: String(data.config.custo_cartao ?? 0),
+          custo_token: String(data.config.custo_token ?? 0),
+          custo_leitora: String(data.config.custo_leitora ?? 0),
+          custo_suporte_operacional: String(data.config.custo_suporte_operacional ?? 0),
+          gateway_taxa_percentual: String(data.config.gateway_taxa_percentual ?? 0),
+          gateway_taxa_fixa: String(data.config.gateway_taxa_fixa ?? 0),
+          comissao_agr_valor: String(data.config.comissao_agr_valor ?? 0),
+          comissao_vendedor_valor: String(data.config.comissao_vendedor_valor ?? 0),
+          comissao_indicador_valor: String(data.config.comissao_indicador_valor ?? 0),
+          aliquota_imposto: String(data.config.aliquota_imposto ?? 0),
+          margem_lucro_desejada: String(data.config.margem_lucro_desejada ?? 0),
+        })
+      }
       setLoading(false)
     })()
   }, [])
@@ -7955,6 +7985,26 @@ function AbaPrecificacao() {
       body: JSON.stringify({ ...cfg, custo_midia: custoMidiaTotal }),
     })
     setSaving(false)
+  }
+
+  function atualizarCampo(nome: keyof typeof campos, valor: string) {
+    setCampos(prev => ({ ...prev, [nome]: valor }))
+    const n = toNum(valor)
+    setCfg(prev => {
+      if (nome === 'custo_certificadora') return { ...prev, custo_certificadora: n }
+      if (nome === 'custo_cartao') return { ...prev, custo_cartao: n }
+      if (nome === 'custo_token') return { ...prev, custo_token: n }
+      if (nome === 'custo_leitora') return { ...prev, custo_leitora: n }
+      if (nome === 'custo_suporte_operacional') return { ...prev, custo_suporte_operacional: n }
+      if (nome === 'gateway_taxa_percentual') return { ...prev, gateway_taxa_percentual: n }
+      if (nome === 'gateway_taxa_fixa') return { ...prev, gateway_taxa_fixa: n }
+      if (nome === 'comissao_agr_valor') return { ...prev, comissao_agr_valor: n }
+      if (nome === 'comissao_vendedor_valor') return { ...prev, comissao_vendedor_valor: n }
+      if (nome === 'comissao_indicador_valor') return { ...prev, comissao_indicador_valor: n }
+      if (nome === 'aliquota_imposto') return { ...prev, aliquota_imposto: n }
+      if (nome === 'margem_lucro_desejada') return { ...prev, margem_lucro_desejada: n }
+      return prev
+    })
   }
 
   const lucroEstimado = Math.max(0, toNum(precoVenda) - precoSugerido)
@@ -7971,15 +8021,15 @@ function AbaPrecificacao() {
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <ConfigSelectWithManual label="Regime operacional" value={cfg.regime_operacional} onChange={v => setCfg(p => ({ ...p, regime_operacional: v as 'REVENDA' | 'COMISSIONADO' }))} options={[{ value: 'REVENDA', label: 'Revenda' }, { value: 'COMISSIONADO', label: 'Comissionado' }]} />
-        <ConfigInput label="Custo da certificadora" value={String(cfg.custo_certificadora)} onChange={v => setCfg(p => ({ ...p, custo_certificadora: toNum(v) }))} inputMode="decimal" />
-        <ConfigInput label="Custo do Cartão" value={String(cfg.custo_cartao)} onChange={v => setCfg(p => ({ ...p, custo_cartao: toNum(v) }))} inputMode="decimal" />
-        <ConfigInput label="Custo do Token" value={String(cfg.custo_token)} onChange={v => setCfg(p => ({ ...p, custo_token: toNum(v) }))} inputMode="decimal" />
-        <ConfigInput label="Custo da Leitora" value={String(cfg.custo_leitora)} onChange={v => setCfg(p => ({ ...p, custo_leitora: toNum(v) }))} inputMode="decimal" />
-        <ConfigInput label="Custo suporte operacional" value={String(cfg.custo_suporte_operacional)} onChange={v => setCfg(p => ({ ...p, custo_suporte_operacional: toNum(v) }))} inputMode="decimal" />
-        <ConfigInput label="Gateway %" value={String(cfg.gateway_taxa_percentual)} onChange={v => setCfg(p => ({ ...p, gateway_taxa_percentual: toNum(v) }))} inputMode="decimal" />
-        <ConfigInput label="Gateway fixo" value={String(cfg.gateway_taxa_fixa)} onChange={v => setCfg(p => ({ ...p, gateway_taxa_fixa: toNum(v) }))} inputMode="decimal" />
-        <ConfigInput label="Imposto %" value={String(cfg.aliquota_imposto)} onChange={v => setCfg(p => ({ ...p, aliquota_imposto: toNum(v) }))} inputMode="decimal" />
-        <ConfigInput label="Margem desejada %" value={String(cfg.margem_lucro_desejada)} onChange={v => setCfg(p => ({ ...p, margem_lucro_desejada: toNum(v) }))} inputMode="decimal" />
+        <ConfigInput label="Custo da certificadora" value={campos.custo_certificadora} onChange={v => atualizarCampo('custo_certificadora', v)} inputMode="decimal" />
+        <ConfigInput label="Custo do Cartão" value={campos.custo_cartao} onChange={v => atualizarCampo('custo_cartao', v)} inputMode="decimal" />
+        <ConfigInput label="Custo do Token" value={campos.custo_token} onChange={v => atualizarCampo('custo_token', v)} inputMode="decimal" />
+        <ConfigInput label="Custo da Leitora" value={campos.custo_leitora} onChange={v => atualizarCampo('custo_leitora', v)} inputMode="decimal" />
+        <ConfigInput label="Custo suporte operacional" value={campos.custo_suporte_operacional} onChange={v => atualizarCampo('custo_suporte_operacional', v)} inputMode="decimal" />
+        <ConfigInput label="Gateway %" value={campos.gateway_taxa_percentual} onChange={v => atualizarCampo('gateway_taxa_percentual', v)} inputMode="decimal" />
+        <ConfigInput label="Gateway fixo" value={campos.gateway_taxa_fixa} onChange={v => atualizarCampo('gateway_taxa_fixa', v)} inputMode="decimal" />
+        <ConfigInput label="Imposto %" value={campos.aliquota_imposto} onChange={v => atualizarCampo('aliquota_imposto', v)} inputMode="decimal" />
+        <ConfigInput label="Margem desejada %" value={campos.margem_lucro_desejada} onChange={v => atualizarCampo('margem_lucro_desejada', v)} inputMode="decimal" />
       </div>
       <div className="grid gap-4 md:grid-cols-3">
         <div className="space-y-2">
@@ -7989,7 +8039,7 @@ function AbaPrecificacao() {
             onChange={v => setCfg(p => ({ ...p, comissao_agr_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
             options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }]}
           />
-          <ConfigInput label="Comissão AGR valor" value={String(cfg.comissao_agr_valor)} onChange={v => setCfg(p => ({ ...p, comissao_agr_valor: toNum(v) }))} inputMode="decimal" />
+          <ConfigInput label="Comissão AGR valor" value={campos.comissao_agr_valor} onChange={v => atualizarCampo('comissao_agr_valor', v)} inputMode="decimal" />
         </div>
         <div className="space-y-2">
           <ConfigSelectWithManual
@@ -7998,7 +8048,7 @@ function AbaPrecificacao() {
             onChange={v => setCfg(p => ({ ...p, comissao_vendedor_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
             options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
           />
-          <ConfigInput label="Comissão vendedor valor / taxa" value={String(cfg.comissao_vendedor_valor)} onChange={v => setCfg(p => ({ ...p, comissao_vendedor_valor: toNum(v) }))} inputMode="decimal" />
+          <ConfigInput label="Comissão vendedor valor / taxa" value={campos.comissao_vendedor_valor} onChange={v => atualizarCampo('comissao_vendedor_valor', v)} inputMode="decimal" />
         </div>
         <div className="space-y-2">
           <ConfigSelectWithManual
@@ -8007,7 +8057,7 @@ function AbaPrecificacao() {
             onChange={v => setCfg(p => ({ ...p, comissao_indicador_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
             options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
           />
-          <ConfigInput label="Comissão indicador valor" value={String(cfg.comissao_indicador_valor)} onChange={v => setCfg(p => ({ ...p, comissao_indicador_valor: toNum(v) }))} inputMode="decimal" />
+          <ConfigInput label="Comissão indicador valor" value={campos.comissao_indicador_valor} onChange={v => atualizarCampo('comissao_indicador_valor', v)} inputMode="decimal" />
         </div>
       </div>
       <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
