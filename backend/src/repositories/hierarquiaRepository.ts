@@ -60,13 +60,16 @@ export type PrecificacaoCertificadosRow = {
   id: string
   regime_operacional: 'REVENDA' | 'COMISSIONADO'
   custo_certificadora: number
+  custo_cartao: number
+  custo_token: number
+  custo_leitora: number
   custo_midia: number
   custo_suporte_operacional: number
   gateway_taxa_percentual: number
   gateway_taxa_fixa: number
   comissao_agr_tipo: 'FIXO' | 'PERCENTUAL'
   comissao_agr_valor: number
-  comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL'
+  comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL' | 'DIFERENCA'
   comissao_vendedor_valor: number
   comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL'
   comissao_indicador_valor: number
@@ -147,6 +150,9 @@ export class HierarquiaRepository {
       id: 'default',
       regime_operacional: 'REVENDA',
       custo_certificadora: 0,
+      custo_cartao: 0,
+      custo_token: 0,
+      custo_leitora: 0,
       custo_midia: 0,
       custo_suporte_operacional: 0,
       gateway_taxa_percentual: 0,
@@ -169,16 +175,19 @@ export class HierarquiaRepository {
   async savePrecificacaoCertificados(input: Omit<PrecificacaoCertificadosRow, 'created_at' | 'updated_at' | 'metadata'> & { metadata?: Record<string, unknown> | null }): Promise<PrecificacaoCertificadosRow> {
     const result = await this.db.query<PrecificacaoCertificadosRow>(
       `INSERT INTO configuracao_precificacao_certificados
-         (id, regime_operacional, custo_certificadora, custo_midia, custo_suporte_operacional,
+         (id, regime_operacional, custo_certificadora, custo_cartao, custo_token, custo_leitora, custo_midia, custo_suporte_operacional,
           gateway_taxa_percentual, gateway_taxa_fixa,
           comissao_agr_tipo, comissao_agr_valor,
           comissao_vendedor_tipo, comissao_vendedor_valor,
           comissao_indicador_tipo, comissao_indicador_valor,
           aliquota_imposto, margem_lucro_desejada, ativo, metadata)
-       VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb)
+       VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb)
        ON CONFLICT (id) DO UPDATE SET
          regime_operacional = EXCLUDED.regime_operacional,
          custo_certificadora = EXCLUDED.custo_certificadora,
+         custo_cartao = EXCLUDED.custo_cartao,
+         custo_token = EXCLUDED.custo_token,
+         custo_leitora = EXCLUDED.custo_leitora,
          custo_midia = EXCLUDED.custo_midia,
          custo_suporte_operacional = EXCLUDED.custo_suporte_operacional,
          gateway_taxa_percentual = EXCLUDED.gateway_taxa_percentual,
@@ -198,6 +207,9 @@ export class HierarquiaRepository {
       [
         input.regime_operacional,
         input.custo_certificadora,
+        input.custo_cartao,
+        input.custo_token,
+        input.custo_leitora,
         input.custo_midia,
         input.custo_suporte_operacional,
         input.gateway_taxa_percentual,

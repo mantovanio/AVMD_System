@@ -1061,13 +1061,16 @@ export class CatalogRepository {
   private async getPrecificacaoCertificados(): Promise<{
     regime_operacional: 'REVENDA' | 'COMISSIONADO'
     custo_certificadora: number
+    custo_cartao: number
+    custo_token: number
+    custo_leitora: number
     custo_midia: number
     custo_suporte_operacional: number
     gateway_taxa_percentual: number
     gateway_taxa_fixa: number
     comissao_agr_tipo: 'FIXO' | 'PERCENTUAL'
     comissao_agr_valor: number
-    comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL'
+    comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL' | 'DIFERENCA'
     comissao_vendedor_valor: number
     comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL'
     comissao_indicador_valor: number
@@ -1075,7 +1078,7 @@ export class CatalogRepository {
     margem_lucro_desejada: number
   } | null> {
     const r = await this.db.query<Record<string, unknown>>(
-      `select regime_operacional, custo_certificadora, custo_midia, custo_suporte_operacional,
+      `select regime_operacional, custo_certificadora, custo_cartao, custo_token, custo_leitora, custo_midia, custo_suporte_operacional,
               gateway_taxa_percentual, gateway_taxa_fixa,
               comissao_agr_tipo, comissao_agr_valor,
               comissao_vendedor_tipo, comissao_vendedor_valor,
@@ -1090,6 +1093,9 @@ export class CatalogRepository {
     return {
       regime_operacional: (row.regime_operacional as 'REVENDA' | 'COMISSIONADO') ?? 'REVENDA',
       custo_certificadora: Number(row.custo_certificadora ?? 0),
+      custo_cartao: Number(row.custo_cartao ?? 0),
+      custo_token: Number(row.custo_token ?? 0),
+      custo_leitora: Number(row.custo_leitora ?? 0),
       custo_midia: Number(row.custo_midia ?? 0),
       custo_suporte_operacional: Number(row.custo_suporte_operacional ?? 0),
       gateway_taxa_percentual: Number(row.gateway_taxa_percentual ?? 0),
@@ -1107,13 +1113,16 @@ export class CatalogRepository {
 
   private calcularPrecoMinimoPrecificacao(cfg: {
     custo_certificadora: number
+    custo_cartao: number
+    custo_token: number
+    custo_leitora: number
     custo_midia: number
     custo_suporte_operacional: number
     gateway_taxa_percentual: number
     gateway_taxa_fixa: number
     comissao_agr_tipo: 'FIXO' | 'PERCENTUAL'
     comissao_agr_valor: number
-    comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL'
+    comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL' | 'DIFERENCA'
     comissao_vendedor_valor: number
     comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL'
     comissao_indicador_valor: number
@@ -1122,6 +1131,9 @@ export class CatalogRepository {
   }) {
     const baseFixa =
       cfg.custo_certificadora +
+      cfg.custo_cartao +
+      cfg.custo_token +
+      cfg.custo_leitora +
       cfg.custo_midia +
       cfg.custo_suporte_operacional +
       cfg.gateway_taxa_fixa +
@@ -1137,6 +1149,24 @@ export class CatalogRepository {
       (cfg.comissao_indicador_tipo === 'PERCENTUAL' ? cfg.comissao_indicador_valor : 0)
     const divisor = Math.max(0.0001, 1 - percentualTotal / 100)
     return Number((baseFixa / divisor).toFixed(2))
+  }
+
+  private calcularComissaoVendedorDiferenca(input: {
+    valorVenda: number
+    precoBase: number
+    aliquotaImposto: number
+    comissaoIndicadorValor: number
+  }) {
+    const valorLiquidoAposImposto = Number((input.valorVenda - (input.valorVenda * input.aliquotaImposto / 100)).toFixed(2))
+    const diferencaBruta = Number(Math.max(0, valorLiquidoAposImposto - input.precoBase).toFixed(2))
+    const comissaoIndicador = Number(Math.max(0, input.comissaoIndicadorValor).toFixed(2))
+    const comissaoVendedorLiquida = Number(Math.max(0, diferencaBruta - comissaoIndicador).toFixed(2))
+    return {
+      valor_liquido_pos_imposto: valorLiquidoAposImposto,
+      diferenca_bruta: diferencaBruta,
+      comissao_indicador: comissaoIndicador,
+      comissao_vendedor_liquida: comissaoVendedorLiquida,
+    }
   }
 
   private async buildEstruturaComercialSnapshot(input: Record<string, unknown>) {
@@ -1238,6 +1268,16 @@ export class CatalogRepository {
     }
     const baseCalculo = valorAposImposto
     const escopoCascata = modoOperacao === 'revenda' ? 'margem_revenda' : 'venda'
+    const precificacao = await this.getPrecificacaoCertificados()
+    const vendedorEmDif = precificacao?.comissao_vendedor_tipo === 'DIFERENCA'
+    const diferencaVendedor = vendedorEmDif
+      ? this.calcularComissaoVendedorDiferenca({
+          valorVenda,
+          precoBase,
+          aliquotaImposto,
+          comissaoIndicadorValor: precificacao?.comissao_indicador_valor ?? 0,
+        })
+      : null
 
     const repasses = await this.db.query<{
       id: string
@@ -1313,6 +1353,12 @@ export class CatalogRepository {
       tabela_nome: precoBaseRow.rows[0]?.tabela_nome ?? null,
       repasses: repassesCalculados,
       total_repasse: totalRepasse,
+      comissao_vendedor_modo: vendedorEmDif ? 'DIFERENCA' : (precificacao?.comissao_vendedor_tipo ?? 'FIXO'),
+      comissao_vendedor_liquida: diferencaVendedor?.comissao_vendedor_liquida ?? null,
+      comissao_indicador_paga_pelo_vendedor: vendedorEmDif ? true : false,
+      comissao_indicador_valor: vendedorEmDif ? (diferencaVendedor?.comissao_indicador ?? precificacao?.comissao_indicador_valor ?? 0) : (precificacao?.comissao_indicador_valor ?? null),
+      valor_liquido_pos_imposto: diferencaVendedor?.valor_liquido_pos_imposto ?? valorAposImposto,
+      diferenca_vendedor_bruta: diferencaVendedor?.diferenca_bruta ?? null,
     }
   }
 

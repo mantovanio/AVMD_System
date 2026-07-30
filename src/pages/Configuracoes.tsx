@@ -7827,13 +7827,16 @@ type PrecificacaoConfig = {
   id: string
   regime_operacional: 'REVENDA' | 'COMISSIONADO'
   custo_certificadora: number
+  custo_cartao: number
+  custo_token: number
+  custo_leitora: number
   custo_midia: number
   custo_suporte_operacional: number
   gateway_taxa_percentual: number
   gateway_taxa_fixa: number
   comissao_agr_tipo: 'FIXO' | 'PERCENTUAL'
   comissao_agr_valor: number
-  comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL'
+  comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL' | 'DIFERENCA'
   comissao_vendedor_valor: number
   comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL'
   comissao_indicador_valor: number
@@ -7856,7 +7859,8 @@ function toNum(value: string) {
 }
 
 function calcularPrecificacao(cfg: PrecificacaoConfig): PrecificacaoDetalhe {
-  const custosFixos = cfg.custo_certificadora + cfg.custo_midia + cfg.custo_suporte_operacional + cfg.gateway_taxa_fixa
+  const custoMidiaTotal = cfg.custo_cartao + cfg.custo_token + cfg.custo_leitora
+  const custosFixos = cfg.custo_certificadora + custoMidiaTotal + cfg.custo_suporte_operacional + cfg.gateway_taxa_fixa
   const comissoesFixas =
     (cfg.comissao_agr_tipo === 'FIXO' ? cfg.comissao_agr_valor : 0) +
     (cfg.comissao_vendedor_tipo === 'FIXO' ? cfg.comissao_vendedor_valor : 0) +
@@ -7885,6 +7889,9 @@ function AbaPrecificacao() {
     id: 'default',
     regime_operacional: 'REVENDA',
     custo_certificadora: 0,
+    custo_cartao: 0,
+    custo_token: 0,
+    custo_leitora: 0,
     custo_midia: 0,
     custo_suporte_operacional: 0,
     gateway_taxa_percentual: 0,
@@ -7937,7 +7944,10 @@ function AbaPrecificacao() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <ConfigSelectWithManual label="Regime operacional" value={cfg.regime_operacional} onChange={v => setCfg(p => ({ ...p, regime_operacional: v as 'REVENDA' | 'COMISSIONADO' }))} options={[{ value: 'REVENDA', label: 'Revenda' }, { value: 'COMISSIONADO', label: 'Comissionado' }]} />
         <ConfigInput label="Custo da certificadora" value={String(cfg.custo_certificadora)} onChange={v => setCfg(p => ({ ...p, custo_certificadora: toNum(v) }))} />
-        <ConfigInput label="Custo de mídia" value={String(cfg.custo_midia)} onChange={v => setCfg(p => ({ ...p, custo_midia: toNum(v) }))} />
+        <ConfigInput label="Custo do Cartão" value={String(cfg.custo_cartao)} onChange={v => setCfg(p => ({ ...p, custo_cartao: toNum(v), custo_midia: toNum(v) + p.custo_token + p.custo_leitora }))} />
+        <ConfigInput label="Custo do Token" value={String(cfg.custo_token)} onChange={v => setCfg(p => ({ ...p, custo_token: toNum(v), custo_midia: p.custo_cartao + toNum(v) + p.custo_leitora }))} />
+        <ConfigInput label="Custo da Leitora" value={String(cfg.custo_leitora)} onChange={v => setCfg(p => ({ ...p, custo_leitora: toNum(v), custo_midia: p.custo_cartao + p.custo_token + toNum(v) }))} />
+        <ConfigInput label="Custo de mídia total" value={String(cfg.custo_midia)} onChange={v => setCfg(p => ({ ...p, custo_midia: toNum(v) }))} />
         <ConfigInput label="Custo suporte operacional" value={String(cfg.custo_suporte_operacional)} onChange={v => setCfg(p => ({ ...p, custo_suporte_operacional: toNum(v) }))} />
         <ConfigInput label="Gateway %" value={String(cfg.gateway_taxa_percentual)} onChange={v => setCfg(p => ({ ...p, gateway_taxa_percentual: toNum(v) }))} />
         <ConfigInput label="Gateway fixo" value={String(cfg.gateway_taxa_fixa)} onChange={v => setCfg(p => ({ ...p, gateway_taxa_fixa: toNum(v) }))} />
@@ -7959,16 +7969,16 @@ function AbaPrecificacao() {
             label="Comissão vendedor tipo"
             value={cfg.comissao_vendedor_tipo}
             onChange={v => setCfg(p => ({ ...p, comissao_vendedor_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
-            options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }]}
+            options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
           />
-          <ConfigInput label="Comissão vendedor valor" value={String(cfg.comissao_vendedor_valor)} onChange={v => setCfg(p => ({ ...p, comissao_vendedor_valor: toNum(v) }))} />
+          <ConfigInput label="Comissão vendedor valor / taxa" value={String(cfg.comissao_vendedor_valor)} onChange={v => setCfg(p => ({ ...p, comissao_vendedor_valor: toNum(v) }))} />
         </div>
         <div className="space-y-2">
           <ConfigSelectWithManual
             label="Comissão indicador tipo"
             value={cfg.comissao_indicador_tipo}
             onChange={v => setCfg(p => ({ ...p, comissao_indicador_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
-            options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }]}
+            options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
           />
           <ConfigInput label="Comissão indicador valor" value={String(cfg.comissao_indicador_valor)} onChange={v => setCfg(p => ({ ...p, comissao_indicador_valor: toNum(v) }))} />
         </div>
@@ -7977,7 +7987,7 @@ function AbaPrecificacao() {
         <div className="mb-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 p-4 text-sm text-blue-900 dark:text-blue-100">
           <p className="font-semibold">Regra da cadeia comercial</p>
           <p className="mt-1">
-            A venda precisa cobrir custo da certificadora, mídia, suporte, gateway, comissão do contador, comissão do vendedor e comissão do AGR, preservando a margem mínima da empresa.
+            A venda precisa cobrir custo da certificadora, cartão, token, leitora, suporte, gateway, comissão do contador, comissão do vendedor e comissão do AGR, preservando a margem mínima da empresa.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -7997,6 +8007,9 @@ function AbaPrecificacao() {
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-4 text-sm">
             <p className="font-semibold text-gray-800 dark:text-gray-100">Cálculo do piso mínimo</p>
             <p className="mt-2 text-gray-600 dark:text-gray-300">Base fixa total: R$ {precificacao.totalBaseFixo.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Custo cartão: R$ {cfg.custo_cartao.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Custo token: R$ {cfg.custo_token.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Custo leitora: R$ {cfg.custo_leitora.toFixed(2).replace('.', ',')}</p>
             <p className="text-gray-600 dark:text-gray-300">Percentual total: {precificacao.totalPercentual.toFixed(2).replace('.', ',')}%</p>
             <p className="text-gray-600 dark:text-gray-300">Divisor: {precificacao.divisor.toFixed(4).replace('.', ',')}</p>
             <p className="mt-2 text-base font-semibold text-gray-900 dark:text-white">Preço mínimo calculado: R$ {precificacao.precoMinimo.toFixed(2).replace('.', ',')}</p>
@@ -8010,7 +8023,7 @@ function AbaPrecificacao() {
           </div>
         </div>
         <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-          A regra considera as três pontas da cadeia: contador, vendedor e AGR. Quando uma comissão estiver em percentual, ela entra no divisor; quando estiver fixa, ela entra no bloco de custos.
+          A regra considera as três pontas da cadeia: contador, vendedor e AGR. O vendedor agora pode operar em `Fixo`, `Percentual` ou `Diferença`, e isso não remove as regras anteriores.
         </p>
       </div>
     </div>

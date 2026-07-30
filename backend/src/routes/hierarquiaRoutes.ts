@@ -36,13 +36,16 @@ export async function handleHierarquiaRoutes(
     const body = await readJson<{
       regime_operacional: 'REVENDA' | 'COMISSIONADO'
       custo_certificadora: number
+      custo_cartao: number
+      custo_token: number
+      custo_leitora: number
       custo_midia: number
       custo_suporte_operacional: number
       gateway_taxa_percentual: number
       gateway_taxa_fixa: number
       comissao_agr_tipo: 'FIXO' | 'PERCENTUAL'
       comissao_agr_valor: number
-      comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL'
+      comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL' | 'DIFERENCA'
       comissao_vendedor_valor: number
       comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL'
       comissao_indicador_valor: number
@@ -54,7 +57,12 @@ export async function handleHierarquiaRoutes(
       writeJson(res, 400, { ok: false, error: 'regime_operacional obrigatório' }, corsOrigin)
       return true
     }
-    const config = await repo.savePrecificacaoCertificados({ id: 'default', ...body, ativo: body.ativo ?? true })
+    const config = await repo.savePrecificacaoCertificados({
+      id: 'default',
+      ...body,
+      custo_midia: Number(body.custo_cartao ?? 0) + Number(body.custo_token ?? 0) + Number(body.custo_leitora ?? 0),
+      ativo: body.ativo ?? true,
+    })
     writeJson(res, 200, { ok: true, config }, corsOrigin)
     return true
   }

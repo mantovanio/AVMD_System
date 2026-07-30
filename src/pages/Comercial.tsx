@@ -6472,6 +6472,35 @@ export default function Comercial() {
                         </div>
                       )}
 
+                      {vendaStepStatus.produtoOk && (
+                        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
+                          <p className="font-semibold text-sm">Resumo operacional da venda</p>
+                          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                            <div>
+                              <p className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Valor bruto</p>
+                              <p className="mt-1 text-sm font-semibold">{formatCurrency(valorBaseProduto)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Desconto aplicado</p>
+                              <p className="mt-1 text-sm font-semibold">{formatCurrency(formV2.desconto || 0)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Valor final</p>
+                              <p className="mt-1 text-sm font-semibold">{formatCurrency(precoFinalComDesconto)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Situação do voucher</p>
+                              <p className={cn('mt-1 text-sm font-semibold', voucherAplicadoValido ? 'text-blue-800 dark:text-blue-100' : 'text-red-600 dark:text-red-300')}>
+                                {formV2.voucher_codigo.trim() ? (voucherAplicadoValido ? 'Aplicado' : 'Inválido') : 'Não informado'}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="mt-3 text-[11px] text-blue-700 dark:text-blue-300">
+                            O detalhamento financeiro da comissão do vendedor e do indicador é calculado no backend no momento do salvamento.
+                          </p>
+                        </div>
+                      )}
+
                       {vendaStepStatus.produtoOk && (!descontoDentroDoLimite || !voucherAplicadoValido) && (
                         <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800/40 dark:bg-red-950/20 dark:text-red-300">
                           {!descontoDentroDoLimite && <p>O desconto atual ultrapassa o limite permitido pela tabela.</p>}
@@ -8397,6 +8426,23 @@ export default function Comercial() {
                 <InfoCardMini label="Forma" value={(vendaFinanceiroModal.venda.metadata as { forma_pagamento?: string } | null)?.forma_pagamento ?? '—'} />
               </div>
 
+              {(() => {
+                const meta = ((vendaFinanceiroModal.venda.metadata as { estrutura_comercial?: Record<string, unknown> } | null)?.estrutura_comercial) ?? {}
+                return (
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
+                    <p className="font-semibold text-sm">Resumo financeiro da venda</p>
+                    <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+                      <div><span className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Valor bruto</span><p className="mt-1 text-sm font-semibold">{formatCurrency(Number(vendaFinanceiroModal.venda.valor_venda ?? 0))}</p></div>
+                      <div><span className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Líquido pós-imposto</span><p className="mt-1 text-sm font-semibold">{formatCurrency(Number(meta.valor_liquido_pos_imposto ?? 0))}</p></div>
+                      <div><span className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Comissão vendedor</span><p className="mt-1 text-sm font-semibold">{formatCurrency(Number(meta.comissao_vendedor_liquida ?? 0))}</p></div>
+                      <div><span className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Comissão indicador</span><p className="mt-1 text-sm font-semibold">{formatCurrency(Number(meta.comissao_indicador_valor ?? 0))}</p></div>
+                      <div><span className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Modo vendedor</span><p className="mt-1 text-sm font-semibold">{String(meta.comissao_vendedor_modo ?? '—')}</p></div>
+                      <div><span className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Indicador pago pelo vendedor</span><p className="mt-1 text-sm font-semibold">{meta.comissao_indicador_paga_pelo_vendedor ? 'Sim' : 'Não'}</p></div>
+                    </div>
+                  </div>
+                )
+              })()}
+
               <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
                 <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-800">
                   <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Lançamentos financeiros vinculados</h4>
@@ -9493,6 +9539,20 @@ export default function Comercial() {
                     <option key={nome} value={nome}>{nome}</option>
                   ))}
                 </select>
+              </div>
+
+              <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
+                <p className="font-semibold text-sm">Resumo da venda</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Valor atual</p>
+                    <p className="mt-1 text-sm font-semibold">{formatCurrency(Number(editForm.valor_venda ?? 0))}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Desconto</p>
+                    <p className="mt-1 text-sm font-semibold">{formatCurrency(Number(editForm.desconto ?? 0))}</p>
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
