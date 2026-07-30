@@ -73,6 +73,29 @@ type EngageTask = {
   created_at: string
 }
 
+type EngageCampaignMessage = {
+  id: string
+  campaign_id: string
+  contact_id: string
+  status: string
+  sent_at: string | null
+  delivered_at: string | null
+  read_at: string | null
+  replied_at: string | null
+  failed_at: string | null
+  failure_reason: string | null
+  created_at: string
+}
+
+type EngageAutomationRule = {
+  id: string
+  name: string
+  trigger_event: string
+  priority: number
+  is_active: boolean
+  created_at: string
+}
+
 type ApiPayload<T> = { ok: boolean; [key: string]: unknown } & Record<string, T | undefined>
 
 const defaultSummary: EngageSummary = {
@@ -97,6 +120,8 @@ export default function Engage() {
   const [tasks, setTasks] = useState<EngageTask[]>([])
   const [inboxEvents, setInboxEvents] = useState<EngageEvent[]>([])
   const [inboxTasks, setInboxTasks] = useState<EngageTask[]>([])
+  const [campaignMessages, setCampaignMessages] = useState<EngageCampaignMessage[]>([])
+  const [automationRules, setAutomationRules] = useState<EngageAutomationRule[]>([])
   const [templates, setTemplates] = useState<EngageTemplate[]>([])
   const [segments, setSegments] = useState<EngageSegment[]>([])
   const [loading, setLoading] = useState(true)
@@ -144,6 +169,14 @@ export default function Engage() {
   const [taskForm, setTaskForm] = useState({ title: '', type: 'followup', due_at: '' })
   const [templateForm, setTemplateForm] = useState({ name: '', channel: 'whatsapp', body: '', approval_status: 'draft' })
   const [segmentForm, setSegmentForm] = useState({ name: '', description: '', is_active: true })
+  const [automationForm, setAutomationForm] = useState({
+    name: '',
+    trigger_event: 'message.replied',
+    priority: 100,
+    is_active: true,
+    conditions_json: '{"channel":"whatsapp"}',
+    actions_json: '{"create_task":{"title":"Responder lead","type":"followup"}}',
+  })
 
   useEffect(() => {
     let active = true
@@ -153,7 +186,7 @@ export default function Engage() {
       setLoading(true)
       setError(null)
       try {
-        const [summaryRes, contactsRes, campaignsRes, providersRes, eventsRes, tasksRes, inboxRes, templatesRes, segmentsRes] = await Promise.all([
+        const [summaryRes, contactsRes, campaignsRes, providersRes, eventsRes, tasksRes, inboxRes, templatesRes, segmentsRes, messagesRes, rulesRes] = await Promise.all([
           fetch(getApiUrl('/engage/summary'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/contacts'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/campaigns'), { signal: controller.signal }),
@@ -163,9 +196,11 @@ export default function Engage() {
           fetch(getApiUrl('/engage/inbox'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/templates'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/segments'), { signal: controller.signal }),
+          fetch(getApiUrl('/engage/campaign-messages'), { signal: controller.signal }),
+          fetch(getApiUrl('/engage/automation-rules'), { signal: controller.signal }),
         ])
 
-        const [summaryData, contactsData, campaignsData, providersData, eventsData, tasksData, inboxData, templatesData, segmentsData] = await Promise.all([
+        const [summaryData, contactsData, campaignsData, providersData, eventsData, tasksData, inboxData, templatesData, segmentsData, messagesData, rulesData] = await Promise.all([
           summaryRes.json().catch(() => null),
           contactsRes.json().catch(() => null),
           campaignsRes.json().catch(() => null),
@@ -175,6 +210,8 @@ export default function Engage() {
           inboxRes.json().catch(() => null),
           templatesRes.json().catch(() => null),
           segmentsRes.json().catch(() => null),
+          messagesRes.json().catch(() => null),
+          rulesRes.json().catch(() => null),
         ]) as [
           ApiPayload<EngageSummary>,
           ApiPayload<EngageContact[]>,
@@ -185,9 +222,11 @@ export default function Engage() {
           ApiPayload<{ events?: EngageEvent[]; tasks?: EngageTask[] }>,
           ApiPayload<{ templates?: EngageTemplate[] }>,
           ApiPayload<{ segments?: EngageSegment[] }>,
+          ApiPayload<{ messages?: EngageCampaignMessage[] }>,
+          ApiPayload<{ rules?: EngageAutomationRule[] }>,
         ]
 
-        if (!summaryRes.ok || !contactsRes.ok || !campaignsRes.ok || !providersRes.ok || !eventsRes.ok || !tasksRes.ok || !inboxRes.ok || !templatesRes.ok || !segmentsRes.ok) {
+        if (!summaryRes.ok || !contactsRes.ok || !campaignsRes.ok || !providersRes.ok || !eventsRes.ok || !tasksRes.ok || !inboxRes.ok || !templatesRes.ok || !segmentsRes.ok || !messagesRes.ok || !rulesRes.ok) {
           throw new Error('Nao foi possivel carregar os dados do Engage.')
         }
 
@@ -201,10 +240,14 @@ export default function Engage() {
         const inboxPayload = inboxData as { events?: EngageEvent[]; tasks?: EngageTask[] } | null
         const templatesPayload = templatesData as { templates?: EngageTemplate[] } | null
         const segmentsPayload = segmentsData as { segments?: EngageSegment[] } | null
+        const messagesPayload = messagesData as { messages?: EngageCampaignMessage[] } | null
+        const rulesPayload = rulesData as { rules?: EngageAutomationRule[] } | null
         setInboxEvents(inboxPayload?.events ?? [])
         setInboxTasks(inboxPayload?.tasks ?? [])
         setTemplates(templatesPayload?.templates ?? [])
         setSegments(segmentsPayload?.segments ?? [])
+        setCampaignMessages(messagesPayload?.messages ?? [])
+        setAutomationRules(rulesPayload?.rules ?? [])
       } catch (err) {
         if (!active) return
         setError(err instanceof Error ? err.message : 'Nao foi possivel carregar os dados do Engage.')
@@ -288,6 +331,27 @@ export default function Engage() {
     setContacts(contactsData.contacts ?? [])
     setCampaigns(campaignsData.campaigns ?? [])
     setProviders(providersData.providers ?? [])
+  }
+
+  async function createAutomationRule() {
+    let conditions_json: Record<string, unknown> = {}
+    let actions_json: Record<string, unknown> = {}
+    try {
+      conditions_json = automationForm.conditions_json ? JSON.parse(automationForm.conditions_json) : {}
+      actions_json = automationForm.actions_json ? JSON.parse(automationForm.actions_json) : {}
+    } catch {
+      setActionMessage('O JSON das regras de automacao precisa ser valido.')
+      return
+    }
+
+    await submitJson('/engage/automation-rules', {
+      name: automationForm.name,
+      trigger_event: automationForm.trigger_event,
+      priority: automationForm.priority,
+      is_active: automationForm.is_active,
+      conditions_json,
+      actions_json,
+    }, 'Regra de automacao criada com sucesso.')
   }
 
   async function submitJson(path: string, payload: Record<string, unknown>, successMessage: string) {
@@ -778,6 +842,62 @@ export default function Engage() {
                   </div>
                 ))}
                 {!inboxTasks.length && <div className="text-sm text-slate-500 dark:text-slate-400">Nenhuma tarefa pendente.</div>}
+              </div>
+            </article>
+
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Status de campanha</p>
+              <h2 className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">Enviado, entregue, lido, respondeu</h2>
+              <div className="mt-4 grid gap-3 text-sm">
+                {campaignMessages.slice(0, 6).map(item => (
+                  <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
+                    <p className="font-medium text-slate-950 dark:text-white">{item.status}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{item.sent_at ?? item.created_at}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{item.delivered_at ? 'entregue' : 'aguardando entrega'} · {item.read_at ? 'lido' : 'não lido'} · {item.replied_at ? 'respondeu' : 'sem resposta'}</p>
+                  </div>
+                ))}
+                {!campaignMessages.length && <div className="text-sm text-slate-500 dark:text-slate-400">Nenhuma mensagem de campanha ainda.</div>}
+              </div>
+            </article>
+
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Nova automação</p>
+              <h2 className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">Ações por evento</h2>
+              <div className="mt-4 grid gap-3">
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Nome da regra" value={automationForm.name} onChange={e => setAutomationForm(v => ({ ...v, name: e.target.value }))} />
+                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" value={automationForm.trigger_event} onChange={e => setAutomationForm(v => ({ ...v, trigger_event: e.target.value }))}>
+                  <option value="message.replied">message.replied</option>
+                  <option value="message.delivered">message.delivered</option>
+                  <option value="message.read">message.read</option>
+                  <option value="campaign.queued">campaign.queued</option>
+                  <option value="opt_out.received">opt_out.received</option>
+                </select>
+                <textarea className="min-h-28 rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="conditions_json" value={automationForm.conditions_json} onChange={e => setAutomationForm(v => ({ ...v, conditions_json: e.target.value }))} />
+                <textarea className="min-h-28 rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="actions_json" value={automationForm.actions_json} onChange={e => setAutomationForm(v => ({ ...v, actions_json: e.target.value }))} />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input type="number" className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Prioridade" value={automationForm.priority} onChange={e => setAutomationForm(v => ({ ...v, priority: Number(e.target.value || 0) }))} />
+                  <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300">
+                    <input type="checkbox" checked={automationForm.is_active} onChange={e => setAutomationForm(v => ({ ...v, is_active: e.target.checked }))} />
+                    Ativa
+                  </label>
+                </div>
+                <button type="button" disabled={saving} onClick={createAutomationRule} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-slate-950">
+                  Criar automação
+                </button>
+              </div>
+            </article>
+
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60 lg:col-span-2">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Regras ativas</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {automationRules.map(rule => (
+                  <div key={rule.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
+                    <p className="font-medium text-slate-950 dark:text-white">{rule.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{rule.trigger_event} · prioridade {rule.priority}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{rule.is_active ? 'ativa' : 'inativa'}</p>
+                  </div>
+                ))}
+                {!automationRules.length && <div className="text-sm text-slate-500 dark:text-slate-400">Nenhuma regra cadastrada ainda.</div>}
               </div>
             </article>
           </section>

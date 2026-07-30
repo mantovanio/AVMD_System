@@ -180,6 +180,46 @@ export type EngageTaskRow = {
   updated_at: string
 }
 
+export type EngageCampaignMessageRow = {
+  id: string
+  campaign_id: string
+  contact_id: string
+  provider_id: string | null
+  sender_account_id: string | null
+  provider_message_id: string | null
+  status: string
+  sent_at: string | null
+  delivered_at: string | null
+  read_at: string | null
+  clicked_at: string | null
+  replied_at: string | null
+  failed_at: string | null
+  failure_reason: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type EngageAutomationRuleRow = {
+  id: string
+  name: string
+  trigger_event: string
+  conditions_json: Record<string, unknown>
+  actions_json: Record<string, unknown>
+  priority: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type CreateEngageAutomationRuleInput = {
+  name: string
+  trigger_event: string
+  conditions_json?: Record<string, unknown>
+  actions_json?: Record<string, unknown>
+  priority?: number
+  is_active?: boolean
+}
+
 export type EngageConversationRow = {
   id: string
   contact_id: string
@@ -474,6 +514,40 @@ export class EngageRepository {
       [limit],
     )
     return result.rows
+  }
+
+  async listCampaignMessages(limit = 50): Promise<EngageCampaignMessageRow[]> {
+    const result = await this.db.query<EngageCampaignMessageRow>(
+      `SELECT * FROM engage_campaign_messages ORDER BY created_at DESC LIMIT $1`,
+      [limit],
+    )
+    return result.rows
+  }
+
+  async listAutomationRules(limit = 50): Promise<EngageAutomationRuleRow[]> {
+    const result = await this.db.query<EngageAutomationRuleRow>(
+      `SELECT * FROM engage_automation_rules ORDER BY priority ASC, created_at DESC LIMIT $1`,
+      [limit],
+    )
+    return result.rows
+  }
+
+  async createAutomationRule(input: CreateEngageAutomationRuleInput): Promise<EngageAutomationRuleRow> {
+    const result = await this.db.query<EngageAutomationRuleRow>(
+      `INSERT INTO engage_automation_rules
+         (name, trigger_event, conditions_json, actions_json, priority, is_active)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       RETURNING *`,
+      [
+        input.name,
+        input.trigger_event,
+        JSON.stringify(input.conditions_json ?? {}),
+        JSON.stringify(input.actions_json ?? {}),
+        input.priority ?? 100,
+        input.is_active ?? true,
+      ],
+    )
+    return result.rows[0]
   }
 
   async createTask(input: CreateEngageTaskInput): Promise<EngageTaskRow> {

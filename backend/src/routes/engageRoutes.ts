@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type {
   CreateEngageEventInput,
+  CreateEngageAutomationRuleInput,
   EngageRepository,
   CreateEngageCampaignInput,
   CreateEngageContactInput,
@@ -157,6 +158,29 @@ export async function handleEngageRoutes(
   if (method === 'GET' && url === '/api/engage/tasks') {
     const tasks = await repo.listTasks()
     writeJson(res, 200, { ok: true, tasks }, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && url === '/api/engage/campaign-messages') {
+    const messages = await repo.listCampaignMessages()
+    writeJson(res, 200, { ok: true, messages }, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && url === '/api/engage/automation-rules') {
+    const rules = await repo.listAutomationRules()
+    writeJson(res, 200, { ok: true, rules }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/engage/automation-rules') {
+    const body = await readJson<CreateEngageAutomationRuleInput>(req)
+    if (!body?.name || !body?.trigger_event) {
+      writeJson(res, 400, { ok: false, error: 'name e trigger_event sao obrigatorios' }, corsOrigin)
+      return true
+    }
+    const rule = await repo.createAutomationRule(body)
+    writeJson(res, 201, { ok: true, rule }, corsOrigin)
     return true
   }
 
