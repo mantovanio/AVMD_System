@@ -59,6 +59,12 @@ export default function Engage() {
   const [providers, setProviders] = useState<EngageProvider[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', score: 0 })
+  const [providerForm, setProviderForm] = useState({ key: '', name: '', channel: 'whatsapp' })
+  const [senderForm, setSenderForm] = useState({ provider_id: '', label: '', phone_number: '', channel: 'whatsapp' })
+  const [campaignForm, setCampaignForm] = useState({ name: '', channel: 'whatsapp', scheduled_at: '' })
 
   useEffect(() => {
     let active = true
@@ -123,6 +129,58 @@ export default function Engage() {
   const latestCampaigns = campaigns.slice(0, 5)
   const themeIsDark = document.documentElement.classList.contains('dark')
 
+  async function refreshData() {
+    const [summaryRes, contactsRes, campaignsRes, providersRes] = await Promise.all([
+      fetch(getApiUrl('/engage/summary')),
+      fetch(getApiUrl('/engage/contacts')),
+      fetch(getApiUrl('/engage/campaigns')),
+      fetch(getApiUrl('/engage/providers')),
+    ])
+
+    if (!summaryRes.ok || !contactsRes.ok || !campaignsRes.ok || !providersRes.ok) {
+      throw new Error('Nao foi possivel atualizar os dados do Engage.')
+    }
+
+    const [summaryData, contactsData, campaignsData, providersData] = await Promise.all([
+      summaryRes.json(),
+      contactsRes.json(),
+      campaignsRes.json(),
+      providersRes.json(),
+    ]) as [
+      ApiPayload<EngageSummary>,
+      ApiPayload<EngageContact[]>,
+      ApiPayload<EngageCampaign[]>,
+      ApiPayload<EngageProvider[]>,
+    ]
+
+    setSummary(summaryData.summary ?? defaultSummary)
+    setContacts(contactsData.contacts ?? [])
+    setCampaigns(campaignsData.campaigns ?? [])
+    setProviders(providersData.providers ?? [])
+  }
+
+  async function submitJson(path: string, payload: Record<string, unknown>, successMessage: string) {
+    setSaving(true)
+    setActionMessage(null)
+    try {
+      const response = await fetch(getApiUrl(path), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
+      if (!response.ok) {
+        throw new Error(data?.error ?? 'Nao foi possivel salvar o registro.')
+      }
+      setActionMessage(successMessage)
+      await refreshData()
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : 'Nao foi possivel salvar o registro.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="h-full overflow-auto bg-slate-50 text-slate-900 dark:bg-[radial-gradient(circle_at_top,_#27354d_0,_#101724_42%,_#06080f_100%)] dark:text-slate-100">
       <div className="mx-auto max-w-7xl px-6 py-6 lg:px-8">
@@ -182,6 +240,11 @@ export default function Engage() {
         {error && (
           <div className="mt-6 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-100">
             {error}
+          </div>
+        )}
+        {actionMessage && (
+          <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-100">
+            {actionMessage}
           </div>
         )}
 
@@ -267,42 +330,33 @@ export default function Engage() {
         {tab === 'campanhas' && (
           <section className="mt-6 grid gap-6 lg:grid-cols-3">
             <article className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/40">
-              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Contatos</p>
-              <div className="mt-4 space-y-3">
-                {latestContacts.map(contact => (
-                  <div key={contact.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="font-medium text-slate-950 dark:text-white">{contact.name}</h3>
-                      <span className="text-xs text-cyan-700 dark:text-cyan-200">{contact.status}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{contact.phone ?? 'sem telefone'} · score {contact.score}</p>
-                  </div>
-                ))}
-                {!latestContacts.length && !loading && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-                    Nenhum contato cadastrado ainda.
-                  </div>
-                )}
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Novo contato</p>
+              <div className="mt-4 grid gap-3">
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Nome" value={contactForm.name} onChange={e => setContactForm(v => ({ ...v, name: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="E-mail" value={contactForm.email} onChange={e => setContactForm(v => ({ ...v, email: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Telefone" value={contactForm.phone} onChange={e => setContactForm(v => ({ ...v, phone: e.target.value }))} />
+                <input type="number" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Score" value={contactForm.score} onChange={e => setContactForm(v => ({ ...v, score: Number(e.target.value || 0) }))} />
+                <button type="button" disabled={saving} onClick={() => submitJson('/engage/contacts', { ...contactForm }, 'Contato criado com sucesso.')}
+                  className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-slate-950">
+                  Criar contato
+                </button>
               </div>
             </article>
 
             <article className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/40">
-              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Campanhas</p>
-              <div className="mt-4 space-y-3">
-                {latestCampaigns.map(campaign => (
-                  <div key={campaign.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="font-medium text-slate-950 dark:text-white">{campaign.name}</h3>
-                      <span className="text-xs text-cyan-700 dark:text-cyan-200">{campaign.status}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{campaign.channel} · {campaign.scheduled_at ? `agendada ${campaign.scheduled_at}` : 'envio livre'}</p>
-                  </div>
-                ))}
-                {!latestCampaigns.length && !loading && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-                    Nenhuma campanha criada ainda.
-                  </div>
-                )}
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Nova campanha</p>
+              <div className="mt-4 grid gap-3">
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Nome da campanha" value={campaignForm.name} onChange={e => setCampaignForm(v => ({ ...v, name: e.target.value }))} />
+                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" value={campaignForm.channel} onChange={e => setCampaignForm(v => ({ ...v, channel: e.target.value }))}>
+                  <option value="whatsapp">whatsapp</option>
+                  <option value="email">email</option>
+                  <option value="instagram">instagram</option>
+                </select>
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Agendamento opcional" value={campaignForm.scheduled_at} onChange={e => setCampaignForm(v => ({ ...v, scheduled_at: e.target.value }))} />
+                <button type="button" disabled={saving} onClick={() => submitJson('/engage/campaigns', { ...campaignForm, scheduled_at: campaignForm.scheduled_at || null }, 'Campanha criada com sucesso.')}
+                  className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-slate-950">
+                  Criar campanha
+                </button>
               </div>
             </article>
 
@@ -315,8 +369,7 @@ export default function Engage() {
                 <li>Sender accounts: {loading ? '—' : summary.sender_accounts_active}</li>
               </ul>
               <p className="mt-4 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                A base já está pronta para expandir para templates, mensagens, webhooks e fila de
-                disparo controlada.
+                A base já está pronta para expandir para templates, mensagens, webhooks e fila de disparo controlada.
               </p>
             </article>
           </section>
@@ -356,6 +409,40 @@ export default function Engage() {
                   </div>
                 ))}
               </div>
+              <div className="mt-5 grid gap-3">
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Provider key" value={providerForm.key} onChange={e => setProviderForm(v => ({ ...v, key: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Nome do provedor" value={providerForm.name} onChange={e => setProviderForm(v => ({ ...v, name: e.target.value }))} />
+                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" value={providerForm.channel} onChange={e => setProviderForm(v => ({ ...v, channel: e.target.value }))}>
+                  <option value="whatsapp">whatsapp</option>
+                  <option value="email">email</option>
+                  <option value="instagram">instagram</option>
+                </select>
+                <button type="button" disabled={saving} onClick={() => submitJson('/engage/providers', { ...providerForm }, 'Provedor criado com sucesso.')}
+                  className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-slate-950">
+                  Criar provedor
+                </button>
+              </div>
+            </article>
+
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60 lg:col-span-2">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Sender account</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-4">
+                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" value={senderForm.provider_id} onChange={e => setSenderForm(v => ({ ...v, provider_id: e.target.value }))}>
+                  <option value="">Escolha um provedor</option>
+                  {providers.map(provider => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
+                </select>
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Rótulo" value={senderForm.label} onChange={e => setSenderForm(v => ({ ...v, label: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Telefone" value={senderForm.phone_number} onChange={e => setSenderForm(v => ({ ...v, phone_number: e.target.value }))} />
+                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" value={senderForm.channel} onChange={e => setSenderForm(v => ({ ...v, channel: e.target.value }))}>
+                  <option value="whatsapp">whatsapp</option>
+                  <option value="email">email</option>
+                  <option value="instagram">instagram</option>
+                </select>
+              </div>
+              <button type="button" disabled={saving} onClick={() => submitJson('/engage/sender-accounts', { ...senderForm, phone_number: senderForm.phone_number || null }, 'Sender account criada com sucesso.')}
+                className="mt-3 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-slate-950">
+                Criar sender account
+              </button>
             </article>
           </section>
         )}
