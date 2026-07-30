@@ -1,6 +1,19 @@
 # React + TypeScript + Vite
 
 Documentacao tecnica do checkout e da governanca de compensacao: [docs/checkout-governanca.md](./docs/checkout-governanca.md)
+Documentacao tecnica do modulo Engage: [docs/engage.md](./docs/engage.md)
+
+## Modulos principais
+
+- `Dashboard`
+- `Clientes`
+- `Certificados`
+- `Renovações`
+- `Comercial`
+- `Chat ao Vivo`
+- `Engage`
+
+O modulo `Engage` foi desenhado para campanhas, respostas e automacao multicanal dentro do AVMD System, com suporte a e-mail, WhatsApp e Instagram, além de roteamento por provedor e por número.
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
