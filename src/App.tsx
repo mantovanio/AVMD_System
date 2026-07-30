@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import Sidebar, { type Page } from '@/components/Sidebar'
 import NotificationBell from '@/components/NotificationBell'
 import { useNotifications } from '@/hooks/useNotifications'
-import { Menu } from 'lucide-react'
+import { Menu, MoonStar, SunMedium } from 'lucide-react'
 import { APP_VERSION } from '@/lib/version'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig } from '@/lib/agencyConfig'
 import { PAGE_LABELS, PERFIL_LABEL, isAdminProfile, resolveAllowedPages as resolveLegacyPages, resolveDefaultPage } from '@/lib/security'
@@ -247,6 +247,7 @@ function AppContent() {
 
   const perfilLabel  = PERFIL_LABEL[profile.perfil] ?? ''
   const nomeDisplay  = profile.nome ?? user.email ?? 'Usuário'
+  const themeToggleLabel = dark ? 'Alternar para tema claro' : 'Alternar para tema escuro'
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
@@ -268,7 +269,7 @@ function AppContent() {
               <Menu size={18} />
             </button>
             {agencyConfig.logo_interna_url?.trim() ? (
-              <img src={agencyConfig.logo_interna_url} alt={agencyConfig.nome_agencia} className="h-10 w-auto max-w-[180px] object-contain" />
+              <img src={agencyConfig.logo_interna_url} alt={agencyConfig.nome_agencia} className="h-20 w-auto max-w-[320px] object-contain" />
             ) : null}
             <span className="font-semibold text-blue-600 dark:text-blue-400 hidden md:inline">
               {PAGE_LABELS[activePage]}
@@ -297,8 +298,9 @@ function AppContent() {
             </button>
             <button type="button" onClick={() => setDark(d => !d)}
               className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              title={dark ? 'Modo claro' : 'Modo escuro'}>
-              {dark ? '☀️' : '🌙'}
+              title={themeToggleLabel}
+              aria-label={themeToggleLabel}>
+              {dark ? <SunMedium size={16} /> : <MoonStar size={16} />}
             </button>
           </div>
         </header>
