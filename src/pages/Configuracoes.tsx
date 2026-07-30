@@ -3582,12 +3582,13 @@ function AbaAutomacoes() {
   )
 }
 
-function ConfigInput({ label, value, onChange, placeholder, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; type?: string }) {
+function ConfigInput({ label, value, onChange, placeholder, type = 'text', inputMode }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; type?: string; inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'] }) {
   return (
     <label className="flex flex-col gap-1">
       <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
       <input
         type={type}
+        inputMode={inputMode}
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
@@ -7855,13 +7856,8 @@ type PrecificacaoDetalhe = {
 
 type MetodoPagamento = 'PIX' | 'CARTAO_AVISTA' | 'CARTAO_PARCELADO' | 'BOLETO'
 
-type LinhaMatrizPrecificacao = {
-  produto: string
-  precoVenda: number
-}
-
 function toNum(value: string) {
-  const n = Number(String(value).replace(',', '.'))
+  const n = Number(String(value).trim().replace(/\./g, '').replace(',', '.'))
   return Number.isFinite(n) ? n : 0
 }
 
@@ -7938,15 +7934,6 @@ function AbaPrecificacao() {
   const [metodoSimulacao, setMetodoSimulacao] = useState<MetodoPagamento>('PIX')
   const precificacao = calcularPrecificacao(cfg)
   const precoSugerido = precificacao.precoMinimo
-  const precosReais = [
-    { label: 'e-CNPJ A1', preco: 229.90 },
-    { label: 'e-CPF A1', preco: 159.90 },
-    { label: 'A3 sem mídia - faixa 1', preco: 279.90 },
-    { label: 'A3 sem mídia - faixa 2', preco: 249.90 },
-    { label: 'A3 sem mídia - faixa 3', preco: 199.90 },
-    { label: 'A3 sem mídia - faixa 4', preco: 129.90 },
-  ]
-  const matrizVenda: LinhaMatrizPrecificacao[] = precosReais.map(item => ({ produto: item.label, precoVenda: item.preco }))
   const simulacaoAtual = calcularMargemLiquida(toNum(precoVenda), cfg, metodoSimulacao)
 
   useEffect(() => {
@@ -7961,10 +7948,11 @@ function AbaPrecificacao() {
 
   async function salvar() {
     setSaving(true)
+    const custoMidiaTotal = cfg.custo_cartao + cfg.custo_token + (cfg.custo_cartao > 0 ? cfg.custo_leitora : 0)
     await fetch(getApiUrl('/hierarquia/precificacao-certificados'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cfg),
+      body: JSON.stringify({ ...cfg, custo_midia: custoMidiaTotal }),
     })
     setSaving(false)
   }
@@ -7983,16 +7971,15 @@ function AbaPrecificacao() {
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <ConfigSelectWithManual label="Regime operacional" value={cfg.regime_operacional} onChange={v => setCfg(p => ({ ...p, regime_operacional: v as 'REVENDA' | 'COMISSIONADO' }))} options={[{ value: 'REVENDA', label: 'Revenda' }, { value: 'COMISSIONADO', label: 'Comissionado' }]} />
-        <ConfigInput label="Custo da certificadora" value={String(cfg.custo_certificadora)} onChange={v => setCfg(p => ({ ...p, custo_certificadora: toNum(v) }))} />
-        <ConfigInput label="Custo do Cartão" value={String(cfg.custo_cartao)} onChange={v => setCfg(p => ({ ...p, custo_cartao: toNum(v), custo_midia: toNum(v) + p.custo_token + (toNum(v) > 0 ? p.custo_leitora : 0) }))} />
-        <ConfigInput label="Custo do Token" value={String(cfg.custo_token)} onChange={v => setCfg(p => ({ ...p, custo_token: toNum(v), custo_midia: p.custo_cartao + toNum(v) + (p.custo_cartao > 0 ? p.custo_leitora : 0) }))} />
-        <ConfigInput label="Custo da Leitora" value={String(cfg.custo_leitora)} onChange={v => setCfg(p => ({ ...p, custo_leitora: toNum(v), custo_midia: p.custo_cartao + p.custo_token + (p.custo_cartao > 0 ? toNum(v) : 0) }))} />
-        <ConfigInput label="Custo de mídia total" value={String(cfg.custo_midia)} onChange={v => setCfg(p => ({ ...p, custo_midia: toNum(v) }))} />
-        <ConfigInput label="Custo suporte operacional" value={String(cfg.custo_suporte_operacional)} onChange={v => setCfg(p => ({ ...p, custo_suporte_operacional: toNum(v) }))} />
-        <ConfigInput label="Gateway %" value={String(cfg.gateway_taxa_percentual)} onChange={v => setCfg(p => ({ ...p, gateway_taxa_percentual: toNum(v) }))} />
-        <ConfigInput label="Gateway fixo" value={String(cfg.gateway_taxa_fixa)} onChange={v => setCfg(p => ({ ...p, gateway_taxa_fixa: toNum(v) }))} />
-        <ConfigInput label="Imposto %" value={String(cfg.aliquota_imposto)} onChange={v => setCfg(p => ({ ...p, aliquota_imposto: toNum(v) }))} />
-        <ConfigInput label="Margem desejada %" value={String(cfg.margem_lucro_desejada)} onChange={v => setCfg(p => ({ ...p, margem_lucro_desejada: toNum(v) }))} />
+        <ConfigInput label="Custo da certificadora" value={String(cfg.custo_certificadora)} onChange={v => setCfg(p => ({ ...p, custo_certificadora: toNum(v) }))} inputMode="decimal" />
+        <ConfigInput label="Custo do Cartão" value={String(cfg.custo_cartao)} onChange={v => setCfg(p => ({ ...p, custo_cartao: toNum(v) }))} inputMode="decimal" />
+        <ConfigInput label="Custo do Token" value={String(cfg.custo_token)} onChange={v => setCfg(p => ({ ...p, custo_token: toNum(v) }))} inputMode="decimal" />
+        <ConfigInput label="Custo da Leitora" value={String(cfg.custo_leitora)} onChange={v => setCfg(p => ({ ...p, custo_leitora: toNum(v) }))} inputMode="decimal" />
+        <ConfigInput label="Custo suporte operacional" value={String(cfg.custo_suporte_operacional)} onChange={v => setCfg(p => ({ ...p, custo_suporte_operacional: toNum(v) }))} inputMode="decimal" />
+        <ConfigInput label="Gateway %" value={String(cfg.gateway_taxa_percentual)} onChange={v => setCfg(p => ({ ...p, gateway_taxa_percentual: toNum(v) }))} inputMode="decimal" />
+        <ConfigInput label="Gateway fixo" value={String(cfg.gateway_taxa_fixa)} onChange={v => setCfg(p => ({ ...p, gateway_taxa_fixa: toNum(v) }))} inputMode="decimal" />
+        <ConfigInput label="Imposto %" value={String(cfg.aliquota_imposto)} onChange={v => setCfg(p => ({ ...p, aliquota_imposto: toNum(v) }))} inputMode="decimal" />
+        <ConfigInput label="Margem desejada %" value={String(cfg.margem_lucro_desejada)} onChange={v => setCfg(p => ({ ...p, margem_lucro_desejada: toNum(v) }))} inputMode="decimal" />
       </div>
       <div className="grid gap-4 md:grid-cols-3">
         <div className="space-y-2">
@@ -8002,7 +7989,7 @@ function AbaPrecificacao() {
             onChange={v => setCfg(p => ({ ...p, comissao_agr_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
             options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }]}
           />
-          <ConfigInput label="Comissão AGR valor" value={String(cfg.comissao_agr_valor)} onChange={v => setCfg(p => ({ ...p, comissao_agr_valor: toNum(v) }))} />
+          <ConfigInput label="Comissão AGR valor" value={String(cfg.comissao_agr_valor)} onChange={v => setCfg(p => ({ ...p, comissao_agr_valor: toNum(v) }))} inputMode="decimal" />
         </div>
         <div className="space-y-2">
           <ConfigSelectWithManual
@@ -8011,7 +7998,7 @@ function AbaPrecificacao() {
             onChange={v => setCfg(p => ({ ...p, comissao_vendedor_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
             options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
           />
-          <ConfigInput label="Comissão vendedor valor / taxa" value={String(cfg.comissao_vendedor_valor)} onChange={v => setCfg(p => ({ ...p, comissao_vendedor_valor: toNum(v) }))} />
+          <ConfigInput label="Comissão vendedor valor / taxa" value={String(cfg.comissao_vendedor_valor)} onChange={v => setCfg(p => ({ ...p, comissao_vendedor_valor: toNum(v) }))} inputMode="decimal" />
         </div>
         <div className="space-y-2">
           <ConfigSelectWithManual
@@ -8020,7 +8007,7 @@ function AbaPrecificacao() {
             onChange={v => setCfg(p => ({ ...p, comissao_indicador_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
             options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
           />
-          <ConfigInput label="Comissão indicador valor" value={String(cfg.comissao_indicador_valor)} onChange={v => setCfg(p => ({ ...p, comissao_indicador_valor: toNum(v) }))} />
+          <ConfigInput label="Comissão indicador valor" value={String(cfg.comissao_indicador_valor)} onChange={v => setCfg(p => ({ ...p, comissao_indicador_valor: toNum(v) }))} inputMode="decimal" />
         </div>
       </div>
       <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
@@ -8031,7 +8018,7 @@ function AbaPrecificacao() {
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <ConfigInput label="Preço de venda para simular" value={precoVenda} onChange={setPrecoVenda} />
+          <ConfigInput label="Preço de venda para simular" value={precoVenda} onChange={setPrecoVenda} inputMode="decimal" />
           <ConfigSelectWithManual
             label="Forma de pagamento"
             value={metodoSimulacao}
@@ -8056,38 +8043,6 @@ function AbaPrecificacao() {
           <SummaryChip label="Base fixa" value={Number(precificacao.totalBaseFixo.toFixed(2))} tone="yellow" />
           <SummaryChip label="Comissões fixas" value={Number(precificacao.comissoesFixas.toFixed(2))} tone="yellow" />
           <SummaryChip label="Soma percentual" value={Number(precificacao.totalPercentual.toFixed(2))} tone="yellow" />
-        </div>
-        <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950/40">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-900">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Produto</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Preço</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Pix</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Cartão avista</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Parcelado</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Boleto</th>
-              </tr>
-            </thead>
-            <tbody>
-              {matrizVenda.map(row => {
-                const pix = calcularMargemLiquida(row.precoVenda, cfg, 'PIX')
-                const avista = calcularMargemLiquida(row.precoVenda, cfg, 'CARTAO_AVISTA')
-                const parcelado = calcularMargemLiquida(row.precoVenda, cfg, 'CARTAO_PARCELADO')
-                const boleto = calcularMargemLiquida(row.precoVenda, cfg, 'BOLETO')
-                return (
-                  <tr key={row.produto} className="border-t border-gray-100 dark:border-gray-800">
-                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">{row.produto}</td>
-                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">R$ {row.precoVenda.toFixed(2).replace('.', ',')}</td>
-                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">R$ {pix.lucro.toFixed(2).replace('.', ',')}</td>
-                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">R$ {avista.lucro.toFixed(2).replace('.', ',')}</td>
-                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">R$ {parcelado.lucro.toFixed(2).replace('.', ',')}</td>
-                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">R$ {boleto.lucro.toFixed(2).replace('.', ',')}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-4 text-sm">
