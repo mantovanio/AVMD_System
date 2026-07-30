@@ -81,6 +81,19 @@ export type PrecificacaoCertificadosRow = {
   updated_at: string
 }
 
+export type PrecificacaoSimulacaoRow = {
+  id: string
+  profile_id: string
+  nome: string | null
+  regime_operacional: 'REVENDA' | 'COMISSIONADO'
+  preco_venda: number
+  metodo_pagamento: 'PIX' | 'CARTAO_AVISTA' | 'CARTAO_PARCELADO' | 'BOLETO'
+  saldo_final: number
+  margem_final: number
+  detalhe: Record<string, unknown>
+  created_at: string
+}
+
 export type RevendaPrecoBaseRow = {
   id: string
   profile_id: string
@@ -141,6 +154,27 @@ const PROFILE_COLS = `id, nome, email, perfil, status, nivel_hierarquia,
 
 export class HierarquiaRepository {
   constructor(private readonly db: AivenSqlClient) {}
+
+  private async ensurePrecificacaoSimulacoesTable(): Promise<void> {
+    await this.db.query(`
+      create table if not exists precificacao_simulacoes (
+        id uuid primary key default gen_random_uuid(),
+        profile_id uuid not null references profiles(id) on delete cascade,
+        nome text,
+        regime_operacional text not null default 'REVENDA' check (regime_operacional in ('REVENDA', 'COMISSIONADO')),
+        preco_venda numeric(12,2) not null default 0,
+        metodo_pagamento text not null default 'PIX' check (metodo_pagamento in ('PIX', 'CARTAO_AVISTA', 'CARTAO_PARCELADO', 'BOLETO')),
+        saldo_final numeric(12,2) not null default 0,
+        margem_final numeric(12,4) not null default 0,
+        detalhe jsonb not null default '{}'::jsonb,
+        created_at timestamptz not null default now()
+      )
+    `)
+    await this.db.query(`
+      create index if not exists idx_precificacao_simulacoes_profile_created
+        on precificacao_simulacoes (profile_id, created_at desc)
+    `)
+  }
 
   async getPrecificacaoCertificados(): Promise<PrecificacaoCertificadosRow> {
     const result = await this.db.query<PrecificacaoCertificadosRow>(
@@ -224,6 +258,49 @@ export class HierarquiaRepository {
         input.margem_lucro_desejada,
         input.ativo,
         JSON.stringify(input.metadata ?? {}),
+      ],
+    )
+    return result.rows[0]
+  }
+
+  async listPrecificacaoSimulacoes(profileId: string): Promise<PrecificacaoSimulacaoRow[]> {
+    await this.ensurePrecificacaoSimulacoesTable()
+    const result = await this.db.query<PrecificacaoSimulacaoRow>(
+      `SELECT id, profile_id, nome, regime_operacional, preco_venda, metodo_pagamento, saldo_final, margem_final, detalhe, created_at
+       FROM precificacao_simulacoes
+       WHERE profile_id = $1
+       ORDER BY created_at DESC
+       LIMIT 30`,
+      [profileId],
+    )
+    return result.rows
+  }
+
+  async savePrecificacaoSimulacao(input: {
+    profile_id: string
+    nome?: string | null
+    regime_operacional: 'REVENDA' | 'COMISSIONADO'
+    preco_venda: number
+    metodo_pagamento: 'PIX' | 'CARTAO_AVISTA' | 'CARTAO_PARCELADO' | 'BOLETO'
+    saldo_final: number
+    margem_final: number
+    detalhe: Record<string, unknown>
+  }): Promise<PrecificacaoSimulacaoRow> {
+    await this.ensurePrecificacaoSimulacoesTable()
+    const result = await this.db.query<PrecificacaoSimulacaoRow>(
+      `INSERT INTO precificacao_simulacoes
+         (profile_id, nome, regime_operacional, preco_venda, metodo_pagamento, saldo_final, margem_final, detalhe)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+       RETURNING id, profile_id, nome, regime_operacional, preco_venda, metodo_pagamento, saldo_final, margem_final, detalhe, created_at`,
+      [
+        input.profile_id,
+        input.nome ?? null,
+        input.regime_operacional,
+        input.preco_venda,
+        input.metodo_pagamento,
+        input.saldo_final,
+        input.margem_final,
+        JSON.stringify(input.detalhe),
       ],
     )
     return result.rows[0]

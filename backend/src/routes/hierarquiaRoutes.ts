@@ -32,6 +32,17 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
+  if (method === 'GET' && pathname === '/api/hierarquia/precificacao-simulacoes') {
+    const profileId = parsed.searchParams.get('profileId')
+    if (!profileId) {
+      writeJson(res, 400, { ok: false, error: 'profileId obrigatório' }, corsOrigin)
+      return true
+    }
+    const simulacoes = await repo.listPrecificacaoSimulacoes(profileId)
+    writeJson(res, 200, { ok: true, simulacoes }, corsOrigin)
+    return true
+  }
+
   if (method === 'POST' && pathname === '/api/hierarquia/precificacao-certificados') {
     const body = await readJson<{
       regime_operacional: 'REVENDA' | 'COMISSIONADO'
@@ -64,6 +75,26 @@ export async function handleHierarquiaRoutes(
       ativo: body.ativo ?? true,
     })
     writeJson(res, 200, { ok: true, config }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && pathname === '/api/hierarquia/precificacao-simulacoes') {
+    const body = await readJson<{
+      profile_id: string
+      nome?: string | null
+      regime_operacional: 'REVENDA' | 'COMISSIONADO'
+      preco_venda: number
+      metodo_pagamento: 'PIX' | 'CARTAO_AVISTA' | 'CARTAO_PARCELADO' | 'BOLETO'
+      saldo_final: number
+      margem_final: number
+      detalhe: Record<string, unknown>
+    }>(req)
+    if (!body?.profile_id) {
+      writeJson(res, 400, { ok: false, error: 'profile_id obrigatório' }, corsOrigin)
+      return true
+    }
+    const simulacao = await repo.savePrecificacaoSimulacao(body)
+    writeJson(res, 200, { ok: true, simulacao }, corsOrigin)
     return true
   }
 

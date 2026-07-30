@@ -7915,8 +7915,20 @@ function calcularRepasse(precoVenda: number, cfg: PrecificacaoConfig, metodo: Me
 }
 
 function AbaPrecificacao() {
+  const { profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [savingSimulacao, setSavingSimulacao] = useState(false)
+  const [nomeSimulacao, setNomeSimulacao] = useState('')
+  const [historico, setHistorico] = useState<{
+    id: string
+    nome: string | null
+    preco_venda: number
+    metodo_pagamento: string
+    saldo_final: number
+    margem_final: number
+    created_at: string
+  }[]>([])
   const [campos, setCampos] = useState({
     custo_certificadora: '0',
     custo_cartao: '0',
@@ -7960,8 +7972,12 @@ function AbaPrecificacao() {
   useEffect(() => {
     void (async () => {
       setLoading(true)
-      const res = await fetch(getApiUrl('/hierarquia/precificacao-certificados'))
-      const data = await res.json().catch(() => null) as { ok?: boolean; config?: PrecificacaoConfig } | null
+      const [configRes, histRes] = await Promise.all([
+        fetch(getApiUrl('/hierarquia/precificacao-certificados')),
+        profile?.id ? fetch(getApiUrl(`/hierarquia/precificacao-simulacoes?profileId=${profile.id}`)) : Promise.resolve(null),
+      ])
+      const data = await configRes.json().catch(() => null) as { ok?: boolean; config?: PrecificacaoConfig } | null
+      const histData = histRes ? await histRes.json().catch(() => null) as { ok?: boolean; simulacoes?: typeof historico } | null : null
       if (data?.ok && data.config) {
         setCfg(data.config)
         setCampos({
@@ -7979,9 +7995,10 @@ function AbaPrecificacao() {
           margem_lucro_desejada: String(data.config.margem_lucro_desejada ?? 0),
         })
       }
+      setHistorico(histData?.ok && histData.simulacoes ? histData.simulacoes : [])
       setLoading(false)
     })()
-  }, [])
+  }, [profile?.id])
 
   async function salvar() {
     setSaving(true)
@@ -7992,6 +8009,45 @@ function AbaPrecificacao() {
       body: JSON.stringify({ ...cfg, custo_midia: custoMidiaTotal }),
     })
     setSaving(false)
+  }
+
+  async function salvarSimulacao() {
+    if (!profile?.id) return
+    setSavingSimulacao(true)
+    const payload = {
+      profile_id: profile.id,
+      nome: nomeSimulacao.trim() || null,
+      regime_operacional: cfg.regime_operacional,
+      preco_venda: toNum(precoVenda),
+      metodo_pagamento: metodoSimulacao,
+      saldo_final: simulacaoAtual.saldoFinal,
+      margem_final: simulacaoAtual.margemFinal,
+      detalhe: {
+        custoCertificadora: simulacaoAtual.custoCertificadora,
+        custoMidia: simulacaoAtual.custoMidia,
+        custoOperacional: simulacaoAtual.custoOperacional,
+        imposto: simulacaoAtual.imposto,
+        gateway: simulacaoAtual.gateway,
+        comissaoAgr: simulacaoAtual.comissaoAgr,
+        comissaoVendedor: simulacaoAtual.comissaoVendedor,
+        comissaoIndicador: simulacaoAtual.comissaoIndicador,
+        margemDesejada: simulacaoAtual.margemDesejada,
+        totalSaidas: simulacaoAtual.totalSaidas,
+      },
+    }
+    const res = await fetch(getApiUrl('/hierarquia/precificacao-simulacoes'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json().catch(() => null) as { ok?: boolean } | null
+    if (data?.ok) {
+      const histRes = await fetch(getApiUrl(`/hierarquia/precificacao-simulacoes?profileId=${profile.id}`))
+      const histData = await histRes.json().catch(() => null) as { ok?: boolean; simulacoes?: typeof historico } | null
+      setHistorico(histData?.ok && histData.simulacoes ? histData.simulacoes : [])
+      setNomeSimulacao('')
+    }
+    setSavingSimulacao(false)
   }
 
   function atualizarCampo(nome: keyof typeof campos, valor: string) {
@@ -8067,6 +8123,7 @@ function AbaPrecificacao() {
       </div>
       <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
         <div className="flex flex-wrap items-end gap-3">
+          <ConfigInput label="Nome da simulação" value={nomeSimulacao} onChange={setNomeSimulacao} placeholder="Ex: e-CNPJ A1 Pix julho" />
           <ConfigInput label="Preço de venda informado" value={precoVenda} onChange={setPrecoVenda} inputMode="decimal" />
           <ConfigSelectWithManual
             label="Forma de pagamento"
@@ -8081,6 +8138,9 @@ function AbaPrecificacao() {
           />
           <button type="button" onClick={() => void salvar()} disabled={saving} className="h-11 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
             {saving ? 'Salvando...' : 'Salvar configuração'}
+          </button>
+          <button type="button" onClick={() => void salvarSimulacao()} disabled={savingSimulacao || !profile?.id} className="h-11 rounded-xl border border-blue-600 px-4 text-sm font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50">
+            {savingSimulacao ? 'Salvando simulação...' : 'Salvar simulação'}
           </button>
         </div>
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
@@ -8115,6 +8175,29 @@ function AbaPrecificacao() {
             <p className="text-gray-600 dark:text-gray-300">A leitora só entra quando houver cartão.</p>
             <p className="text-gray-600 dark:text-gray-300">O valor final mostra o que sobra após todos os repasses.</p>
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Os campos aceitam vírgula e ponto na entrada.</p>
+          </div>
+        </div>
+        <div className="mt-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
+          <p className="font-semibold text-gray-800 dark:text-gray-100">Últimas 30 simulações</p>
+          <div className="mt-3 space-y-2">
+            {historico.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Nenhuma simulação salva ainda.</p>
+            ) : (
+              historico.map(item => (
+                <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm">
+                  <div>
+                    <p className="font-medium text-gray-800 dark:text-gray-100">{item.nome || 'Sem nome'}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {new Date(item.created_at).toLocaleString('pt-BR')} · {item.metodo_pagamento} · R$ {Number(item.preco_venda).toFixed(2).replace('.', ',')}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Saldo: R$ {Number(item.saldo_final).toFixed(2).replace('.', ',')}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Margem: {Number(item.margem_final).toFixed(2).replace('.', ',')}%</p>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
