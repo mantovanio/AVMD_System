@@ -247,6 +247,7 @@ export interface TabelaPrecoItem {
   valor_repasse: number
   link_safeweb: string | null
   ativo: boolean
+  metadata: Record<string, unknown>
   created_at: string
   updated_at: string
 }

@@ -387,7 +387,7 @@ export class CatalogRepository {
 
   async saveTabelaItem(input: Record<string, unknown>) {
     const id = (input.id as string | null)?.trim() || randomUUID()
-    const fields = ['tabela_preco_id','certificado_id','valor','valor_custo','valor_repasse','link_safeweb','ativo']
+    const fields = ['tabela_preco_id','certificado_id','valor','valor_custo','valor_repasse','link_safeweb','ativo','metadata']
     const vals = fields.map(f => input[f] ?? null)
     const cols = fields.join(', ')
     const phs = fields.map((_, i) => `$${i + 2}`).join(', ')
@@ -402,7 +402,7 @@ export class CatalogRepository {
 
   async bulkUpsertTabelaItens(items: Record<string, unknown>[]) {
     const inserted: string[] = []
-    const fields = ['tabela_preco_id','certificado_id','valor','valor_custo','valor_repasse','link_safeweb','ativo']
+    const fields = ['tabela_preco_id','certificado_id','valor','valor_custo','valor_repasse','link_safeweb','ativo','metadata']
     for (const item of items) {
       const id = (item.id as string | null)?.trim() || randomUUID()
       const vals = fields.map(f => item[f] ?? null)
@@ -1133,7 +1133,7 @@ export class CatalogRepository {
       cfg.custo_certificadora +
       cfg.custo_cartao +
       cfg.custo_token +
-      cfg.custo_leitora +
+      (cfg.custo_cartao > 0 ? cfg.custo_leitora : 0) +
       cfg.custo_midia +
       cfg.custo_suporte_operacional +
       cfg.gateway_taxa_fixa +

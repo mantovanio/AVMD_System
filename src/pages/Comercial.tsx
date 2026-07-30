@@ -747,7 +747,7 @@ const EMPTY_TABELA: NovaTabelaPreco = {
 }
 
 const EMPTY_ITEM: NovaTabelaPrecoItem = {
-  tabela_preco_id: '', certificado_id: '', valor: 0, valor_custo: 0, valor_repasse: 0, link_safeweb: null, ativo: true,
+  tabela_preco_id: '', certificado_id: '', valor: 0, valor_custo: 0, valor_repasse: 0, link_safeweb: null, ativo: true, metadata: {},
 }
 
 const EMPTY_PARTICIPANTE: NovaTabelaPrecoParticipante = {
@@ -3350,6 +3350,7 @@ export default function Comercial() {
         valor_repasse: 0,
         link_safeweb: null,
         ativo: true,
+        metadata: { gratuito: false },
       }))
 
     const totalReativados = itensInativosParaReativar.length
@@ -3614,6 +3615,7 @@ export default function Comercial() {
       tabela_preco_id: tabelaId,
       certificado_id: certificadoId,
       valor: certificado?.preco_venda ?? 0,
+      valor_custo: certificado?.valor_custo ?? 0,
     })
     setShowFormItem(true)
   }
@@ -3623,7 +3625,7 @@ export default function Comercial() {
     setFormItem({
       tabela_preco_id: item.tabela_preco_id, certificado_id: item.certificado_id,
       valor: certificado?.preco_venda ?? item.valor, valor_custo: item.valor_custo, valor_repasse: item.valor_repasse,
-      link_safeweb: item.link_safeweb, ativo: item.ativo,
+      link_safeweb: item.link_safeweb, ativo: item.ativo, metadata: item.metadata ?? {},
     })
     setShowFormItem(true)
   }
@@ -7977,10 +7979,31 @@ export default function Comercial() {
                             <SelectInput label="Certificado do catálogo *" value={formItem.certificado_id}
                               onChange={v => {
                                 const cert = certificadoById.get(v)
-                                setFormItem(p => ({ ...p, certificado_id: v, valor: cert?.preco_venda ?? 0 }))
+                                setFormItem(p => ({
+                                  ...p,
+                                  certificado_id: v,
+                                  valor: p.metadata?.gratuito ? 0 : (cert?.preco_venda ?? 0),
+                                  valor_custo: p.metadata?.gratuito ? 0 : (cert?.valor_custo ?? 0),
+                                  valor_repasse: p.metadata?.gratuito ? 0 : 0,
+                                }))
                               }}
                               options={[{ value: '', label: 'Selecione um certificado...' }, ...certificadosAtivos.map(c => ({ value: c.id, label: `${c.codigo ? c.codigo + ' · ' : ''}${c.tipo}${c.validade ? ' · ' + c.validade : ''}` }))]} />
                           </div>
+                          <label className="flex items-center gap-2 md:col-span-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(formItem.metadata?.gratuito)}
+                              onChange={e => setFormItem(p => ({
+                                ...p,
+                                metadata: { ...(p.metadata ?? {}), gratuito: e.target.checked },
+                                valor: e.target.checked ? 0 : p.valor,
+                                valor_custo: e.target.checked ? 0 : p.valor_custo,
+                                valor_repasse: e.target.checked ? 0 : p.valor_repasse,
+                              }))}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                            />
+                            Produto gratuito: não cobra cliente, não paga AGR, não gera comissão de vendas
+                          </label>
                           <NumberInput label="Preço de venda nesta tabela (R$)" value={formItem.valor} onChange={v => setFormItem(p => ({ ...p, valor: v }))} />
                           <NumberInput label="Valor Custo (R$)" value={formItem.valor_custo} onChange={v => setFormItem(p => ({ ...p, valor_custo: v }))} />
                           <NumberInput label="Valor Repasse (R$)" value={formItem.valor_repasse} onChange={v => setFormItem(p => ({ ...p, valor_repasse: v }))} />
@@ -8075,7 +8098,16 @@ export default function Comercial() {
                                       <td className="px-3 py-2 text-xs text-gray-500">{cert?.validade ?? '—'}</td>
                                       <td className="px-3 py-2 text-xs text-gray-500">{cert?.periodo_uso ?? '—'}</td>
                                       <td className="px-3 py-2 text-xs text-gray-500">{cert?.tipo_emissao_padrao ?? '—'}</td>
-                                      <td className="px-3 py-2 text-green-600 dark:text-green-400 font-semibold text-sm">{formatCurrency(item.valor)}</td>
+                                      <td className="px-3 py-2 text-green-600 dark:text-green-400 font-semibold text-sm">
+                                        <div className="flex items-center gap-2">
+                                          <span>{formatCurrency(item.valor)}</span>
+                                          {Boolean(item.metadata?.gratuito) && (
+                                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                              Gratuito
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
                                       <td className="px-3 py-2 text-xs text-gray-500">{formatCurrency(item.valor_custo)}</td>
                                       <td className="px-3 py-2 text-xs text-gray-500">{formatCurrency(item.valor_repasse)}</td>
                                       <td className="px-3 py-2">
