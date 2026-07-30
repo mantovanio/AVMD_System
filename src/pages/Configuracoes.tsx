@@ -7946,6 +7946,7 @@ function AbaPrecificacao() {
         <ConfigInput label="Custo da certificadora" value={String(cfg.custo_certificadora)} onChange={v => setCfg(p => ({ ...p, custo_certificadora: toNum(v) }))} />
         <ConfigInput label="Custo do Cartão" value={String(cfg.custo_cartao)} onChange={v => setCfg(p => ({ ...p, custo_cartao: toNum(v), custo_midia: toNum(v) + p.custo_token + (toNum(v) > 0 ? p.custo_leitora : 0) }))} />
         <ConfigInput label="Custo do Token" value={String(cfg.custo_token)} onChange={v => setCfg(p => ({ ...p, custo_token: toNum(v), custo_midia: p.custo_cartao + toNum(v) + (p.custo_cartao > 0 ? p.custo_leitora : 0) }))} />
+        <ConfigInput label="Custo da Leitora" value={String(cfg.custo_leitora)} onChange={v => setCfg(p => ({ ...p, custo_leitora: toNum(v), custo_midia: p.custo_cartao + p.custo_token + (p.custo_cartao > 0 ? toNum(v) : 0) }))} />
         <ConfigInput label="Custo de mídia total" value={String(cfg.custo_midia)} onChange={v => setCfg(p => ({ ...p, custo_midia: toNum(v) }))} />
         <ConfigInput label="Custo suporte operacional" value={String(cfg.custo_suporte_operacional)} onChange={v => setCfg(p => ({ ...p, custo_suporte_operacional: toNum(v) }))} />
         <ConfigInput label="Gateway %" value={String(cfg.gateway_taxa_percentual)} onChange={v => setCfg(p => ({ ...p, gateway_taxa_percentual: toNum(v) }))} />
@@ -7995,6 +7996,9 @@ function AbaPrecificacao() {
             {saving ? 'Salvando...' : 'Salvar configuração'}
           </button>
         </div>
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          O campo de simulação não salva preço de venda. Ele serve só para você testar um valor e ver o lucro estimado na tela. Para salvar a configuração base, use o botão acima.
+        </p>
         <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-5">
           <SummaryChip label="Preço sugerido" value={Number(precoSugerido.toFixed(2))} tone="blue" />
           <SummaryChip label="Lucro estimado" value={Number(lucroEstimado.toFixed(2))} tone="green" />
