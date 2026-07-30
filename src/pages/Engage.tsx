@@ -78,6 +78,8 @@ export default function Engage() {
   const [providers, setProviders] = useState<EngageProvider[]>([])
   const [events, setEvents] = useState<EngageEvent[]>([])
   const [tasks, setTasks] = useState<EngageTask[]>([])
+  const [inboxEvents, setInboxEvents] = useState<EngageEvent[]>([])
+  const [inboxTasks, setInboxTasks] = useState<EngageTask[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
@@ -97,22 +99,24 @@ export default function Engage() {
       setLoading(true)
       setError(null)
       try {
-        const [summaryRes, contactsRes, campaignsRes, providersRes, eventsRes, tasksRes] = await Promise.all([
+        const [summaryRes, contactsRes, campaignsRes, providersRes, eventsRes, tasksRes, inboxRes] = await Promise.all([
           fetch(getApiUrl('/engage/summary'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/contacts'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/campaigns'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/providers'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/events'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/tasks'), { signal: controller.signal }),
+          fetch(getApiUrl('/engage/inbox'), { signal: controller.signal }),
         ])
 
-        const [summaryData, contactsData, campaignsData, providersData, eventsData, tasksData] = await Promise.all([
+        const [summaryData, contactsData, campaignsData, providersData, eventsData, tasksData, inboxData] = await Promise.all([
           summaryRes.json().catch(() => null),
           contactsRes.json().catch(() => null),
           campaignsRes.json().catch(() => null),
           providersRes.json().catch(() => null),
           eventsRes.json().catch(() => null),
           tasksRes.json().catch(() => null),
+          inboxRes.json().catch(() => null),
         ]) as [
           ApiPayload<EngageSummary>,
           ApiPayload<EngageContact[]>,
@@ -120,9 +124,10 @@ export default function Engage() {
           ApiPayload<EngageProvider[]>,
           ApiPayload<EngageEvent[]>,
           ApiPayload<EngageTask[]>,
+          ApiPayload<{ events?: EngageEvent[]; tasks?: EngageTask[] }>,
         ]
 
-        if (!summaryRes.ok || !contactsRes.ok || !campaignsRes.ok || !providersRes.ok || !eventsRes.ok || !tasksRes.ok) {
+        if (!summaryRes.ok || !contactsRes.ok || !campaignsRes.ok || !providersRes.ok || !eventsRes.ok || !tasksRes.ok || !inboxRes.ok) {
           throw new Error('Nao foi possivel carregar os dados do Engage.')
         }
 
@@ -133,6 +138,8 @@ export default function Engage() {
         setProviders(providersData.providers ?? [])
         setEvents(eventsData.events ?? [])
         setTasks(tasksData.tasks ?? [])
+        setInboxEvents((inboxData as { events?: EngageEvent[] } | null)?.events ?? [])
+        setInboxTasks((inboxData as { tasks?: EngageTask[] } | null)?.tasks ?? [])
       } catch (err) {
         if (!active) return
         setError(err instanceof Error ? err.message : 'Nao foi possivel carregar os dados do Engage.')
@@ -485,71 +492,42 @@ export default function Engage() {
         {tab === 'configuracoes' && (
           <section className="mt-6 grid gap-6 lg:grid-cols-2">
             <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
-              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Configuração operacional</p>
-              <h2 className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">Regras do Engage</h2>
-              <div className="mt-5 grid gap-3">
-                {[
-                  'Segmentar por interesse, status, origem e score.',
-                  'Escolher provedor e número por reputação, limite e canal.',
-                  'Registrar abertura, clique, resposta, opt-out e bloqueio.',
-                  'Criar follow-up automático quando houver resposta.',
-                ].map(rule => (
-                  <div key={rule} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-                    {rule}
-                  </div>
-                ))}
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Webhook do Engage</p>
+              <h2 className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">Receber respostas</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                O backend já aceita eventos de entrada em `/api/webhooks/engage`. Isso registra
+                mensagem, conversa e tarefa de follow-up quando a resposta chega.
+              </p>
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                Payload mínimo: `contact_id`, `channel`, `event_type` e `message`.
               </div>
             </article>
 
             <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
-              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Integrações</p>
-              <h2 className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">Meta, Evolution e Z-API</h2>
-              <div className="mt-5 grid gap-3">
-                {[
-                  'Meta Cloud API para WhatsApp oficial e maior credibilidade.',
-                  'Evolution API para múltiplos números e operação paralela.',
-                  'Z-API como provedor alternativo de continuidade.',
-                  'Webhook único para receber entregas, leituras e respostas.',
-                ].map(item => (
-                  <div key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-                    {item}
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Inbox operacional</p>
+              <h2 className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">Respostas recentes</h2>
+              <div className="mt-4 space-y-3">
+                {inboxEvents.slice(0, 5).map(event => (
+                  <div key={event.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
+                    <p className="font-medium text-slate-950 dark:text-white">{event.event_type}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{event.created_at}</p>
                   </div>
                 ))}
-              </div>
-              <div className="mt-5 grid gap-3">
-                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Provider key" value={providerForm.key} onChange={e => setProviderForm(v => ({ ...v, key: e.target.value }))} />
-                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Nome do provedor" value={providerForm.name} onChange={e => setProviderForm(v => ({ ...v, name: e.target.value }))} />
-                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" value={providerForm.channel} onChange={e => setProviderForm(v => ({ ...v, channel: e.target.value }))}>
-                  <option value="whatsapp">whatsapp</option>
-                  <option value="email">email</option>
-                  <option value="instagram">instagram</option>
-                </select>
-                <button type="button" disabled={saving} onClick={() => submitJson('/engage/providers', { ...providerForm }, 'Provedor criado com sucesso.')}
-                  className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-slate-950">
-                  Criar provedor
-                </button>
+                {!inboxEvents.length && <div className="text-sm text-slate-500 dark:text-slate-400">Nenhuma resposta registrada ainda.</div>}
               </div>
             </article>
 
             <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60 lg:col-span-2">
-              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Sender account</p>
-              <div className="mt-4 grid gap-3 md:grid-cols-4">
-                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" value={senderForm.provider_id} onChange={e => setSenderForm(v => ({ ...v, provider_id: e.target.value }))}>
-                  <option value="">Escolha um provedor</option>
-                  {providers.map(provider => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
-                </select>
-                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Rótulo" value={senderForm.label} onChange={e => setSenderForm(v => ({ ...v, label: e.target.value }))} />
-                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Telefone" value={senderForm.phone_number} onChange={e => setSenderForm(v => ({ ...v, phone_number: e.target.value }))} />
-                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" value={senderForm.channel} onChange={e => setSenderForm(v => ({ ...v, channel: e.target.value }))}>
-                  <option value="whatsapp">whatsapp</option>
-                  <option value="email">email</option>
-                  <option value="instagram">instagram</option>
-                </select>
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Tarefas da inbox</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {inboxTasks.slice(0, 6).map(task => (
+                  <div key={task.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
+                    <p className="font-medium text-slate-950 dark:text-white">{task.title}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{task.type} · {task.status}</p>
+                  </div>
+                ))}
+                {!inboxTasks.length && <div className="text-sm text-slate-500 dark:text-slate-400">Nenhuma tarefa pendente.</div>}
               </div>
-              <button type="button" disabled={saving} onClick={() => submitJson('/engage/sender-accounts', { ...senderForm, phone_number: senderForm.phone_number || null }, 'Sender account criada com sucesso.')}
-                className="mt-3 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-slate-950">
-                Criar sender account
-              </button>
             </article>
           </section>
         )}

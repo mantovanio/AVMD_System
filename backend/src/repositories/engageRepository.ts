@@ -138,6 +138,29 @@ export type EngageTaskRow = {
   updated_at: string
 }
 
+export type EngageConversationRow = {
+  id: string
+  contact_id: string
+  channel: string
+  status: string
+  assigned_to: string | null
+  last_message_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type EngageMessageRow = {
+  id: string
+  conversation_id: string
+  direction: string
+  channel: string
+  provider_message_id: string | null
+  body: string
+  payload_json: Record<string, unknown>
+  status: string
+  created_at: string
+}
+
 export type CreateEngageEventInput = {
   contact_id?: string | null
   campaign_id?: string | null
@@ -157,6 +180,24 @@ export type CreateEngageTaskInput = {
   status?: string
   due_at?: string | null
   assigned_to?: string | null
+}
+
+export type CreateEngageConversationInput = {
+  contact_id: string
+  channel: string
+  status?: string
+  assigned_to?: string | null
+  last_message_at?: string | null
+}
+
+export type CreateEngageMessageInput = {
+  conversation_id: string
+  direction: string
+  channel: string
+  provider_message_id?: string | null
+  body: string
+  payload_json?: Record<string, unknown>
+  status?: string
 }
 
 export type QueueEngageDispatchInput = {
@@ -393,5 +434,74 @@ export class EngageRepository {
       campaign_message_id: campaignMessage.rows[0]?.id ?? null,
       event_id: event?.id ?? null,
     }
+  }
+
+  async findConversationByContact(contactId: string, channel: string): Promise<EngageConversationRow | null> {
+    const result = await this.db.query<EngageConversationRow>(
+      `SELECT * FROM engage_conversations WHERE contact_id = $1 AND channel = $2 ORDER BY updated_at DESC LIMIT 1`,
+      [contactId, channel],
+    )
+    return result.rows[0] ?? null
+  }
+
+  async createConversation(input: CreateEngageConversationInput): Promise<EngageConversationRow> {
+    const result = await this.db.query<EngageConversationRow>(
+      `INSERT INTO engage_conversations (contact_id, channel, status, assigned_to, last_message_at)
+       VALUES ($1,$2,$3,$4,$5)
+       RETURNING *`,
+      [
+        input.contact_id,
+        input.channel,
+        input.status ?? 'open',
+        input.assigned_to ?? null,
+        input.last_message_at ?? null,
+      ],
+    )
+    return result.rows[0]
+  }
+
+  async upsertConversation(input: CreateEngageConversationInput): Promise<EngageConversationRow> {
+    const existing = await this.findConversationByContact(input.contact_id, input.channel)
+    if (existing) {
+      const updated = await this.db.query<EngageConversationRow>(
+        `UPDATE engage_conversations
+            SET status = COALESCE($2, status),
+                assigned_to = COALESCE($3, assigned_to),
+                last_message_at = COALESCE($4, last_message_at),
+                updated_at = NOW()
+          WHERE id = $1
+          RETURNING *`,
+        [existing.id, input.status ?? null, input.assigned_to ?? null, input.last_message_at ?? null],
+      )
+      return updated.rows[0]
+    }
+    return this.createConversation(input)
+  }
+
+  async listMessages(conversationId: string, limit = 50): Promise<EngageMessageRow[]> {
+    const result = await this.db.query<EngageMessageRow>(
+      `SELECT * FROM engage_messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT $2`,
+      [conversationId, limit],
+    )
+    return result.rows
+  }
+
+  async createMessage(input: CreateEngageMessageInput): Promise<EngageMessageRow> {
+    const result = await this.db.query<EngageMessageRow>(
+      `INSERT INTO engage_messages
+         (conversation_id, direction, channel, provider_message_id, body, payload_json, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING *`,
+      [
+        input.conversation_id,
+        input.direction,
+        input.channel,
+        input.provider_message_id ?? null,
+        input.body,
+        JSON.stringify(input.payload_json ?? {}),
+        input.status ?? 'created',
+      ],
+    )
+    return result.rows[0]
   }
 }

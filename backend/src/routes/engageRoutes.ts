@@ -94,6 +94,13 @@ export async function handleEngageRoutes(
     return true
   }
 
+  if (method === 'GET' && url === '/api/engage/inbox') {
+    const events = await repo.listEvents(50)
+    const tasks = await repo.listTasks(50)
+    writeJson(res, 200, { ok: true, events, tasks }, corsOrigin)
+    return true
+  }
+
   if (method === 'GET' && url === '/api/engage/events') {
     const events = await repo.listEvents()
     writeJson(res, 200, { ok: true, events }, corsOrigin)
@@ -136,6 +143,56 @@ export async function handleEngageRoutes(
     }
     const queued = await repo.queueDispatch(body)
     writeJson(res, 201, { ok: true, queued }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/webhooks/engage') {
+    const body = await readJson<{
+      contact_id?: string | null
+      channel?: string
+      provider_id?: string | null
+      conversation_id?: string | null
+      event_type?: string
+      message?: string | null
+      payload_json?: Record<string, unknown>
+    }>(req)
+    if (!body?.contact_id || !body?.channel || !body?.event_type) {
+      writeJson(res, 400, { ok: false, error: 'contact_id, channel e event_type sao obrigatorios' }, corsOrigin)
+      return true
+    }
+
+    const conversation = await repo.upsertConversation({
+      contact_id: body.contact_id,
+      channel: body.channel,
+      last_message_at: new Date().toISOString(),
+    })
+    const message = await repo.createMessage({
+      conversation_id: conversation.id,
+      direction: body.event_type === 'message.sent' ? 'outgoing' : 'incoming',
+      channel: body.channel,
+      body: body.message ?? body.event_type,
+      payload_json: body.payload_json ?? {},
+      status: 'received',
+    })
+    const event = await repo.createEvent({
+      contact_id: body.contact_id,
+      conversation_id: conversation.id,
+      message_id: message.id,
+      event_type: body.event_type,
+      provider_id: body.provider_id ?? null,
+      payload_json: body.payload_json ?? {},
+    })
+    if (body.event_type === 'message.replied') {
+      await repo.createTask({
+        contact_id: body.contact_id,
+        conversation_id: conversation.id,
+        title: 'Responder lead no Engage',
+        type: 'followup',
+        status: 'open',
+        due_at: null,
+      })
+    }
+    writeJson(res, 201, { ok: true, conversation, message, event }, corsOrigin)
     return true
   }
 
