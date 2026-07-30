@@ -7853,6 +7853,8 @@ type PrecificacaoDetalhe = {
   precoMinimo: number
 }
 
+type CenárioPrecificacao = 'SEM_MIDIA' | 'SO_CARTAO' | 'SO_TOKEN' | 'CARTAO_LEITORA' | 'GRATUITO'
+
 function toNum(value: string) {
   const n = Number(String(value).replace(',', '.'))
   return Number.isFinite(n) ? n : 0
@@ -7882,6 +7884,31 @@ function calcPrecoSugerido(cfg: PrecificacaoConfig) {
   return calcularPrecificacao(cfg).precoMinimo
 }
 
+function calcularPorCenario(cfg: PrecificacaoConfig, cenario: CenárioPrecificacao) {
+  const base = { ...cfg }
+  if (cenario === 'GRATUITO') {
+    return { ...calcularPrecificacao({ ...base, custo_certificadora: 0, custo_cartao: 0, custo_token: 0, custo_leitora: 0, custo_midia: 0, custo_suporte_operacional: 0, gateway_taxa_fixa: 0, gateway_taxa_percentual: 0, comissao_agr_tipo: 'FIXO', comissao_agr_valor: 0, comissao_vendedor_tipo: 'FIXO', comissao_vendedor_valor: 0, comissao_indicador_tipo: 'FIXO', comissao_indicador_valor: 0, aliquota_imposto: 0, margem_lucro_desejada: 0 }), cenario }
+  }
+  if (cenario === 'SEM_MIDIA') {
+    base.custo_cartao = 0
+    base.custo_token = 0
+    base.custo_leitora = 0
+  }
+  if (cenario === 'SO_CARTAO') {
+    base.custo_token = 0
+    base.custo_leitora = 0
+  }
+  if (cenario === 'SO_TOKEN') {
+    base.custo_cartao = 0
+    base.custo_leitora = 0
+  }
+  if (cenario === 'CARTAO_LEITORA') {
+    base.custo_token = 0
+    if (base.custo_cartao <= 0) base.custo_cartao = 1
+  }
+  return { ...calcularPrecificacao(base), cenario }
+}
+
 function AbaPrecificacao() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -7908,6 +7935,14 @@ function AbaPrecificacao() {
   const [precoVenda, setPrecoVenda] = useState('0')
   const precificacao = calcularPrecificacao(cfg)
   const precoSugerido = precificacao.precoMinimo
+  const cenarios: { key: CenárioPrecificacao; label: string }[] = [
+    { key: 'SEM_MIDIA', label: 'Sem mídia' },
+    { key: 'SO_CARTAO', label: 'Só cartão' },
+    { key: 'SO_TOKEN', label: 'Só token' },
+    { key: 'CARTAO_LEITORA', label: 'Cartão + leitora' },
+    { key: 'GRATUITO', label: 'Gratuito' },
+  ]
+  const cenariosCalculados = cenarios.map(item => ({ ...item, ...calcularPorCenario(cfg, item.key) }))
 
   useEffect(() => {
     void (async () => {
@@ -8005,6 +8040,20 @@ function AbaPrecificacao() {
           <SummaryChip label="Base fixa" value={Number(precificacao.totalBaseFixo.toFixed(2))} tone="yellow" />
           <SummaryChip label="Comissões fixas" value={Number(precificacao.comissoesFixas.toFixed(2))} tone="yellow" />
           <SummaryChip label="Soma percentual" value={Number(precificacao.totalPercentual.toFixed(2))} tone="yellow" />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {cenariosCalculados.map(c => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => setPrecoVenda(c.precoMinimo.toFixed(2))}
+              className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950/40 p-4 text-left hover:border-blue-300 hover:bg-blue-50/40 dark:hover:bg-blue-900/10 transition"
+            >
+              <p className="text-xs uppercase tracking-wide text-gray-500">{c.label}</p>
+              <p className="mt-2 text-lg font-semibold text-gray-900 dark:text-white">R$ {c.precoMinimo.toFixed(2).replace('.', ',')}</p>
+              <p className="text-xs text-gray-500">{c.key === 'GRATUITO' ? 'zera a operação' : 'usa a base salva'}</p>
+            </button>
+          ))}
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-4 text-sm">

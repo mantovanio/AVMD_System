@@ -3619,6 +3619,25 @@ export default function Comercial() {
     })
     setShowFormItem(true)
   }
+  function preencherItemPorCenario(cenario: 'SEM_MIDIA' | 'SO_CARTAO' | 'SO_TOKEN' | 'CARTAO_LEITORA' | 'GRATUITO') {
+    const certificado = certificadoById.get(formItem.certificado_id)
+    const valorBase = certificado?.preco_venda ?? 0
+    const custoBase = certificado?.valor_custo ?? 0
+    if (cenario === 'GRATUITO') {
+      setFormItem(p => ({ ...p, valor: 0, valor_custo: 0, valor_repasse: 0, metadata: { ...(p.metadata ?? {}), gratuito: true } }))
+      return
+    }
+    const usaCartao = cenario === 'SO_CARTAO' || cenario === 'CARTAO_LEITORA'
+    const usaToken = cenario === 'SO_TOKEN'
+    const usaLeitora = cenario === 'CARTAO_LEITORA'
+    setFormItem(p => ({
+      ...p,
+      metadata: { ...(p.metadata ?? {}), gratuito: false },
+      valor: valorBase,
+      valor_custo: usaCartao || usaToken || usaLeitora ? custoBase : 0,
+      valor_repasse: usaLeitora ? p.valor_repasse : (usaCartao || usaToken ? p.valor_repasse : 0),
+    }))
+  }
   function editarItem(item: TabelaPrecoItem) {
     const certificado = certificadoById.get(item.certificado_id)
     setEditingItemId(item.id)
@@ -8004,6 +8023,24 @@ export default function Comercial() {
                             />
                             Produto gratuito: não cobra cliente, não paga AGR, não gera comissão de vendas
                           </label>
+                          <div className="md:col-span-2 flex flex-wrap gap-2">
+                            {[
+                              ['SEM_MIDIA', 'Sem mídia'],
+                              ['SO_CARTAO', 'Só cartão'],
+                              ['SO_TOKEN', 'Só token'],
+                              ['CARTAO_LEITORA', 'Cartão + leitora'],
+                              ['GRATUITO', 'Gratuito'],
+                            ].map(([key, label]) => (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => preencherItemPorCenario(key as 'SEM_MIDIA' | 'SO_CARTAO' | 'SO_TOKEN' | 'CARTAO_LEITORA' | 'GRATUITO')}
+                                className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
                           <NumberInput label="Preço de venda nesta tabela (R$)" value={formItem.valor} onChange={v => setFormItem(p => ({ ...p, valor: v }))} />
                           <NumberInput label="Valor Custo (R$)" value={formItem.valor_custo} onChange={v => setFormItem(p => ({ ...p, valor_custo: v }))} />
                           <NumberInput label="Valor Repasse (R$)" value={formItem.valor_repasse} onChange={v => setFormItem(p => ({ ...p, valor_repasse: v }))} />
