@@ -7853,7 +7853,12 @@ type PrecificacaoDetalhe = {
   precoMinimo: number
 }
 
-type CenárioPrecificacao = 'SEM_MIDIA' | 'SO_CARTAO' | 'SO_TOKEN' | 'CARTAO_LEITORA' | 'GRATUITO'
+type MetodoPagamento = 'PIX' | 'CARTAO_AVISTA' | 'CARTAO_PARCELADO' | 'BOLETO'
+
+type LinhaMatrizPrecificacao = {
+  produto: string
+  precoVenda: number
+}
 
 function toNum(value: string) {
   const n = Number(String(value).replace(',', '.'))
@@ -7884,29 +7889,26 @@ function calcPrecoSugerido(cfg: PrecificacaoConfig) {
   return calcularPrecificacao(cfg).precoMinimo
 }
 
-function calcularPorCenario(cfg: PrecificacaoConfig, cenario: CenárioPrecificacao) {
-  const base = { ...cfg }
-  if (cenario === 'GRATUITO') {
-    return { ...calcularPrecificacao({ ...base, custo_certificadora: 0, custo_cartao: 0, custo_token: 0, custo_leitora: 0, custo_midia: 0, custo_suporte_operacional: 0, gateway_taxa_fixa: 0, gateway_taxa_percentual: 0, comissao_agr_tipo: 'FIXO', comissao_agr_valor: 0, comissao_vendedor_tipo: 'FIXO', comissao_vendedor_valor: 0, comissao_indicador_tipo: 'FIXO', comissao_indicador_valor: 0, aliquota_imposto: 0, margem_lucro_desejada: 0 }), cenario }
-  }
-  if (cenario === 'SEM_MIDIA') {
-    base.custo_cartao = 0
-    base.custo_token = 0
-    base.custo_leitora = 0
-  }
-  if (cenario === 'SO_CARTAO') {
-    base.custo_token = 0
-    base.custo_leitora = 0
-  }
-  if (cenario === 'SO_TOKEN') {
-    base.custo_cartao = 0
-    base.custo_leitora = 0
-  }
-  if (cenario === 'CARTAO_LEITORA') {
-    base.custo_token = 0
-    if (base.custo_cartao <= 0) base.custo_cartao = 1
-  }
-  return { ...calcularPrecificacao(base), cenario }
+function calcularTaxaPagamento(preco: number, metodo: MetodoPagamento) {
+  if (metodo === 'PIX') return 0.50
+  if (metodo === 'CARTAO_AVISTA') return preco * 0.03
+  if (metodo === 'CARTAO_PARCELADO') return preco * 0.048
+  if (metodo === 'BOLETO') return 0.98
+  return 0
+}
+
+function calcularMargemLiquida(precoVenda: number, cfg: PrecificacaoConfig, metodo: MetodoPagamento) {
+  const custoMidiaTotal = cfg.custo_cartao + cfg.custo_token + (cfg.custo_cartao > 0 ? cfg.custo_leitora : 0)
+  const custoBase = cfg.custo_certificadora + custoMidiaTotal + cfg.custo_suporte_operacional + cfg.gateway_taxa_fixa
+  const imposto = precoVenda * (cfg.aliquota_imposto / 100)
+  const gateway = calcularTaxaPagamento(precoVenda, metodo)
+  const comissoes =
+    (cfg.comissao_agr_tipo === 'FIXO' ? cfg.comissao_agr_valor : precoVenda * (cfg.comissao_agr_valor / 100)) +
+    (cfg.comissao_vendedor_tipo === 'FIXO' ? cfg.comissao_vendedor_valor : precoVenda * (cfg.comissao_vendedor_valor / 100)) +
+    (cfg.comissao_indicador_tipo === 'FIXO' ? cfg.comissao_indicador_valor : precoVenda * (cfg.comissao_indicador_valor / 100))
+  const lucro = precoVenda - custoBase - imposto - gateway - comissoes
+  const margem = precoVenda > 0 ? (lucro / precoVenda) * 100 : 0
+  return { custoBase, imposto, gateway, comissoes, lucro, margem }
 }
 
 function AbaPrecificacao() {
@@ -7933,16 +7935,19 @@ function AbaPrecificacao() {
     margem_lucro_desejada: 0,
   })
   const [precoVenda, setPrecoVenda] = useState('0')
+  const [metodoSimulacao, setMetodoSimulacao] = useState<MetodoPagamento>('PIX')
   const precificacao = calcularPrecificacao(cfg)
   const precoSugerido = precificacao.precoMinimo
-  const cenarios: { key: CenárioPrecificacao; label: string }[] = [
-    { key: 'SEM_MIDIA', label: 'Sem mídia' },
-    { key: 'SO_CARTAO', label: 'Só cartão' },
-    { key: 'SO_TOKEN', label: 'Só token' },
-    { key: 'CARTAO_LEITORA', label: 'Cartão + leitora' },
-    { key: 'GRATUITO', label: 'Gratuito' },
+  const precosReais = [
+    { label: 'e-CNPJ A1', preco: 229.90 },
+    { label: 'e-CPF A1', preco: 159.90 },
+    { label: 'A3 sem mídia - faixa 1', preco: 279.90 },
+    { label: 'A3 sem mídia - faixa 2', preco: 249.90 },
+    { label: 'A3 sem mídia - faixa 3', preco: 199.90 },
+    { label: 'A3 sem mídia - faixa 4', preco: 129.90 },
   ]
-  const cenariosCalculados = cenarios.map(item => ({ ...item, ...calcularPorCenario(cfg, item.key) }))
+  const matrizVenda: LinhaMatrizPrecificacao[] = precosReais.map(item => ({ produto: item.label, precoVenda: item.preco }))
+  const simulacaoAtual = calcularMargemLiquida(toNum(precoVenda), cfg, metodoSimulacao)
 
   useEffect(() => {
     void (async () => {
@@ -8027,12 +8032,23 @@ function AbaPrecificacao() {
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <ConfigInput label="Preço de venda para simular" value={precoVenda} onChange={setPrecoVenda} />
+          <ConfigSelectWithManual
+            label="Forma de pagamento"
+            value={metodoSimulacao}
+            onChange={v => setMetodoSimulacao(v as MetodoPagamento)}
+            options={[
+              { value: 'PIX', label: 'Pix' },
+              { value: 'CARTAO_AVISTA', label: 'Cartão à vista' },
+              { value: 'CARTAO_PARCELADO', label: 'Cartão parcelado' },
+              { value: 'BOLETO', label: 'Boleto' },
+            ]}
+          />
           <button type="button" onClick={() => void salvar()} disabled={saving} className="h-11 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
             {saving ? 'Salvando...' : 'Salvar configuração'}
           </button>
         </div>
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-          O campo de simulação não salva preço de venda. Ele serve só para você testar um valor e ver o lucro estimado na tela. Para salvar a configuração base, use o botão acima.
+          O campo de simulação não salva preço de venda. Ele serve só para você testar um valor real de mercado e ver a margem estimada na tela.
         </p>
         <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-5">
           <SummaryChip label="Preço sugerido" value={Number(precoSugerido.toFixed(2))} tone="blue" />
@@ -8041,42 +8057,57 @@ function AbaPrecificacao() {
           <SummaryChip label="Comissões fixas" value={Number(precificacao.comissoesFixas.toFixed(2))} tone="yellow" />
           <SummaryChip label="Soma percentual" value={Number(precificacao.totalPercentual.toFixed(2))} tone="yellow" />
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {cenariosCalculados.map(c => (
-            <button
-              key={c.key}
-              type="button"
-              onClick={() => setPrecoVenda(c.precoMinimo.toFixed(2))}
-              className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950/40 p-4 text-left hover:border-blue-300 hover:bg-blue-50/40 dark:hover:bg-blue-900/10 transition"
-            >
-              <p className="text-xs uppercase tracking-wide text-gray-500">{c.label}</p>
-              <p className="mt-2 text-lg font-semibold text-gray-900 dark:text-white">R$ {c.precoMinimo.toFixed(2).replace('.', ',')}</p>
-              <p className="text-xs text-gray-500">{c.key === 'GRATUITO' ? 'zera a operação' : 'usa a base salva'}</p>
-            </button>
-          ))}
+        <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950/40">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50 dark:bg-gray-900">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Produto</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-500">Preço</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-500">Pix</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-500">Cartão avista</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-500">Parcelado</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-500">Boleto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {matrizVenda.map(row => {
+                const pix = calcularMargemLiquida(row.precoVenda, cfg, 'PIX')
+                const avista = calcularMargemLiquida(row.precoVenda, cfg, 'CARTAO_AVISTA')
+                const parcelado = calcularMargemLiquida(row.precoVenda, cfg, 'CARTAO_PARCELADO')
+                const boleto = calcularMargemLiquida(row.precoVenda, cfg, 'BOLETO')
+                return (
+                  <tr key={row.produto} className="border-t border-gray-100 dark:border-gray-800">
+                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">{row.produto}</td>
+                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">R$ {row.precoVenda.toFixed(2).replace('.', ',')}</td>
+                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">R$ {pix.lucro.toFixed(2).replace('.', ',')}</td>
+                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">R$ {avista.lucro.toFixed(2).replace('.', ',')}</td>
+                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">R$ {parcelado.lucro.toFixed(2).replace('.', ',')}</td>
+                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">R$ {boleto.lucro.toFixed(2).replace('.', ',')}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-4 text-sm">
-            <p className="font-semibold text-gray-800 dark:text-gray-100">Cálculo do piso mínimo</p>
-            <p className="mt-2 text-gray-600 dark:text-gray-300">Base fixa total: R$ {precificacao.totalBaseFixo.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Custo cartão: R$ {cfg.custo_cartao.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Custo token: R$ {cfg.custo_token.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Custo leitora (somente com cartão): R$ {cfg.custo_leitora.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Percentual total: {precificacao.totalPercentual.toFixed(2).replace('.', ',')}%</p>
-            <p className="text-gray-600 dark:text-gray-300">Divisor: {precificacao.divisor.toFixed(4).replace('.', ',')}</p>
-            <p className="mt-2 text-base font-semibold text-gray-900 dark:text-white">Preço mínimo calculado: R$ {precificacao.precoMinimo.toFixed(2).replace('.', ',')}</p>
+            <p className="font-semibold text-gray-800 dark:text-gray-100">Simulação atual</p>
+            <p className="mt-2 text-gray-600 dark:text-gray-300">Preço: R$ {toNum(precoVenda).toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Pagamento: {metodoSimulacao === 'PIX' ? 'Pix' : metodoSimulacao === 'CARTAO_AVISTA' ? 'Cartão à vista' : metodoSimulacao === 'CARTAO_PARCELADO' ? 'Cartão parcelado' : 'Boleto'}</p>
+            <p className="text-gray-600 dark:text-gray-300">Custo base: R$ {simulacaoAtual.custoBase.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Imposto: R$ {simulacaoAtual.imposto.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Taxa pagamento: R$ {simulacaoAtual.gateway.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Comissões: R$ {simulacaoAtual.comissoes.toFixed(2).replace('.', ',')}</p>
+            <p className="mt-2 text-base font-semibold text-gray-900 dark:text-white">Lucro líquido: R$ {simulacaoAtual.lucro.toFixed(2).replace('.', ',')}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Margem: {simulacaoAtual.margem.toFixed(2).replace('.', ',')}%</p>
           </div>
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-4 text-sm">
-            <p className="font-semibold text-gray-800 dark:text-gray-100">Comissões da cadeia</p>
-            <p className="mt-2 text-gray-600 dark:text-gray-300">Contador: {cfg.comissao_indicador_tipo} {cfg.comissao_indicador_valor.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Vendedor: {cfg.comissao_vendedor_tipo} {cfg.comissao_vendedor_valor.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">AGR: {cfg.comissao_agr_tipo} {cfg.comissao_agr_valor.toFixed(2).replace('.', ',')}</p>
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Se alguma comissão estiver como percentual, ela entra na conta do divisor. Se estiver fixa, entra no bloco de custos.</p>
+            <p className="font-semibold text-gray-800 dark:text-gray-100">Leitura rápida</p>
+            <p className="mt-2 text-gray-600 dark:text-gray-300">O sistema agora compara seu preço real com o custo real do produto e da forma de pagamento.</p>
+            <p className="text-gray-600 dark:text-gray-300">Assim você enxerga se R$ 229,90 no e-CNPJ A1 ou R$ 159,90 no e-CPF A1 fecham margem com pix, cartão, boleto ou parcelado.</p>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Se quiser, o próximo passo é salvar essa matriz por produto no banco para editar direto na tabela.</p>
           </div>
         </div>
-        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-          A regra considera as três pontas da cadeia: contador, vendedor e AGR. O vendedor agora pode operar em `Fixo`, `Percentual` ou `Diferença`, e isso não remove as regras anteriores.
-        </p>
       </div>
     </div>
   )
