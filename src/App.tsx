@@ -268,9 +268,9 @@ function AppContent() {
               <Menu size={18} />
             </button>
             {agencyConfig.logo_interna_url?.trim() ? (
-              <img src={agencyConfig.logo_interna_url} alt={agencyConfig.nome_agencia} className="h-7 w-auto object-contain" />
+              <img src={agencyConfig.logo_interna_url} alt={agencyConfig.nome_agencia} className="h-10 w-auto max-w-[180px] object-contain" />
             ) : null}
-            <span className="font-semibold text-blue-600 dark:text-blue-400">
+            <span className="font-semibold text-blue-600 dark:text-blue-400 hidden md:inline">
               {PAGE_LABELS[activePage]}
             </span>
           </div>

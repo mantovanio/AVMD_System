@@ -25,6 +25,7 @@ import { HierarquiaRepository } from './repositories/hierarquiaRepository.js'
 import { handleHierarquiaRoutes } from './routes/hierarquiaRoutes.js'
 import { ProfileRepository } from './repositories/profileRepository.js'
 import { handleExternalIntegrationRoutes } from './routes/externalIntegrationRoutes.js'
+import { handleEngageRoutes } from './routes/engageRoutes.js'
 import { ExternalIntegrationRepository } from './repositories/externalIntegrationRepository.js'
 import { RenovacaoRepository } from './repositories/renovacaoRepository.js'
 import { CommunicationTemplateRepository } from './repositories/communicationTemplateRepository.js'
@@ -34,6 +35,7 @@ import { LeadRepository } from './repositories/leadRepository.js'
 import { CommunicationOutboxRepository } from './repositories/communicationOutboxRepository.js'
 import { CommunicationEventRepository } from './repositories/communicationEventRepository.js'
 import { ConfigRepository } from './repositories/configRepository.js'
+import { EngageRepository } from './repositories/engageRepository.js'
 import { FileRepository } from './repositories/fileRepository.js'
 import { PasswordRecoveryAuditRepository } from './repositories/passwordRecoveryAuditRepository.js'
 import { PasswordRecoveryRepository } from './repositories/passwordRecoveryRepository.js'
@@ -74,6 +76,7 @@ const leadRepository = new LeadRepository(db)
 const communicationOutboxRepository = new CommunicationOutboxRepository(db)
 const communicationEventRepository = new CommunicationEventRepository(db)
 const configRepository = new ConfigRepository(db)
+const engageRepository = new EngageRepository(db)
 const fileRepository = new FileRepository(db)
 const passwordRecoveryAuditRepository = new PasswordRecoveryAuditRepository(db)
 const passwordRecoveryRepository = new PasswordRecoveryRepository(db)
@@ -216,6 +219,9 @@ const server = createServer(async (req, res) => {
       config,
     )
     if (handledChat) return
+
+    const handledEngage = await handleEngageRoutes(req, res, engageRepository, config.corsOrigin)
+    if (handledEngage) return
 
     const handledCatalog = await handleCatalogRoutes(req, res, catalogRepository, renovacaoRepository, db, config.corsOrigin)
     if (handledCatalog) return

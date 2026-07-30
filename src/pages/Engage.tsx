@@ -1,54 +1,125 @@
-const stats = [
-  { label: 'Contatos prontos', value: '48.320' },
-  { label: 'Campanhas ativas', value: '18' },
-  { label: 'Respostas hoje', value: '1.284' },
-  { label: 'Conversões rastreadas', value: '3.092' },
-]
+import { useEffect, useMemo, useState } from 'react'
+import { getApiUrl } from '@/lib/api'
 
-const channels = [
-  {
-    title: 'E-mail marketing',
-    text: 'Disparo em escala com métricas de entrega, abertura, clique, bounce e descadastro.',
-  },
-  {
-    title: 'WhatsApp oficial',
-    text: 'API da Meta com templates aprovados, respostas rastreáveis e governança por reputação.',
-  },
-  {
-    title: 'Instagram',
-    text: 'Canal de relacionamento e resposta dentro das permissões oficiais, conectado ao funil.',
-  },
-]
+type EngageSummary = {
+  contacts_active: number
+  campaigns_active: number
+  messages_sent: number
+  replies_today: number
+  opt_outs: number
+  providers_active: number
+  sender_accounts_active: number
+}
 
-const providers = [
-  {
-    title: 'Meta / Cloud API',
-    text: 'Canal oficial para credibilidade, rastreio e conformidade.',
-  },
-  {
-    title: 'Evolution API',
-    text: 'Roteamento flexível para múltiplos números e operações paralelas.',
-  },
-  {
-    title: 'Z-API',
-    text: 'Alternativa para distribuição de carga e continuidade operacional.',
-  },
-  {
-    title: 'Conectores futuros',
-    text: 'Estrutura preparada para novos gateways sem refazer o módulo.',
-  },
-]
+type EngageContact = {
+  id: string
+  name: string
+  email: string | null
+  phone: string | null
+  status: string
+  score: number
+  created_at: string
+}
 
-const routingRules = [
-  'Escolher o número com menor risco e melhor reputação.',
-  'Aplicar limite por hora, por dia e por segmento.',
-  'Trocar de provedor se a fila atingir alerta de entrega.',
-  'Suspender campanhas para contatos que bloquearam ou reclamaram.',
-]
+type EngageCampaign = {
+  id: string
+  name: string
+  channel: string
+  status: string
+  scheduled_at: string | null
+  created_at: string
+}
 
-const states = ['new', 'segmented', 'queued', 'contacted', 'engaged', 'replied', 'in_negotiation', 'converted']
+type EngageProvider = {
+  id: string
+  key: string
+  name: string
+  channel: string
+  status: string
+}
+
+type ApiPayload<T> = { ok: boolean; [key: string]: unknown } & Record<string, T | undefined>
+
+const defaultSummary: EngageSummary = {
+  contacts_active: 0,
+  campaigns_active: 0,
+  messages_sent: 0,
+  replies_today: 0,
+  opt_outs: 0,
+  providers_active: 0,
+  sender_accounts_active: 0,
+}
 
 export default function Engage() {
+  const [summary, setSummary] = useState<EngageSummary>(defaultSummary)
+  const [contacts, setContacts] = useState<EngageContact[]>([])
+  const [campaigns, setCampaigns] = useState<EngageCampaign[]>([])
+  const [providers, setProviders] = useState<EngageProvider[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    const controller = new AbortController()
+
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const [summaryRes, contactsRes, campaignsRes, providersRes] = await Promise.all([
+          fetch(getApiUrl('/engage/summary'), { signal: controller.signal }),
+          fetch(getApiUrl('/engage/contacts'), { signal: controller.signal }),
+          fetch(getApiUrl('/engage/campaigns'), { signal: controller.signal }),
+          fetch(getApiUrl('/engage/providers'), { signal: controller.signal }),
+        ])
+
+        const [summaryData, contactsData, campaignsData, providersData] = await Promise.all([
+          summaryRes.json().catch(() => null),
+          contactsRes.json().catch(() => null),
+          campaignsRes.json().catch(() => null),
+          providersRes.json().catch(() => null),
+        ]) as [
+          ApiPayload<EngageSummary>,
+          ApiPayload<EngageContact[]>,
+          ApiPayload<EngageCampaign[]>,
+          ApiPayload<EngageProvider[]>,
+        ]
+
+        if (!summaryRes.ok || !contactsRes.ok || !campaignsRes.ok || !providersRes.ok) {
+          throw new Error('Nao foi possivel carregar os dados do Engage.')
+        }
+
+        if (!active) return
+        setSummary(summaryData.summary ?? defaultSummary)
+        setContacts(contactsData.contacts ?? [])
+        setCampaigns(campaignsData.campaigns ?? [])
+        setProviders(providersData.providers ?? [])
+      } catch (err) {
+        if (!active) return
+        setError(err instanceof Error ? err.message : 'Nao foi possivel carregar os dados do Engage.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    void load()
+
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [])
+
+  const stats = useMemo(() => [
+    { label: 'Contatos prontos', value: summary.contacts_active },
+    { label: 'Campanhas ativas', value: summary.campaigns_active },
+    { label: 'Respostas hoje', value: summary.replies_today },
+    { label: 'Bloqueios', value: summary.opt_outs },
+  ], [summary])
+
+  const latestContacts = contacts.slice(0, 5)
+  const latestCampaigns = campaigns.slice(0, 5)
+
   return (
     <div className="h-full overflow-auto bg-[radial-gradient(circle_at_top,_#27354d_0,_#101724_42%,_#06080f_100%)] text-slate-100">
       <div className="mx-auto max-w-7xl px-6 py-6 lg:px-8">
@@ -59,7 +130,7 @@ export default function Engage() {
               Campanhas, respostas e automações
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-              Módulo integrado ao AVMD System para trabalhar e-mail, WhatsApp e Instagram com
+              Módulo integrado ao AVMD System para operar e-mail, WhatsApp e Instagram com
               múltiplos provedores e múltiplos números.
             </p>
           </div>
@@ -68,11 +139,17 @@ export default function Engage() {
           </div>
         </div>
 
+        {error && (
+          <div className="mt-6 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+            {error}
+          </div>
+        )}
+
         <div className="grid gap-4 py-6 sm:grid-cols-2 xl:grid-cols-4">
           {stats.map(item => (
             <div key={item.label} className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
               <p className="text-sm text-slate-300">{item.label}</p>
-              <p className="mt-3 text-3xl font-semibold text-white">{item.value}</p>
+              <p className="mt-3 text-3xl font-semibold text-white">{loading ? '—' : item.value}</p>
             </div>
           ))}
         </div>
@@ -85,12 +162,16 @@ export default function Engage() {
                 <h2 className="mt-2 text-2xl font-semibold text-white">Multicanal sem retrabalho</h2>
               </div>
               <div className="rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-medium text-emerald-300">
-                operação controlada
+                {summary.providers_active} provedores ativos
               </div>
             </div>
 
-            <div className="mt-6 grid gap-4">
-              {channels.map((channel, index) => (
+            <div className="mt-6 grid gap-3">
+              {[
+                { title: 'E-mail marketing', text: 'Disparo em escala com métricas de entrega, abertura, clique, bounce e descadastro.' },
+                { title: 'WhatsApp oficial', text: 'API da Meta com templates aprovados, respostas rastreáveis e governança por reputação.' },
+                { title: 'Instagram', text: 'Canal de relacionamento e resposta dentro das permissões oficiais, conectado ao funil.' },
+              ].map((channel, index) => (
                 <div key={channel.title} className="rounded-2xl border border-white/8 bg-white/4 p-4">
                   <div className="flex items-center justify-between gap-4">
                     <h3 className="font-medium text-white">{channel.title}</h3>
@@ -99,17 +180,6 @@ export default function Engage() {
                   <p className="mt-2 text-sm leading-6 text-slate-300">{channel.text}</p>
                 </div>
               ))}
-            </div>
-
-            <div className="mt-6 rounded-2xl bg-gradient-to-r from-cyan-400/15 to-blue-500/15 p-4">
-              <p className="text-sm text-cyan-100">Jornada resumida do lead</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {states.map(state => (
-                  <span key={state} className="rounded-full border border-white/10 bg-slate-950/40 px-3 py-1 text-xs text-slate-200">
-                    {state}
-                  </span>
-                ))}
-              </div>
             </div>
           </section>
 
@@ -121,85 +191,83 @@ export default function Engage() {
               </h2>
               <div className="mt-5 grid gap-3">
                 {providers.map(item => (
-                  <div key={item.title} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-sm uppercase tracking-[0.24em] text-cyan-300/70">{item.title}</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-300">{item.text}</p>
+                  <div key={item.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-sm uppercase tracking-[0.24em] text-cyan-300/70">{item.name}</p>
+                    <p className="mt-1 text-xs text-slate-400">{item.key} · {item.channel} · {item.status}</p>
                   </div>
                 ))}
+                {!providers.length && !loading && (
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+                    Nenhum provedor cadastrado ainda. A estrutura está pronta para receber Meta, Evolution API e Z-API.
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
-              <p className="text-sm uppercase tracking-[0.3em] text-cyan-300/70">Regras de envio</p>
-              <div className="mt-4 grid gap-3">
-                {routingRules.map(rule => (
-                  <div key={rule} className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-4 text-sm text-slate-200">
-                    {rule}
-                  </div>
-                ))}
-              </div>
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-300/70">Fila de disparo</p>
+              <p className="mt-3 text-sm leading-6 text-slate-300">
+                O backend já expõe a base para campanhas, contatos, provedores e números.
+                A próxima camada conecta templates, envio, webhooks e automações.
+              </p>
             </div>
           </section>
         </div>
 
         <section className="mt-6 grid gap-6 border-t border-white/10 py-8 lg:grid-cols-3">
           <article className="rounded-3xl border border-white/10 bg-slate-950/40 p-6">
-            <p className="text-sm uppercase tracking-[0.3em] text-cyan-300/70">Arquitetura</p>
-            <h3 className="mt-3 text-2xl font-semibold text-white">AVMD Core</h3>
-            <p className="mt-4 leading-7 text-slate-300">
-              Mantém clientes, certificados, vencimentos e o histórico principal como base confiável da operação.
-            </p>
+            <p className="text-sm uppercase tracking-[0.3em] text-cyan-300/70">Contatos</p>
+            <div className="mt-4 space-y-3">
+              {latestContacts.map(contact => (
+                <div key={contact.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-medium text-white">{contact.name}</h3>
+                    <span className="text-xs text-cyan-200">{contact.status}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">{contact.phone ?? 'sem telefone'} · score {contact.score}</p>
+                </div>
+              ))}
+              {!latestContacts.length && !loading && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+                  Nenhum contato cadastrado ainda.
+                </div>
+              )}
+            </div>
           </article>
 
           <article className="rounded-3xl border border-white/10 bg-slate-950/40 p-6">
-            <p className="text-sm uppercase tracking-[0.3em] text-cyan-300/70">Módulo</p>
-            <h3 className="mt-3 text-2xl font-semibold text-white">Engage</h3>
-            <p className="mt-4 leading-7 text-slate-300">
-              Executa campanhas, respostas, automações e relatórios sem duplicar a base nem bagunçar o sistema principal.
-            </p>
+            <p className="text-sm uppercase tracking-[0.3em] text-cyan-300/70">Campanhas</p>
+            <div className="mt-4 space-y-3">
+              {latestCampaigns.map(campaign => (
+                <div key={campaign.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-medium text-white">{campaign.name}</h3>
+                    <span className="text-xs text-cyan-200">{campaign.status}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">{campaign.channel} · {campaign.scheduled_at ? `agendada ${campaign.scheduled_at}` : 'envio livre'}</p>
+                </div>
+              ))}
+              {!latestCampaigns.length && !loading && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+                  Nenhuma campanha criada ainda.
+                </div>
+              )}
+            </div>
           </article>
 
           <article className="rounded-3xl border border-white/10 bg-slate-950/40 p-6">
-            <p className="text-sm uppercase tracking-[0.3em] text-cyan-300/70">Integração</p>
-            <h3 className="mt-3 text-2xl font-semibold text-white">Meta, Evolution, Z-API</h3>
-            <p className="mt-4 leading-7 text-slate-300">
-              O roteamento escolhe o provedor certo, o número certo e a fila certa sem quebrar o fluxo.
+            <p className="text-sm uppercase tracking-[0.3em] text-cyan-300/70">Resumo operacional</p>
+            <ul className="mt-4 grid gap-3 text-sm text-slate-200">
+              <li>Mensagens enviadas: {loading ? '—' : summary.messages_sent}</li>
+              <li>Respostas hoje: {loading ? '—' : summary.replies_today}</li>
+              <li>Opt-out registrados: {loading ? '—' : summary.opt_outs}</li>
+              <li>Sender accounts: {loading ? '—' : summary.sender_accounts_active}</li>
+            </ul>
+            <p className="mt-4 text-sm leading-6 text-slate-300">
+              A base já está pronta para expandir para templates, mensagens, webhooks e fila de
+              disparo controlada.
             </p>
           </article>
-        </section>
-
-        <section className="border-t border-white/10 py-8">
-          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6">
-              <p className="text-sm uppercase tracking-[0.3em] text-cyan-300/70">Escopo da v1</p>
-              <h3 className="mt-3 text-3xl font-semibold text-white">
-                Base pronta para validar campanhas, respostas e roteamento
-              </h3>
-              <ul className="mt-5 grid gap-3 text-slate-200">
-                <li>Base integrada de contatos</li>
-                <li>Tags e segmentação dinâmica</li>
-                <li>Templates e campanhas</li>
-                <li>E-mail, WhatsApp e Instagram</li>
-                <li>Integração com Meta, Evolution e Z-API</li>
-                <li>Inbox e respostas</li>
-                <li>Automações simples</li>
-                <li>Relatórios básicos</li>
-                <li>Tarefas de follow-up</li>
-                <li>Roteamento por número e por provedor</li>
-              </ul>
-            </div>
-
-            <div className="rounded-[2rem] border border-white/10 bg-slate-950/60 p-6">
-              <p className="text-sm uppercase tracking-[0.3em] text-cyan-300/70">Pronto para crescer</p>
-              <h3 className="mt-3 text-3xl font-semibold text-white">
-                A arquitetura já nasce preparada para escalar.
-              </h3>
-              <p className="mt-4 text-slate-300">
-                Você começa simples, valida valor rápido e depois amplia sem refazer a base.
-                O desenho já considera múltiplos canais, múltiplos números e troca de provedor.
-              </p>
-            </div>
-          </div>
         </section>
       </div>
     </div>
