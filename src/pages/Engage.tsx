@@ -186,7 +186,7 @@ export default function Engage() {
       setLoading(true)
       setError(null)
       try {
-        const [summaryRes, contactsRes, campaignsRes, providersRes, eventsRes, tasksRes, inboxRes, templatesRes, segmentsRes, messagesRes, rulesRes] = await Promise.all([
+        const [summaryRes, contactsRes, campaignsRes, providersRes, eventsRes, tasksRes, inboxRes, templatesRes, segmentsRes] = await Promise.all([
           fetch(getApiUrl('/engage/summary'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/contacts'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/campaigns'), { signal: controller.signal }),
@@ -196,11 +196,9 @@ export default function Engage() {
           fetch(getApiUrl('/engage/inbox'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/templates'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/segments'), { signal: controller.signal }),
-          fetch(getApiUrl('/engage/campaign-messages'), { signal: controller.signal }),
-          fetch(getApiUrl('/engage/automation-rules'), { signal: controller.signal }),
         ])
 
-        const [summaryData, contactsData, campaignsData, providersData, eventsData, tasksData, inboxData, templatesData, segmentsData, messagesData, rulesData] = await Promise.all([
+        const [summaryData, contactsData, campaignsData, providersData, eventsData, tasksData, inboxData, templatesData, segmentsData] = await Promise.all([
           summaryRes.json().catch(() => null),
           contactsRes.json().catch(() => null),
           campaignsRes.json().catch(() => null),
@@ -210,8 +208,6 @@ export default function Engage() {
           inboxRes.json().catch(() => null),
           templatesRes.json().catch(() => null),
           segmentsRes.json().catch(() => null),
-          messagesRes.json().catch(() => null),
-          rulesRes.json().catch(() => null),
         ]) as [
           ApiPayload<EngageSummary>,
           ApiPayload<EngageContact[]>,
@@ -222,11 +218,9 @@ export default function Engage() {
           ApiPayload<{ events?: EngageEvent[]; tasks?: EngageTask[] }>,
           ApiPayload<{ templates?: EngageTemplate[] }>,
           ApiPayload<{ segments?: EngageSegment[] }>,
-          ApiPayload<{ messages?: EngageCampaignMessage[] }>,
-          ApiPayload<{ rules?: EngageAutomationRule[] }>,
         ]
 
-        if (!summaryRes.ok || !contactsRes.ok || !campaignsRes.ok || !providersRes.ok || !eventsRes.ok || !tasksRes.ok || !inboxRes.ok || !templatesRes.ok || !segmentsRes.ok || !messagesRes.ok || !rulesRes.ok) {
+        if (!summaryRes.ok || !contactsRes.ok || !campaignsRes.ok || !providersRes.ok || !eventsRes.ok || !tasksRes.ok || !inboxRes.ok || !templatesRes.ok || !segmentsRes.ok) {
           throw new Error('Nao foi possivel carregar os dados do Engage.')
         }
 
@@ -240,14 +234,20 @@ export default function Engage() {
         const inboxPayload = inboxData as { events?: EngageEvent[]; tasks?: EngageTask[] } | null
         const templatesPayload = templatesData as { templates?: EngageTemplate[] } | null
         const segmentsPayload = segmentsData as { segments?: EngageSegment[] } | null
-        const messagesPayload = messagesData as { messages?: EngageCampaignMessage[] } | null
-        const rulesPayload = rulesData as { rules?: EngageAutomationRule[] } | null
         setInboxEvents(inboxPayload?.events ?? [])
         setInboxTasks(inboxPayload?.tasks ?? [])
         setTemplates(templatesPayload?.templates ?? [])
         setSegments(segmentsPayload?.segments ?? [])
-        setCampaignMessages(messagesPayload?.messages ?? [])
-        setAutomationRules(rulesPayload?.rules ?? [])
+        void Promise.allSettled([
+          fetch(getApiUrl('/engage/campaign-messages'), { signal: controller.signal })
+            .then(async response => response.ok ? response.json() : null)
+            .then(data => setCampaignMessages(((data as { messages?: EngageCampaignMessage[] } | null)?.messages) ?? []))
+            .catch(() => setCampaignMessages([])),
+          fetch(getApiUrl('/engage/automation-rules'), { signal: controller.signal })
+            .then(async response => response.ok ? response.json() : null)
+            .then(data => setAutomationRules(((data as { rules?: EngageAutomationRule[] } | null)?.rules) ?? []))
+            .catch(() => setAutomationRules([])),
+        ])
       } catch (err) {
         if (!active) return
         setError(err instanceof Error ? err.message : 'Nao foi possivel carregar os dados do Engage.')
@@ -331,6 +331,17 @@ export default function Engage() {
     setContacts(contactsData.contacts ?? [])
     setCampaigns(campaignsData.campaigns ?? [])
     setProviders(providersData.providers ?? [])
+
+    void Promise.allSettled([
+      fetch(getApiUrl('/engage/campaign-messages'))
+        .then(async response => response.ok ? response.json() : null)
+        .then(data => setCampaignMessages(((data as { messages?: EngageCampaignMessage[] } | null)?.messages) ?? []))
+        .catch(() => setCampaignMessages([])),
+      fetch(getApiUrl('/engage/automation-rules'))
+        .then(async response => response.ok ? response.json() : null)
+        .then(data => setAutomationRules(((data as { rules?: EngageAutomationRule[] } | null)?.rules) ?? []))
+        .catch(() => setAutomationRules([])),
+    ])
   }
 
   async function createAutomationRule() {
