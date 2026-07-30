@@ -31,6 +31,7 @@ const MODULO_TO_PAGE: Record<string, Page> = {
   comercial: 'comercial',
   clientes: 'clientes',
   chat_crm: 'chat',
+  engage: 'engage',
   renovacoes: 'renovacoes',
   financeiro: 'financeiro',
   relatorios: 'relatorios',
@@ -45,6 +46,7 @@ const PAGE_TO_MODULO: Record<Page, string> = {
   comercial: 'comercial',
   clientes: 'clientes',
   chat: 'chat_crm',
+  engage: 'engage',
   renovacoes: 'renovacoes',
   financeiro: 'financeiro',
   relatorios: 'relatorios',
@@ -97,6 +99,10 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
   }
 
   function resolveAllowedPages(): Page[] {
+    if (profile?.perfil === 'supervisor_chat') {
+      return ['chat']
+    }
+
     const pages: Page[] = []
     for (const p of permissoes) {
       const page = MODULO_TO_PAGE[p.chave]

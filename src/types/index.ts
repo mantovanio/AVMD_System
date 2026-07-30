@@ -508,6 +508,7 @@ export type PermissaoPagina =
   | 'comercial'
   | 'clientes'
   | 'chat'
+  | 'engage'
   | 'renovacoes'
   | 'financeiro'
   | 'relatorios'

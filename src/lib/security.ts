@@ -7,6 +7,7 @@ export const PAGE_LABELS: Record<Page, string> = {
   comercial: 'Comercial',
   clientes: 'Clientes',
   chat: 'Chat ao Vivo',
+  engage: 'Engage',
   renovacoes: 'Renovações',
   financeiro: 'Financeiro',
   relatorios: 'Relatórios',
@@ -21,6 +22,7 @@ export const PAGE_PERMISSIONS: { id: PermissaoPagina; label: string; description
   { id: 'comercial', label: 'Comercial', description: 'Clientes, vendas, agenda e certificados' },
   { id: 'clientes', label: 'Clientes', description: 'Consultar base de clientes e histórico comercial' },
   { id: 'chat', label: 'Chat ao Vivo', description: 'Atendimento e Kanban de conversas' },
+  { id: 'engage', label: 'Engage', description: 'Campanhas, respostas e automações multicanal' },
   { id: 'renovacoes', label: 'Renovações', description: 'Base e campanhas de renovação' },
   { id: 'financeiro', label: 'Financeiro', description: 'Lançamentos, contas e pagamentos' },
   { id: 'relatorios', label: 'Relatórios', description: 'Análises e relatórios' },
@@ -32,14 +34,15 @@ export const PAGE_PERMISSIONS: { id: PermissaoPagina; label: string; description
 export const DEFAULT_PERMISSIONS: Record<PerfilAcesso, PermissaoPagina[]> = {
   admin: PAGE_PERMISSIONS.map(p => p.id),
   supervisor_chat: ['chat'],
-  agente_registro: ['dashboard', 'comercial', 'clientes', 'chat', 'renovacoes'],
-  vendedor: ['dashboard', 'comercial', 'clientes', 'parceiros', 'relatorios'],
-  revendedor: ['dashboard', 'comercial', 'clientes', 'parceiros', 'relatorios'],
-  usuario: ['dashboard', 'relatorios', 'chat'],
+  agente_registro: ['dashboard', 'comercial', 'clientes', 'chat', 'engage', 'renovacoes'],
+  vendedor: ['dashboard', 'comercial', 'clientes', 'engage', 'parceiros', 'relatorios'],
+  revendedor: ['dashboard', 'comercial', 'clientes', 'engage', 'parceiros', 'relatorios'],
+  usuario: ['dashboard', 'relatorios', 'chat', 'engage'],
 }
 
 const RESTRICTED_PAGE_PROFILES: Partial<Record<PermissaoPagina, PerfilAcesso[]>> = {
   chat: ['admin', 'supervisor_chat', 'agente_registro', 'usuario'],
+  engage: ['admin', 'supervisor_chat', 'agente_registro', 'vendedor', 'revendedor', 'usuario'],
 }
 
 const LEGACY_REQUIRED_PERMISSIONS: Partial<Record<PerfilAcesso, PermissaoPagina[]>> = {
