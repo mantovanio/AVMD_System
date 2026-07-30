@@ -26,6 +26,39 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
+  if (method === 'GET' && pathname === '/api/hierarquia/precificacao-certificados') {
+    const config = await repo.getPrecificacaoCertificados()
+    writeJson(res, 200, { ok: true, config }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && pathname === '/api/hierarquia/precificacao-certificados') {
+    const body = await readJson<{
+      regime_operacional: 'REVENDA' | 'COMISSIONADO'
+      custo_certificadora: number
+      custo_midia: number
+      custo_suporte_operacional: number
+      gateway_taxa_percentual: number
+      gateway_taxa_fixa: number
+      comissao_agr_tipo: 'FIXO' | 'PERCENTUAL'
+      comissao_agr_valor: number
+      comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL'
+      comissao_vendedor_valor: number
+      comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL'
+      comissao_indicador_valor: number
+      aliquota_imposto: number
+      margem_lucro_desejada: number
+      ativo?: boolean
+    }>(req)
+    if (!body?.regime_operacional) {
+      writeJson(res, 400, { ok: false, error: 'regime_operacional obrigatório' }, corsOrigin)
+      return true
+    }
+    const config = await repo.savePrecificacaoCertificados({ id: 'default', ...body, ativo: body.ativo ?? true })
+    writeJson(res, 200, { ok: true, config }, corsOrigin)
+    return true
+  }
+
   if (method === 'GET' && pathname === '/api/hierarquia/agentes-disponiveis') {
     const rows = await repo.getAvailableAgentes(parsed.searchParams.get('pontoId'))
     writeJson(res, 200, { ok: true, profiles: rows }, corsOrigin)

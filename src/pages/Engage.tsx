@@ -41,6 +41,22 @@ type EngageProvider = {
   status: string
 }
 
+type EngageTemplate = {
+  id: string
+  name: string
+  channel: string
+  approval_status: string
+  created_at: string
+}
+
+type EngageSegment = {
+  id: string
+  name: string
+  description: string | null
+  is_active: boolean
+  created_at: string
+}
+
 type EngageEvent = {
   id: string
   event_type: string
@@ -71,7 +87,7 @@ const defaultSummary: EngageSummary = {
 }
 
 export default function Engage() {
-  const [tab, setTab] = useState<'resumo' | 'campanhas' | 'configuracoes' | 'fila'>('resumo')
+  const [tab, setTab] = useState<'resumo' | 'campanhas' | 'configuracoes' | 'fila' | 'templates'>('resumo')
   const [summary, setSummary] = useState<EngageSummary>(defaultSummary)
   const [contacts, setContacts] = useState<EngageContact[]>([])
   const [campaigns, setCampaigns] = useState<EngageCampaign[]>([])
@@ -80,6 +96,8 @@ export default function Engage() {
   const [tasks, setTasks] = useState<EngageTask[]>([])
   const [inboxEvents, setInboxEvents] = useState<EngageEvent[]>([])
   const [inboxTasks, setInboxTasks] = useState<EngageTask[]>([])
+  const [templates, setTemplates] = useState<EngageTemplate[]>([])
+  const [segments, setSegments] = useState<EngageSegment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
@@ -90,6 +108,8 @@ export default function Engage() {
   const [campaignForm, setCampaignForm] = useState({ name: '', channel: 'whatsapp', scheduled_at: '' })
   const [queueForm, setQueueForm] = useState({ campaign_id: '', contact_id: '', body: '', channel: 'whatsapp' })
   const [taskForm, setTaskForm] = useState({ title: '', type: 'followup', due_at: '' })
+  const [templateForm, setTemplateForm] = useState({ name: '', channel: 'whatsapp', body: '', approval_status: 'draft' })
+  const [segmentForm, setSegmentForm] = useState({ name: '', description: '', is_active: true })
 
   useEffect(() => {
     let active = true
@@ -99,7 +119,7 @@ export default function Engage() {
       setLoading(true)
       setError(null)
       try {
-        const [summaryRes, contactsRes, campaignsRes, providersRes, eventsRes, tasksRes, inboxRes] = await Promise.all([
+        const [summaryRes, contactsRes, campaignsRes, providersRes, eventsRes, tasksRes, inboxRes, templatesRes, segmentsRes] = await Promise.all([
           fetch(getApiUrl('/engage/summary'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/contacts'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/campaigns'), { signal: controller.signal }),
@@ -107,9 +127,11 @@ export default function Engage() {
           fetch(getApiUrl('/engage/events'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/tasks'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/inbox'), { signal: controller.signal }),
+          fetch(getApiUrl('/engage/templates'), { signal: controller.signal }),
+          fetch(getApiUrl('/engage/segments'), { signal: controller.signal }),
         ])
 
-        const [summaryData, contactsData, campaignsData, providersData, eventsData, tasksData, inboxData] = await Promise.all([
+        const [summaryData, contactsData, campaignsData, providersData, eventsData, tasksData, inboxData, templatesData, segmentsData] = await Promise.all([
           summaryRes.json().catch(() => null),
           contactsRes.json().catch(() => null),
           campaignsRes.json().catch(() => null),
@@ -117,6 +139,8 @@ export default function Engage() {
           eventsRes.json().catch(() => null),
           tasksRes.json().catch(() => null),
           inboxRes.json().catch(() => null),
+          templatesRes.json().catch(() => null),
+          segmentsRes.json().catch(() => null),
         ]) as [
           ApiPayload<EngageSummary>,
           ApiPayload<EngageContact[]>,
@@ -125,9 +149,11 @@ export default function Engage() {
           ApiPayload<EngageEvent[]>,
           ApiPayload<EngageTask[]>,
           ApiPayload<{ events?: EngageEvent[]; tasks?: EngageTask[] }>,
+          ApiPayload<{ templates?: EngageTemplate[] }>,
+          ApiPayload<{ segments?: EngageSegment[] }>,
         ]
 
-        if (!summaryRes.ok || !contactsRes.ok || !campaignsRes.ok || !providersRes.ok || !eventsRes.ok || !tasksRes.ok || !inboxRes.ok) {
+        if (!summaryRes.ok || !contactsRes.ok || !campaignsRes.ok || !providersRes.ok || !eventsRes.ok || !tasksRes.ok || !inboxRes.ok || !templatesRes.ok || !segmentsRes.ok) {
           throw new Error('Nao foi possivel carregar os dados do Engage.')
         }
 
@@ -138,8 +164,13 @@ export default function Engage() {
         setProviders(providersData.providers ?? [])
         setEvents(eventsData.events ?? [])
         setTasks(tasksData.tasks ?? [])
-        setInboxEvents((inboxData as { events?: EngageEvent[] } | null)?.events ?? [])
-        setInboxTasks((inboxData as { tasks?: EngageTask[] } | null)?.tasks ?? [])
+        const inboxPayload = inboxData as { events?: EngageEvent[]; tasks?: EngageTask[] } | null
+        const templatesPayload = templatesData as { templates?: EngageTemplate[] } | null
+        const segmentsPayload = segmentsData as { segments?: EngageSegment[] } | null
+        setInboxEvents(inboxPayload?.events ?? [])
+        setInboxTasks(inboxPayload?.tasks ?? [])
+        setTemplates(templatesPayload?.templates ?? [])
+        setSegments(segmentsPayload?.segments ?? [])
       } catch (err) {
         if (!active) return
         setError(err instanceof Error ? err.message : 'Nao foi possivel carregar os dados do Engage.')
@@ -167,6 +198,8 @@ export default function Engage() {
   const latestCampaigns = campaigns.slice(0, 5)
   const latestEvents = events.slice(0, 8)
   const latestTasks = tasks.slice(0, 8)
+  const latestTemplates = templates.slice(0, 5)
+  const latestSegments = segments.slice(0, 5)
   const themeIsDark = document.documentElement.classList.contains('dark')
 
   async function refreshData() {
@@ -256,6 +289,7 @@ export default function Engage() {
             { id: 'campanhas', label: 'Campanhas', icon: Send },
             { id: 'configuracoes', label: 'Configurações', icon: Settings2 },
             { id: 'fila', label: 'Fila', icon: SlidersHorizontal },
+            { id: 'templates', label: 'Templates', icon: Webhook },
           ].map(item => {
             const Icon = item.icon
             const active = tab === item.id
@@ -527,6 +561,70 @@ export default function Engage() {
                   </div>
                 ))}
                 {!inboxTasks.length && <div className="text-sm text-slate-500 dark:text-slate-400">Nenhuma tarefa pendente.</div>}
+              </div>
+            </article>
+          </section>
+        )}
+
+        {tab === 'templates' && (
+          <section className="mt-6 grid gap-6 lg:grid-cols-2">
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Novo template</p>
+              <div className="mt-4 grid gap-3">
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Nome" value={templateForm.name} onChange={e => setTemplateForm(v => ({ ...v, name: e.target.value }))} />
+                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" value={templateForm.channel} onChange={e => setTemplateForm(v => ({ ...v, channel: e.target.value }))}>
+                  <option value="whatsapp">whatsapp</option>
+                  <option value="email">email</option>
+                  <option value="instagram">instagram</option>
+                </select>
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Status de aprovação" value={templateForm.approval_status} onChange={e => setTemplateForm(v => ({ ...v, approval_status: e.target.value }))} />
+                <textarea className="min-h-32 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Conteúdo do template" value={templateForm.body} onChange={e => setTemplateForm(v => ({ ...v, body: e.target.value }))} />
+                <button type="button" disabled={saving} onClick={() => submitJson('/engage/templates', { ...templateForm }, 'Template criado com sucesso.')}
+                  className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-slate-950">
+                  Criar template
+                </button>
+              </div>
+            </article>
+
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Novo segmento</p>
+              <div className="mt-4 grid gap-3">
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Nome do segmento" value={segmentForm.name} onChange={e => setSegmentForm(v => ({ ...v, name: e.target.value }))} />
+                <textarea className="min-h-32 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Descrição / regra" value={segmentForm.description} onChange={e => setSegmentForm(v => ({ ...v, description: e.target.value }))} />
+                <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                  <input type="checkbox" checked={segmentForm.is_active} onChange={e => setSegmentForm(v => ({ ...v, is_active: e.target.checked }))} />
+                  Segmento ativo
+                </label>
+                <button type="button" disabled={saving} onClick={() => submitJson('/engage/segments', { ...segmentForm, description: segmentForm.description || null }, 'Segmento criado com sucesso.')}
+                  className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-slate-950">
+                  Criar segmento
+                </button>
+              </div>
+            </article>
+
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Templates recentes</p>
+              <div className="mt-4 space-y-3">
+                {latestTemplates.map(item => (
+                  <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
+                    <p className="font-medium text-slate-950 dark:text-white">{item.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{item.channel} · {item.approval_status}</p>
+                  </div>
+                ))}
+                {!latestTemplates.length && <div className="text-sm text-slate-500 dark:text-slate-400">Nenhum template cadastrado.</div>}
+              </div>
+            </article>
+
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Segmentos recentes</p>
+              <div className="mt-4 space-y-3">
+                {latestSegments.map(item => (
+                  <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
+                    <p className="font-medium text-slate-950 dark:text-white">{item.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{item.description ?? 'Sem descrição'} · {item.is_active ? 'ativo' : 'inativo'}</p>
+                  </div>
+                ))}
+                {!latestSegments.length && <div className="text-sm text-slate-500 dark:text-slate-400">Nenhum segmento cadastrado.</div>}
               </div>
             </article>
           </section>

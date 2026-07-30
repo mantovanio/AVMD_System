@@ -5,6 +5,8 @@ import type {
   CreateEngageCampaignInput,
   CreateEngageContactInput,
   CreateEngageProviderInput,
+  CreateEngageSegmentInput,
+  CreateEngageTemplateInput,
   CreateEngageTaskInput,
   CreateEngageSenderAccountInput,
   QueueEngageDispatchInput,
@@ -57,6 +59,40 @@ export async function handleEngageRoutes(
     }
     const campaign = await repo.createCampaign(body)
     writeJson(res, 201, { ok: true, campaign }, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && url === '/api/engage/templates') {
+    const templates = await repo.listTemplates()
+    writeJson(res, 200, { ok: true, templates }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/engage/templates') {
+    const body = await readJson<CreateEngageTemplateInput>(req)
+    if (!body?.channel || !body?.name || !body?.body) {
+      writeJson(res, 400, { ok: false, error: 'channel, name e body sao obrigatorios' }, corsOrigin)
+      return true
+    }
+    const template = await repo.createTemplate(body)
+    writeJson(res, 201, { ok: true, template }, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && url === '/api/engage/segments') {
+    const segments = await repo.listSegments()
+    writeJson(res, 200, { ok: true, segments }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/engage/segments') {
+    const body = await readJson<CreateEngageSegmentInput>(req)
+    if (!body?.name) {
+      writeJson(res, 400, { ok: false, error: 'name e obrigatorio' }, corsOrigin)
+      return true
+    }
+    const segment = await repo.createSegment(body)
+    writeJson(res, 201, { ok: true, segment }, corsOrigin)
     return true
   }
 
@@ -190,6 +226,56 @@ export async function handleEngageRoutes(
         type: 'followup',
         status: 'open',
         due_at: null,
+      })
+    }
+    writeJson(res, 201, { ok: true, conversation, message, event }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/webhooks/evolution/engage') {
+    const body = await readJson<{
+      contact_id?: string | null
+      channel?: string
+      provider_id?: string | null
+      event_type?: string
+      message?: string | null
+      payload_json?: Record<string, unknown>
+    }>(req)
+    const contactId = body?.contact_id ?? null
+    const channel = body?.channel ?? 'whatsapp'
+    const eventType = body?.event_type ?? 'message.received'
+    if (!contactId) {
+      writeJson(res, 400, { ok: false, error: 'contact_id e obrigatorio' }, corsOrigin)
+      return true
+    }
+    const conversation = await repo.upsertConversation({
+      contact_id: contactId,
+      channel,
+      last_message_at: new Date().toISOString(),
+    })
+    const message = await repo.createMessage({
+      conversation_id: conversation.id,
+      direction: eventType === 'message.sent' ? 'outgoing' : 'incoming',
+      channel,
+      body: body?.message ?? eventType,
+      payload_json: body?.payload_json ?? {},
+      status: 'received',
+    })
+    const event = await repo.createEvent({
+      contact_id: contactId,
+      conversation_id: conversation.id,
+      message_id: message.id,
+      event_type: eventType,
+      provider_id: body?.provider_id ?? null,
+      payload_json: body?.payload_json ?? {},
+    })
+    if (eventType === 'message.replied') {
+      await repo.createTask({
+        contact_id: contactId,
+        conversation_id: conversation.id,
+        title: 'Responder lead no Engage',
+        type: 'followup',
+        status: 'open',
       })
     }
     writeJson(res, 201, { ok: true, conversation, message, event }, corsOrigin)

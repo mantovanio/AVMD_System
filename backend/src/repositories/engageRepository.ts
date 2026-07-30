@@ -41,6 +41,30 @@ export type EngageCampaignRow = {
   updated_at: string
 }
 
+export type EngageTemplateRow = {
+  id: string
+  provider_id: string | null
+  channel: string
+  name: string
+  category: string | null
+  subject: string | null
+  body: string
+  variables_json: Record<string, unknown>
+  approval_status: string
+  created_at: string
+  updated_at: string
+}
+
+export type EngageSegmentRow = {
+  id: string
+  name: string
+  description: string | null
+  rule_json: Record<string, unknown>
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export type EngageContactRow = {
   id: string
   core_contact_id: string | null
@@ -89,6 +113,24 @@ export type CreateEngageCampaignInput = {
   sender_account_id?: string | null
   scheduled_at?: string | null
   created_by?: string | null
+}
+
+export type CreateEngageTemplateInput = {
+  provider_id?: string | null
+  channel: string
+  name: string
+  category?: string | null
+  subject?: string | null
+  body: string
+  variables_json?: Record<string, unknown>
+  approval_status?: string
+}
+
+export type CreateEngageSegmentInput = {
+  name: string
+  description?: string | null
+  rule_json?: Record<string, unknown>
+  is_active?: boolean
 }
 
 export type CreateEngageProviderInput = {
@@ -289,6 +331,58 @@ export class EngageRepository {
         input.sender_account_id ?? null,
         input.scheduled_at ?? null,
         input.created_by ?? null,
+      ],
+    )
+    return result.rows[0]
+  }
+
+  async listTemplates(limit = 20): Promise<EngageTemplateRow[]> {
+    const result = await this.db.query<EngageTemplateRow>(
+      `SELECT * FROM engage_templates ORDER BY created_at DESC LIMIT $1`,
+      [limit],
+    )
+    return result.rows
+  }
+
+  async createTemplate(input: CreateEngageTemplateInput): Promise<EngageTemplateRow> {
+    const result = await this.db.query<EngageTemplateRow>(
+      `INSERT INTO engage_templates
+         (provider_id, channel, name, category, subject, body, variables_json, approval_status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       RETURNING *`,
+      [
+        input.provider_id ?? null,
+        input.channel,
+        input.name,
+        input.category ?? null,
+        input.subject ?? null,
+        input.body,
+        JSON.stringify(input.variables_json ?? {}),
+        input.approval_status ?? 'draft',
+      ],
+    )
+    return result.rows[0]
+  }
+
+  async listSegments(limit = 20): Promise<EngageSegmentRow[]> {
+    const result = await this.db.query<EngageSegmentRow>(
+      `SELECT * FROM engage_segments ORDER BY created_at DESC LIMIT $1`,
+      [limit],
+    )
+    return result.rows
+  }
+
+  async createSegment(input: CreateEngageSegmentInput): Promise<EngageSegmentRow> {
+    const result = await this.db.query<EngageSegmentRow>(
+      `INSERT INTO engage_segments
+         (name, description, rule_json, is_active)
+       VALUES ($1,$2,$3,$4)
+       RETURNING *`,
+      [
+        input.name,
+        input.description ?? null,
+        JSON.stringify(input.rule_json ?? {}),
+        input.is_active ?? true,
       ],
     )
     return result.rows[0]
