@@ -181,7 +181,7 @@ export class HierarquiaRepository {
           comissao_vendedor_tipo, comissao_vendedor_valor,
           comissao_indicador_tipo, comissao_indicador_valor,
           aliquota_imposto, margem_lucro_desejada, ativo, metadata)
-       VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb)
+       VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb)
        ON CONFLICT (id) DO UPDATE SET
          regime_operacional = EXCLUDED.regime_operacional,
          custo_certificadora = EXCLUDED.custo_certificadora,
