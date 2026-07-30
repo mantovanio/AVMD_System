@@ -1,10 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type {
+  CreateEngageEventInput,
   EngageRepository,
   CreateEngageCampaignInput,
   CreateEngageContactInput,
   CreateEngageProviderInput,
+  CreateEngageTaskInput,
   CreateEngageSenderAccountInput,
+  QueueEngageDispatchInput,
 } from '../repositories/engageRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
 
@@ -88,6 +91,51 @@ export async function handleEngageRoutes(
     }
     const senderAccount = await repo.createSenderAccount(body)
     writeJson(res, 201, { ok: true, senderAccount }, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && url === '/api/engage/events') {
+    const events = await repo.listEvents()
+    writeJson(res, 200, { ok: true, events }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/engage/events') {
+    const body = await readJson<CreateEngageEventInput>(req)
+    if (!body?.event_type) {
+      writeJson(res, 400, { ok: false, error: 'event_type e obrigatorio' }, corsOrigin)
+      return true
+    }
+    const event = await repo.createEvent(body)
+    writeJson(res, 201, { ok: true, event }, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && url === '/api/engage/tasks') {
+    const tasks = await repo.listTasks()
+    writeJson(res, 200, { ok: true, tasks }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/engage/tasks') {
+    const body = await readJson<CreateEngageTaskInput>(req)
+    if (!body?.title || !body?.type) {
+      writeJson(res, 400, { ok: false, error: 'title e type sao obrigatorios' }, corsOrigin)
+      return true
+    }
+    const task = await repo.createTask(body)
+    writeJson(res, 201, { ok: true, task }, corsOrigin)
+    return true
+  }
+
+  if (method === 'POST' && url === '/api/engage/queue') {
+    const body = await readJson<QueueEngageDispatchInput>(req)
+    if (!body?.campaign_id || !body?.contact_id || !body?.body || !body?.channel) {
+      writeJson(res, 400, { ok: false, error: 'campaign_id, contact_id, body e channel sao obrigatorios' }, corsOrigin)
+      return true
+    }
+    const queued = await repo.queueDispatch(body)
+    writeJson(res, 201, { ok: true, queued }, corsOrigin)
     return true
   }
 

@@ -10,6 +10,8 @@ type EngageSummary = {
   opt_outs: number
   providers_active: number
   sender_accounts_active: number
+  tasks_open: number
+  events_today: number
 }
 
 type EngageContact = {
@@ -39,6 +41,21 @@ type EngageProvider = {
   status: string
 }
 
+type EngageEvent = {
+  id: string
+  event_type: string
+  created_at: string
+}
+
+type EngageTask = {
+  id: string
+  title: string
+  type: string
+  status: string
+  due_at: string | null
+  created_at: string
+}
+
 type ApiPayload<T> = { ok: boolean; [key: string]: unknown } & Record<string, T | undefined>
 
 const defaultSummary: EngageSummary = {
@@ -49,14 +66,18 @@ const defaultSummary: EngageSummary = {
   opt_outs: 0,
   providers_active: 0,
   sender_accounts_active: 0,
+  tasks_open: 0,
+  events_today: 0,
 }
 
 export default function Engage() {
-  const [tab, setTab] = useState<'resumo' | 'campanhas' | 'configuracoes'>('resumo')
+  const [tab, setTab] = useState<'resumo' | 'campanhas' | 'configuracoes' | 'fila'>('resumo')
   const [summary, setSummary] = useState<EngageSummary>(defaultSummary)
   const [contacts, setContacts] = useState<EngageContact[]>([])
   const [campaigns, setCampaigns] = useState<EngageCampaign[]>([])
   const [providers, setProviders] = useState<EngageProvider[]>([])
+  const [events, setEvents] = useState<EngageEvent[]>([])
+  const [tasks, setTasks] = useState<EngageTask[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
@@ -65,6 +86,8 @@ export default function Engage() {
   const [providerForm, setProviderForm] = useState({ key: '', name: '', channel: 'whatsapp' })
   const [senderForm, setSenderForm] = useState({ provider_id: '', label: '', phone_number: '', channel: 'whatsapp' })
   const [campaignForm, setCampaignForm] = useState({ name: '', channel: 'whatsapp', scheduled_at: '' })
+  const [queueForm, setQueueForm] = useState({ campaign_id: '', contact_id: '', body: '', channel: 'whatsapp' })
+  const [taskForm, setTaskForm] = useState({ title: '', type: 'followup', due_at: '' })
 
   useEffect(() => {
     let active = true
@@ -74,26 +97,32 @@ export default function Engage() {
       setLoading(true)
       setError(null)
       try {
-        const [summaryRes, contactsRes, campaignsRes, providersRes] = await Promise.all([
+        const [summaryRes, contactsRes, campaignsRes, providersRes, eventsRes, tasksRes] = await Promise.all([
           fetch(getApiUrl('/engage/summary'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/contacts'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/campaigns'), { signal: controller.signal }),
           fetch(getApiUrl('/engage/providers'), { signal: controller.signal }),
+          fetch(getApiUrl('/engage/events'), { signal: controller.signal }),
+          fetch(getApiUrl('/engage/tasks'), { signal: controller.signal }),
         ])
 
-        const [summaryData, contactsData, campaignsData, providersData] = await Promise.all([
+        const [summaryData, contactsData, campaignsData, providersData, eventsData, tasksData] = await Promise.all([
           summaryRes.json().catch(() => null),
           contactsRes.json().catch(() => null),
           campaignsRes.json().catch(() => null),
           providersRes.json().catch(() => null),
+          eventsRes.json().catch(() => null),
+          tasksRes.json().catch(() => null),
         ]) as [
           ApiPayload<EngageSummary>,
           ApiPayload<EngageContact[]>,
           ApiPayload<EngageCampaign[]>,
           ApiPayload<EngageProvider[]>,
+          ApiPayload<EngageEvent[]>,
+          ApiPayload<EngageTask[]>,
         ]
 
-        if (!summaryRes.ok || !contactsRes.ok || !campaignsRes.ok || !providersRes.ok) {
+        if (!summaryRes.ok || !contactsRes.ok || !campaignsRes.ok || !providersRes.ok || !eventsRes.ok || !tasksRes.ok) {
           throw new Error('Nao foi possivel carregar os dados do Engage.')
         }
 
@@ -102,6 +131,8 @@ export default function Engage() {
         setContacts(contactsData.contacts ?? [])
         setCampaigns(campaignsData.campaigns ?? [])
         setProviders(providersData.providers ?? [])
+        setEvents(eventsData.events ?? [])
+        setTasks(tasksData.tasks ?? [])
       } catch (err) {
         if (!active) return
         setError(err instanceof Error ? err.message : 'Nao foi possivel carregar os dados do Engage.')
@@ -127,6 +158,8 @@ export default function Engage() {
 
   const latestContacts = contacts.slice(0, 5)
   const latestCampaigns = campaigns.slice(0, 5)
+  const latestEvents = events.slice(0, 8)
+  const latestTasks = tasks.slice(0, 8)
   const themeIsDark = document.documentElement.classList.contains('dark')
 
   async function refreshData() {
@@ -215,6 +248,7 @@ export default function Engage() {
             { id: 'resumo', label: 'Resumo', icon: Inbox },
             { id: 'campanhas', label: 'Campanhas', icon: Send },
             { id: 'configuracoes', label: 'Configurações', icon: Settings2 },
+            { id: 'fila', label: 'Fila', icon: SlidersHorizontal },
           ].map(item => {
             const Icon = item.icon
             const active = tab === item.id
@@ -367,10 +401,83 @@ export default function Engage() {
                 <li>Respostas hoje: {loading ? '—' : summary.replies_today}</li>
                 <li>Opt-out registrados: {loading ? '—' : summary.opt_outs}</li>
                 <li>Sender accounts: {loading ? '—' : summary.sender_accounts_active}</li>
+                <li>Tarefas abertas: {loading ? '—' : summary.tasks_open}</li>
+                <li>Eventos hoje: {loading ? '—' : summary.events_today}</li>
               </ul>
               <p className="mt-4 text-sm leading-6 text-slate-600 dark:text-slate-300">
                 A base já está pronta para expandir para templates, mensagens, webhooks e fila de disparo controlada.
               </p>
+            </article>
+          </section>
+        )}
+
+        {tab === 'fila' && (
+          <section className="mt-6 grid gap-6 lg:grid-cols-2">
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Enfileirar disparo</p>
+              <div className="mt-4 grid gap-3">
+                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" value={queueForm.campaign_id} onChange={e => setQueueForm(v => ({ ...v, campaign_id: e.target.value }))}>
+                  <option value="">Escolha uma campanha</option>
+                  {campaigns.map(campaign => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}
+                </select>
+                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" value={queueForm.contact_id} onChange={e => setQueueForm(v => ({ ...v, contact_id: e.target.value }))}>
+                  <option value="">Escolha um contato</option>
+                  {contacts.map(contact => <option key={contact.id} value={contact.id}>{contact.name}</option>)}
+                </select>
+                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" value={queueForm.channel} onChange={e => setQueueForm(v => ({ ...v, channel: e.target.value }))}>
+                  <option value="whatsapp">whatsapp</option>
+                  <option value="email">email</option>
+                  <option value="instagram">instagram</option>
+                </select>
+                <textarea className="min-h-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Texto do disparo" value={queueForm.body} onChange={e => setQueueForm(v => ({ ...v, body: e.target.value }))} />
+                <button type="button" disabled={saving} onClick={() => submitJson('/engage/queue', { ...queueForm }, 'Disparo enfileirado com sucesso.')}
+                  className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-slate-950">
+                  Enfileirar disparo
+                </button>
+              </div>
+            </article>
+
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Criar tarefa</p>
+              <div className="mt-4 grid gap-3">
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Título da tarefa" value={taskForm.title} onChange={e => setTaskForm(v => ({ ...v, title: e.target.value }))} />
+                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" value={taskForm.type} onChange={e => setTaskForm(v => ({ ...v, type: e.target.value }))}>
+                  <option value="followup">followup</option>
+                  <option value="manual">manual</option>
+                  <option value="call">call</option>
+                </select>
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Prazo opcional" value={taskForm.due_at} onChange={e => setTaskForm(v => ({ ...v, due_at: e.target.value }))} />
+                <button type="button" disabled={saving} onClick={() => submitJson('/engage/tasks', { ...taskForm, due_at: taskForm.due_at || null }, 'Tarefa criada com sucesso.')}
+                  className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-slate-950">
+                  Criar tarefa
+                </button>
+              </div>
+            </article>
+
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Eventos recentes</p>
+              <div className="mt-4 space-y-3">
+                {latestEvents.map(event => (
+                  <div key={event.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                    <p className="font-medium text-slate-950 dark:text-white">{event.event_type}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{event.created_at}</p>
+                  </div>
+                ))}
+                {!latestEvents.length && !loading && <div className="text-sm text-slate-500 dark:text-slate-400">Nenhum evento registrado.</div>}
+              </div>
+            </article>
+
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Tarefas abertas</p>
+              <div className="mt-4 space-y-3">
+                {latestTasks.map(task => (
+                  <div key={task.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                    <p className="font-medium text-slate-950 dark:text-white">{task.title}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{task.type} · {task.status} {task.due_at ? `· ${task.due_at}` : ''}</p>
+                  </div>
+                ))}
+                {!latestTasks.length && !loading && <div className="text-sm text-slate-500 dark:text-slate-400">Nenhuma tarefa aberta.</div>}
+              </div>
             </article>
           </section>
         )}

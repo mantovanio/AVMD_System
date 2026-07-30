@@ -66,6 +66,8 @@ export type EngageSummaryRow = {
   opt_outs: number
   providers_active: number
   sender_accounts_active: number
+  tasks_open: number
+  events_today: number
 }
 
 export type CreateEngageContactInput = {
@@ -110,6 +112,63 @@ export type CreateEngageSenderAccountInput = {
   metadata_json?: Record<string, unknown>
 }
 
+export type EngageEventRow = {
+  id: string
+  contact_id: string | null
+  campaign_id: string | null
+  conversation_id: string | null
+  message_id: string | null
+  event_type: string
+  provider_id: string | null
+  payload_json: Record<string, unknown>
+  created_at: string
+}
+
+export type EngageTaskRow = {
+  id: string
+  contact_id: string | null
+  campaign_id: string | null
+  conversation_id: string | null
+  title: string
+  type: string
+  status: string
+  due_at: string | null
+  assigned_to: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type CreateEngageEventInput = {
+  contact_id?: string | null
+  campaign_id?: string | null
+  conversation_id?: string | null
+  message_id?: string | null
+  event_type: string
+  provider_id?: string | null
+  payload_json?: Record<string, unknown>
+}
+
+export type CreateEngageTaskInput = {
+  contact_id?: string | null
+  campaign_id?: string | null
+  conversation_id?: string | null
+  title: string
+  type: string
+  status?: string
+  due_at?: string | null
+  assigned_to?: string | null
+}
+
+export type QueueEngageDispatchInput = {
+  campaign_id: string
+  contact_id: string
+  provider_id?: string | null
+  sender_account_id?: string | null
+  body: string
+  channel: string
+  payload_json?: Record<string, unknown>
+}
+
 export class EngageRepository {
   constructor(private readonly db: AivenSqlClient) {}
 
@@ -122,7 +181,9 @@ export class EngageRepository {
         (SELECT COUNT(*) FROM engage_events WHERE event_type = 'message.replied' AND created_at >= NOW() - INTERVAL '1 day')::int AS replies_today,
         (SELECT COUNT(*) FROM engage_contacts WHERE status = 'opt_out')::int AS opt_outs,
         (SELECT COUNT(*) FROM engage_providers WHERE status = 'ativo')::int AS providers_active,
-        (SELECT COUNT(*) FROM engage_sender_accounts WHERE status = 'ativo')::int AS sender_accounts_active
+        (SELECT COUNT(*) FROM engage_sender_accounts WHERE status = 'ativo')::int AS sender_accounts_active,
+        (SELECT COUNT(*) FROM engage_tasks WHERE status IN ('open','pending','waiting'))::int AS tasks_open,
+        (SELECT COUNT(*) FROM engage_events WHERE created_at >= NOW() - INTERVAL '1 day')::int AS events_today
     `)
     return result.rows[0] ?? {
       contacts_active: 0,
@@ -132,6 +193,8 @@ export class EngageRepository {
       opt_outs: 0,
       providers_active: 0,
       sender_accounts_active: 0,
+      tasks_open: 0,
+      events_today: 0,
     }
   }
 
@@ -241,5 +304,94 @@ export class EngageRepository {
       ],
     )
     return result.rows[0]
+  }
+
+  async listEvents(limit = 20): Promise<EngageEventRow[]> {
+    const result = await this.db.query<EngageEventRow>(
+      `SELECT * FROM engage_events ORDER BY created_at DESC LIMIT $1`,
+      [limit],
+    )
+    return result.rows
+  }
+
+  async createEvent(input: CreateEngageEventInput): Promise<EngageEventRow> {
+    const result = await this.db.query<EngageEventRow>(
+      `INSERT INTO engage_events
+         (contact_id, campaign_id, conversation_id, message_id, event_type, provider_id, payload_json)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING *`,
+      [
+        input.contact_id ?? null,
+        input.campaign_id ?? null,
+        input.conversation_id ?? null,
+        input.message_id ?? null,
+        input.event_type,
+        input.provider_id ?? null,
+        JSON.stringify(input.payload_json ?? {}),
+      ],
+    )
+    return result.rows[0]
+  }
+
+  async listTasks(limit = 20): Promise<EngageTaskRow[]> {
+    const result = await this.db.query<EngageTaskRow>(
+      `SELECT * FROM engage_tasks ORDER BY created_at DESC LIMIT $1`,
+      [limit],
+    )
+    return result.rows
+  }
+
+  async createTask(input: CreateEngageTaskInput): Promise<EngageTaskRow> {
+    const result = await this.db.query<EngageTaskRow>(
+      `INSERT INTO engage_tasks
+         (contact_id, campaign_id, conversation_id, title, type, status, due_at, assigned_to)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       RETURNING *`,
+      [
+        input.contact_id ?? null,
+        input.campaign_id ?? null,
+        input.conversation_id ?? null,
+        input.title,
+        input.type,
+        input.status ?? 'open',
+        input.due_at ?? null,
+        input.assigned_to ?? null,
+      ],
+    )
+    return result.rows[0]
+  }
+
+  async queueDispatch(input: QueueEngageDispatchInput) {
+    const campaignMessage = await this.db.query<{ id: string }>(
+      `INSERT INTO engage_campaign_messages
+         (campaign_id, contact_id, provider_id, sender_account_id, status, sent_at, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,'queued',NULL,NOW(),NOW())
+       RETURNING id`,
+      [
+        input.campaign_id,
+        input.contact_id,
+        input.provider_id ?? null,
+        input.sender_account_id ?? null,
+      ],
+    )
+
+    const event = await this.createEvent({
+      campaign_id: input.campaign_id,
+      contact_id: input.contact_id,
+      message_id: campaignMessage.rows[0]?.id ?? null,
+      event_type: 'campaign.queued',
+      provider_id: input.provider_id ?? null,
+      payload_json: {
+        body: input.body,
+        channel: input.channel,
+        sender_account_id: input.sender_account_id ?? null,
+        ...input.payload_json,
+      },
+    })
+
+    return {
+      campaign_message_id: campaignMessage.rows[0]?.id ?? null,
+      event_id: event?.id ?? null,
+    }
   }
 }
