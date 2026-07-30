@@ -7854,6 +7854,7 @@ type PrecificacaoDetalhe = {
   comissaoAgr: number
   comissaoVendedor: number
   comissaoIndicador: number
+  margemDesejada: number
   totalSaidas: number
   saldoFinal: number
   margemFinal: number
@@ -7886,14 +7887,15 @@ function calcularRepasse(precoVenda: number, cfg: PrecificacaoConfig, metodo: Me
   const gateway = calcularTaxaPagamento(precoVenda, metodo)
   const comissaoAgr = cfg.comissao_agr_tipo === 'FIXO' ? cfg.comissao_agr_valor : precoVenda * (cfg.comissao_agr_valor / 100)
   const comissaoIndicador = cfg.comissao_indicador_tipo === 'FIXO' ? cfg.comissao_indicador_valor : precoVenda * (cfg.comissao_indicador_valor / 100)
-  const saldoAntesVendedor = precoVenda - custoCertificadora - custoMidia - custoOperacional - imposto - gateway - comissaoAgr - comissaoIndicador
+  const margemDesejada = precoVenda * (cfg.margem_lucro_desejada / 100)
+  const saldoAntesVendedor = precoVenda - custoCertificadora - custoMidia - custoOperacional - imposto - gateway - comissaoAgr - comissaoIndicador - margemDesejada
   const comissaoVendedor =
     cfg.comissao_vendedor_tipo === 'FIXO'
       ? cfg.comissao_vendedor_valor
       : cfg.comissao_vendedor_tipo === 'PERCENTUAL'
         ? precoVenda * (cfg.comissao_vendedor_valor / 100)
         : Math.max(0, saldoAntesVendedor)
-  const totalSaidas = custoCertificadora + custoMidia + custoOperacional + imposto + gateway + comissaoAgr + comissaoIndicador + comissaoVendedor
+  const totalSaidas = custoCertificadora + custoMidia + custoOperacional + imposto + gateway + comissaoAgr + comissaoIndicador + comissaoVendedor + margemDesejada
   const saldoFinal = precoVenda - totalSaidas
   const margemFinal = precoVenda > 0 ? (saldoFinal / precoVenda) * 100 : 0
   return {
@@ -7905,6 +7907,7 @@ function calcularRepasse(precoVenda: number, cfg: PrecificacaoConfig, metodo: Me
     comissaoAgr,
     comissaoVendedor,
     comissaoIndicador,
+    margemDesejada,
     totalSaidas,
     saldoFinal,
     margemFinal,
@@ -8102,6 +8105,7 @@ function AbaPrecificacao() {
             <p className="text-gray-600 dark:text-gray-300">Comissão indicador: R$ {simulacaoAtual.comissaoIndicador.toFixed(2).replace('.', ',')}</p>
             <p className="text-gray-600 dark:text-gray-300">Comissão vendedor: R$ {simulacaoAtual.comissaoVendedor.toFixed(2).replace('.', ',')}</p>
             <p className="text-gray-600 dark:text-gray-300">Comissão AGR: R$ {simulacaoAtual.comissaoAgr.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Margem desejada: R$ {simulacaoAtual.margemDesejada.toFixed(2).replace('.', ',')}</p>
             <p className="mt-2 text-base font-semibold text-gray-900 dark:text-white">Saldo final: R$ {simulacaoAtual.saldoFinal.toFixed(2).replace('.', ',')}</p>
             <p className="text-xs text-gray-500 dark:text-gray-400">Margem final: {simulacaoAtual.margemFinal.toFixed(2).replace('.', ',')}%</p>
           </div>
