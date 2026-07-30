@@ -7863,13 +7863,14 @@ function toNum(value: string) {
 
 function calcularPrecificacao(cfg: PrecificacaoConfig): PrecificacaoDetalhe {
   const custoMidiaTotal = cfg.custo_cartao + cfg.custo_token + (cfg.custo_cartao > 0 ? cfg.custo_leitora : 0)
-  const custosFixos = cfg.custo_certificadora + custoMidiaTotal + cfg.custo_suporte_operacional + cfg.gateway_taxa_fixa
+  const custosFixos = cfg.custo_certificadora + custoMidiaTotal
   const comissoesFixas =
     (cfg.comissao_agr_tipo === 'FIXO' ? cfg.comissao_agr_valor : 0) +
     (cfg.comissao_vendedor_tipo === 'FIXO' ? cfg.comissao_vendedor_valor : 0) +
     (cfg.comissao_indicador_tipo === 'FIXO' ? cfg.comissao_indicador_valor : 0)
   const totalBaseFixo = custosFixos + comissoesFixas
   const totalPercentual =
+    cfg.custo_suporte_operacional +
     cfg.gateway_taxa_percentual +
     cfg.aliquota_imposto +
     cfg.margem_lucro_desejada +
@@ -7895,9 +7896,9 @@ function calcularTaxaPagamento(preco: number, metodo: MetodoPagamento) {
 
 function calcularMargemLiquida(precoVenda: number, cfg: PrecificacaoConfig, metodo: MetodoPagamento) {
   const custoMidiaTotal = cfg.custo_cartao + cfg.custo_token + (cfg.custo_cartao > 0 ? cfg.custo_leitora : 0)
-  const custoBase = cfg.custo_certificadora + custoMidiaTotal + cfg.custo_suporte_operacional + cfg.gateway_taxa_fixa
+  const custoBase = cfg.custo_certificadora + custoMidiaTotal
   const imposto = precoVenda * (cfg.aliquota_imposto / 100)
-  const gateway = calcularTaxaPagamento(precoVenda, metodo)
+  const gateway = calcularTaxaPagamento(precoVenda, metodo) + cfg.custo_suporte_operacional
   const comissoes =
     (cfg.comissao_agr_tipo === 'FIXO' ? cfg.comissao_agr_valor : precoVenda * (cfg.comissao_agr_valor / 100)) +
     (cfg.comissao_vendedor_tipo === 'FIXO' ? cfg.comissao_vendedor_valor : precoVenda * (cfg.comissao_vendedor_valor / 100)) +
