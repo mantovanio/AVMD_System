@@ -8011,12 +8011,6 @@ function AbaPrecificacao() {
         </div>
       </div>
       <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
-        <div className="mb-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 p-4 text-sm text-blue-900 dark:text-blue-100">
-          <p className="font-semibold">Regra da cadeia comercial</p>
-          <p className="mt-1">
-            A venda pode ser só cartão, só token, ou cartão com leitora. A leitora nunca entra sozinha. O preço precisa cobrir a certificadora, a mídia aplicável, suporte, gateway, comissão do contador, comissão do vendedor e comissão do AGR, preservando a margem mínima da empresa.
-          </p>
-        </div>
         <div className="flex flex-wrap items-end gap-3">
           <ConfigInput label="Preço de venda para simular" value={precoVenda} onChange={setPrecoVenda} inputMode="decimal" />
           <ConfigSelectWithManual
@@ -8057,10 +8051,10 @@ function AbaPrecificacao() {
             <p className="text-xs text-gray-500 dark:text-gray-400">Margem: {simulacaoAtual.margem.toFixed(2).replace('.', ',')}%</p>
           </div>
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-4 text-sm">
-            <p className="font-semibold text-gray-800 dark:text-gray-100">Leitura rápida</p>
-            <p className="mt-2 text-gray-600 dark:text-gray-300">O sistema agora compara seu preço real com o custo real do produto e da forma de pagamento.</p>
-            <p className="text-gray-600 dark:text-gray-300">Assim você enxerga se R$ 229,90 no e-CNPJ A1 ou R$ 159,90 no e-CPF A1 fecham margem com pix, cartão, boleto ou parcelado.</p>
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Se quiser, o próximo passo é salvar essa matriz por produto no banco para editar direto na tabela.</p>
+            <p className="font-semibold text-gray-800 dark:text-gray-100">Resumo</p>
+            <p className="mt-2 text-gray-600 dark:text-gray-300">A mídia total é calculada automaticamente.</p>
+            <p className="text-gray-600 dark:text-gray-300">Os campos de custo e percentual aceitam decimal.</p>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">O preço de venda fica livre para teste manual.</p>
           </div>
         </div>
       </div>
