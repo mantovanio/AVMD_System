@@ -56,6 +56,28 @@ export type ModeloNegocioRow = {
   updated_at: string
 }
 
+export type PrecificacaoCertificadosRow = {
+  id: string
+  regime_operacional: 'REVENDA' | 'COMISSIONADO'
+  custo_certificadora: number
+  custo_midia: number
+  custo_suporte_operacional: number
+  gateway_taxa_percentual: number
+  gateway_taxa_fixa: number
+  comissao_agr_tipo: 'FIXO' | 'PERCENTUAL'
+  comissao_agr_valor: number
+  comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL'
+  comissao_vendedor_valor: number
+  comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL'
+  comissao_indicador_valor: number
+  aliquota_imposto: number
+  margem_lucro_desejada: number
+  ativo: boolean
+  metadata: Record<string, unknown> | null
+  created_at: string
+  updated_at: string
+}
+
 export type RevendaPrecoBaseRow = {
   id: string
   profile_id: string
@@ -116,6 +138,84 @@ const PROFILE_COLS = `id, nome, email, perfil, status, nivel_hierarquia,
 
 export class HierarquiaRepository {
   constructor(private readonly db: AivenSqlClient) {}
+
+  async getPrecificacaoCertificados(): Promise<PrecificacaoCertificadosRow> {
+    const result = await this.db.query<PrecificacaoCertificadosRow>(
+      `SELECT * FROM configuracao_precificacao_certificados WHERE id = 'default' LIMIT 1`,
+    )
+    return result.rows[0] ?? {
+      id: 'default',
+      regime_operacional: 'REVENDA',
+      custo_certificadora: 0,
+      custo_midia: 0,
+      custo_suporte_operacional: 0,
+      gateway_taxa_percentual: 0,
+      gateway_taxa_fixa: 0,
+      comissao_agr_tipo: 'FIXO',
+      comissao_agr_valor: 0,
+      comissao_vendedor_tipo: 'FIXO',
+      comissao_vendedor_valor: 0,
+      comissao_indicador_tipo: 'FIXO',
+      comissao_indicador_valor: 0,
+      aliquota_imposto: 0,
+      margem_lucro_desejada: 0,
+      ativo: true,
+      metadata: {},
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+  }
+
+  async savePrecificacaoCertificados(input: Omit<PrecificacaoCertificadosRow, 'created_at' | 'updated_at' | 'metadata'> & { metadata?: Record<string, unknown> | null }): Promise<PrecificacaoCertificadosRow> {
+    const result = await this.db.query<PrecificacaoCertificadosRow>(
+      `INSERT INTO configuracao_precificacao_certificados
+         (id, regime_operacional, custo_certificadora, custo_midia, custo_suporte_operacional,
+          gateway_taxa_percentual, gateway_taxa_fixa,
+          comissao_agr_tipo, comissao_agr_valor,
+          comissao_vendedor_tipo, comissao_vendedor_valor,
+          comissao_indicador_tipo, comissao_indicador_valor,
+          aliquota_imposto, margem_lucro_desejada, ativo, metadata)
+       VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb)
+       ON CONFLICT (id) DO UPDATE SET
+         regime_operacional = EXCLUDED.regime_operacional,
+         custo_certificadora = EXCLUDED.custo_certificadora,
+         custo_midia = EXCLUDED.custo_midia,
+         custo_suporte_operacional = EXCLUDED.custo_suporte_operacional,
+         gateway_taxa_percentual = EXCLUDED.gateway_taxa_percentual,
+         gateway_taxa_fixa = EXCLUDED.gateway_taxa_fixa,
+         comissao_agr_tipo = EXCLUDED.comissao_agr_tipo,
+         comissao_agr_valor = EXCLUDED.comissao_agr_valor,
+         comissao_vendedor_tipo = EXCLUDED.comissao_vendedor_tipo,
+         comissao_vendedor_valor = EXCLUDED.comissao_vendedor_valor,
+         comissao_indicador_tipo = EXCLUDED.comissao_indicador_tipo,
+         comissao_indicador_valor = EXCLUDED.comissao_indicador_valor,
+         aliquota_imposto = EXCLUDED.aliquota_imposto,
+         margem_lucro_desejada = EXCLUDED.margem_lucro_desejada,
+         ativo = EXCLUDED.ativo,
+         metadata = EXCLUDED.metadata,
+         updated_at = now()
+       RETURNING *`,
+      [
+        input.regime_operacional,
+        input.custo_certificadora,
+        input.custo_midia,
+        input.custo_suporte_operacional,
+        input.gateway_taxa_percentual,
+        input.gateway_taxa_fixa,
+        input.comissao_agr_tipo,
+        input.comissao_agr_valor,
+        input.comissao_vendedor_tipo,
+        input.comissao_vendedor_valor,
+        input.comissao_indicador_tipo,
+        input.comissao_indicador_valor,
+        input.aliquota_imposto,
+        input.margem_lucro_desejada,
+        input.ativo,
+        JSON.stringify(input.metadata ?? {}),
+      ],
+    )
+    return result.rows[0]
+  }
 
   async getTreeForPonto(pontoId: string): Promise<ProfileHierarquiaRow[]> {
     const result = await this.db.query<ProfileHierarquiaRow>(`

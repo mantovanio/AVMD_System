@@ -750,7 +750,6 @@ export default function ChatInboxCRM() {
   const [selectedAgentId, setSelectedAgentId] = useState('')
   const [draggedConversationId, setDraggedConversationId] = useState<string | null>(null)
   const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(new Set())
-  const [selectionAnchors, setSelectionAnchors] = useState<Record<string, string>>({})
   const [humanMessage, setHumanMessage] = useState('')
   const [sendingHumanMessage, setSendingHumanMessage] = useState(false)
   const [emailSubject, setEmailSubject] = useState('')
@@ -1610,29 +1609,26 @@ export default function ChatInboxCRM() {
     }
   }
 
-  function toggleConversationSelection(listKey: string, itemId: string, orderedIds: string[], shiftKey: boolean) {
-    const anchorId = selectionAnchors[listKey]
+  function toggleConversationSelection(itemId: string) {
     setSelectedConversationIds(prev => {
       const next = new Set(prev)
-      if (shiftKey && anchorId) {
-        const anchorIndex = orderedIds.indexOf(anchorId)
-        const clickedIndex = orderedIds.indexOf(itemId)
-        if (anchorIndex !== -1 && clickedIndex !== -1) {
-          const [start, end] = anchorIndex < clickedIndex ? [anchorIndex, clickedIndex] : [clickedIndex, anchorIndex]
-          for (let i = start; i <= end; i += 1) next.add(orderedIds[i])
-          return next
-        }
-      }
       if (next.has(itemId)) next.delete(itemId)
       else next.add(itemId)
       return next
     })
-    setSelectionAnchors(prev => ({ ...prev, [listKey]: itemId }))
+  }
+
+  function handleConversationClick(itemId: string, event: React.MouseEvent<HTMLButtonElement>) {
+    if (event.ctrlKey || event.metaKey) {
+      toggleConversationSelection(itemId)
+      return
+    }
+    setSelectedId(itemId)
+    setSelectedConversationIds(new Set())
   }
 
   function clearConversationSelection() {
     setSelectedConversationIds(new Set())
-    setSelectionAnchors({})
   }
 
   async function bulkDeleteSelectedConversations() {
@@ -2639,14 +2635,12 @@ export default function ChatInboxCRM() {
                       key={item.id}
                       item={item}
                       selected={item.id === selectedId}
-                      onClick={() => setSelectedId(item.id)}
+                      onClick={event => handleConversationClick(item.id, event)}
                       human={item.atendimento_humano || humanOverrideIds.includes(item.id)}
                       unreadCount={unreadCounts[item.id] ?? 0}
                       onArchive={() => void updateConversationStatusById(item.id, 'arquivado')}
                       onDelete={() => void archiveConversationWithHistory(item.id)}
                       onSaveContact={() => void saveContactFromConversation(item.id)}
-                      checked={selectedConversationIds.has(item.id)}
-                      onCheckToggle={event => toggleConversationSelection('inbox-ativas', item.id, filteredConversationIds, event.shiftKey)}
                     />
                   ))}
                   {filteredConversations.length === 0 && <EmptyState text="Nenhuma conversa encontrada com os filtros atuais." />}
@@ -2665,14 +2659,12 @@ export default function ChatInboxCRM() {
                             key={item.id}
                             item={item}
                             selected={item.id === selectedId}
-                            onClick={() => setSelectedId(item.id)}
+                            onClick={event => handleConversationClick(item.id, event)}
                             human={item.atendimento_humano || humanOverrideIds.includes(item.id)}
                             unreadCount={unreadCounts[item.id] ?? 0}
                             closed
                             onDelete={() => void archiveConversationWithHistory(item.id)}
                             onSaveContact={() => void saveContactFromConversation(item.id)}
-                            checked={selectedConversationIds.has(item.id)}
-                            onCheckToggle={event => toggleConversationSelection('inbox-encerradas', item.id, filteredClosedConversationIds, event.shiftKey)}
                           />
                         ))}
                         {filteredClosedConversations.length === 0 && <EmptyState text="Nenhuma conversa encerrada com os filtros atuais." compact />}
@@ -3492,8 +3484,6 @@ export default function ChatInboxCRM() {
                             onDragEnd={() => setDraggedConversationId(null)}
                             onDelete={() => void archiveConversationWithHistory(item.id)}
                             onSaveContact={() => void saveContactFromConversation(item.id)}
-                            checked={selectedConversationIds.has(item.id)}
-                            onCheckToggle={event => toggleConversationSelection(`kanban:${column.key}`, item.id, column.items.map(i => i.id), event.shiftKey)}
                           />
                         ))}
                         {column.items.length === 0 && <EmptyState text="Sem conversas" compact />}
@@ -3588,20 +3578,16 @@ function ConversationCard({
   onArchive,
   onDelete,
   onSaveContact,
-  checked = false,
-  onCheckToggle,
 }: {
   item: ConversationRow
   selected: boolean
-  onClick: () => void
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void
   human: boolean
   unreadCount?: number
   closed?: boolean
   onArchive?: () => void
   onDelete?: () => void
   onSaveContact?: () => void
-  checked?: boolean
-  onCheckToggle?: (event: React.MouseEvent<HTMLButtonElement>) => void
 }) {
     const hasCrmCustomer = hasRegisteredCustomer(item)
     const selectedClass = selected
@@ -3613,16 +3599,6 @@ function ConversationCard({
     return (
       <div className={`w-full rounded-2xl border px-4 py-3 text-left transition ${selectedClass}`}>
         <div className="flex flex-wrap items-center gap-2.5">
-          {onCheckToggle && (
-            <button
-              type="button"
-              onClick={event => { event.stopPropagation(); onCheckToggle(event) }}
-              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${checked ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-300 bg-white text-transparent hover:border-sky-400'}`}
-              title="Selecionar conversa"
-            >
-              <Check size={13} />
-            </button>
-          )}
           <button type="button" onClick={onClick} className="flex min-w-[150px] flex-1 items-center gap-2.5 text-left">
             <ContactAvatar item={item} />
             <div className="min-w-0">
@@ -3697,12 +3673,10 @@ function ConversationMiniCard({
   onDragEnd,
   onDelete,
   onSaveContact,
-  checked = false,
-  onCheckToggle,
 }: {
   item: ConversationRow
   selected: boolean
-  onClick: () => void
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void
   human: boolean
   unreadCount?: number
   draggable?: boolean
@@ -3710,24 +3684,12 @@ function ConversationMiniCard({
   onDragEnd?: () => void
   onDelete?: () => void
   onSaveContact?: () => void
-  checked?: boolean
-  onCheckToggle?: (event: React.MouseEvent<HTMLButtonElement>) => void
 }) {
     const urgency = getUrgencyMeta(item, human)
     const hasCrmCustomer = !!item.crm_customer_id
     return (
       <div className={`group relative w-full rounded-xl border ${selected ? 'border-slate-900 bg-slate-900 text-white' : 'border-white/70 bg-white hover:border-slate-300'}`}>
-        {onCheckToggle && (
-          <button
-            type="button"
-            onClick={event => { event.stopPropagation(); onCheckToggle(event) }}
-            className={`absolute left-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-md border transition ${checked ? 'border-sky-500 bg-sky-500 text-white' : 'border-slate-300 bg-white/90 text-transparent hover:border-sky-400'}`}
-            title="Selecionar conversa"
-          >
-            <Check size={12} />
-          </button>
-        )}
-        <button type="button" onClick={onClick} draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd} className={`w-full py-3 text-left ${onCheckToggle ? 'pl-7 pr-3' : 'px-3'}`}>
+        <button type="button" onClick={onClick} draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd} className="w-full px-3 py-3 text-left">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <ContactAvatar item={item} size="sm" />

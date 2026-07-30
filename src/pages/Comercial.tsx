@@ -1409,6 +1409,11 @@ export default function Comercial() {
     if (!valorBaseProduto || formV2.valor_venda >= valorBaseProduto) return 0
     return Number((valorBaseProduto - formV2.valor_venda).toFixed(2))
   }, [formV2.valor_venda, valorBaseProduto])
+  const precoFinalComDesconto = useMemo(() => {
+    const desconto = Number(formV2.desconto || 0)
+    if (!valorBaseProduto) return Number(formV2.valor_venda || 0)
+    return Number(Math.max(0, valorBaseProduto - desconto).toFixed(2))
+  }, [formV2.desconto, valorBaseProduto, formV2.valor_venda])
   const descontoMaximoPermitido = useMemo(() => {
     if (!tabelaSelecionadaVenda || !valorBaseProduto) return 0
     const limites: number[] = []
@@ -1428,9 +1433,9 @@ export default function Comercial() {
     return codigoTabela.toLowerCase() === formV2.voucher_codigo.trim().toLowerCase()
   }, [formV2.voucher_codigo, tabelaSelecionadaVenda])
   const descontoDentroDoLimite = useMemo(() => {
-    if (descontoCalculadoVenda <= 0) return true
-    return descontoCalculadoVenda <= descontoMaximoPermitido
-  }, [descontoCalculadoVenda, descontoMaximoPermitido])
+    if (Number(formV2.desconto || 0) <= 0) return true
+    return Number(formV2.desconto || 0) <= descontoMaximoPermitido
+  }, [formV2.desconto, descontoMaximoPermitido])
   const paymentFlow = useMemo(() => classifyPaymentFlow(formV2.forma_pagamento), [formV2.forma_pagamento])
   const vendaStepStatus = useMemo(() => {
     const tipoVendaOk = !!formV2.tipo_venda
@@ -2382,6 +2387,7 @@ export default function Comercial() {
           voucher_codigo: formV2.voucher_codigo.trim() || null,
           desconto_calculado: formV2.desconto || 0,
           valor_base_produto: valorBaseProduto || null,
+          valor_final_com_desconto: precoFinalComDesconto,
           parceiro_indicador_id: formV2.contador_id || null,
           ponto_atendimento_id: pontoAtendimentoId,
           payment_method_id: pagamentoSelecionado.paymentMethod?.id ?? null,
@@ -6414,6 +6420,15 @@ export default function Comercial() {
                                   </select>
                                 </label>
                               ) : null}
+                              <NumberInput
+                                label="Desconto (R$)"
+                                value={formV2.desconto || 0}
+                                onChange={v => setFormV2(p => ({
+                                  ...p,
+                                  desconto: v,
+                                  valor_venda: valorBaseProduto ? Math.max(0, Number((valorBaseProduto - v).toFixed(2))) : p.valor_venda,
+                                }))}
+                              />
                               <TextInput label="Cupom / Voucher" value={formV2.voucher_codigo}
                                 onChange={v => setFormV2(p => ({ ...p, voucher_codigo: v }))}
                                 placeholder={tabelaSelecionadaVenda?.codigo_voucher ? `Tabela aceita: ${tabelaSelecionadaVenda.codigo_voucher}` : 'Opcional'} />
@@ -6439,6 +6454,10 @@ export default function Comercial() {
                             <p className={cn('mt-1 text-sm font-semibold', descontoDentroDoLimite ? 'text-gray-700 dark:text-gray-200' : 'text-red-600 dark:text-red-400')}>
                               {formatCurrency(formV2.desconto || 0)}
                             </p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] uppercase tracking-wide text-gray-400">Valor final</p>
+                            <p className="mt-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{formatCurrency(precoFinalComDesconto)}</p>
                           </div>
                           <div>
                             <p className="text-[11px] uppercase tracking-wide text-gray-400">Limite tabela</p>

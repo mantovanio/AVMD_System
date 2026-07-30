@@ -14,6 +14,8 @@ import {
   X,
   BookOpen,
   ChevronLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AgencyConfig } from '@/lib/agencyConfig'
@@ -90,34 +92,40 @@ function IconRail({
   onNavigate,
   onLogout,
   agencyConfig,
+  expanded,
+  onToggle,
 }: {
   groups: SidebarGroup[]
   activePage: Page
   onNavigate: (page: Page) => void
   onLogout?: () => void
   agencyConfig?: AgencyConfig
+  expanded: boolean
+  onToggle: () => void
 }) {
   return (
     <div className={cn(
       'relative flex flex-col py-4 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0 transition-[width] duration-200',
-      'w-64',
+      expanded ? 'w-64' : 'w-16',
     )}>
-      <div className="flex items-center gap-3 mb-4 px-4">
-        {agencyConfig?.logo_interna_url?.trim() ? (
-          <div className="w-12 h-12 rounded-2xl bg-white border border-gray-200 dark:border-gray-800 flex items-center justify-center p-2 overflow-hidden shadow-sm">
-            <img src={agencyConfig.logo_interna_url} alt={agencyConfig.nome_agencia} className="w-full h-full object-contain" />
-          </div>
-        ) : (
-          <div
-            className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-sm shadow-sm"
-            style={{ backgroundColor: agencyConfig?.cor_primaria ?? '#2563eb' }}
-          >
-            ID
-          </div>
+      <div className={cn('flex items-center mb-4 px-2', expanded ? 'justify-between' : 'justify-center')}>
+        {expanded && (
+          <span className="min-w-0 flex-1 px-3 text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">
+            {agencyConfig?.nome_agencia ?? 'Menu principal'}
+          </span>
         )}
-        <span className="min-w-0 flex-1 text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">
-          {agencyConfig?.nome_agencia ?? 'Menu principal'}
-        </span>
+        <button
+          type="button"
+          onClick={onToggle}
+          title={expanded ? 'Minimizar sidebar' : 'Expandir sidebar'}
+          aria-label={expanded ? 'Minimizar sidebar' : 'Expandir sidebar'}
+          className={cn(
+            'flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 transition-colors',
+            expanded ? 'w-9 h-9 shrink-0' : 'w-8 h-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-sm',
+          )}
+        >
+          {expanded ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={16} />}
+        </button>
       </div>
 
       <div className="flex-1 flex flex-col min-h-0">
@@ -135,14 +143,15 @@ function IconRail({
                     type="button"
                     title={label}
                     className={cn(
-                      'flex items-center h-12 w-full gap-3 px-3 rounded-xl transition-colors',
+                      'flex items-center h-12 rounded-xl transition-colors',
+                      expanded ? 'w-full gap-3 px-3' : 'justify-center w-12 mx-auto',
                       activePage === id
                         ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
                         : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300',
                     )}
                   >
                     <Icon size={20} className="shrink-0" />
-                    <span className="text-sm font-medium truncate">{label}</span>
+                    {expanded && <span className="text-sm font-medium truncate">{label}</span>}
                   </button>
                 ))}
               </div>
@@ -156,12 +165,13 @@ function IconRail({
           type="button"
           title="Sair"
           className={cn(
-            'flex items-center h-12 w-full gap-3 px-3 rounded-xl text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 transition-colors',
+            'flex items-center h-12 rounded-xl text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 transition-colors',
+            expanded ? 'w-full gap-3 px-3' : 'justify-center w-12 mx-auto',
           )}
           onClick={onLogout}
         >
           <LogOut size={18} className="shrink-0" />
-          <span className="text-sm font-medium">Sair</span>
+          {expanded && <span className="text-sm font-medium">Sair</span>}
         </button>
       </div>
     </div>
@@ -260,6 +270,7 @@ function MobileDrawer({
 }
 
 export default function Sidebar({ activePage, onNavigate, allowedPages, onLogout, agencyConfig, mobileOpen, onMobileClose }: Props) {
+  const [desktopExpanded, setDesktopExpanded] = useState(false)
   const groups = MENU_GROUPS
     .map(group => ({
       ...group,
@@ -278,6 +289,8 @@ export default function Sidebar({ activePage, onNavigate, allowedPages, onLogout
           onNavigate={onNavigate}
           onLogout={onLogout}
           agencyConfig={agencyConfig}
+          expanded={desktopExpanded}
+          onToggle={() => setDesktopExpanded(value => !value)}
         />
       </aside>
 

@@ -910,9 +910,40 @@ export class CatalogRepository {
   async createVenda(input: Record<string, unknown>) {
     const id = randomUUID()
     const metadataBase = this.normalizeMetadata(input.metadata)
+    const precificacao = await this.getPrecificacaoCertificados()
+    const valorVendaInformado = Number(input.valor_venda ?? 0)
+    const adminProfileId = typeof input.admin_profile_id === 'string' ? input.admin_profile_id.trim() : ''
+    let adminOverrideAprovado = false
+    if (precificacao) {
+      const precoMinimo = this.calcularPrecoMinimoPrecificacao(precificacao)
+      if (valorVendaInformado > 0 && valorVendaInformado < precoMinimo) {
+        if (!adminProfileId) {
+          throw new Error(`A venda foi bloqueada: o valor informado está abaixo do preço mínimo calculado para a tríade comercial (R$ ${precoMinimo.toFixed(2)}).`)
+        }
+        const adminCheck = await this.db.query<{ id: string }>(
+          `select id
+             from profiles
+            where id = $1::uuid
+              and perfil = 'admin'
+              and status = 'ativo'
+            limit 1`,
+          [adminProfileId],
+        )
+        if (!adminCheck.rows[0]) {
+          throw new Error(`A venda foi bloqueada: o valor informado está abaixo do preço mínimo calculado para a tríade comercial (R$ ${precoMinimo.toFixed(2)}).`)
+        }
+        adminOverrideAprovado = true
+      }
+    }
     const estruturaSnapshot = await this.buildEstruturaComercialSnapshot(input)
     const metadataFinal = {
       ...metadataBase,
+      precificacao_certificados: precificacao ? {
+        ...precificacao,
+        preco_venda_minimo: this.calcularPrecoMinimoPrecificacao(precificacao),
+        override_admin_aprovado: adminOverrideAprovado,
+        admin_profile_id: adminOverrideAprovado ? adminProfileId : null,
+      } : null,
       estrutura_comercial: estruturaSnapshot,
     }
     const payload: Record<string, unknown> = {
@@ -1027,9 +1058,91 @@ export class CatalogRepository {
     return typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
   }
 
+  private async getPrecificacaoCertificados(): Promise<{
+    regime_operacional: 'REVENDA' | 'COMISSIONADO'
+    custo_certificadora: number
+    custo_midia: number
+    custo_suporte_operacional: number
+    gateway_taxa_percentual: number
+    gateway_taxa_fixa: number
+    comissao_agr_tipo: 'FIXO' | 'PERCENTUAL'
+    comissao_agr_valor: number
+    comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL'
+    comissao_vendedor_valor: number
+    comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL'
+    comissao_indicador_valor: number
+    aliquota_imposto: number
+    margem_lucro_desejada: number
+  } | null> {
+    const r = await this.db.query<Record<string, unknown>>(
+      `select regime_operacional, custo_certificadora, custo_midia, custo_suporte_operacional,
+              gateway_taxa_percentual, gateway_taxa_fixa,
+              comissao_agr_tipo, comissao_agr_valor,
+              comissao_vendedor_tipo, comissao_vendedor_valor,
+              comissao_indicador_tipo, comissao_indicador_valor,
+              aliquota_imposto, margem_lucro_desejada
+         from configuracao_precificacao_certificados
+        where id = 'default'
+        limit 1`,
+    )
+    const row = r.rows[0]
+    if (!row) return null
+    return {
+      regime_operacional: (row.regime_operacional as 'REVENDA' | 'COMISSIONADO') ?? 'REVENDA',
+      custo_certificadora: Number(row.custo_certificadora ?? 0),
+      custo_midia: Number(row.custo_midia ?? 0),
+      custo_suporte_operacional: Number(row.custo_suporte_operacional ?? 0),
+      gateway_taxa_percentual: Number(row.gateway_taxa_percentual ?? 0),
+      gateway_taxa_fixa: Number(row.gateway_taxa_fixa ?? 0),
+      comissao_agr_tipo: (row.comissao_agr_tipo as 'FIXO' | 'PERCENTUAL') ?? 'FIXO',
+      comissao_agr_valor: Number(row.comissao_agr_valor ?? 0),
+      comissao_vendedor_tipo: (row.comissao_vendedor_tipo as 'FIXO' | 'PERCENTUAL') ?? 'FIXO',
+      comissao_vendedor_valor: Number(row.comissao_vendedor_valor ?? 0),
+      comissao_indicador_tipo: (row.comissao_indicador_tipo as 'FIXO' | 'PERCENTUAL') ?? 'FIXO',
+      comissao_indicador_valor: Number(row.comissao_indicador_valor ?? 0),
+      aliquota_imposto: Number(row.aliquota_imposto ?? 0),
+      margem_lucro_desejada: Number(row.margem_lucro_desejada ?? 0),
+    }
+  }
+
+  private calcularPrecoMinimoPrecificacao(cfg: {
+    custo_certificadora: number
+    custo_midia: number
+    custo_suporte_operacional: number
+    gateway_taxa_percentual: number
+    gateway_taxa_fixa: number
+    comissao_agr_tipo: 'FIXO' | 'PERCENTUAL'
+    comissao_agr_valor: number
+    comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL'
+    comissao_vendedor_valor: number
+    comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL'
+    comissao_indicador_valor: number
+    aliquota_imposto: number
+    margem_lucro_desejada: number
+  }) {
+    const baseFixa =
+      cfg.custo_certificadora +
+      cfg.custo_midia +
+      cfg.custo_suporte_operacional +
+      cfg.gateway_taxa_fixa +
+      (cfg.comissao_agr_tipo === 'FIXO' ? cfg.comissao_agr_valor : 0) +
+      (cfg.comissao_vendedor_tipo === 'FIXO' ? cfg.comissao_vendedor_valor : 0) +
+      (cfg.comissao_indicador_tipo === 'FIXO' ? cfg.comissao_indicador_valor : 0)
+    const percentualTotal =
+      cfg.gateway_taxa_percentual +
+      cfg.aliquota_imposto +
+      cfg.margem_lucro_desejada +
+      (cfg.comissao_agr_tipo === 'PERCENTUAL' ? cfg.comissao_agr_valor : 0) +
+      (cfg.comissao_vendedor_tipo === 'PERCENTUAL' ? cfg.comissao_vendedor_valor : 0) +
+      (cfg.comissao_indicador_tipo === 'PERCENTUAL' ? cfg.comissao_indicador_valor : 0)
+    const divisor = Math.max(0.0001, 1 - percentualTotal / 100)
+    return Number((baseFixa / divisor).toFixed(2))
+  }
+
   private async buildEstruturaComercialSnapshot(input: Record<string, unknown>) {
     const vendedorInformadoId = typeof input.vendedor_id === 'string' ? input.vendedor_id : null
     const parceiroInformadoId = typeof input.contador_id === 'string' ? input.contador_id : null
+    const validadorInformadoId = typeof input.agente_registro_id === 'string' ? input.agente_registro_id : null
     const pontoId = typeof input.ponto_atendimento_id === 'string' ? input.ponto_atendimento_id : null
     const itemId = typeof input.tabela_preco_item_id === 'string' ? input.tabela_preco_item_id : null
     const valorVenda = Number(input.valor_venda ?? 0)
@@ -1063,6 +1176,9 @@ export class CatalogRepository {
         valor_apos_imposto: Number((valorVenda - impostoValor).toFixed(2)),
         base_calculo_comissoes: Number((valorVenda - impostoValor).toFixed(2)),
         origem: !pontoId ? 'sem_ponto' : origemParticipante,
+        contador_id: parceiroInformadoId,
+        vendedor_id: vendedorId,
+        validador_id: validadorInformadoId,
         parceiro_id: parceiroInformadoId,
       }
     }
@@ -1171,6 +1287,8 @@ export class CatalogRepository {
       modo_operacao: modoOperacao,
       modelo_comercial: modoOperacao === 'revenda' ? 'revenda' : 'integrado',
       vendedor_id: vendedorId,
+      contador_id: parceiroInformadoId,
+      validador_id: validadorInformadoId,
       parceiro_id: parceiroInformadoId,
       origem_participante: origemParticipante,
       ponto_atendimento_id: pontoId,

@@ -46,3 +46,29 @@ create unique index if not exists uq_perfil_repasse_regras_parent_child_escopo
 
 create index if not exists idx_perfil_repasse_regras_child_ponto
   on perfil_repasse_regras (child_profile_id, ponto_atendimento_id, ativo);
+
+create table if not exists configuracao_precificacao_certificados (
+  id text primary key,
+  regime_operacional text not null default 'REVENDA' check (regime_operacional in ('REVENDA', 'COMISSIONADO')),
+  custo_certificadora numeric(12,2) not null default 0,
+  custo_midia numeric(12,2) not null default 0,
+  custo_suporte_operacional numeric(12,2) not null default 0,
+  gateway_taxa_percentual numeric(8,4) not null default 0,
+  gateway_taxa_fixa numeric(12,2) not null default 0,
+  comissao_agr_tipo text not null default 'FIXO' check (comissao_agr_tipo in ('FIXO', 'PERCENTUAL')),
+  comissao_agr_valor numeric(12,2) not null default 0,
+  comissao_vendedor_tipo text not null default 'FIXO' check (comissao_vendedor_tipo in ('FIXO', 'PERCENTUAL')),
+  comissao_vendedor_valor numeric(12,2) not null default 0,
+  comissao_indicador_tipo text not null default 'FIXO' check (comissao_indicador_tipo in ('FIXO', 'PERCENTUAL')),
+  comissao_indicador_valor numeric(12,2) not null default 0,
+  aliquota_imposto numeric(8,4) not null default 0,
+  margem_lucro_desejada numeric(8,4) not null default 0,
+  ativo boolean not null default true,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+insert into configuracao_precificacao_certificados (id)
+values ('default')
+on conflict (id) do nothing;

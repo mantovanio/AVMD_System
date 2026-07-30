@@ -262,20 +262,21 @@ function AppContent() {
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-14 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex items-center justify-between px-4 shrink-0">
-          <div className="flex items-center gap-3">
+        <header className="h-16 border-b border-gray-200/80 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-white/85 flex items-center justify-between px-4 shrink-0 shadow-[0_1px_0_rgba(15,23,42,0.04)]">
+          <div className="flex items-center gap-4 min-w-0">
             <button type="button" onClick={() => setMobileNavOpen(true)}
               className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
               <Menu size={18} />
             </button>
             {agencyConfig.logo_interna_url?.trim() ? (
-              <img src={agencyConfig.logo_interna_url} alt={agencyConfig.nome_agencia} className="h-20 w-auto max-w-[320px] object-contain" />
+              <img src={agencyConfig.logo_interna_url} alt={agencyConfig.nome_agencia} className="h-24 w-auto max-w-[420px] object-contain drop-shadow-sm" />
             ) : null}
-            <span className="font-semibold text-blue-600 dark:text-blue-400 hidden md:inline">
-              {PAGE_LABELS[activePage]}
-            </span>
+            <div className="hidden md:flex min-w-0 flex-col">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">Painel operacional</span>
+              <span className="truncate text-sm font-semibold text-blue-600 dark:text-blue-400">{PAGE_LABELS[activePage]}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <div className="text-right hidden sm:block">
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 leading-none">{nomeDisplay}</p>
               {perfilLabel && (

@@ -44,7 +44,7 @@ import type {
   WhatsAppEngine,
 } from '@/types'
 
-type Tab = 'geral' | 'integracoes' | 'automacoes' | 'usuarios' | 'permissoes' | 'pontos' | 'pagamentos' | 'fiscal' | 'privacidade'
+type Tab = 'geral' | 'integracoes' | 'automacoes' | 'usuarios' | 'permissoes' | 'pontos' | 'pagamentos' | 'precificacao' | 'fiscal' | 'privacidade'
 type NfseEmitenteCrm = Pick<CadastroBase, 'id' | 'cpf_cnpj' | 'nome' | 'nome_fantasia' | 'email' | 'telefone' | 'cidade' | 'uf' | 'inscricao_municipal' | 'inscricao_estadual' | 'status'>
 
 const TABS: { id: Tab; label: string }[] = [
@@ -55,6 +55,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'permissoes',   label: 'Permissões'             },
   { id: 'pontos',       label: 'Pontos de Atendimento'  },
   { id: 'pagamentos',   label: 'Pagamentos'             },
+  { id: 'precificacao', label: 'Precificação'           },
   { id: 'fiscal',       label: 'Fiscal / NFS-e'         },
   { id: 'privacidade',  label: 'Privacidade (LGPD)'     },
 ]
@@ -1725,6 +1726,9 @@ function AbaUsuarios() {
                         </label>
                       ))}
                     </div>
+                    <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
+                      Para o Daniel operar como Supervisor do Chat e ver todas as conversas, o perfil dele precisa estar como <strong>Supervisor do Chat</strong>, não apenas com permissão marcada manualmente.
+                    </p>
                   </div>
 
                   <div>
@@ -7807,6 +7811,9 @@ export default function Configuracoes() {
         {/* FISCAL */}
         {tab === 'fiscal' && <AbaFiscal />}
 
+        {/* PRECIFICAÇÃO */}
+        {tab === 'precificacao' && <AbaPrecificacao />}
+
         {/* PRIVACIDADE LGPD */}
         {tab === 'privacidade' && <AbaPrivacidade />}
       </div>
@@ -7815,6 +7822,200 @@ export default function Configuracoes() {
 }
 
 // ── Aba Privacidade (LGPD Art. 18) ─────────────────────────────────────────
+
+type PrecificacaoConfig = {
+  id: string
+  regime_operacional: 'REVENDA' | 'COMISSIONADO'
+  custo_certificadora: number
+  custo_midia: number
+  custo_suporte_operacional: number
+  gateway_taxa_percentual: number
+  gateway_taxa_fixa: number
+  comissao_agr_tipo: 'FIXO' | 'PERCENTUAL'
+  comissao_agr_valor: number
+  comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL'
+  comissao_vendedor_valor: number
+  comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL'
+  comissao_indicador_valor: number
+  aliquota_imposto: number
+  margem_lucro_desejada: number
+}
+
+type PrecificacaoDetalhe = {
+  custosFixos: number
+  comissoesFixas: number
+  totalBaseFixo: number
+  totalPercentual: number
+  divisor: number
+  precoMinimo: number
+}
+
+function toNum(value: string) {
+  const n = Number(String(value).replace(',', '.'))
+  return Number.isFinite(n) ? n : 0
+}
+
+function calcularPrecificacao(cfg: PrecificacaoConfig): PrecificacaoDetalhe {
+  const custosFixos = cfg.custo_certificadora + cfg.custo_midia + cfg.custo_suporte_operacional + cfg.gateway_taxa_fixa
+  const comissoesFixas =
+    (cfg.comissao_agr_tipo === 'FIXO' ? cfg.comissao_agr_valor : 0) +
+    (cfg.comissao_vendedor_tipo === 'FIXO' ? cfg.comissao_vendedor_valor : 0) +
+    (cfg.comissao_indicador_tipo === 'FIXO' ? cfg.comissao_indicador_valor : 0)
+  const totalBaseFixo = custosFixos + comissoesFixas
+  const totalPercentual =
+    cfg.gateway_taxa_percentual +
+    cfg.aliquota_imposto +
+    cfg.margem_lucro_desejada +
+    (cfg.comissao_agr_tipo === 'PERCENTUAL' ? cfg.comissao_agr_valor : 0) +
+    (cfg.comissao_vendedor_tipo === 'PERCENTUAL' ? cfg.comissao_vendedor_valor : 0) +
+    (cfg.comissao_indicador_tipo === 'PERCENTUAL' ? cfg.comissao_indicador_valor : 0)
+  const divisor = Math.max(0.0001, 1 - totalPercentual / 100)
+  const precoMinimo = totalBaseFixo / divisor
+  return { custosFixos, comissoesFixas, totalBaseFixo, totalPercentual, divisor, precoMinimo }
+}
+
+function calcPrecoSugerido(cfg: PrecificacaoConfig) {
+  return calcularPrecificacao(cfg).precoMinimo
+}
+
+function AbaPrecificacao() {
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [cfg, setCfg] = useState<PrecificacaoConfig>({
+    id: 'default',
+    regime_operacional: 'REVENDA',
+    custo_certificadora: 0,
+    custo_midia: 0,
+    custo_suporte_operacional: 0,
+    gateway_taxa_percentual: 0,
+    gateway_taxa_fixa: 0,
+    comissao_agr_tipo: 'FIXO',
+    comissao_agr_valor: 0,
+    comissao_vendedor_tipo: 'FIXO',
+    comissao_vendedor_valor: 0,
+    comissao_indicador_tipo: 'FIXO',
+    comissao_indicador_valor: 0,
+    aliquota_imposto: 0,
+    margem_lucro_desejada: 0,
+  })
+  const [precoVenda, setPrecoVenda] = useState('0')
+  const precificacao = calcularPrecificacao(cfg)
+  const precoSugerido = precificacao.precoMinimo
+
+  useEffect(() => {
+    void (async () => {
+      setLoading(true)
+      const res = await fetch(getApiUrl('/hierarquia/precificacao-certificados'))
+      const data = await res.json().catch(() => null) as { ok?: boolean; config?: PrecificacaoConfig } | null
+      if (data?.ok && data.config) setCfg(data.config)
+      setLoading(false)
+    })()
+  }, [])
+
+  async function salvar() {
+    setSaving(true)
+    await fetch(getApiUrl('/hierarquia/precificacao-certificados'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg),
+    })
+    setSaving(false)
+  }
+
+  const lucroEstimado = Math.max(0, toNum(precoVenda) - precoSugerido)
+
+  if (loading) {
+    return <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 text-sm text-gray-500">Carregando precificação...</div>
+  }
+
+  return (
+    <div className="space-y-6 max-w-6xl">
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Precificação de Certificados</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Ferramenta para definir custos, repasses e preço sugerido por regime operacional.</p>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <ConfigSelectWithManual label="Regime operacional" value={cfg.regime_operacional} onChange={v => setCfg(p => ({ ...p, regime_operacional: v as 'REVENDA' | 'COMISSIONADO' }))} options={[{ value: 'REVENDA', label: 'Revenda' }, { value: 'COMISSIONADO', label: 'Comissionado' }]} />
+        <ConfigInput label="Custo da certificadora" value={String(cfg.custo_certificadora)} onChange={v => setCfg(p => ({ ...p, custo_certificadora: toNum(v) }))} />
+        <ConfigInput label="Custo de mídia" value={String(cfg.custo_midia)} onChange={v => setCfg(p => ({ ...p, custo_midia: toNum(v) }))} />
+        <ConfigInput label="Custo suporte operacional" value={String(cfg.custo_suporte_operacional)} onChange={v => setCfg(p => ({ ...p, custo_suporte_operacional: toNum(v) }))} />
+        <ConfigInput label="Gateway %" value={String(cfg.gateway_taxa_percentual)} onChange={v => setCfg(p => ({ ...p, gateway_taxa_percentual: toNum(v) }))} />
+        <ConfigInput label="Gateway fixo" value={String(cfg.gateway_taxa_fixa)} onChange={v => setCfg(p => ({ ...p, gateway_taxa_fixa: toNum(v) }))} />
+        <ConfigInput label="Imposto %" value={String(cfg.aliquota_imposto)} onChange={v => setCfg(p => ({ ...p, aliquota_imposto: toNum(v) }))} />
+        <ConfigInput label="Margem desejada %" value={String(cfg.margem_lucro_desejada)} onChange={v => setCfg(p => ({ ...p, margem_lucro_desejada: toNum(v) }))} />
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="space-y-2">
+          <ConfigSelectWithManual
+            label="Comissão AGR tipo"
+            value={cfg.comissao_agr_tipo}
+            onChange={v => setCfg(p => ({ ...p, comissao_agr_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
+            options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }]}
+          />
+          <ConfigInput label="Comissão AGR valor" value={String(cfg.comissao_agr_valor)} onChange={v => setCfg(p => ({ ...p, comissao_agr_valor: toNum(v) }))} />
+        </div>
+        <div className="space-y-2">
+          <ConfigSelectWithManual
+            label="Comissão vendedor tipo"
+            value={cfg.comissao_vendedor_tipo}
+            onChange={v => setCfg(p => ({ ...p, comissao_vendedor_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
+            options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }]}
+          />
+          <ConfigInput label="Comissão vendedor valor" value={String(cfg.comissao_vendedor_valor)} onChange={v => setCfg(p => ({ ...p, comissao_vendedor_valor: toNum(v) }))} />
+        </div>
+        <div className="space-y-2">
+          <ConfigSelectWithManual
+            label="Comissão indicador tipo"
+            value={cfg.comissao_indicador_tipo}
+            onChange={v => setCfg(p => ({ ...p, comissao_indicador_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
+            options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }]}
+          />
+          <ConfigInput label="Comissão indicador valor" value={String(cfg.comissao_indicador_valor)} onChange={v => setCfg(p => ({ ...p, comissao_indicador_valor: toNum(v) }))} />
+        </div>
+      </div>
+      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
+        <div className="mb-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 p-4 text-sm text-blue-900 dark:text-blue-100">
+          <p className="font-semibold">Regra da cadeia comercial</p>
+          <p className="mt-1">
+            A venda precisa cobrir custo da certificadora, mídia, suporte, gateway, comissão do contador, comissão do vendedor e comissão do AGR, preservando a margem mínima da empresa.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <ConfigInput label="Preço de venda para simular" value={precoVenda} onChange={setPrecoVenda} />
+          <button type="button" onClick={() => void salvar()} disabled={saving} className="h-11 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+            {saving ? 'Salvando...' : 'Salvar configuração'}
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+          <SummaryChip label="Preço sugerido" value={Number(precoSugerido.toFixed(2))} tone="blue" />
+          <SummaryChip label="Lucro estimado" value={Number(lucroEstimado.toFixed(2))} tone="green" />
+          <SummaryChip label="Base fixa" value={Number(precificacao.totalBaseFixo.toFixed(2))} tone="yellow" />
+          <SummaryChip label="Comissões fixas" value={Number(precificacao.comissoesFixas.toFixed(2))} tone="yellow" />
+          <SummaryChip label="Soma percentual" value={Number(precificacao.totalPercentual.toFixed(2))} tone="yellow" />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-4 text-sm">
+            <p className="font-semibold text-gray-800 dark:text-gray-100">Cálculo do piso mínimo</p>
+            <p className="mt-2 text-gray-600 dark:text-gray-300">Base fixa total: R$ {precificacao.totalBaseFixo.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Percentual total: {precificacao.totalPercentual.toFixed(2).replace('.', ',')}%</p>
+            <p className="text-gray-600 dark:text-gray-300">Divisor: {precificacao.divisor.toFixed(4).replace('.', ',')}</p>
+            <p className="mt-2 text-base font-semibold text-gray-900 dark:text-white">Preço mínimo calculado: R$ {precificacao.precoMinimo.toFixed(2).replace('.', ',')}</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-4 text-sm">
+            <p className="font-semibold text-gray-800 dark:text-gray-100">Comissões da cadeia</p>
+            <p className="mt-2 text-gray-600 dark:text-gray-300">Contador: {cfg.comissao_indicador_tipo} {cfg.comissao_indicador_valor.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Vendedor: {cfg.comissao_vendedor_tipo} {cfg.comissao_vendedor_valor.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">AGR: {cfg.comissao_agr_tipo} {cfg.comissao_agr_valor.toFixed(2).replace('.', ',')}</p>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Se alguma comissão estiver como percentual, ela entra na conta do divisor. Se estiver fixa, entra no bloco de custos.</p>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+          A regra considera as três pontas da cadeia: contador, vendedor e AGR. Quando uma comissão estiver em percentual, ela entra no divisor; quando estiver fixa, ela entra no bloco de custos.
+        </p>
+      </div>
+    </div>
+  )
+}
 
 function AbaPrivacidade() {
   const { profile } = useAuth()
