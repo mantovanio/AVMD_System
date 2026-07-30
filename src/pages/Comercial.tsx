@@ -8431,11 +8431,13 @@ export default function Comercial() {
                 return (
                   <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
                     <p className="font-semibold text-sm">Resumo financeiro da venda</p>
-                    <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+                    <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-6">
                       <div><span className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Valor bruto</span><p className="mt-1 text-sm font-semibold">{formatCurrency(Number(vendaFinanceiroModal.venda.valor_venda ?? 0))}</p></div>
+                      <div><span className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Imposto</span><p className="mt-1 text-sm font-semibold">{formatCurrency(Number(meta.imposto_valor ?? 0))}</p></div>
                       <div><span className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Líquido pós-imposto</span><p className="mt-1 text-sm font-semibold">{formatCurrency(Number(meta.valor_liquido_pos_imposto ?? 0))}</p></div>
                       <div><span className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Comissão vendedor</span><p className="mt-1 text-sm font-semibold">{formatCurrency(Number(meta.comissao_vendedor_liquida ?? 0))}</p></div>
                       <div><span className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Comissão indicador</span><p className="mt-1 text-sm font-semibold">{formatCurrency(Number(meta.comissao_indicador_valor ?? 0))}</p></div>
+                      <div><span className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Líquido empresa</span><p className="mt-1 text-sm font-semibold">{formatCurrency(Number(meta.saldo_estrutura ?? 0))}</p></div>
                       <div><span className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Modo vendedor</span><p className="mt-1 text-sm font-semibold">{String(meta.comissao_vendedor_modo ?? '—')}</p></div>
                       <div><span className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Indicador pago pelo vendedor</span><p className="mt-1 text-sm font-semibold">{meta.comissao_indicador_paga_pelo_vendedor ? 'Sim' : 'Não'}</p></div>
                     </div>
@@ -9543,7 +9545,7 @@ export default function Comercial() {
 
               <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
                 <p className="font-semibold text-sm">Resumo da venda</p>
-                <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
                   <div>
                     <p className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Valor atual</p>
                     <p className="mt-1 text-sm font-semibold">{formatCurrency(Number(editForm.valor_venda ?? 0))}</p>
@@ -9551,6 +9553,14 @@ export default function Comercial() {
                   <div>
                     <p className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Desconto</p>
                     <p className="mt-1 text-sm font-semibold">{formatCurrency(Number(editForm.desconto ?? 0))}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Valor final</p>
+                    <p className="mt-1 text-sm font-semibold">{formatCurrency(Math.max(0, Number(editForm.valor_venda ?? 0) - Number(editForm.desconto ?? 0)))}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-blue-500 dark:text-blue-300">Tipo</p>
+                    <p className="mt-1 text-sm font-semibold">{editForm.tipo_venda ?? '—'}</p>
                   </div>
                 </div>
               </div>
