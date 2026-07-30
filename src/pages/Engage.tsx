@@ -39,6 +39,7 @@ type EngageProvider = {
   name: string
   channel: string
   status: string
+  config_json?: Record<string, unknown>
 }
 
 type EngageTemplate = {
@@ -103,8 +104,41 @@ export default function Engage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', score: 0 })
-  const [providerForm, setProviderForm] = useState({ key: '', name: '', channel: 'whatsapp' })
-  const [senderForm, setSenderForm] = useState({ provider_id: '', label: '', phone_number: '', channel: 'whatsapp' })
+  const [providerForm, setProviderForm] = useState({
+    key: '',
+    name: '',
+    channel: 'whatsapp',
+    base_url: '',
+    api_token: '',
+    instance_name: '',
+    webhook_url: '',
+    webhook_secret: '',
+    account_id: '',
+    app_id: '',
+    app_secret: '',
+    phone_number_id: '',
+    access_token: '',
+    verify_token: '',
+    template_namespace: '',
+    routing_mode: 'round_robin',
+    delivery_mode: 'official',
+    daily_limit: 0,
+    hourly_limit: 0,
+    priority: 100,
+    risk_score: 0,
+    anti_ban_delay_seconds: 0,
+    status: 'ativo',
+  })
+  const [senderForm, setSenderForm] = useState({
+    provider_id: '',
+    label: '',
+    phone_number: '',
+    channel: 'whatsapp',
+    daily_limit: 0,
+    hourly_limit: 0,
+    priority: 100,
+    risk_score: 0,
+  })
   const [campaignForm, setCampaignForm] = useState({ name: '', channel: 'whatsapp', scheduled_at: '' })
   const [queueForm, setQueueForm] = useState({ campaign_id: '', contact_id: '', body: '', channel: 'whatsapp' })
   const [taskForm, setTaskForm] = useState({ title: '', type: 'followup', due_at: '' })
@@ -201,6 +235,30 @@ export default function Engage() {
   const latestTemplates = templates.slice(0, 5)
   const latestSegments = segments.slice(0, 5)
   const themeIsDark = document.documentElement.classList.contains('dark')
+  const providerConfigPreview = useMemo(() => {
+    const preview = {
+      base_url: providerForm.base_url,
+      api_token: providerForm.api_token,
+      instance_name: providerForm.instance_name,
+      webhook_url: providerForm.webhook_url,
+      webhook_secret: providerForm.webhook_secret,
+      account_id: providerForm.account_id,
+      app_id: providerForm.app_id,
+      app_secret: providerForm.app_secret,
+      phone_number_id: providerForm.phone_number_id,
+      access_token: providerForm.access_token,
+      verify_token: providerForm.verify_token,
+      template_namespace: providerForm.template_namespace,
+      routing_mode: providerForm.routing_mode,
+      delivery_mode: providerForm.delivery_mode,
+      daily_limit: providerForm.daily_limit,
+      hourly_limit: providerForm.hourly_limit,
+      priority: providerForm.priority,
+      risk_score: providerForm.risk_score,
+      anti_ban_delay_seconds: providerForm.anti_ban_delay_seconds,
+    }
+    return Object.fromEntries(Object.entries(preview).filter(([, value]) => value !== '' && value !== 0))
+  }, [providerForm])
 
   async function refreshData() {
     const [summaryRes, contactsRes, campaignsRes, providersRes] = await Promise.all([
@@ -252,6 +310,51 @@ export default function Engage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  async function createProviderFromForm() {
+    const config_json = {
+      base_url: providerForm.base_url || null,
+      api_token: providerForm.api_token || null,
+      instance_name: providerForm.instance_name || null,
+      webhook_url: providerForm.webhook_url || null,
+      webhook_secret: providerForm.webhook_secret || null,
+      account_id: providerForm.account_id || null,
+      app_id: providerForm.app_id || null,
+      app_secret: providerForm.app_secret || null,
+      phone_number_id: providerForm.phone_number_id || null,
+      access_token: providerForm.access_token || null,
+      verify_token: providerForm.verify_token || null,
+      template_namespace: providerForm.template_namespace || null,
+      routing_mode: providerForm.routing_mode,
+      delivery_mode: providerForm.delivery_mode,
+      daily_limit: providerForm.daily_limit,
+      hourly_limit: providerForm.hourly_limit,
+      priority: providerForm.priority,
+      risk_score: providerForm.risk_score,
+      anti_ban_delay_seconds: providerForm.anti_ban_delay_seconds,
+    }
+
+    await submitJson('/engage/providers', {
+      key: providerForm.key,
+      name: providerForm.name,
+      channel: providerForm.channel,
+      status: providerForm.status,
+      config_json,
+    }, 'Provedor criado com sucesso.')
+  }
+
+  async function createSenderFromForm() {
+    await submitJson('/engage/sender-accounts', {
+      provider_id: senderForm.provider_id,
+      label: senderForm.label,
+      phone_number: senderForm.phone_number || null,
+      channel: senderForm.channel,
+      daily_limit: senderForm.daily_limit,
+      hourly_limit: senderForm.hourly_limit,
+      priority: senderForm.priority,
+      risk_score: senderForm.risk_score,
+    }, 'Sender account criada com sucesso.')
   }
 
   return (
@@ -524,7 +627,7 @@ export default function Engage() {
         )}
 
         {tab === 'configuracoes' && (
-          <section className="mt-6 grid gap-6 lg:grid-cols-2">
+          <section className="mt-6 grid gap-6 xl:grid-cols-3">
             <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
               <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Webhook do Engage</p>
               <h2 className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">Receber respostas</h2>
@@ -538,6 +641,120 @@ export default function Engage() {
             </article>
 
             <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Integrações API</p>
+              <h2 className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">Meta, Evolution e Z-API</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                Estes campos cobrem a maior parte das credenciais e rotas que precisamos para operar múltiplos provedores
+                com rastreio, fallback e governança de envio.
+              </p>
+              <div className="mt-5 grid gap-3 text-sm">
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Base URL da API" value={providerForm.base_url} onChange={e => setProviderForm(v => ({ ...v, base_url: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="API token" value={providerForm.api_token} onChange={e => setProviderForm(v => ({ ...v, api_token: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Nome da instância" value={providerForm.instance_name} onChange={e => setProviderForm(v => ({ ...v, instance_name: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Webhook URL" value={providerForm.webhook_url} onChange={e => setProviderForm(v => ({ ...v, webhook_url: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Webhook secret" value={providerForm.webhook_secret} onChange={e => setProviderForm(v => ({ ...v, webhook_secret: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Account ID / WABA ID" value={providerForm.account_id} onChange={e => setProviderForm(v => ({ ...v, account_id: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="App ID" value={providerForm.app_id} onChange={e => setProviderForm(v => ({ ...v, app_id: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="App Secret" value={providerForm.app_secret} onChange={e => setProviderForm(v => ({ ...v, app_secret: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Phone Number ID" value={providerForm.phone_number_id} onChange={e => setProviderForm(v => ({ ...v, phone_number_id: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Access token" value={providerForm.access_token} onChange={e => setProviderForm(v => ({ ...v, access_token: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Verify token" value={providerForm.verify_token} onChange={e => setProviderForm(v => ({ ...v, verify_token: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Template namespace" value={providerForm.template_namespace} onChange={e => setProviderForm(v => ({ ...v, template_namespace: e.target.value }))} />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" value={providerForm.routing_mode} onChange={e => setProviderForm(v => ({ ...v, routing_mode: e.target.value }))}>
+                    <option value="round_robin">round_robin</option>
+                    <option value="priority">priority</option>
+                    <option value="weighted">weighted</option>
+                    <option value="manual">manual</option>
+                  </select>
+                  <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" value={providerForm.delivery_mode} onChange={e => setProviderForm(v => ({ ...v, delivery_mode: e.target.value }))}>
+                    <option value="official">official</option>
+                    <option value="hybrid">hybrid</option>
+                    <option value="fallback">fallback</option>
+                  </select>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input type="number" className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Limite diário" value={providerForm.daily_limit} onChange={e => setProviderForm(v => ({ ...v, daily_limit: Number(e.target.value || 0) }))} />
+                  <input type="number" className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Limite por hora" value={providerForm.hourly_limit} onChange={e => setProviderForm(v => ({ ...v, hourly_limit: Number(e.target.value || 0) }))} />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <input type="number" className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Prioridade" value={providerForm.priority} onChange={e => setProviderForm(v => ({ ...v, priority: Number(e.target.value || 0) }))} />
+                  <input type="number" className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Risco" value={providerForm.risk_score} onChange={e => setProviderForm(v => ({ ...v, risk_score: Number(e.target.value || 0) }))} />
+                  <input type="number" className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Delay anti-ban (s)" value={providerForm.anti_ban_delay_seconds} onChange={e => setProviderForm(v => ({ ...v, anti_ban_delay_seconds: Number(e.target.value || 0) }))} />
+                </div>
+                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" value={providerForm.status} onChange={e => setProviderForm(v => ({ ...v, status: e.target.value }))}>
+                  <option value="ativo">ativo</option>
+                  <option value="pausado">pausado</option>
+                  <option value="manutencao">manutencao</option>
+                </select>
+                <button type="button" disabled={saving} onClick={createProviderFromForm} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-slate-950">
+                  Salvar provedor
+                </button>
+              </div>
+            </article>
+
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Campos salvos</p>
+              <h2 className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">Estrutura pronta para vários provedores</h2>
+              <div className="mt-4 space-y-3">
+                {providers.slice(0, 5).map(provider => {
+                  const config = provider.config_json ?? {}
+                  return (
+                    <div key={provider.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
+                      <p className="font-medium text-slate-950 dark:text-white">{provider.name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{provider.key} · {provider.channel} · {provider.status}</p>
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                        {'base_url' in config && <span>base url</span>}
+                        {'api_token' in config && <span>api token</span>}
+                        {'webhook_url' in config && <span>webhook</span>}
+                        {'instance_name' in config && <span>instância</span>}
+                        {'phone_number_id' in config && <span>phone id</span>}
+                      </div>
+                    </div>
+                  )
+                })}
+                {!providers.length && <div className="text-sm text-slate-500 dark:text-slate-400">Nenhum provedor configurado ainda.</div>}
+              </div>
+            </article>
+
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60 lg:col-span-2">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Preview da configuração</p>
+              <h2 className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">Payload que vai para o banco</h2>
+              <pre className="mt-4 overflow-auto rounded-2xl border border-slate-200 bg-slate-950 p-4 text-xs text-slate-100 dark:border-white/10">
+{JSON.stringify(providerConfigPreview, null, 2)}
+              </pre>
+            </article>
+
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60">
+              <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Sender accounts</p>
+              <h2 className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">Múltiplos números por provedor</h2>
+              <div className="mt-4 grid gap-3">
+                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" value={senderForm.provider_id} onChange={e => setSenderForm(v => ({ ...v, provider_id: e.target.value }))}>
+                  <option value="">Selecione o provedor</option>
+                  {providers.map(provider => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
+                </select>
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Rótulo do número" value={senderForm.label} onChange={e => setSenderForm(v => ({ ...v, label: e.target.value }))} />
+                <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Telefone" value={senderForm.phone_number} onChange={e => setSenderForm(v => ({ ...v, phone_number: e.target.value }))} />
+                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" value={senderForm.channel} onChange={e => setSenderForm(v => ({ ...v, channel: e.target.value }))}>
+                  <option value="whatsapp">whatsapp</option>
+                  <option value="email">email</option>
+                  <option value="instagram">instagram</option>
+                </select>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input type="number" className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Limite diário" value={senderForm.daily_limit} onChange={e => setSenderForm(v => ({ ...v, daily_limit: Number(e.target.value || 0) }))} />
+                  <input type="number" className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Limite por hora" value={senderForm.hourly_limit} onChange={e => setSenderForm(v => ({ ...v, hourly_limit: Number(e.target.value || 0) }))} />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input type="number" className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Prioridade" value={senderForm.priority} onChange={e => setSenderForm(v => ({ ...v, priority: Number(e.target.value || 0) }))} />
+                  <input type="number" className="rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none dark:border-white/10 dark:bg-slate-900" placeholder="Risco" value={senderForm.risk_score} onChange={e => setSenderForm(v => ({ ...v, risk_score: Number(e.target.value || 0) }))} />
+                </div>
+                <button type="button" disabled={saving} onClick={createSenderFromForm} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-slate-950">
+                  Salvar sender
+                </button>
+              </div>
+            </article>
+
+            <article className="rounded-[2rem] border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-950/60 lg:col-span-2">
               <p className="text-sm uppercase tracking-[0.3em] text-cyan-700/70 dark:text-cyan-300/70">Inbox operacional</p>
               <h2 className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">Respostas recentes</h2>
               <div className="mt-4 space-y-3">
