@@ -7846,12 +7846,17 @@ type PrecificacaoConfig = {
 }
 
 type PrecificacaoDetalhe = {
-  custosFixos: number
-  comissoesFixas: number
-  totalBaseFixo: number
-  totalPercentual: number
-  divisor: number
-  precoMinimo: number
+  custoCertificadora: number
+  custoMidia: number
+  custoOperacional: number
+  imposto: number
+  gateway: number
+  comissaoAgr: number
+  comissaoVendedor: number
+  comissaoIndicador: number
+  totalSaidas: number
+  saldoFinal: number
+  margemFinal: number
 }
 
 type MetodoPagamento = 'PIX' | 'CARTAO_AVISTA' | 'CARTAO_PARCELADO' | 'BOLETO'
@@ -7861,27 +7866,8 @@ function toNum(value: string) {
   return Number.isFinite(n) ? n : 0
 }
 
-function calcularPrecificacao(cfg: PrecificacaoConfig): PrecificacaoDetalhe {
-  const custoMidiaTotal = cfg.custo_cartao + cfg.custo_token + (cfg.custo_cartao > 0 ? cfg.custo_leitora : 0)
-  const custosFixos = cfg.custo_certificadora + custoMidiaTotal
-  const comissoesFixas =
-    (cfg.comissao_agr_tipo === 'FIXO' ? cfg.comissao_agr_valor : 0) +
-    (cfg.comissao_vendedor_tipo === 'FIXO' ? cfg.comissao_vendedor_valor : 0) +
-    (cfg.comissao_indicador_tipo === 'FIXO' ? cfg.comissao_indicador_valor : 0)
-  const totalBaseFixo = custosFixos + comissoesFixas
-  const totalPercentual =
-    cfg.gateway_taxa_percentual +
-    cfg.aliquota_imposto +
-    (cfg.comissao_agr_tipo === 'PERCENTUAL' ? cfg.comissao_agr_valor : 0) +
-    (cfg.comissao_vendedor_tipo === 'PERCENTUAL' ? cfg.comissao_vendedor_valor : 0) +
-    (cfg.comissao_indicador_tipo === 'PERCENTUAL' ? cfg.comissao_indicador_valor : 0)
-  const divisor = Math.max(0.0001, 1 - totalPercentual / 100)
-  const precoMinimo = totalBaseFixo / divisor
-  return { custosFixos, comissoesFixas, totalBaseFixo, totalPercentual, divisor, precoMinimo }
-}
-
-function calcPrecoSugerido(cfg: PrecificacaoConfig) {
-  return calcularPrecificacao(cfg).precoMinimo
+function calcularCustoMidia(cfg: PrecificacaoConfig) {
+  return cfg.custo_cartao + cfg.custo_token + (cfg.custo_cartao > 0 ? cfg.custo_leitora : 0)
 }
 
 function calcularTaxaPagamento(preco: number, metodo: MetodoPagamento) {
@@ -7892,19 +7878,37 @@ function calcularTaxaPagamento(preco: number, metodo: MetodoPagamento) {
   return 0
 }
 
-function calcularMargemLiquida(precoVenda: number, cfg: PrecificacaoConfig, metodo: MetodoPagamento) {
-  const custoMidiaTotal = cfg.custo_cartao + cfg.custo_token + (cfg.custo_cartao > 0 ? cfg.custo_leitora : 0)
-  const custoBase = cfg.custo_certificadora + custoMidiaTotal
+function calcularRepasse(precoVenda: number, cfg: PrecificacaoConfig, metodo: MetodoPagamento): PrecificacaoDetalhe {
+  const custoCertificadora = cfg.custo_certificadora
+  const custoMidia = calcularCustoMidia(cfg)
+  const custoOperacional = cfg.custo_suporte_operacional
   const imposto = precoVenda * (cfg.aliquota_imposto / 100)
   const gateway = calcularTaxaPagamento(precoVenda, metodo)
-  const suaParte = cfg.margem_lucro_desejada > 0 ? precoVenda * (cfg.margem_lucro_desejada / 100) : 0
-  const comissoes =
-    (cfg.comissao_agr_tipo === 'FIXO' ? cfg.comissao_agr_valor : precoVenda * (cfg.comissao_agr_valor / 100)) +
-    (cfg.comissao_vendedor_tipo === 'FIXO' ? cfg.comissao_vendedor_valor : precoVenda * (cfg.comissao_vendedor_valor / 100)) +
-    (cfg.comissao_indicador_tipo === 'FIXO' ? cfg.comissao_indicador_valor : precoVenda * (cfg.comissao_indicador_valor / 100))
-  const lucro = precoVenda - custoBase - imposto - gateway - comissoes - suaParte
-  const margem = precoVenda > 0 ? (lucro / precoVenda) * 100 : 0
-  return { custoBase, imposto, gateway, comissoes, lucro, margem }
+  const comissaoAgr = cfg.comissao_agr_tipo === 'FIXO' ? cfg.comissao_agr_valor : precoVenda * (cfg.comissao_agr_valor / 100)
+  const comissaoIndicador = cfg.comissao_indicador_tipo === 'FIXO' ? cfg.comissao_indicador_valor : precoVenda * (cfg.comissao_indicador_valor / 100)
+  const saldoAntesVendedor = precoVenda - custoCertificadora - custoMidia - custoOperacional - imposto - gateway - comissaoAgr - comissaoIndicador
+  const comissaoVendedor =
+    cfg.comissao_vendedor_tipo === 'FIXO'
+      ? cfg.comissao_vendedor_valor
+      : cfg.comissao_vendedor_tipo === 'PERCENTUAL'
+        ? precoVenda * (cfg.comissao_vendedor_valor / 100)
+        : Math.max(0, saldoAntesVendedor)
+  const totalSaidas = custoCertificadora + custoMidia + custoOperacional + imposto + gateway + comissaoAgr + comissaoIndicador + comissaoVendedor
+  const saldoFinal = precoVenda - totalSaidas
+  const margemFinal = precoVenda > 0 ? (saldoFinal / precoVenda) * 100 : 0
+  return {
+    custoCertificadora,
+    custoMidia,
+    custoOperacional,
+    imposto,
+    gateway,
+    comissaoAgr,
+    comissaoVendedor,
+    comissaoIndicador,
+    totalSaidas,
+    saldoFinal,
+    margemFinal,
+  }
 }
 
 function AbaPrecificacao() {
@@ -7946,9 +7950,9 @@ function AbaPrecificacao() {
   })
   const [precoVenda, setPrecoVenda] = useState('0')
   const [metodoSimulacao, setMetodoSimulacao] = useState<MetodoPagamento>('PIX')
-  const precificacao = calcularPrecificacao(cfg)
-  const precoSugerido = precificacao.precoMinimo
-  const simulacaoAtual = calcularMargemLiquida(toNum(precoVenda), cfg, metodoSimulacao)
+  const simulacaoAtual = calcularRepasse(toNum(precoVenda), cfg, metodoSimulacao)
+  const custoMidiaTotal = calcularCustoMidia(cfg)
+  const totalCustosFixos = cfg.custo_certificadora + custoMidiaTotal + cfg.custo_suporte_operacional
 
   useEffect(() => {
     void (async () => {
@@ -8007,8 +8011,6 @@ function AbaPrecificacao() {
     })
   }
 
-  const lucroEstimado = Math.max(0, toNum(precoVenda) - precoSugerido)
-
   if (loading) {
     return <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 text-sm text-gray-500">Carregando precificação...</div>
   }
@@ -8017,7 +8019,7 @@ function AbaPrecificacao() {
     <div className="space-y-6 max-w-6xl">
       <div>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Precificação de Certificados</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Ferramenta para definir custos, repasses e preço sugerido por regime operacional.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Ferramenta para informar o preço de venda e ver a distribuição financeira por produto.</p>
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <ConfigSelectWithManual label="Regime operacional" value={cfg.regime_operacional} onChange={v => setCfg(p => ({ ...p, regime_operacional: v as 'REVENDA' | 'COMISSIONADO' }))} options={[{ value: 'REVENDA', label: 'Revenda' }, { value: 'COMISSIONADO', label: 'Comissionado' }]} />
@@ -8062,7 +8064,7 @@ function AbaPrecificacao() {
       </div>
       <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
         <div className="flex flex-wrap items-end gap-3">
-          <ConfigInput label="Preço de venda para simular" value={precoVenda} onChange={setPrecoVenda} inputMode="decimal" />
+          <ConfigInput label="Preço de venda informado" value={precoVenda} onChange={setPrecoVenda} inputMode="decimal" />
           <ConfigSelectWithManual
             label="Forma de pagamento"
             value={metodoSimulacao}
@@ -8079,32 +8081,36 @@ function AbaPrecificacao() {
           </button>
         </div>
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-          O campo de simulação não salva preço de venda. Ele serve só para você testar um valor real de mercado e ver a margem estimada na tela.
+          O preço de venda é apenas para simulação. Ele não é salvo como tabela comercial.
         </p>
-        <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-5">
-          <SummaryChip label="Preço sugerido" value={Number(precoSugerido.toFixed(2))} tone="blue" />
-          <SummaryChip label="Lucro estimado" value={Number(lucroEstimado.toFixed(2))} tone="green" />
-          <SummaryChip label="Base fixa" value={Number(precificacao.totalBaseFixo.toFixed(2))} tone="yellow" />
-          <SummaryChip label="Comissões fixas" value={Number(precificacao.comissoesFixas.toFixed(2))} tone="yellow" />
-          <SummaryChip label="Soma percentual" value={Number(precificacao.totalPercentual.toFixed(2))} tone="yellow" />
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <SummaryChip label="Preço informado" value={Number(toNum(precoVenda).toFixed(2))} tone="blue" />
+          <SummaryChip label="Saldo final" value={Number(simulacaoAtual.saldoFinal.toFixed(2))} tone="green" />
+          <SummaryChip label="Custos fixos" value={Number(totalCustosFixos.toFixed(2))} tone="yellow" />
+          <SummaryChip label="Total repassado" value={Number((simulacaoAtual.comissaoAgr + simulacaoAtual.comissaoVendedor + simulacaoAtual.comissaoIndicador).toFixed(2))} tone="yellow" />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-4 text-sm">
-            <p className="font-semibold text-gray-800 dark:text-gray-100">Simulação atual</p>
+            <p className="font-semibold text-gray-800 dark:text-gray-100">Distribuição financeira</p>
             <p className="mt-2 text-gray-600 dark:text-gray-300">Preço: R$ {toNum(precoVenda).toFixed(2).replace('.', ',')}</p>
             <p className="text-gray-600 dark:text-gray-300">Pagamento: {metodoSimulacao === 'PIX' ? 'Pix' : metodoSimulacao === 'CARTAO_AVISTA' ? 'Cartão à vista' : metodoSimulacao === 'CARTAO_PARCELADO' ? 'Cartão parcelado' : 'Boleto'}</p>
-            <p className="text-gray-600 dark:text-gray-300">Custo base: R$ {simulacaoAtual.custoBase.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Custo certificadora: R$ {simulacaoAtual.custoCertificadora.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Custo mídia: R$ {simulacaoAtual.custoMidia.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Custo operacional: R$ {simulacaoAtual.custoOperacional.toFixed(2).replace('.', ',')}</p>
             <p className="text-gray-600 dark:text-gray-300">Imposto: R$ {simulacaoAtual.imposto.toFixed(2).replace('.', ',')}</p>
             <p className="text-gray-600 dark:text-gray-300">Taxa pagamento: R$ {simulacaoAtual.gateway.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Comissões: R$ {simulacaoAtual.comissoes.toFixed(2).replace('.', ',')}</p>
-            <p className="mt-2 text-base font-semibold text-gray-900 dark:text-white">Lucro líquido: R$ {simulacaoAtual.lucro.toFixed(2).replace('.', ',')}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Margem: {simulacaoAtual.margem.toFixed(2).replace('.', ',')}%</p>
+            <p className="text-gray-600 dark:text-gray-300">Comissão indicador: R$ {simulacaoAtual.comissaoIndicador.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Comissão vendedor: R$ {simulacaoAtual.comissaoVendedor.toFixed(2).replace('.', ',')}</p>
+            <p className="text-gray-600 dark:text-gray-300">Comissão AGR: R$ {simulacaoAtual.comissaoAgr.toFixed(2).replace('.', ',')}</p>
+            <p className="mt-2 text-base font-semibold text-gray-900 dark:text-white">Saldo final: R$ {simulacaoAtual.saldoFinal.toFixed(2).replace('.', ',')}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Margem final: {simulacaoAtual.margemFinal.toFixed(2).replace('.', ',')}%</p>
           </div>
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-4 text-sm">
-            <p className="font-semibold text-gray-800 dark:text-gray-100">Resumo</p>
-            <p className="mt-2 text-gray-600 dark:text-gray-300">A mídia total é calculada automaticamente.</p>
-            <p className="text-gray-600 dark:text-gray-300">Os campos de custo e percentual aceitam decimal.</p>
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">O preço de venda fica livre para teste manual.</p>
+            <p className="font-semibold text-gray-800 dark:text-gray-100">Leitura rápida</p>
+            <p className="mt-2 text-gray-600 dark:text-gray-300">Você informa o preço de venda e o sistema calcula quanto sai para certificadora, mídia, operação, imposto, gateway e comissões.</p>
+            <p className="text-gray-600 dark:text-gray-300">A leitora só entra quando houver cartão.</p>
+            <p className="text-gray-600 dark:text-gray-300">O valor final mostra o que sobra após todos os repasses.</p>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Os campos aceitam vírgula e ponto na entrada.</p>
           </div>
         </div>
       </div>
