@@ -8306,12 +8306,12 @@ function AbaPrecificacao() {
           <SummaryChip label="Margem final" value={Number(simulacaoAtual.margemFinal.toFixed(2))} tone="yellow" />
           <SummaryChip label="Total repassado" value={Number((simulacaoAtual.comissaoAgr + simulacaoAtual.comissaoVendedor + simulacaoAtual.comissaoIndicador).toFixed(2))} tone="yellow" />
         </div>
-        <div className="mt-4 grid gap-4 xl:grid-cols-[1.35fr_0.95fr]">
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">Painel de Distribuição financeira</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Clique em uma simulação salva para reabrir o cálculo completo</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Resumo direto do que entra, sai e sobra na simulação</p>
               </div>
               <div className="text-right">
                 <p className="text-xs text-gray-500 dark:text-gray-400">Saldo final</p>
@@ -8325,45 +8325,44 @@ function AbaPrecificacao() {
                 <p className="text-xs text-slate-500">Pagamento: {metodoSimulacao === 'PIX' ? 'Pix' : metodoSimulacao === 'CARTAO_AVISTA' ? 'Cartão à vista' : metodoSimulacao === 'CARTAO_PARCELADO' ? 'Cartão parcelado' : 'Boleto'}</p>
               </div>
               <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 p-4 border border-emerald-200 dark:border-emerald-800">
-                <p className="text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Margem</p>
+                <p className="text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Margem final</p>
                 <p className="mt-1 text-2xl font-bold text-emerald-700 dark:text-emerald-300">{simulacaoAtual.margemFinal.toFixed(2).replace('.', ',')}%</p>
-                <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80">Reserva: R$ {simulacaoAtual.margemDesejada.toFixed(2).replace('.', ',')}</p>
+                <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80">Margem desejada: R$ {simulacaoAtual.margemDesejada.toFixed(2).replace('.', ',')}</p>
               </div>
             </div>
-            <div className="mt-5 space-y-3">
+            <div className="mt-5 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <div className="grid grid-cols-2 bg-gray-50 dark:bg-gray-950/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                <span>Saída</span>
+                <span className="text-right">Valor</span>
+              </div>
               {[
-                { label: 'Certificadora', value: simulacaoAtual.custoCertificadora, tone: 'bg-slate-800' },
-                { label: 'Mídia', value: simulacaoAtual.custoMidia, tone: 'bg-indigo-600' },
-                { label: 'Operação', value: simulacaoAtual.custoOperacional, tone: 'bg-cyan-600' },
-                { label: 'Imposto', value: simulacaoAtual.imposto, tone: 'bg-rose-500' },
-                { label: 'Gateway', value: simulacaoAtual.gateway, tone: 'bg-amber-500' },
-                { label: 'Indicador', value: simulacaoAtual.comissaoIndicador, tone: 'bg-fuchsia-500' },
-                { label: 'Vendedor', value: simulacaoAtual.comissaoVendedor, tone: 'bg-blue-600' },
-                { label: 'AGR', value: simulacaoAtual.comissaoAgr, tone: 'bg-violet-600' },
-                { label: 'Margem desejada', value: simulacaoAtual.margemDesejada, tone: 'bg-emerald-600' },
-              ].map(item => {
-                const total = Math.max(toNum(precoVenda), 1)
-                const pct = Math.min(100, Math.max(0, (item.value / total) * 100))
-                return (
-                  <div key={item.label} className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-2.5">
-                    <div className="flex items-center justify-between gap-3 text-xs sm:text-sm">
-                      <span className="font-medium text-gray-800 dark:text-gray-100">{item.label}</span>
-                      <span className="font-semibold text-gray-900 dark:text-white">R$ {item.value.toFixed(2).replace('.', ',')}</span>
-                    </div>
-                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
-                      <div className={`${item.tone} h-full rounded-full`} style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                )
-              })}
+                { label: 'Certificadora', value: simulacaoAtual.custoCertificadora },
+                { label: 'Mídia', value: simulacaoAtual.custoMidia },
+                { label: 'Operação', value: simulacaoAtual.custoOperacional },
+                { label: 'Imposto', value: simulacaoAtual.imposto },
+                { label: 'Gateway', value: simulacaoAtual.gateway },
+                { label: 'Indicador', value: simulacaoAtual.comissaoIndicador },
+                { label: 'Vendedor', value: simulacaoAtual.comissaoVendedor },
+                { label: 'AGR', value: simulacaoAtual.comissaoAgr },
+                { label: 'Margem reservada', value: simulacaoAtual.margemDesejada },
+              ].map(item => (
+                <div key={item.label} className="grid grid-cols-2 border-t border-gray-200 dark:border-gray-800 px-4 py-2 text-sm">
+                  <span className="text-gray-600 dark:text-gray-300">{item.label}</span>
+                  <span className="text-right font-semibold text-gray-900 dark:text-white">R$ {item.value.toFixed(2).replace('.', ',')}</span>
+                </div>
+              ))}
+              <div className="grid grid-cols-2 border-t border-gray-200 dark:border-gray-800 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-2 text-sm">
+                <span className="font-semibold text-emerald-700 dark:text-emerald-300">Sobra final</span>
+                <span className="text-right font-bold text-emerald-700 dark:text-emerald-300">R$ {simulacaoAtual.saldoFinal.toFixed(2).replace('.', ',')}</span>
+              </div>
             </div>
           </div>
           <div className="space-y-4">
             <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-4 text-sm">
               <p className="font-semibold text-gray-800 dark:text-gray-100">Leitura rápida</p>
-              <p className="mt-2 text-gray-600 dark:text-gray-300">Você informa o preço de venda e o sistema calcula a sobra depois de certificadora, mídia, operação, imposto, gateway e comissões.</p>
+              <p className="mt-2 text-gray-600 dark:text-gray-300">Você informa o preço de venda e vê imediatamente quanto sai para cada parte e quanto sobra no fim.</p>
               <p className="text-gray-600 dark:text-gray-300">A leitora só entra quando houver cartão.</p>
-              <p className="text-gray-600 dark:text-gray-300">A margem desejada entra como reserva do resultado.</p>
+              <p className="text-gray-600 dark:text-gray-300">A margem desejada vira reserva, não sobra operacional.</p>
             </div>
             <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
               <p className="font-semibold text-gray-800 dark:text-gray-100">Detalhes da simulação</p>
