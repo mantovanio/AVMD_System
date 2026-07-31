@@ -8442,8 +8442,14 @@ function AbaPrecificacao() {
                 </div>
               ))}
               <div className="grid grid-cols-2 border-t border-gray-200 dark:border-gray-800 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-2 text-sm">
-                <span className="font-semibold text-emerald-700 dark:text-emerald-300">Sobra final</span>
-                <span className="text-right font-bold text-emerald-700 dark:text-emerald-300">R$ {simulacaoAtual.saldoFinal.toFixed(2).replace('.', ',')}</span>
+                <span className={cn(
+                  'font-semibold',
+                  simulacaoAtual.saldoFinal < 0 ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300',
+                )}>Sobra final</span>
+                <span className={cn(
+                  'text-right font-bold',
+                  simulacaoAtual.saldoFinal < 0 ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300',
+                )}>R$ {simulacaoAtual.saldoFinal.toFixed(2).replace('.', ',')}</span>
               </div>
             </div>
           </div>
@@ -8459,7 +8465,15 @@ function AbaPrecificacao() {
               <div className="mt-3 space-y-2 text-sm">
                 <p className="flex justify-between gap-4"><span className="text-gray-500">Preço</span><span className="font-medium text-gray-900 dark:text-white">R$ {toNum(precoVenda).toFixed(2).replace('.', ',')}</span></p>
                 <p className="flex justify-between gap-4"><span className="text-gray-500">Total de saídas</span><span className="font-medium text-gray-900 dark:text-white">R$ {simulacaoAtual.totalSaidas.toFixed(2).replace('.', ',')}</span></p>
-                <p className="flex justify-between gap-4"><span className="text-gray-500">Saldo final</span><span className="font-semibold text-emerald-600 dark:text-emerald-400">R$ {simulacaoAtual.saldoFinal.toFixed(2).replace('.', ',')}</span></p>
+                <p className="flex justify-between gap-4">
+                  <span className="text-gray-500">Saldo final</span>
+                  <span className={cn(
+                    'font-semibold',
+                    simulacaoAtual.saldoFinal < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400',
+                  )}>
+                    R$ {simulacaoAtual.saldoFinal.toFixed(2).replace('.', ',')}
+                  </span>
+                </p>
                 <p className="flex justify-between gap-4">
                   <span className="text-gray-500">Margem final</span>
                   <span className={cn('font-medium', simulacaoAtual.margemFinal < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white')}>
