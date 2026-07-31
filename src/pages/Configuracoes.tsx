@@ -7920,6 +7920,7 @@ function AbaPrecificacao() {
   const [saving, setSaving] = useState(false)
   const [savingSimulacao, setSavingSimulacao] = useState(false)
   const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
+  const [painelRecolhido, setPainelRecolhido] = useState(false)
   const [nomeSimulacao, setNomeSimulacao] = useState('')
   const [historico, setHistorico] = useState<{
     id: string
@@ -8207,6 +8208,26 @@ function AbaPrecificacao() {
         </div>
       </div>
       <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Painel de Precificação</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Parâmetros, simulação e histórico</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPainelRecolhido(v => !v)}
+            className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+          >
+            {painelRecolhido ? 'Expandir painel' : 'Recolher painel'}
+          </button>
+        </div>
+        {painelRecolhido && (
+          <div className="mt-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-950/30 p-4">
+            <p className="text-sm text-gray-600 dark:text-gray-300">Painel recolhido. Clique em <strong>Expandir painel</strong> para ajustar custos, salvar simulação e ver o histórico.</p>
+          </div>
+        )}
+        {!painelRecolhido && (
+          <>
         <div className="flex flex-wrap items-end gap-3">
           <ConfigInput label="Nome da simulação" value={nomeSimulacao} onChange={setNomeSimulacao} placeholder="Ex: e-CNPJ A1 Pix julho" />
           <ConfigInput label="Preço de venda informado" value={precoVenda} onChange={setPrecoVenda} inputMode="decimal" />
@@ -8388,6 +8409,8 @@ function AbaPrecificacao() {
               </div>
             )}
           </div>
+        )}
+          </>
         )}
       </div>
     </div>
