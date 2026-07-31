@@ -7919,6 +7919,7 @@ function AbaPrecificacao() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [savingSimulacao, setSavingSimulacao] = useState(false)
+  const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
   const [nomeSimulacao, setNomeSimulacao] = useState('')
   const [historico, setHistorico] = useState<{
     id: string
@@ -7927,8 +7928,10 @@ function AbaPrecificacao() {
     metodo_pagamento: string
     saldo_final: number
     margem_final: number
+    detalhe?: Record<string, unknown>
     created_at: string
   }[]>([])
+  const [simulacaoSelecionada, setSimulacaoSelecionada] = useState<(typeof historico)[number] | null>(null)
   const [campos, setCampos] = useState({
     custo_certificadora: '0',
     custo_cartao: '0',
@@ -7995,19 +7998,28 @@ function AbaPrecificacao() {
           margem_lucro_desejada: String(data.config.margem_lucro_desejada ?? 0),
         })
       }
-      setHistorico(histData?.ok && histData.simulacoes ? histData.simulacoes : [])
+      const lista = histData?.ok && histData.simulacoes ? histData.simulacoes : []
+      setHistorico(lista)
+      setSimulacaoSelecionada(prev => (prev ? lista.find(item => item.id === prev.id) ?? lista[0] ?? null : lista[0] ?? null))
       setLoading(false)
     })()
   }, [profile?.id])
 
   async function salvar() {
     setSaving(true)
+    setFeedback(null)
     const custoMidiaTotal = cfg.custo_cartao + cfg.custo_token + (cfg.custo_cartao > 0 ? cfg.custo_leitora : 0)
-    await fetch(getApiUrl('/hierarquia/precificacao-certificados'), {
+    const res = await fetch(getApiUrl('/hierarquia/precificacao-certificados'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...cfg, custo_midia: custoMidiaTotal }),
     })
+    const data = await res.json().catch(() => null) as { ok?: boolean; config?: PrecificacaoConfig } | null
+    if (data?.ok) {
+      setFeedback({ tipo: 'ok', texto: 'Configuração salva com sucesso.' })
+    } else {
+      setFeedback({ tipo: 'erro', texto: 'Não foi possível salvar a configuração.' })
+    }
     setSaving(false)
   }
 
@@ -8023,6 +8035,25 @@ function AbaPrecificacao() {
       saldo_final: simulacaoAtual.saldoFinal,
       margem_final: simulacaoAtual.margemFinal,
       detalhe: {
+        config: {
+          regime_operacional: cfg.regime_operacional,
+          custo_certificadora: cfg.custo_certificadora,
+          custo_cartao: cfg.custo_cartao,
+          custo_token: cfg.custo_token,
+          custo_leitora: cfg.custo_leitora,
+          custo_midia: cfg.custo_midia,
+          custo_suporte_operacional: cfg.custo_suporte_operacional,
+          gateway_taxa_percentual: cfg.gateway_taxa_percentual,
+          gateway_taxa_fixa: cfg.gateway_taxa_fixa,
+          comissao_agr_tipo: cfg.comissao_agr_tipo,
+          comissao_agr_valor: cfg.comissao_agr_valor,
+          comissao_vendedor_tipo: cfg.comissao_vendedor_tipo,
+          comissao_vendedor_valor: cfg.comissao_vendedor_valor,
+          comissao_indicador_tipo: cfg.comissao_indicador_tipo,
+          comissao_indicador_valor: cfg.comissao_indicador_valor,
+          aliquota_imposto: cfg.aliquota_imposto,
+          margem_lucro_desejada: cfg.margem_lucro_desejada,
+        },
         custoCertificadora: simulacaoAtual.custoCertificadora,
         custoMidia: simulacaoAtual.custoMidia,
         custoOperacional: simulacaoAtual.custoOperacional,
@@ -8044,10 +8075,64 @@ function AbaPrecificacao() {
     if (data?.ok) {
       const histRes = await fetch(getApiUrl(`/hierarquia/precificacao-simulacoes?profileId=${profile.id}`))
       const histData = await histRes.json().catch(() => null) as { ok?: boolean; simulacoes?: typeof historico } | null
-      setHistorico(histData?.ok && histData.simulacoes ? histData.simulacoes : [])
+      const lista = histData?.ok && histData.simulacoes ? histData.simulacoes : []
+      setHistorico(lista)
+      setSimulacaoSelecionada(lista[0] ?? null)
+      if (lista[0]) {
+        const detalhe = lista[0].detalhe ?? {}
+        const configSalva = detalhe.config as Partial<PrecificacaoConfig> | undefined
+        if (configSalva) {
+          setCfg(prev => ({ ...prev, ...configSalva }))
+          setCampos({
+            custo_certificadora: String(configSalva.custo_certificadora ?? 0),
+            custo_cartao: String(configSalva.custo_cartao ?? 0),
+            custo_token: String(configSalva.custo_token ?? 0),
+            custo_leitora: String(configSalva.custo_leitora ?? 0),
+            custo_suporte_operacional: String(configSalva.custo_suporte_operacional ?? 0),
+            gateway_taxa_percentual: String(configSalva.gateway_taxa_percentual ?? 0),
+            gateway_taxa_fixa: String(configSalva.gateway_taxa_fixa ?? 0),
+            comissao_agr_valor: String(configSalva.comissao_agr_valor ?? 0),
+            comissao_vendedor_valor: String(configSalva.comissao_vendedor_valor ?? 0),
+            comissao_indicador_valor: String(configSalva.comissao_indicador_valor ?? 0),
+            aliquota_imposto: String(configSalva.aliquota_imposto ?? 0),
+            margem_lucro_desejada: String(configSalva.margem_lucro_desejada ?? 0),
+          })
+        }
+        const nome = lista[0].nome ?? ''
+        setPrecoVenda(String(lista[0].preco_venda ?? 0))
+        setMetodoSimulacao(lista[0].metodo_pagamento as MetodoPagamento)
+        setNomeSimulacao(nome)
+        setFeedback({ tipo: 'ok', texto: 'Simulação salva e reaberta na tela.' })
+      }
       setNomeSimulacao('')
     }
     setSavingSimulacao(false)
+  }
+
+  function abrirSimulacaoSalva(item: (typeof historico)[number]) {
+    setSimulacaoSelecionada(item)
+    const detalhe = item.detalhe ?? {}
+    const configSalva = detalhe.config as Partial<PrecificacaoConfig> | undefined
+    if (configSalva) {
+      setCfg(prev => ({ ...prev, ...configSalva }))
+      setCampos({
+        custo_certificadora: String(configSalva.custo_certificadora ?? 0),
+        custo_cartao: String(configSalva.custo_cartao ?? 0),
+        custo_token: String(configSalva.custo_token ?? 0),
+        custo_leitora: String(configSalva.custo_leitora ?? 0),
+        custo_suporte_operacional: String(configSalva.custo_suporte_operacional ?? 0),
+        gateway_taxa_percentual: String(configSalva.gateway_taxa_percentual ?? 0),
+        gateway_taxa_fixa: String(configSalva.gateway_taxa_fixa ?? 0),
+        comissao_agr_valor: String(configSalva.comissao_agr_valor ?? 0),
+        comissao_vendedor_valor: String(configSalva.comissao_vendedor_valor ?? 0),
+        comissao_indicador_valor: String(configSalva.comissao_indicador_valor ?? 0),
+        aliquota_imposto: String(configSalva.aliquota_imposto ?? 0),
+        margem_lucro_desejada: String(configSalva.margem_lucro_desejada ?? 0),
+      })
+    }
+    setPrecoVenda(String(item.preco_venda ?? 0))
+    setMetodoSimulacao(item.metodo_pagamento as MetodoPagamento)
+    setNomeSimulacao(item.nome ?? '')
   }
 
   function atualizarCampo(nome: keyof typeof campos, valor: string) {
@@ -8146,45 +8231,106 @@ function AbaPrecificacao() {
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
           O preço de venda é apenas para simulação. Ele não é salvo como tabela comercial.
         </p>
+        {feedback && (
+          <div className={`mt-3 rounded-xl px-3 py-2 text-sm ${feedback.tipo === 'ok' ? 'bg-green-50 text-green-700 border border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-900/40' : 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/30 dark:text-red-300 dark:border-red-900/40'}`}>
+            {feedback.texto}
+          </div>
+        )}
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <SummaryChip label="Preço informado" value={Number(toNum(precoVenda).toFixed(2))} tone="blue" />
           <SummaryChip label="Saldo final" value={Number(simulacaoAtual.saldoFinal.toFixed(2))} tone="green" />
-          <SummaryChip label="Custos fixos" value={Number(totalCustosFixos.toFixed(2))} tone="yellow" />
+          <SummaryChip label="Margem final" value={Number(simulacaoAtual.margemFinal.toFixed(2))} tone="yellow" />
           <SummaryChip label="Total repassado" value={Number((simulacaoAtual.comissaoAgr + simulacaoAtual.comissaoVendedor + simulacaoAtual.comissaoIndicador).toFixed(2))} tone="yellow" />
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-4 text-sm">
-            <p className="font-semibold text-gray-800 dark:text-gray-100">Distribuição financeira</p>
-            <p className="mt-2 text-gray-600 dark:text-gray-300">Preço: R$ {toNum(precoVenda).toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Pagamento: {metodoSimulacao === 'PIX' ? 'Pix' : metodoSimulacao === 'CARTAO_AVISTA' ? 'Cartão à vista' : metodoSimulacao === 'CARTAO_PARCELADO' ? 'Cartão parcelado' : 'Boleto'}</p>
-            <p className="text-gray-600 dark:text-gray-300">Custo certificadora: R$ {simulacaoAtual.custoCertificadora.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Custo mídia: R$ {simulacaoAtual.custoMidia.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Custo operacional: R$ {simulacaoAtual.custoOperacional.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Imposto: R$ {simulacaoAtual.imposto.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Taxa pagamento: R$ {simulacaoAtual.gateway.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Comissão indicador: R$ {simulacaoAtual.comissaoIndicador.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Comissão vendedor: R$ {simulacaoAtual.comissaoVendedor.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Comissão AGR: R$ {simulacaoAtual.comissaoAgr.toFixed(2).replace('.', ',')}</p>
-            <p className="text-gray-600 dark:text-gray-300">Margem desejada: R$ {simulacaoAtual.margemDesejada.toFixed(2).replace('.', ',')}</p>
-            <p className="mt-2 text-base font-semibold text-gray-900 dark:text-white">Saldo final: R$ {simulacaoAtual.saldoFinal.toFixed(2).replace('.', ',')}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Margem final: {simulacaoAtual.margemFinal.toFixed(2).replace('.', ',')}%</p>
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.35fr_0.95fr]">
+          <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Painel de Distribuição financeira</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Clique em uma simulação salva para reabrir o cálculo completo</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Saldo final</p>
+                <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">R$ {simulacaoAtual.saldoFinal.toFixed(2).replace('.', ',')}</p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-950/50 p-4 border border-slate-200 dark:border-slate-800">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Entrada</p>
+                <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">R$ {toNum(precoVenda).toFixed(2).replace('.', ',')}</p>
+                <p className="text-xs text-slate-500">Pagamento: {metodoSimulacao === 'PIX' ? 'Pix' : metodoSimulacao === 'CARTAO_AVISTA' ? 'Cartão à vista' : metodoSimulacao === 'CARTAO_PARCELADO' ? 'Cartão parcelado' : 'Boleto'}</p>
+              </div>
+              <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 p-4 border border-emerald-200 dark:border-emerald-800">
+                <p className="text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Margem</p>
+                <p className="mt-1 text-2xl font-bold text-emerald-700 dark:text-emerald-300">{simulacaoAtual.margemFinal.toFixed(2).replace('.', ',')}%</p>
+                <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80">Reserva: R$ {simulacaoAtual.margemDesejada.toFixed(2).replace('.', ',')}</p>
+              </div>
+            </div>
+            <div className="mt-5 space-y-3">
+              {[
+                { label: 'Certificadora', value: simulacaoAtual.custoCertificadora, tone: 'bg-slate-800' },
+                { label: 'Mídia', value: simulacaoAtual.custoMidia, tone: 'bg-indigo-600' },
+                { label: 'Operação', value: simulacaoAtual.custoOperacional, tone: 'bg-cyan-600' },
+                { label: 'Imposto', value: simulacaoAtual.imposto, tone: 'bg-rose-500' },
+                { label: 'Gateway', value: simulacaoAtual.gateway, tone: 'bg-amber-500' },
+                { label: 'Indicador', value: simulacaoAtual.comissaoIndicador, tone: 'bg-fuchsia-500' },
+                { label: 'Vendedor', value: simulacaoAtual.comissaoVendedor, tone: 'bg-blue-600' },
+                { label: 'AGR', value: simulacaoAtual.comissaoAgr, tone: 'bg-violet-600' },
+                { label: 'Margem desejada', value: simulacaoAtual.margemDesejada, tone: 'bg-emerald-600' },
+              ].map(item => {
+                const total = Math.max(toNum(precoVenda), 1)
+                const pct = Math.min(100, Math.max(0, (item.value / total) * 100))
+                return (
+                  <div key={item.label} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-3">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="font-medium text-gray-800 dark:text-gray-100">{item.label}</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">R$ {item.value.toFixed(2).replace('.', ',')}</span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
+                      <div className={`${item.tone} h-full rounded-full`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
-          <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-4 text-sm">
-            <p className="font-semibold text-gray-800 dark:text-gray-100">Leitura rápida</p>
-            <p className="mt-2 text-gray-600 dark:text-gray-300">Você informa o preço de venda e o sistema calcula quanto sai para certificadora, mídia, operação, imposto, gateway e comissões.</p>
-            <p className="text-gray-600 dark:text-gray-300">A leitora só entra quando houver cartão.</p>
-            <p className="text-gray-600 dark:text-gray-300">O valor final mostra o que sobra após todos os repasses.</p>
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Os campos aceitam vírgula e ponto na entrada.</p>
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/40 p-4 text-sm">
+              <p className="font-semibold text-gray-800 dark:text-gray-100">Leitura rápida</p>
+              <p className="mt-2 text-gray-600 dark:text-gray-300">Você informa o preço de venda e o sistema calcula a sobra depois de certificadora, mídia, operação, imposto, gateway e comissões.</p>
+              <p className="text-gray-600 dark:text-gray-300">A leitora só entra quando houver cartão.</p>
+              <p className="text-gray-600 dark:text-gray-300">A margem desejada entra como reserva do resultado.</p>
+            </div>
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
+              <p className="font-semibold text-gray-800 dark:text-gray-100">Detalhes da simulação</p>
+              <div className="mt-3 space-y-2 text-sm">
+                <p className="flex justify-between gap-4"><span className="text-gray-500">Preço</span><span className="font-medium text-gray-900 dark:text-white">R$ {toNum(precoVenda).toFixed(2).replace('.', ',')}</span></p>
+                <p className="flex justify-between gap-4"><span className="text-gray-500">Total de saídas</span><span className="font-medium text-gray-900 dark:text-white">R$ {simulacaoAtual.totalSaidas.toFixed(2).replace('.', ',')}</span></p>
+                <p className="flex justify-between gap-4"><span className="text-gray-500">Saldo final</span><span className="font-semibold text-emerald-600 dark:text-emerald-400">R$ {simulacaoAtual.saldoFinal.toFixed(2).replace('.', ',')}</span></p>
+                <p className="flex justify-between gap-4"><span className="text-gray-500">Margem final</span><span className="font-medium text-gray-900 dark:text-white">{simulacaoAtual.margemFinal.toFixed(2).replace('.', ',')}%</span></p>
+              </div>
+            </div>
           </div>
         </div>
         <div className="mt-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
           <p className="font-semibold text-gray-800 dark:text-gray-100">Últimas 30 simulações</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Clique em uma simulação para reabrir o cálculo completo.</p>
           <div className="mt-3 space-y-2">
             {historico.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400">Nenhuma simulação salva ainda.</p>
             ) : (
               historico.map(item => (
-                <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 dark:border-gray-800 px-3 py-2 text-sm">
+                <button
+                  type="button"
+                  key={item.id}
+                  onClick={() => abrirSimulacaoSalva(item)}
+                  className={cn(
+                    'w-full text-left flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-3 text-sm transition',
+                    simulacaoSelecionada?.id === item.id
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
+                      : 'border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/30 hover:border-blue-300',
+                  )}
+                >
                   <div>
                     <p className="font-medium text-gray-800 dark:text-gray-100">{item.nome || 'Sem nome'}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -8195,11 +8341,54 @@ function AbaPrecificacao() {
                     <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Saldo: R$ {Number(item.saldo_final).toFixed(2).replace('.', ',')}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">Margem: {Number(item.margem_final).toFixed(2).replace('.', ',')}%</p>
                   </div>
-                </div>
+                </button>
               ))
             )}
           </div>
         </div>
+        {simulacaoSelecionada && (
+          <div className="rounded-2xl border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold text-blue-900 dark:text-blue-300">Simulação aberta</p>
+                <p className="text-sm text-blue-700 dark:text-blue-400">{simulacaoSelecionada.nome || 'Sem nome'} · {new Date(simulacaoSelecionada.created_at).toLocaleString('pt-BR')}</p>
+              </div>
+              <button type="button" onClick={() => setSimulacaoSelecionada(null)} className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                Fechar
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
+              <div className="rounded-xl bg-white/80 dark:bg-gray-950/40 p-3 border border-blue-100 dark:border-blue-900/40">
+                <p className="text-xs text-gray-500">Preço</p>
+                <p className="font-semibold">R$ {Number(simulacaoSelecionada.preco_venda).toFixed(2).replace('.', ',')}</p>
+              </div>
+              <div className="rounded-xl bg-white/80 dark:bg-gray-950/40 p-3 border border-blue-100 dark:border-blue-900/40">
+                <p className="text-xs text-gray-500">Pagamento</p>
+                <p className="font-semibold">{simulacaoSelecionada.metodo_pagamento}</p>
+              </div>
+              <div className="rounded-xl bg-white/80 dark:bg-gray-950/40 p-3 border border-blue-100 dark:border-blue-900/40">
+                <p className="text-xs text-gray-500">Saldo final</p>
+                <p className="font-semibold">R$ {Number(simulacaoSelecionada.saldo_final).toFixed(2).replace('.', ',')}</p>
+              </div>
+              <div className="rounded-xl bg-white/80 dark:bg-gray-950/40 p-3 border border-blue-100 dark:border-blue-900/40">
+                <p className="text-xs text-gray-500">Margem final</p>
+                <p className="font-semibold">{Number(simulacaoSelecionada.margem_final).toFixed(2).replace('.', ',')}%</p>
+              </div>
+            </div>
+            {simulacaoSelecionada.detalhe && (
+              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3 text-sm">
+                {Object.entries(simulacaoSelecionada.detalhe).map(([key, value]) => (
+                  <div key={key} className="rounded-lg bg-white/80 dark:bg-gray-950/40 px-3 py-2 border border-blue-100 dark:border-blue-900/40 flex items-center justify-between gap-3">
+                    <span className="text-gray-500">{key}</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {typeof value === 'number' ? `R$ ${value.toFixed(2).replace('.', ',')}` : String(value)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
