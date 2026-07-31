@@ -7854,7 +7854,7 @@ type PrecificacaoDetalhe = {
   comissaoAgr: number
   comissaoVendedor: number
   comissaoIndicador: number
-  margemDesejada: number
+  custosVariaveis: number
   totalSaidas: number
   saldoFinal: number
   margemFinal: number
@@ -7898,19 +7898,19 @@ function calcularRepasse(precoVenda: number, cfg: PrecificacaoConfig, metodo: Me
   const custoCertificadora = cfg.custo_certificadora
   const custoMidia = calcularCustoMidia(cfg)
   const custoOperacional = cfg.custo_suporte_operacional
+  const custosVariaveis = cfg.margem_lucro_desejada
   const imposto = precoVenda * (cfg.aliquota_imposto / 100)
   const gateway = calcularTaxaPagamento(precoVenda, metodo)
   const comissaoAgr = cfg.comissao_agr_tipo === 'FIXO' ? cfg.comissao_agr_valor : precoVenda * (cfg.comissao_agr_valor / 100)
   const comissaoIndicador = cfg.comissao_indicador_tipo === 'FIXO' ? cfg.comissao_indicador_valor : precoVenda * (cfg.comissao_indicador_valor / 100)
-  const margemDesejada = precoVenda * (cfg.margem_lucro_desejada / 100)
-  const saldoAntesVendedor = precoVenda - custoCertificadora - custoMidia - custoOperacional - imposto - gateway - comissaoAgr - comissaoIndicador - margemDesejada
+  const saldoAntesVendedor = precoVenda - custoCertificadora - custoMidia - custoOperacional - custosVariaveis - imposto - gateway - comissaoAgr - comissaoIndicador
   const comissaoVendedor =
     cfg.comissao_vendedor_tipo === 'FIXO'
       ? cfg.comissao_vendedor_valor
       : cfg.comissao_vendedor_tipo === 'PERCENTUAL'
         ? precoVenda * (cfg.comissao_vendedor_valor / 100)
         : Math.max(0, saldoAntesVendedor)
-  const totalSaidas = custoCertificadora + custoMidia + custoOperacional + imposto + gateway + comissaoAgr + comissaoIndicador + comissaoVendedor + margemDesejada
+  const totalSaidas = custoCertificadora + custoMidia + custoOperacional + custosVariaveis + imposto + gateway + comissaoAgr + comissaoIndicador + comissaoVendedor
   const saldoFinal = precoVenda - totalSaidas
   const margemFinal = precoVenda > 0 ? (saldoFinal / precoVenda) * 100 : 0
   return {
@@ -7922,7 +7922,7 @@ function calcularRepasse(precoVenda: number, cfg: PrecificacaoConfig, metodo: Me
     comissaoAgr,
     comissaoVendedor,
     comissaoIndicador,
-    margemDesejada,
+    custosVariaveis,
     totalSaidas,
     saldoFinal,
     margemFinal,
@@ -8092,7 +8092,7 @@ function AbaPrecificacao() {
         comissaoAgr: simulacaoAtual.comissaoAgr,
         comissaoVendedor: simulacaoAtual.comissaoVendedor,
         comissaoIndicador: simulacaoAtual.comissaoIndicador,
-        margemDesejada: simulacaoAtual.margemDesejada,
+        custosVariaveis: simulacaoAtual.custosVariaveis,
         totalSaidas: simulacaoAtual.totalSaidas,
       },
     }
@@ -8276,7 +8276,10 @@ function AbaPrecificacao() {
               )}
             </div>
             <ConfigInput label="Imposto %" value={campos.aliquota_imposto} onChange={v => atualizarCampo('aliquota_imposto', v)} inputMode="decimal" />
-            <ConfigInput label="Margem desejada %" value={campos.margem_lucro_desejada} onChange={v => atualizarCampo('margem_lucro_desejada', v)} inputMode="decimal" />
+            <ConfigInput label="Custos variáveis (R$)" value={campos.margem_lucro_desejada} onChange={v => atualizarCampo('margem_lucro_desejada', v)} inputMode="decimal" />
+            <p className="md:col-span-2 xl:col-span-3 -mt-2 text-[11px] leading-4 text-gray-500 dark:text-gray-400">
+              Este campo representa despesas variáveis da operação. O saldo final já é o ganho líquido da empresa após custos, impostos e comissões.
+            </p>
             <div className="md:col-span-2 xl:col-span-3">
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
@@ -8372,8 +8375,8 @@ function AbaPrecificacao() {
         )}
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <SummaryChip label="Preço informado" value={Number(toNum(precoVenda).toFixed(2))} tone="blue" />
-          <SummaryChip label="Saldo final" value={Number(simulacaoAtual.saldoFinal.toFixed(2))} tone="green" />
-          <SummaryChip label="Margem final" value={Number(simulacaoAtual.margemFinal.toFixed(2))} tone="yellow" />
+          <SummaryChip label="Ganho líquido" value={Number(simulacaoAtual.saldoFinal.toFixed(2))} tone="green" />
+          <SummaryChip label="Ganho sobre o preço %" value={Number(simulacaoAtual.margemFinal.toFixed(2))} tone="yellow" />
           <SummaryChip label="Total repassado" value={Number((simulacaoAtual.comissaoAgr + simulacaoAtual.comissaoVendedor + simulacaoAtual.comissaoIndicador).toFixed(2))} tone="yellow" />
         </div>
         <div className="mt-4 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
@@ -8384,7 +8387,7 @@ function AbaPrecificacao() {
                 <p className="text-xs text-gray-500 dark:text-gray-400">Resumo direto do que entra, sai e sobra na simulação</p>
               </div>
               <div className="text-right">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Saldo final</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Ganho líquido</p>
                 <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">R$ {simulacaoAtual.saldoFinal.toFixed(2).replace('.', ',')}</p>
               </div>
             </div>
@@ -8405,7 +8408,7 @@ function AbaPrecificacao() {
                   simulacaoAtual.margemFinal < 0
                     ? 'text-red-600 dark:text-red-400'
                     : 'text-emerald-600 dark:text-emerald-400',
-                )}>Margem final</p>
+                )}>Ganho líquido</p>
                 <p className={cn(
                   'mt-1 text-2xl font-bold',
                   simulacaoAtual.margemFinal < 0
@@ -8417,7 +8420,7 @@ function AbaPrecificacao() {
                   simulacaoAtual.margemFinal < 0
                     ? 'text-red-600/80 dark:text-red-300/80'
                     : 'text-emerald-600/80 dark:text-emerald-400/80',
-                )}>Margem desejada: R$ {simulacaoAtual.margemDesejada.toFixed(2).replace('.', ',')}</p>
+                )}>Custos variáveis: R$ {simulacaoAtual.custosVariaveis.toFixed(2).replace('.', ',')}</p>
               </div>
             </div>
             <div className="mt-5 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
@@ -8434,7 +8437,7 @@ function AbaPrecificacao() {
                 { label: 'Indicador', value: simulacaoAtual.comissaoIndicador },
                 { label: 'Vendedor', value: simulacaoAtual.comissaoVendedor },
                 { label: 'AGR', value: simulacaoAtual.comissaoAgr },
-                { label: 'Margem reservada', value: simulacaoAtual.margemDesejada },
+                { label: 'Custos variáveis', value: simulacaoAtual.custosVariaveis },
               ].map(item => (
                 <div key={item.label} className="grid grid-cols-2 border-t border-gray-200 dark:border-gray-800 px-4 py-2 text-sm">
                   <span className="text-gray-600 dark:text-gray-300">{item.label}</span>
@@ -8445,7 +8448,7 @@ function AbaPrecificacao() {
                 <span className={cn(
                   'font-semibold',
                   simulacaoAtual.saldoFinal < 0 ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300',
-                )}>Sobra final</span>
+                )}>Ganho final</span>
                 <span className={cn(
                   'text-right font-bold',
                   simulacaoAtual.saldoFinal < 0 ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300',
@@ -8458,7 +8461,7 @@ function AbaPrecificacao() {
               <p className="font-semibold text-gray-800 dark:text-gray-100">Leitura rápida</p>
               <p className="mt-2 text-gray-600 dark:text-gray-300">Você informa o preço de venda e vê imediatamente quanto sai para cada parte e quanto sobra no fim.</p>
               <p className="text-gray-600 dark:text-gray-300">A leitora só entra quando houver cartão.</p>
-              <p className="text-gray-600 dark:text-gray-300">A margem desejada vira reserva, não sobra operacional.</p>
+              <p className="text-gray-600 dark:text-gray-300">Os custos variáveis entram como despesa da operação. O que sobra é o ganho líquido da empresa.</p>
             </div>
             <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
               <p className="font-semibold text-gray-800 dark:text-gray-100">Detalhes da simulação</p>
@@ -8466,7 +8469,7 @@ function AbaPrecificacao() {
                 <p className="flex justify-between gap-4"><span className="text-gray-500">Preço</span><span className="font-medium text-gray-900 dark:text-white">R$ {toNum(precoVenda).toFixed(2).replace('.', ',')}</span></p>
                 <p className="flex justify-between gap-4"><span className="text-gray-500">Total de saídas</span><span className="font-medium text-gray-900 dark:text-white">R$ {simulacaoAtual.totalSaidas.toFixed(2).replace('.', ',')}</span></p>
                 <p className="flex justify-between gap-4">
-                  <span className="text-gray-500">Saldo final</span>
+                  <span className="text-gray-500">Ganho final</span>
                   <span className={cn(
                     'font-semibold',
                     simulacaoAtual.saldoFinal < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400',
@@ -8475,7 +8478,7 @@ function AbaPrecificacao() {
                   </span>
                 </p>
                 <p className="flex justify-between gap-4">
-                  <span className="text-gray-500">Margem final</span>
+                  <span className="text-gray-500">Ganho sobre o preço</span>
                   <span className={cn('font-medium', simulacaoAtual.margemFinal < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white')}>
                     {simulacaoAtual.margemFinal.toFixed(2).replace('.', ',')}%
                   </span>
@@ -8574,11 +8577,11 @@ function AbaPrecificacao() {
                 <p className="font-semibold">{simulacaoSelecionada.metodo_pagamento}</p>
               </div>
               <div className="rounded-xl bg-white/80 dark:bg-gray-950/40 p-3 border border-blue-100 dark:border-blue-900/40">
-                <p className="text-xs text-gray-500">Saldo final</p>
+                <p className="text-xs text-gray-500">Ganho líquido</p>
                 <p className="font-semibold">R$ {Number(simulacaoSelecionada.saldo_final).toFixed(2).replace('.', ',')}</p>
               </div>
               <div className="rounded-xl bg-white/80 dark:bg-gray-950/40 p-3 border border-blue-100 dark:border-blue-900/40">
-                <p className="text-xs text-gray-500">Margem final</p>
+                <p className="text-xs text-gray-500">Ganho sobre o preço</p>
                 <p className="font-semibold">{Number(simulacaoSelecionada.margem_final).toFixed(2).replace('.', ',')}%</p>
               </div>
             </div>
