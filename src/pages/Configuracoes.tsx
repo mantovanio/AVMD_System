@@ -8227,29 +8227,35 @@ function AbaPrecificacao() {
             </div>
             <ConfigInput label="Imposto %" value={campos.aliquota_imposto} onChange={v => atualizarCampo('aliquota_imposto', v)} inputMode="decimal" />
             <ConfigInput label="Margem desejada %" value={campos.margem_lucro_desejada} onChange={v => atualizarCampo('margem_lucro_desejada', v)} inputMode="decimal" />
-            <div className="space-y-2 md:col-span-2 xl:col-span-3">
+            <div className="md:col-span-2 xl:col-span-3">
               <div className="grid gap-4 md:grid-cols-3">
-                <ConfigSelectWithManual
-                  label="Comissão AGR tipo"
-                  value={cfg.comissao_agr_tipo}
-                  onChange={v => setCfg(p => ({ ...p, comissao_agr_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
-                  options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }]}
-                />
-                <ConfigInput label="Comissão AGR valor" value={campos.comissao_agr_valor} onChange={v => atualizarCampo('comissao_agr_valor', v)} inputMode="decimal" />
-                <ConfigSelectWithManual
-                  label="Comissão vendedor tipo"
-                  value={cfg.comissao_vendedor_tipo}
-                  onChange={v => setCfg(p => ({ ...p, comissao_vendedor_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
-                  options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
-                />
-                <ConfigInput label="Comissão vendedor valor / taxa" value={campos.comissao_vendedor_valor} onChange={v => atualizarCampo('comissao_vendedor_valor', v)} inputMode="decimal" />
-                <ConfigSelectWithManual
-                  label="Comissão indicador tipo"
-                  value={cfg.comissao_indicador_tipo}
-                  onChange={v => setCfg(p => ({ ...p, comissao_indicador_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
-                  options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
-                />
-                <ConfigInput label="Comissão indicador valor" value={campos.comissao_indicador_valor} onChange={v => atualizarCampo('comissao_indicador_valor', v)} inputMode="decimal" />
+                <div className="space-y-2">
+                  <ConfigSelectWithManual
+                    label="Comissão AGR tipo"
+                    value={cfg.comissao_agr_tipo}
+                    onChange={v => setCfg(p => ({ ...p, comissao_agr_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
+                    options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }]}
+                  />
+                  <ConfigInput label="Comissão AGR valor" value={campos.comissao_agr_valor} onChange={v => atualizarCampo('comissao_agr_valor', v)} inputMode="decimal" />
+                </div>
+                <div className="space-y-2">
+                  <ConfigSelectWithManual
+                    label="Comissão vendedor tipo"
+                    value={cfg.comissao_vendedor_tipo}
+                    onChange={v => setCfg(p => ({ ...p, comissao_vendedor_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
+                    options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
+                  />
+                  <ConfigInput label="Comissão vendedor valor / taxa" value={campos.comissao_vendedor_valor} onChange={v => atualizarCampo('comissao_vendedor_valor', v)} inputMode="decimal" />
+                </div>
+                <div className="space-y-2">
+                  <ConfigSelectWithManual
+                    label="Comissão indicador tipo"
+                    value={cfg.comissao_indicador_tipo}
+                    onChange={v => setCfg(p => ({ ...p, comissao_indicador_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
+                    options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
+                  />
+                  <ConfigInput label="Comissão indicador valor" value={campos.comissao_indicador_valor} onChange={v => atualizarCampo('comissao_indicador_valor', v)} inputMode="decimal" />
+                </div>
               </div>
             </div>
           </div>
