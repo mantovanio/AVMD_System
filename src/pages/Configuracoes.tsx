@@ -8001,6 +8001,7 @@ function AbaPrecificacao() {
   const simulacaoAtual = calcularRepasse(toNum(precoVenda), cfg, metodoSimulacao)
   const custoMidiaTotal = calcularCustoMidia(cfg)
   const totalCustosFixos = cfg.custo_certificadora + custoMidiaTotal + cfg.custo_suporte_operacional
+  const totalCustosVariaveis = simulacaoAtual.custosVariaveis + simulacaoAtual.imposto + simulacaoAtual.gateway + simulacaoAtual.comissaoAgr + simulacaoAtual.comissaoVendedor + simulacaoAtual.comissaoIndicador
 
   useEffect(() => {
     void (async () => {
@@ -8378,6 +8379,23 @@ function AbaPrecificacao() {
           <SummaryChip label="Ganho líquido" value={Number(simulacaoAtual.saldoFinal.toFixed(2))} tone="green" />
           <SummaryChip label="Ganho sobre o preço %" value={Number(simulacaoAtual.margemFinal.toFixed(2))} tone="yellow" />
           <SummaryChip label="Total repassado" value={Number((simulacaoAtual.comissaoAgr + simulacaoAtual.comissaoVendedor + simulacaoAtual.comissaoIndicador).toFixed(2))} tone="yellow" />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-3">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/50">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Custos fixos</p>
+            <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">R$ {totalCustosFixos.toFixed(2).replace('.', ',')}</p>
+            <p className="text-xs text-slate-500">Certificadora + mídia + operação fixa</p>
+          </div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/30">
+            <p className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-300">Custos variáveis</p>
+            <p className="mt-1 text-2xl font-bold text-amber-800 dark:text-amber-200">R$ {totalCustosVariaveis.toFixed(2).replace('.', ',')}</p>
+            <p className="text-xs text-amber-700/80 dark:text-amber-300/80">Imposto + gateway + comissões + reserva variável</p>
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/30">
+            <p className="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Ganho líquido</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-800 dark:text-emerald-200">R$ {simulacaoAtual.saldoFinal.toFixed(2).replace('.', ',')}</p>
+            <p className="text-xs text-emerald-700/80 dark:text-emerald-300/80">O que sobra para a empresa</p>
+          </div>
         </div>
         <div className="mt-4 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm">
