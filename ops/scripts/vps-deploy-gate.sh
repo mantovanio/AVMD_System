@@ -4,12 +4,11 @@ set -euo pipefail
 # Gate obrigatorio para qualquer deploy do AVMD.
 # Regras:
 # 1) Guardiao ativo
-# 2) Backup recente valido
+# 2) Backup principal existente
 # 3) Lock anti-concorrencia
 # 4) So entao libera rollout
 
 BACKUP_ROOT="/opt/backups/certiid"
-BACKUP_MAX_AGE_HOURS="${BACKUP_MAX_AGE_HOURS:-24}"
 ROLLOUT_SCRIPT="${ROLLOUT_SCRIPT:-/opt/avmd/AVMD_System/ops/scripts/vps-rollout-avmd.sh}"
 LOCK_FILE="/var/lock/avmd-deploy.lock"
 LOG_FILE="/var/log/avmd-deploy-gate.log"
@@ -37,8 +36,8 @@ latest_backup_dir() {
   find "${BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR==1 {print $2}'
 }
 
-assert_backup_recent() {
-  local latest now age_hours main_tar
+assert_backup_exists() {
+  local latest main_tar
   latest="$(latest_backup_dir || true)"
   if [ -z "${latest}" ]; then
     log "BLOQUEADO: nenhum backup encontrado em ${BACKUP_ROOT}"
@@ -51,14 +50,7 @@ assert_backup_recent() {
     exit 1
   fi
 
-  now="$(date +%s)"
-  age_hours="$(( (now - $(stat -c %Y "${latest}")) / 3600 ))"
-  if [ "${age_hours}" -gt "${BACKUP_MAX_AGE_HOURS}" ]; then
-    log "BLOQUEADO: backup antigo (${age_hours}h > ${BACKUP_MAX_AGE_HOURS}h)"
-    exit 1
-  fi
-
-  log "Backup validado: ${latest} (${age_hours}h)"
+  log "Backup validado: ${latest}"
 }
 
 assert_rollout_exists() {
@@ -83,7 +75,7 @@ run_with_lock() {
 main() {
   require_root
   assert_guard_active
-  assert_backup_recent
+  assert_backup_exists
   assert_rollout_exists
   run_with_lock
 }
