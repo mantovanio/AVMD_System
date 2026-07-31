@@ -1449,14 +1449,16 @@ export default function ChatInboxCRM() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conversation_id: conversationId, agent_id: agent.id, agente_nome: agent.nome }),
     })
-    const data = await response.json()
-    if (!data.ok) throw new Error(data.error || 'Falha ao atribuir atendimento')
+    const data = await response.json().catch(() => null)
+    if (!response.ok || !data?.ok) throw new Error(data?.error || response.statusText || 'Falha ao atribuir atendimento')
 
-    await fetch(getApiUrl(`/chat/crm/conversations/${conversationId}`), {
+    const patchResponse = await fetch(getApiUrl(`/chat/crm/conversations/${conversationId}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ atendimento_humano: true, agente_nome: agent.nome }),
     })
+    const patchData = await patchResponse.json().catch(() => null)
+    if (!patchResponse.ok || !patchData?.ok) throw new Error(patchData?.error || patchResponse.statusText || 'Falha ao atualizar a conversa')
 
     markConversationAsHuman(conversationId)
   }
@@ -1467,21 +1469,25 @@ export default function ChatInboxCRM() {
     setActionError(null)
     const shouldExitView = isClosedConversationStatus(status)
     const currentConversationId = selectedConversation.id
-    const response = await fetch(getApiUrl(`/chat/crm/conversations/${currentConversationId}`), {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kanban_status: status }),
-    })
-    const data = await response.json()
+    try {
+      const response = await fetch(getApiUrl(`/chat/crm/conversations/${currentConversationId}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kanban_status: status }),
+      })
+      const data = await response.json().catch(() => null)
 
-    if (!data.ok) {
-      setActionError(`Nao foi possivel atualizar a etapa: ${data.error || 'Erro desconhecido'}`)
-    } else {
-      await loadConversations(false)
-      if (shouldExitView) {
-        const nextConversation = activeConversations.find(item => item.id !== currentConversationId) ?? null
-        setSelectedId(nextConversation?.id ?? null)
+      if (!response.ok || !data?.ok) {
+        setActionError(`Nao foi possivel atualizar a etapa: ${data?.error || response.statusText || 'Erro desconhecido'}`)
+      } else {
+        await loadConversations(false)
+        if (shouldExitView) {
+          const nextConversation = activeConversations.find(item => item.id !== currentConversationId) ?? null
+          setSelectedId(nextConversation?.id ?? null)
+        }
       }
+    } catch (err) {
+      setActionError(`Nao foi possivel atualizar a etapa: ${err instanceof Error ? err.message : String(err)}`)
     }
     setActionLoading(false)
   }
@@ -1507,22 +1513,26 @@ export default function ChatInboxCRM() {
 
   async function updateConversationStatusById(conversationId: string, status: string) {
     const shouldExitView = isClosedConversationStatus(status) && conversationId === selectedId
-    const response = await fetch(getApiUrl(`/chat/crm/conversations/${conversationId}`), {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kanban_status: status }),
-    })
-    const data = await response.json()
+    try {
+      const response = await fetch(getApiUrl(`/chat/crm/conversations/${conversationId}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kanban_status: status }),
+      })
+      const data = await response.json().catch(() => null)
 
-    if (!data.ok) {
-      setActionError(`Nao foi possivel mover o card no Kanban: ${data.error || 'Erro desconhecido'}`)
-      return
-    }
+      if (!response.ok || !data?.ok) {
+        setActionError(`Nao foi possivel mover o card no Kanban: ${data?.error || response.statusText || 'Erro desconhecido'}`)
+        return
+      }
 
-    await loadConversations(false)
-    if (shouldExitView) {
-      const nextConversation = activeConversations.find(item => item.id !== conversationId) ?? null
-      setSelectedId(nextConversation?.id ?? null)
+      await loadConversations(false)
+      if (shouldExitView) {
+        const nextConversation = activeConversations.find(item => item.id !== conversationId) ?? null
+        setSelectedId(nextConversation?.id ?? null)
+      }
+    } catch (err) {
+      setActionError(`Nao foi possivel mover o card no Kanban: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -1542,11 +1552,13 @@ export default function ChatInboxCRM() {
         ? { atendimento_humano: true, agente_nome: profile?.nome ?? selectedConversation.agente_atual ?? selectedConversation.agente_nome }
         : { atendimento_humano: false, agente_nome: null }
 
-      await fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}`), {
+      const response = await fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+      const data = await response.json().catch(() => null)
+      if (!response.ok || !data?.ok) throw new Error(data?.error || response.statusText || 'Falha ao alternar atendimento humano')
 
       if (!nextValue) {
         try {
@@ -1558,7 +1570,7 @@ export default function ChatInboxCRM() {
         } catch {}
       }
     } catch (err) {
-      console.warn('toggleHumanMode: erro na sincronizacao', err)
+      setActionError(err instanceof Error ? err.message : String(err))
     }
 
     await loadConversations(false)
@@ -2397,6 +2409,12 @@ export default function ChatInboxCRM() {
     )).length
   ), [activeConversations, queueFilter, humanFilter, humanOverrideIds, aguardandoFilter])
 
+  const hiddenIncomingSample = useMemo(() => (
+    activeConversations
+      .filter(item => item.ultima_mensagem_direcao === 'incoming' && !matchesOperationalFilters(item))
+      .slice(0, 5)
+  ), [activeConversations, queueFilter, humanFilter, humanOverrideIds, aguardandoFilter])
+
   const filteredClosedConversations = useMemo(() => (
     closedConversations.filter(matchesOperationalFilters)
   ), [closedConversations, queueFilter, humanFilter, humanOverrideIds])
@@ -2583,10 +2601,17 @@ export default function ChatInboxCRM() {
           </div>
           {hiddenIncomingByFilters > 0 && (
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              <span>
-                {hiddenIncomingByFilters} conversa{hiddenIncomingByFilters > 1 ? 's' : ''} com mensagem recebida
-                {hiddenIncomingByFilters > 1 ? ' estão ocultas' : ' está oculta'} pelos filtros atuais.
-              </span>
+              <div className="space-y-1">
+                <span>
+                  {hiddenIncomingByFilters} conversa{hiddenIncomingByFilters > 1 ? 's' : ''} com mensagem recebida
+                  {hiddenIncomingByFilters > 1 ? ' estão ocultas' : ' está oculta'} pelos filtros atuais.
+                </span>
+                {hiddenIncomingSample.length > 0 && (
+                  <p className="text-xs text-amber-800/90">
+                    Exemplos: {hiddenIncomingSample.map(item => item.cliente_nome || item.nome_crm || item.telefone || 'Sem nome').join(' · ')}
+                  </p>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => {
