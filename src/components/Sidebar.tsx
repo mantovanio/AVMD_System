@@ -132,9 +132,11 @@ function IconRail({
         <nav className="flex flex-col flex-1 px-2 overflow-y-auto sidebar-scroll">
           {groups.map((group, groupIndex) => (
             <div key={group.id} className={cn(groupIndex > 0 && 'mt-3 pt-3 border-t border-gray-100 dark:border-gray-800')}>
-              <p className="px-3 mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">
-                {group.label}
-              </p>
+              {expanded && (
+                <p className="px-3 mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                  {group.label}
+                </p>
+              )}
               <div className="flex flex-col gap-1">
                 {group.items.map(({ id, icon: Icon, label }) => (
                   <button
