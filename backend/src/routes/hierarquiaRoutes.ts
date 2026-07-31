@@ -43,6 +43,14 @@ export async function handleHierarquiaRoutes(
     return true
   }
 
+  const simulacaoMatch = route(pathname, '/api/hierarquia/precificacao-simulacoes/([^/]+)')
+  if (method === 'DELETE' && simulacaoMatch) {
+    const profileId = parsed.searchParams.get('profileId')
+    await repo.deletePrecificacaoSimulacao(simulacaoMatch[1], profileId)
+    writeJson(res, 200, { ok: true }, corsOrigin)
+    return true
+  }
+
   if (method === 'POST' && pathname === '/api/hierarquia/precificacao-certificados') {
     const body = await readJson<{
       regime_operacional: 'REVENDA' | 'COMISSIONADO'
@@ -58,7 +66,7 @@ export async function handleHierarquiaRoutes(
       comissao_agr_valor: number
       comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL' | 'DIFERENCA'
       comissao_vendedor_valor: number
-      comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL'
+      comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL' | 'DIFERENCA'
       comissao_indicador_valor: number
       aliquota_imposto: number
       margem_lucro_desejada: number

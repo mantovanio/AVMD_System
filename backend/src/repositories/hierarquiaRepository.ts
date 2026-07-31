@@ -71,7 +71,7 @@ export type PrecificacaoCertificadosRow = {
   comissao_agr_valor: number
   comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL' | 'DIFERENCA'
   comissao_vendedor_valor: number
-  comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL'
+  comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL' | 'DIFERENCA'
   comissao_indicador_valor: number
   aliquota_imposto: number
   margem_lucro_desejada: number
@@ -304,6 +304,15 @@ export class HierarquiaRepository {
       ],
     )
     return result.rows[0]
+  }
+
+  async deletePrecificacaoSimulacao(id: string, profileId?: string | null): Promise<void> {
+    await this.ensurePrecificacaoSimulacoesTable()
+    if (profileId) {
+      await this.db.query(`DELETE FROM precificacao_simulacoes WHERE id = $1 AND profile_id = $2`, [id, profileId])
+      return
+    }
+    await this.db.query(`DELETE FROM precificacao_simulacoes WHERE id = $1`, [id])
   }
 
   async getTreeForPonto(pontoId: string): Promise<ProfileHierarquiaRow[]> {

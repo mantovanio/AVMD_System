@@ -7839,7 +7839,7 @@ type PrecificacaoConfig = {
   comissao_agr_valor: number
   comissao_vendedor_tipo: 'FIXO' | 'PERCENTUAL' | 'DIFERENCA'
   comissao_vendedor_valor: number
-  comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL'
+  comissao_indicador_tipo: 'FIXO' | 'PERCENTUAL' | 'DIFERENCA'
   comissao_indicador_valor: number
   aliquota_imposto: number
   margem_lucro_desejada: number
@@ -7912,6 +7912,12 @@ function calcularRepasse(precoVenda: number, cfg: PrecificacaoConfig, metodo: Me
     saldoFinal,
     margemFinal,
   }
+}
+
+function textoTipoComissao(tipo: 'FIXO' | 'PERCENTUAL' | 'DIFERENCA') {
+  if (tipo === 'FIXO') return 'Valor fixo'
+  if (tipo === 'PERCENTUAL') return 'Percentual'
+  return 'Diferença'
 }
 
 function AbaPrecificacao() {
@@ -8112,6 +8118,29 @@ function AbaPrecificacao() {
     setSavingSimulacao(false)
   }
 
+  async function removerSimulacao(item: (typeof historico)[number]) {
+    if (!profile?.id) return
+    const confirmar = window.confirm(`Excluir a simulação "${item.nome || 'Sem nome'}"?`)
+    if (!confirmar) return
+    const res = await fetch(getApiUrl(`/hierarquia/precificacao-simulacoes/${item.id}?profileId=${profile.id}`), {
+      method: 'DELETE',
+    })
+    const data = await res.json().catch(() => null) as { ok?: boolean } | null
+    if (!data?.ok) {
+      setFeedback({ tipo: 'erro', texto: 'Não foi possível excluir a simulação.' })
+      return
+    }
+    const histRes = await fetch(getApiUrl(`/hierarquia/precificacao-simulacoes?profileId=${profile.id}`))
+    const histData = await histRes.json().catch(() => null) as { ok?: boolean; simulacoes?: typeof historico } | null
+    const lista = histData?.ok && histData.simulacoes ? histData.simulacoes : []
+    setHistorico(lista)
+    setSimulacaoSelecionada(prev => {
+      if (prev?.id === item.id) return lista[0] ?? null
+      return lista.find(x => x.id === prev?.id) ?? lista[0] ?? null
+    })
+    setFeedback({ tipo: 'ok', texto: 'Simulação excluída com sucesso.' })
+  }
+
   function abrirSimulacaoSalva(item: (typeof historico)[number]) {
     setPainelRecolhido(false)
     setSimulacaoSelecionada(item)
@@ -8251,10 +8280,15 @@ function AbaPrecificacao() {
                   <ConfigSelectWithManual
                     label="Comissão indicador tipo"
                     value={cfg.comissao_indicador_tipo}
-                    onChange={v => setCfg(p => ({ ...p, comissao_indicador_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
+                    onChange={v => setCfg(p => ({ ...p, comissao_indicador_tipo: v as 'FIXO' | 'PERCENTUAL' | 'DIFERENCA' }))}
                     options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
                   />
-                  <ConfigInput label="Comissão indicador valor" value={campos.comissao_indicador_valor} onChange={v => atualizarCampo('comissao_indicador_valor', v)} inputMode="decimal" />
+                  <ConfigInput
+                    label={`Comissão indicador ${textoTipoComissao(cfg.comissao_indicador_tipo).toLowerCase()}`}
+                    value={campos.comissao_indicador_valor}
+                    onChange={v => atualizarCampo('comissao_indicador_valor', v)}
+                    inputMode="decimal"
+                  />
                 </div>
               </div>
             </div>
@@ -8407,12 +8441,19 @@ function AbaPrecificacao() {
               <p className="text-sm text-gray-500 dark:text-gray-400">Nenhuma simulação salva ainda.</p>
             ) : (
               historico.filter(item => item.id !== simulacaoSelecionada?.id).map(item => (
-                <button
-                  type="button"
+                <div
                   key={item.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => abrirSimulacaoSalva(item)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      abrirSimulacaoSalva(item)
+                    }
+                  }}
                   className={cn(
-                    'w-full text-left flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-3 text-sm transition',
+                    'w-full text-left flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-3 text-sm transition cursor-pointer',
                     simulacaoSelecionada?.id === item.id
                       ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
                       : 'border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950/30 hover:border-blue-300',
@@ -8428,7 +8469,17 @@ function AbaPrecificacao() {
                     <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Saldo: R$ {Number(item.saldo_final).toFixed(2).replace('.', ',')}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">Margem: {Number(item.margem_final).toFixed(2).replace('.', ',')}%</p>
                   </div>
-                </button>
+                  <button
+                    type="button"
+                    onClick={e => {
+                      e.stopPropagation()
+                      void removerSimulacao(item)
+                    }}
+                    className="rounded-lg border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50 dark:border-red-900/40 dark:text-red-300 dark:hover:bg-red-950/30"
+                  >
+                    Excluir
+                  </button>
+                </div>
               ))
             )}
           </div>
@@ -8461,6 +8512,15 @@ function AbaPrecificacao() {
                 <p className="text-xs text-gray-500">Margem final</p>
                 <p className="font-semibold">{Number(simulacaoSelecionada.margem_final).toFixed(2).replace('.', ',')}%</p>
               </div>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => void removerSimulacao(simulacaoSelecionada)}
+                className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 dark:border-red-900/40 dark:text-red-300 dark:hover:bg-red-950/30"
+              >
+                Excluir simulação
+              </button>
             </div>
             {simulacaoSelecionada.detalhe && (
               <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3 text-sm">
