@@ -7898,19 +7898,19 @@ function calcularRepasse(precoVenda: number, cfg: PrecificacaoConfig, metodo: Me
   const custoCertificadora = cfg.custo_certificadora
   const custoMidia = calcularCustoMidia(cfg)
   const custoOperacional = cfg.custo_suporte_operacional
-  const custosVariaveis = cfg.margem_lucro_desejada
+  const custosFixosAdicionais = precoVenda * (cfg.margem_lucro_desejada / 100)
   const imposto = precoVenda * (cfg.aliquota_imposto / 100)
   const gateway = calcularTaxaPagamento(precoVenda, metodo)
   const comissaoAgr = cfg.comissao_agr_tipo === 'FIXO' ? cfg.comissao_agr_valor : precoVenda * (cfg.comissao_agr_valor / 100)
   const comissaoIndicador = cfg.comissao_indicador_tipo === 'FIXO' ? cfg.comissao_indicador_valor : precoVenda * (cfg.comissao_indicador_valor / 100)
-  const saldoAntesVendedor = precoVenda - custoCertificadora - custoMidia - custoOperacional - custosVariaveis - imposto - gateway - comissaoAgr - comissaoIndicador
+  const saldoAntesVendedor = precoVenda - custoCertificadora - custoMidia - custoOperacional - custosFixosAdicionais - imposto - gateway - comissaoAgr - comissaoIndicador
   const comissaoVendedor =
     cfg.comissao_vendedor_tipo === 'FIXO'
       ? cfg.comissao_vendedor_valor
       : cfg.comissao_vendedor_tipo === 'PERCENTUAL'
         ? precoVenda * (cfg.comissao_vendedor_valor / 100)
         : Math.max(0, saldoAntesVendedor)
-  const totalSaidas = custoCertificadora + custoMidia + custoOperacional + custosVariaveis + imposto + gateway + comissaoAgr + comissaoIndicador + comissaoVendedor
+  const totalSaidas = custoCertificadora + custoMidia + custoOperacional + custosFixosAdicionais + imposto + gateway + comissaoAgr + comissaoIndicador + comissaoVendedor
   const saldoFinal = precoVenda - totalSaidas
   const margemFinal = precoVenda > 0 ? (saldoFinal / precoVenda) * 100 : 0
   return {
@@ -7922,7 +7922,7 @@ function calcularRepasse(precoVenda: number, cfg: PrecificacaoConfig, metodo: Me
     comissaoAgr,
     comissaoVendedor,
     comissaoIndicador,
-    custosVariaveis,
+    custosVariaveis: custosFixosAdicionais,
     totalSaidas,
     saldoFinal,
     margemFinal,
@@ -8277,9 +8277,9 @@ function AbaPrecificacao() {
               )}
             </div>
             <ConfigInput label="Imposto %" value={campos.aliquota_imposto} onChange={v => atualizarCampo('aliquota_imposto', v)} inputMode="decimal" />
-            <ConfigInput label="Custos variáveis (R$)" value={campos.margem_lucro_desejada} onChange={v => atualizarCampo('margem_lucro_desejada', v)} inputMode="decimal" />
+            <ConfigInput label="Custos fixos adicionais (%)" value={campos.margem_lucro_desejada} onChange={v => atualizarCampo('margem_lucro_desejada', v)} inputMode="decimal" />
             <p className="md:col-span-2 xl:col-span-3 -mt-2 text-[11px] leading-4 text-gray-500 dark:text-gray-400">
-              Este campo representa despesas variáveis da operação. O saldo final já é o ganho líquido da empresa após custos, impostos e comissões.
+              Este campo representa um custo fixo percentual sobre o preço de venda. Os custos variáveis já estão discriminados nos blocos abaixo.
             </p>
             <div className="md:col-span-2 xl:col-span-3">
               <div className="grid gap-4 md:grid-cols-3">
@@ -8387,9 +8387,9 @@ function AbaPrecificacao() {
             <p className="text-xs text-slate-500">Certificadora + mídia + operação fixa</p>
           </div>
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/30">
-            <p className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-300">Custos variáveis</p>
+            <p className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-300">Custos fixos adicionais</p>
             <p className="mt-1 text-2xl font-bold text-amber-800 dark:text-amber-200">R$ {totalCustosVariaveis.toFixed(2).replace('.', ',')}</p>
-            <p className="text-xs text-amber-700/80 dark:text-amber-300/80">Imposto + gateway + comissões + reserva variável</p>
+            <p className="text-xs text-amber-700/80 dark:text-amber-300/80">Imposto + gateway + comissões + custo fixo percentual</p>
           </div>
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/30">
             <p className="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Ganho líquido</p>
@@ -8438,7 +8438,7 @@ function AbaPrecificacao() {
                   simulacaoAtual.margemFinal < 0
                     ? 'text-red-600/80 dark:text-red-300/80'
                     : 'text-emerald-600/80 dark:text-emerald-400/80',
-                )}>Custos variáveis: R$ {simulacaoAtual.custosVariaveis.toFixed(2).replace('.', ',')}</p>
+                )}>Custos fixos adicionais: R$ {simulacaoAtual.custosVariaveis.toFixed(2).replace('.', ',')}</p>
               </div>
             </div>
             <div className="mt-5 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
@@ -8455,7 +8455,7 @@ function AbaPrecificacao() {
                 { label: 'Indicador', value: simulacaoAtual.comissaoIndicador },
                 { label: 'Vendedor', value: simulacaoAtual.comissaoVendedor },
                 { label: 'AGR', value: simulacaoAtual.comissaoAgr },
-                { label: 'Custos variáveis', value: simulacaoAtual.custosVariaveis },
+                { label: 'Custos fixos adicionais', value: simulacaoAtual.custosVariaveis },
               ].map(item => (
                 <div key={item.label} className="grid grid-cols-2 border-t border-gray-200 dark:border-gray-800 px-4 py-2 text-sm">
                   <span className="text-gray-600 dark:text-gray-300">{item.label}</span>
