@@ -3653,7 +3653,7 @@ function SummaryChip({ label, value, tone }: { label: string; value: number; ton
   return (
     <div className={cn('rounded-xl px-3 py-2 border border-gray-200 dark:border-gray-800', toneClass[tone])}>
       <p className="text-[10px] uppercase tracking-wide opacity-80">{label}</p>
-      <p className="text-sm font-semibold leading-none mt-1">{value}</p>
+      <p className="text-sm font-semibold leading-none mt-1">{formatMoney(value)}</p>
     </div>
   )
 }
@@ -7863,8 +7863,23 @@ type PrecificacaoDetalhe = {
 type MetodoPagamento = 'PIX' | 'CARTAO_AVISTA' | 'CARTAO_PARCELADO' | 'BOLETO'
 
 function toNum(value: string) {
-  const n = Number(String(value).trim().replace(/\./g, '').replace(',', '.'))
+  const raw = String(value).trim().replace(/[^\d.,-]/g, '')
+  if (!raw) return 0
+  const lastComma = raw.lastIndexOf(',')
+  const lastDot = raw.lastIndexOf('.')
+  const decimalPos = Math.max(lastComma, lastDot)
+  const normalized = decimalPos >= 0
+    ? `${raw.slice(0, decimalPos).replace(/[.,]/g, '')}.${raw.slice(decimalPos + 1).replace(/[.,]/g, '')}`
+    : raw.replace(/[.,]/g, '')
+  const n = Number(normalized)
   return Number.isFinite(n) ? n : 0
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
 }
 
 function calcularCustoMidia(cfg: PrecificacaoConfig) {
