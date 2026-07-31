@@ -8394,10 +8394,30 @@ function AbaPrecificacao() {
                 <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">R$ {toNum(precoVenda).toFixed(2).replace('.', ',')}</p>
                 <p className="text-xs text-slate-500">Pagamento: {metodoSimulacao === 'PIX' ? 'Pix' : metodoSimulacao === 'CARTAO_AVISTA' ? 'Cartão à vista' : metodoSimulacao === 'CARTAO_PARCELADO' ? 'Cartão parcelado' : 'Boleto'}</p>
               </div>
-              <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 p-4 border border-emerald-200 dark:border-emerald-800">
-                <p className="text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Margem final</p>
-                <p className="mt-1 text-2xl font-bold text-emerald-700 dark:text-emerald-300">{simulacaoAtual.margemFinal.toFixed(2).replace('.', ',')}%</p>
-                <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80">Margem desejada: R$ {simulacaoAtual.margemDesejada.toFixed(2).replace('.', ',')}</p>
+              <div className={cn(
+                'p-4 border rounded-xl',
+                simulacaoAtual.margemFinal < 0
+                  ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/40'
+                  : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800',
+              )}>
+                <p className={cn(
+                  'text-xs uppercase tracking-wide',
+                  simulacaoAtual.margemFinal < 0
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-emerald-600 dark:text-emerald-400',
+                )}>Margem final</p>
+                <p className={cn(
+                  'mt-1 text-2xl font-bold',
+                  simulacaoAtual.margemFinal < 0
+                    ? 'text-red-700 dark:text-red-300'
+                    : 'text-emerald-700 dark:text-emerald-300',
+                )}>{simulacaoAtual.margemFinal.toFixed(2).replace('.', ',')}%</p>
+                <p className={cn(
+                  'text-xs',
+                  simulacaoAtual.margemFinal < 0
+                    ? 'text-red-600/80 dark:text-red-300/80'
+                    : 'text-emerald-600/80 dark:text-emerald-400/80',
+                )}>Margem desejada: R$ {simulacaoAtual.margemDesejada.toFixed(2).replace('.', ',')}</p>
               </div>
             </div>
             <div className="mt-5 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
@@ -8440,7 +8460,12 @@ function AbaPrecificacao() {
                 <p className="flex justify-between gap-4"><span className="text-gray-500">Preço</span><span className="font-medium text-gray-900 dark:text-white">R$ {toNum(precoVenda).toFixed(2).replace('.', ',')}</span></p>
                 <p className="flex justify-between gap-4"><span className="text-gray-500">Total de saídas</span><span className="font-medium text-gray-900 dark:text-white">R$ {simulacaoAtual.totalSaidas.toFixed(2).replace('.', ',')}</span></p>
                 <p className="flex justify-between gap-4"><span className="text-gray-500">Saldo final</span><span className="font-semibold text-emerald-600 dark:text-emerald-400">R$ {simulacaoAtual.saldoFinal.toFixed(2).replace('.', ',')}</span></p>
-                <p className="flex justify-between gap-4"><span className="text-gray-500">Margem final</span><span className="font-medium text-gray-900 dark:text-white">{simulacaoAtual.margemFinal.toFixed(2).replace('.', ',')}%</span></p>
+                <p className="flex justify-between gap-4">
+                  <span className="text-gray-500">Margem final</span>
+                  <span className={cn('font-medium', simulacaoAtual.margemFinal < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white')}>
+                    {simulacaoAtual.margemFinal.toFixed(2).replace('.', ',')}%
+                  </span>
+                </p>
               </div>
             </div>
           </div>
