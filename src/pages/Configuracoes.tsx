@@ -8266,6 +8266,9 @@ function AbaPrecificacao() {
                     options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }]}
                   />
                   <ConfigInput label="Comissão AGR valor" value={campos.comissao_agr_valor} onChange={v => atualizarCampo('comissao_agr_valor', v)} inputMode="decimal" />
+                  <p className="text-[11px] leading-4 text-gray-500 dark:text-gray-400">
+                    Fixo: R$ 20,00. Percentual: 10%.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <ConfigSelectWithManual
@@ -8275,6 +8278,9 @@ function AbaPrecificacao() {
                     options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
                   />
                   <ConfigInput label="Comissão vendedor valor / taxa" value={campos.comissao_vendedor_valor} onChange={v => atualizarCampo('comissao_vendedor_valor', v)} inputMode="decimal" />
+                  <p className="text-[11px] leading-4 text-gray-500 dark:text-gray-400">
+                    Diferença: usa a sobra do preço.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <ConfigSelectWithManual
@@ -8289,6 +8295,9 @@ function AbaPrecificacao() {
                     onChange={v => atualizarCampo('comissao_indicador_valor', v)}
                     inputMode="decimal"
                   />
+                  <p className="text-[11px] leading-4 text-gray-500 dark:text-gray-400">
+                    Fixo: R$ 20,00. Percentual: 10%. Diferença: usa a sobra do preço.
+                  </p>
                 </div>
               </div>
             </div>
