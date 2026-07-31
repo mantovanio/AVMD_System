@@ -7920,6 +7920,12 @@ function textoTipoComissao(tipo: 'FIXO' | 'PERCENTUAL' | 'DIFERENCA') {
   return 'Diferença'
 }
 
+function dicaTipoComissao(tipo: 'FIXO' | 'PERCENTUAL' | 'DIFERENCA') {
+  if (tipo === 'FIXO') return 'Preencha em R$. Ex: 20,00'
+  if (tipo === 'PERCENTUAL') return 'Preencha em %. Ex: 10'
+  return 'Usa a sobra disponível do preço'
+}
+
 function AbaPrecificacao() {
   const { profile } = useAuth()
   const [loading, setLoading] = useState(true)
@@ -8267,19 +8273,19 @@ function AbaPrecificacao() {
                   />
                   <ConfigInput label="Comissão AGR valor" value={campos.comissao_agr_valor} onChange={v => atualizarCampo('comissao_agr_valor', v)} inputMode="decimal" />
                   <p className="text-[11px] leading-4 text-gray-500 dark:text-gray-400">
-                    Fixo: R$ 20,00. Percentual: 10%.
+                    {dicaTipoComissao(cfg.comissao_agr_tipo)}
                   </p>
                 </div>
                 <div className="space-y-2">
                   <ConfigSelectWithManual
                     label="Comissão vendedor tipo"
                     value={cfg.comissao_vendedor_tipo}
-                    onChange={v => setCfg(p => ({ ...p, comissao_vendedor_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
+                    onChange={v => setCfg(p => ({ ...p, comissao_vendedor_tipo: v as 'FIXO' | 'PERCENTUAL' | 'DIFERENCA' }))}
                     options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
                   />
                   <ConfigInput label="Comissão vendedor valor / taxa" value={campos.comissao_vendedor_valor} onChange={v => atualizarCampo('comissao_vendedor_valor', v)} inputMode="decimal" />
                   <p className="text-[11px] leading-4 text-gray-500 dark:text-gray-400">
-                    Diferença: usa a sobra do preço.
+                    {dicaTipoComissao(cfg.comissao_vendedor_tipo)}
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -8296,7 +8302,7 @@ function AbaPrecificacao() {
                     inputMode="decimal"
                   />
                   <p className="text-[11px] leading-4 text-gray-500 dark:text-gray-400">
-                    Fixo: R$ 20,00. Percentual: 10%. Diferença: usa a sobra do preço.
+                    {dicaTipoComissao(cfg.comissao_indicador_tipo)}
                   </p>
                 </div>
               </div>
