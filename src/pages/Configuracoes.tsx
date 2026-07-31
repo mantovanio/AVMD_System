@@ -7920,6 +7920,7 @@ function AbaPrecificacao() {
   const [saving, setSaving] = useState(false)
   const [savingSimulacao, setSavingSimulacao] = useState(false)
   const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
+  const [parametrosRecolhidos, setParametrosRecolhidos] = useState(false)
   const [painelRecolhido, setPainelRecolhido] = useState(false)
   const [mostrarGatewayFixo, setMostrarGatewayFixo] = useState(false)
   const [nomeSimulacao, setNomeSimulacao] = useState('')
@@ -8168,79 +8169,91 @@ function AbaPrecificacao() {
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Precificação de Certificados</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Ferramenta para informar o preço de venda e ver a distribuição financeira por produto.</p>
       </div>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <ConfigSelectWithManual label="Regime operacional" value={cfg.regime_operacional} onChange={v => setCfg(p => ({ ...p, regime_operacional: v as 'REVENDA' | 'COMISSIONADO' }))} options={[{ value: 'REVENDA', label: 'Revenda' }, { value: 'COMISSIONADO', label: 'Comissionado' }]} />
-        <ConfigInput label="Custo da certificadora" value={campos.custo_certificadora} onChange={v => atualizarCampo('custo_certificadora', v)} inputMode="decimal" />
-        <ConfigInput label="Custo do Cartão" value={campos.custo_cartao} onChange={v => atualizarCampo('custo_cartao', v)} inputMode="decimal" />
-        <ConfigInput label="Custo do Token" value={campos.custo_token} onChange={v => atualizarCampo('custo_token', v)} inputMode="decimal" />
-        <ConfigInput label="Custo da Leitora" value={campos.custo_leitora} onChange={v => atualizarCampo('custo_leitora', v)} inputMode="decimal" />
-        <ConfigInput label="Custo suporte operacional" value={campos.custo_suporte_operacional} onChange={v => atualizarCampo('custo_suporte_operacional', v)} inputMode="decimal" />
-        <ConfigInput label="Gateway %" value={campos.gateway_taxa_percentual} onChange={v => atualizarCampo('gateway_taxa_percentual', v)} inputMode="decimal" />
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-gray-500 dark:text-gray-400">Gateway fixo</span>
-            <button
-              type="button"
-              onClick={() => setMostrarGatewayFixo(v => !v)}
-              className="text-[11px] font-semibold text-blue-600 hover:underline"
-            >
-              {mostrarGatewayFixo ? 'Ocultar' : 'Mostrar'}
-            </button>
-          </div>
-          {mostrarGatewayFixo ? (
-            <ConfigInput label="" value={campos.gateway_taxa_fixa} onChange={v => atualizarCampo('gateway_taxa_fixa', v)} inputMode="decimal" />
-          ) : (
-            <div className="rounded-xl border border-dashed border-gray-200 dark:border-gray-800 px-3 py-2.5 text-xs text-gray-400">
-              Valor opcional. Fica oculto enquanto não for usado.
-            </div>
-          )}
-        </div>
-        <ConfigInput label="Imposto %" value={campos.aliquota_imposto} onChange={v => atualizarCampo('aliquota_imposto', v)} inputMode="decimal" />
-        <ConfigInput label="Margem desejada %" value={campos.margem_lucro_desejada} onChange={v => atualizarCampo('margem_lucro_desejada', v)} inputMode="decimal" />
-      </div>
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="space-y-2">
-          <ConfigSelectWithManual
-            label="Comissão AGR tipo"
-            value={cfg.comissao_agr_tipo}
-            onChange={v => setCfg(p => ({ ...p, comissao_agr_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
-            options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }]}
-          />
-          <ConfigInput label="Comissão AGR valor" value={campos.comissao_agr_valor} onChange={v => atualizarCampo('comissao_agr_valor', v)} inputMode="decimal" />
-        </div>
-        <div className="space-y-2">
-          <ConfigSelectWithManual
-            label="Comissão vendedor tipo"
-            value={cfg.comissao_vendedor_tipo}
-            onChange={v => setCfg(p => ({ ...p, comissao_vendedor_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
-            options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
-          />
-          <ConfigInput label="Comissão vendedor valor / taxa" value={campos.comissao_vendedor_valor} onChange={v => atualizarCampo('comissao_vendedor_valor', v)} inputMode="decimal" />
-        </div>
-        <div className="space-y-2">
-          <ConfigSelectWithManual
-            label="Comissão indicador tipo"
-            value={cfg.comissao_indicador_tipo}
-            onChange={v => setCfg(p => ({ ...p, comissao_indicador_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
-            options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
-          />
-          <ConfigInput label="Comissão indicador valor" value={campos.comissao_indicador_valor} onChange={v => atualizarCampo('comissao_indicador_valor', v)} inputMode="decimal" />
-        </div>
-      </div>
       <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-gray-900 dark:text-white">Painel de Precificação</p>
             <p className="text-xs text-gray-500 dark:text-gray-400">Parâmetros, simulação e histórico</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setPainelRecolhido(v => !v)}
-            className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-          >
-            {painelRecolhido ? 'Expandir painel' : 'Recolher painel'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setParametrosRecolhidos(v => !v)}
+              className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              {parametrosRecolhidos ? 'Expandir parâmetros' : 'Recolher parâmetros'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPainelRecolhido(v => !v)}
+              className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              {painelRecolhido ? 'Expandir painel' : 'Recolher painel'}
+            </button>
+          </div>
         </div>
+        {parametrosRecolhidos ? (
+          <div className="mt-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-950/30 p-4">
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Parâmetros recolhidos</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Clique em Expandir parâmetros para editar custos e comissões.</p>
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <ConfigSelectWithManual label="Regime operacional" value={cfg.regime_operacional} onChange={v => setCfg(p => ({ ...p, regime_operacional: v as 'REVENDA' | 'COMISSIONADO' }))} options={[{ value: 'REVENDA', label: 'Revenda' }, { value: 'COMISSIONADO', label: 'Comissionado' }]} />
+            <ConfigInput label="Custo da certificadora" value={campos.custo_certificadora} onChange={v => atualizarCampo('custo_certificadora', v)} inputMode="decimal" />
+            <ConfigInput label="Custo do Cartão" value={campos.custo_cartao} onChange={v => atualizarCampo('custo_cartao', v)} inputMode="decimal" />
+            <ConfigInput label="Custo do Token" value={campos.custo_token} onChange={v => atualizarCampo('custo_token', v)} inputMode="decimal" />
+            <ConfigInput label="Custo da Leitora" value={campos.custo_leitora} onChange={v => atualizarCampo('custo_leitora', v)} inputMode="decimal" />
+            <ConfigInput label="Custo suporte operacional" value={campos.custo_suporte_operacional} onChange={v => atualizarCampo('custo_suporte_operacional', v)} inputMode="decimal" />
+            <ConfigInput label="Gateway %" value={campos.gateway_taxa_percentual} onChange={v => atualizarCampo('gateway_taxa_percentual', v)} inputMode="decimal" />
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-gray-500 dark:text-gray-400">Gateway fixo</span>
+                <button
+                  type="button"
+                  onClick={() => setMostrarGatewayFixo(v => !v)}
+                  className="text-[11px] font-semibold text-blue-600 hover:underline"
+                >
+                  {mostrarGatewayFixo ? 'Ocultar' : 'Mostrar'}
+                </button>
+              </div>
+              {mostrarGatewayFixo ? (
+                <ConfigInput label="" value={campos.gateway_taxa_fixa} onChange={v => atualizarCampo('gateway_taxa_fixa', v)} inputMode="decimal" />
+              ) : (
+                <div className="rounded-xl border border-dashed border-gray-200 dark:border-gray-800 px-3 py-2.5 text-xs text-gray-400">
+                  Valor opcional. Fica oculto enquanto não for usado.
+                </div>
+              )}
+            </div>
+            <ConfigInput label="Imposto %" value={campos.aliquota_imposto} onChange={v => atualizarCampo('aliquota_imposto', v)} inputMode="decimal" />
+            <ConfigInput label="Margem desejada %" value={campos.margem_lucro_desejada} onChange={v => atualizarCampo('margem_lucro_desejada', v)} inputMode="decimal" />
+            <div className="space-y-2 md:col-span-2 xl:col-span-3">
+              <div className="grid gap-4 md:grid-cols-3">
+                <ConfigSelectWithManual
+                  label="Comissão AGR tipo"
+                  value={cfg.comissao_agr_tipo}
+                  onChange={v => setCfg(p => ({ ...p, comissao_agr_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
+                  options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }]}
+                />
+                <ConfigInput label="Comissão AGR valor" value={campos.comissao_agr_valor} onChange={v => atualizarCampo('comissao_agr_valor', v)} inputMode="decimal" />
+                <ConfigSelectWithManual
+                  label="Comissão vendedor tipo"
+                  value={cfg.comissao_vendedor_tipo}
+                  onChange={v => setCfg(p => ({ ...p, comissao_vendedor_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
+                  options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
+                />
+                <ConfigInput label="Comissão vendedor valor / taxa" value={campos.comissao_vendedor_valor} onChange={v => atualizarCampo('comissao_vendedor_valor', v)} inputMode="decimal" />
+                <ConfigSelectWithManual
+                  label="Comissão indicador tipo"
+                  value={cfg.comissao_indicador_tipo}
+                  onChange={v => setCfg(p => ({ ...p, comissao_indicador_tipo: v as 'FIXO' | 'PERCENTUAL' }))}
+                  options={[{ value: 'FIXO', label: 'Fixo' }, { value: 'PERCENTUAL', label: 'Percentual' }, { value: 'DIFERENCA', label: 'Diferença' }]}
+                />
+                <ConfigInput label="Comissão indicador valor" value={campos.comissao_indicador_valor} onChange={v => atualizarCampo('comissao_indicador_valor', v)} inputMode="decimal" />
+              </div>
+            </div>
+          </div>
+        )}
         {painelRecolhido && (
           <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-950/30 p-4">
             <div>
