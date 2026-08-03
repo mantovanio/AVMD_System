@@ -8360,7 +8360,7 @@ function AbaPrecificacao() {
             ]}
           />
           <button type="button" onClick={() => void salvar()} disabled={saving} className="h-11 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-            {saving ? 'Salvando...' : 'Salvar configuração'}
+            {saving ? 'Salvando...' : 'Salvar padrão'}
           </button>
           <button type="button" onClick={() => void salvarSimulacao()} disabled={savingSimulacao || !profile?.id} className="h-11 rounded-xl border border-blue-600 px-4 text-sm font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50">
             {savingSimulacao ? 'Salvando simulação...' : 'Salvar simulação'}
