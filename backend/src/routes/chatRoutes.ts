@@ -507,7 +507,7 @@ export async function handleChatRoutes(
 
   if (!url.startsWith('/api/chat')) return false
 
-  if (method === 'GET' && url === '/api/chat/crm/integrations') {
+  if (method === 'GET' && url.startsWith('/api/chat/crm/integrations')) {
     const integrations = await externalIntegrationRepository.findActiveWhatsApp()
     const rows = integrations.map(item => ({
       id: item.id,
