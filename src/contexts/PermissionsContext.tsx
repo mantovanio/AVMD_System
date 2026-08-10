@@ -99,10 +99,11 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
   }
 
   function resolveAllowedPages(): Page[] {
-    if (profile?.perfil === 'supervisor_chat') {
+    const perfil = profile?.perfil as string | undefined
+    if (perfil === 'supervisor_chat') {
       return ['chat']
     }
-    if (profile?.perfil === 'supervisor_renovacoes') {
+    if (perfil === 'supervisor_renovacoes') {
       return ['dashboard', 'comercial', 'clientes', 'renovacoes', 'relatorios']
     }
 
