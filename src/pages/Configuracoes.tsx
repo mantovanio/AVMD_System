@@ -63,7 +63,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 const ADMIN_ONLY_TABS: Tab[] = ['fiscal', 'permissoes']
 
-const PERFIL_LABEL: Record<PerfilAcesso, string> = {
+const PERFIL_LABEL: Record<string, string> = {
   admin:           'Administrador',
   supervisor_chat: 'Supervisor do Chat',
   supervisor_renovacoes: 'Supervisor de Renovações',
@@ -73,7 +73,7 @@ const PERFIL_LABEL: Record<PerfilAcesso, string> = {
   usuario:         'Funcionário',
 }
 
-const PERFIL_COLOR: Record<PerfilAcesso, string> = {
+const PERFIL_COLOR: Record<string, string> = {
   admin:           'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
   supervisor_chat: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
   supervisor_renovacoes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
@@ -100,7 +100,7 @@ const FUNCOES_EXTRAS = [
 type UserEditForm = {
   nome: string
   email: string
-  perfil: PerfilAcesso
+  perfil: string
   status: 'ativo' | 'inativo'
   tipo_vinculo: TipoVinculoUsuario
   parceiro_id: string
@@ -941,7 +941,7 @@ function AbaUsuarios() {
       const next = { ...prev, [key]: value }
       if (key === 'perfil') {
         const perfil = value as PerfilAcesso
-        next.permissoes = DEFAULT_PERMISSIONS[perfil]
+        next.permissoes = DEFAULT_PERMISSIONS[perfil] ?? DEFAULT_PERMISSIONS.usuario
       }
       if (key === 'tipo_vinculo' && !['parceiro', 'contador', 'vendedor', 'agente_registro'].includes(String(value))) {
         next.parceiro_id = ''
@@ -959,7 +959,7 @@ function AbaUsuarios() {
         return {
           ...prev,
           perfil: 'supervisor_renovacoes',
-          permissoes: DEFAULT_PERMISSIONS.supervisor_renovacoes,
+          permissoes: DEFAULT_PERMISSIONS.supervisor_renovacoes ?? DEFAULT_PERMISSIONS.usuario,
         }
       }
       if (preset === 'acesso_total') {
@@ -970,7 +970,7 @@ function AbaUsuarios() {
       }
       return {
         ...prev,
-        permissoes: DEFAULT_PERMISSIONS[prev.perfil],
+        permissoes: DEFAULT_PERMISSIONS[prev.perfil as PerfilAcesso] ?? DEFAULT_PERMISSIONS.usuario,
       }
     })
   }
@@ -1116,7 +1116,7 @@ function AbaUsuarios() {
         email: novoEmail,
         senha: novoSenhaU,
         perfil: novoPerfil,
-        permissoes: DEFAULT_PERMISSIONS[novoPerfil],
+        permissoes: DEFAULT_PERMISSIONS[novoPerfil] ?? DEFAULT_PERMISSIONS.usuario,
       })
       if (novoPerfil === 'vendedor' && novoLojaNome.trim() && novoLojaTabelaId && result.userId) {
         await supabase.from('lojas_marketplace').insert([{
