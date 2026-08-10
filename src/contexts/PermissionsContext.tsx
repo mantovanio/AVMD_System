@@ -102,6 +102,9 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
     if (profile?.perfil === 'supervisor_chat') {
       return ['chat']
     }
+    if (profile?.perfil === 'supervisor_renovacoes') {
+      return ['dashboard', 'comercial', 'clientes', 'renovacoes', 'relatorios']
+    }
 
     const pages: Page[] = []
     for (const p of permissoes) {
