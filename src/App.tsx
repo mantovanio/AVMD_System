@@ -117,8 +117,32 @@ function AppContent() {
     document.documentElement.classList.toggle('dark', dark)
     document.body.classList.toggle('dark', dark)
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+    document.body.style.colorScheme = dark ? 'dark' : 'light'
     localStorage.setItem('theme', dark ? 'dark' : 'light')
   }, [dark])
+
+  useEffect(() => {
+    function handleThemeChange(event: Event) {
+      const custom = event as CustomEvent<{ dark?: boolean }>
+      if (typeof custom.detail?.dark === 'boolean') {
+        setDark(custom.detail.dark)
+      }
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (event.key === 'theme') {
+        setDark(event.newValue === 'dark')
+      }
+    }
+
+    window.addEventListener('app:theme-change', handleThemeChange as EventListener)
+    window.addEventListener('storage', handleStorage)
+    return () => {
+      window.removeEventListener('app:theme-change', handleThemeChange as EventListener)
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [])
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -339,6 +363,14 @@ function AppContent() {
                   >
                     <KeyRound size={16} className="text-gray-400" />
                     Configurações do usuário
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDark(prev => !prev)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    {dark ? <SunMedium size={16} className="text-amber-500" /> : <MoonStar size={16} className="text-slate-500" />}
+                    {dark ? 'Alternar para tema claro' : 'Alternar para tema escuro'}
                   </button>
                   <button
                     type="button"
