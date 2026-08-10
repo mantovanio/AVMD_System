@@ -6,6 +6,7 @@ import type { PasswordRecoveryAuditRepository } from '../repositories/passwordRe
 import type { PasswordRecoveryRepository } from '../repositories/passwordRecoveryRepository.js'
 import type { ProfileRepository } from '../repositories/profileRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
+import { checkRateLimit } from '../utils/rateLimit.js'
 
 type RequestBody = {
   email?: string
@@ -115,6 +116,9 @@ async function sendRecoveryCode(
   if (risk.blocked || !risk.clerkUserId) {
     throw new Error(risk.reason ?? 'Recuperação bloqueada para este cadastro.')
   }
+  if (profile.perfil !== 'admin') {
+    throw new Error('Recuperação de senha desativada para perfis de cliente.')
+  }
   const clerkUserId = risk.clerkUserId
 
   const recoveryCode = buildRecoveryCode()
@@ -126,22 +130,6 @@ async function sendRecoveryCode(
     email,
     tokenHash,
     expiresAt,
-  })
-
-  const recoveryEmail = buildRecoveryEmail(profile.nome, recoveryCode)
-  await outboxRepository.create({
-    channel: 'email',
-    provider: 'email_smtp',
-    to_address: email,
-    subject: recoveryEmail.subject,
-    body: recoveryEmail.body,
-    payload: {
-      context: 'password_recovery',
-      profile_id: profile.id,
-      email,
-      code: recoveryCode,
-      origin,
-    },
   })
 
   await passwordRecoveryAuditRepository.create({
@@ -209,6 +197,17 @@ export async function handlePasswordRecoveryRoutes(
       return true
     }
 
+    const requestKey = `password-recovery-request:${getRequestSource(req) ?? 'unknown'}:${email}`
+    const requestLimit = checkRateLimit(requestKey, 5, 60_000)
+    if (!requestLimit.allowed) {
+      writeJson(res, 429, {
+        ok: false,
+        error: 'Muitas tentativas. Aguarde um minuto e tente novamente.',
+        retryAfter: Math.ceil((requestLimit.resetAt - Date.now()) / 1000),
+      }, corsOrigin)
+      return true
+    }
+
     const profile = await profileRepository.findInternalAccessByEmail(email)
     if (!profile) {
       await passwordRecoveryAuditRepository.create({
@@ -221,6 +220,23 @@ export async function handlePasswordRecoveryRoutes(
         userAgent: getUserAgent(req),
       })
       writeJson(res, 404, { ok: false, error: 'Conta não encontrada.' }, corsOrigin)
+      return true
+    }
+
+    if (profile.perfil !== 'admin') {
+      await passwordRecoveryAuditRepository.create({
+        profileId: profile.id,
+        email,
+        action: 'request',
+        status: 'blocked',
+        reason: 'Recuperação desativada para perfis de cliente.',
+        source: 'password_recovery_request',
+        ipAddress: getRequestSource(req),
+        userAgent: getUserAgent(req),
+        clerkUserId: profile.clerk_user_id,
+        metadata: { profile_status: profile.status, blocked_for_customer: true },
+      })
+      writeJson(res, 403, { ok: false, error: 'Recuperação desativada para este tipo de conta.' }, corsOrigin)
       return true
     }
 
@@ -321,6 +337,17 @@ export async function handlePasswordRecoveryRoutes(
 
     if (!email || code.length !== 6 || !password) {
       writeJson(res, 400, { ok: false, error: 'Informe e-mail, código de 6 dígitos e nova senha.' }, corsOrigin)
+      return true
+    }
+
+    const verifyKey = `password-recovery-verify:${getRequestSource(req) ?? 'unknown'}:${email}`
+    const verifyLimit = checkRateLimit(verifyKey, 5, 60_000)
+    if (!verifyLimit.allowed) {
+      writeJson(res, 429, {
+        ok: false,
+        error: 'Muitas tentativas. Aguarde um minuto e tente novamente.',
+        retryAfter: Math.ceil((verifyLimit.resetAt - Date.now()) / 1000),
+      }, corsOrigin)
       return true
     }
 

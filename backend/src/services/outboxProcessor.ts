@@ -451,6 +451,18 @@ export class OutboxProcessor {
     body: string
     payload: Record<string, unknown>
   }) {
+    const context = String(item.payload.context ?? '').trim().toLowerCase()
+    const subject = String(item.subject ?? '').toLowerCase()
+    const body = String(item.body ?? '').toLowerCase()
+    if (context === 'password_recovery' || subject.includes('recuperação de senha') || body.includes('recuperação de senha') || body.includes('redefinir sua senha')) {
+      await this.outboxRepo.markProcessed({
+        id: item.id,
+        status: 'failed',
+        error: 'Envio bloqueado: recuperação de senha desativada.',
+      })
+      return
+    }
+
     const url = this.config.n8nEmailSendUrl
     if (!url) {
       await this.outboxRepo.markProcessed({

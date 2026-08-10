@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Loader2, MapPin, Pencil, X, Check, KeyRound, UserPlus, Eye, EyeOff, MessageCircle, Mail, Webhook, Save, Send, Trash2, Plus, ToggleLeft, ToggleRight, CreditCard, FileText, Upload, ShieldCheck, ChevronDown, ChevronRight, Users, Link, Network, Percent, Clock, Bot, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase, getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
@@ -65,6 +66,7 @@ const ADMIN_ONLY_TABS: Tab[] = ['fiscal', 'permissoes']
 const PERFIL_LABEL: Record<PerfilAcesso, string> = {
   admin:           'Administrador',
   supervisor_chat: 'Supervisor do Chat',
+  supervisor_renovacoes: 'Supervisor de Renovações',
   agente_registro: 'Agente de Registro',
   vendedor:        'Funcionário',
   revendedor:      'Revendedor',
@@ -74,6 +76,7 @@ const PERFIL_LABEL: Record<PerfilAcesso, string> = {
 const PERFIL_COLOR: Record<PerfilAcesso, string> = {
   admin:           'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
   supervisor_chat: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
+  supervisor_renovacoes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
   agente_registro: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   vendedor:        'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   revendedor:      'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
@@ -630,6 +633,7 @@ function AbaUsuarios() {
   const [editForm, setEditForm]     = useState<UserEditForm | null>(null)
   const [saving, setSaving]         = useState(false)
   const [editErro, setEditErro]     = useState<string | null>(null)
+  const editingUser = editingId ? users.find(user => user.id === editingId) ?? null : null
 
   // Acesso a conversas
   const [convAccess, setConvAccess] = useState<{ id: string; telefone: string }[]>([])
@@ -776,6 +780,49 @@ function AbaUsuarios() {
     void load()
   }
 
+  function isEditDirty() {
+    if (!editingId || !editForm) return false
+    const user = users.find(item => item.id === editingId)
+    if (!user) return false
+    const currentPermissoes = JSON.stringify([...editForm.permissoes].sort())
+    const originalPermissoes = JSON.stringify([...(user.permissoes ?? [])].sort())
+    const currentFuncoes = JSON.stringify([...editForm.funcoesAdicionais].sort())
+    const originalFuncoes = JSON.stringify(
+      Array.isArray(user.metadata?.funcoes_adicionais)
+        ? [...(user.metadata?.funcoes_adicionais as string[])].map(item => String(item)).sort()
+        : [],
+    )
+    return (
+      editForm.nome !== user.nome ||
+      editForm.email !== user.email ||
+      editForm.perfil !== user.perfil ||
+      editForm.status !== user.status ||
+      editForm.tipo_vinculo !== (user.tipo_vinculo ?? 'usuario_comum') ||
+      editForm.parceiro_id !== (user.parceiro_id ?? '') ||
+      editForm.vinculo_nome !== (user.vinculo_nome ?? '') ||
+      editForm.documento !== (user.documento ?? '') ||
+      editForm.telefone !== (user.telefone ?? '') ||
+      editForm.cidade !== (user.cidade ?? '') ||
+      editForm.observacoes !== (user.observacoes ?? '') ||
+      currentPermissoes !== originalPermissoes ||
+      currentFuncoes !== originalFuncoes
+    )
+  }
+
+  function closeEditModal(force = false) {
+    if (!editingId) return
+    if (!force && isEditDirty()) {
+      const shouldSave = window.confirm('Existem alterações pendentes. Deseja salvar antes de fechar?')
+      if (shouldSave) {
+        void saveEdit(editingId)
+        return
+      }
+    }
+    setEditingId(null)
+    setEditForm(null)
+    setEditErro(null)
+  }
+
   async function toggleStatus(u: Profile) {
     const novoStatus = u.status === 'ativo' ? 'inativo' : 'ativo'
     await fetch(getApiUrl(`/profiles/${u.id}`), {
@@ -901,6 +948,30 @@ function AbaUsuarios() {
         next.vinculo_nome = ''
       }
       return next
+    })
+  }
+
+  function applyQuickPreset(preset: 'supervisor_renovacoes' | 'acesso_total' | 'padrao_perfil') {
+    setEditErro(null)
+    setEditForm(prev => {
+      if (!prev) return prev
+      if (preset === 'supervisor_renovacoes') {
+        return {
+          ...prev,
+          perfil: 'supervisor_renovacoes',
+          permissoes: DEFAULT_PERMISSIONS.supervisor_renovacoes,
+        }
+      }
+      if (preset === 'acesso_total') {
+        return {
+          ...prev,
+          permissoes: PAGE_PERMISSIONS.map(permission => permission.id),
+        }
+      }
+      return {
+        ...prev,
+        permissoes: DEFAULT_PERMISSIONS[prev.perfil],
+      }
     })
   }
 
@@ -1107,7 +1178,7 @@ function AbaUsuarios() {
                 {senhaErro && (
                   <p className="text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
                     ⚠ {senhaErro}
-                </p>
+                  </p>
               )}
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={fecharModalSenha}
@@ -1548,70 +1619,93 @@ function AbaUsuarios() {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                  {editingId === u.id ? (
-                    <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => saveEdit(u.id)} disabled={saving || !editForm} title="Salvar"
-                        className="w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 flex items-center justify-center hover:bg-green-200 transition-colors disabled:opacity-60">
-                        {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                      </button>
-                      <button type="button" onClick={() => { setEditingId(null); setEditForm(null); setEditErro(null) }} title="Cancelar"
-                        className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', PERFIL_COLOR[u.perfil])}>
-                        {PERFIL_LABEL[u.perfil]}
-                      </span>
-                      <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium',
-                        u.status === 'ativo'
-                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                          : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400')}>
-                        {u.status === 'ativo' ? 'Ativo' : 'Aguardando liberação'}
-                      </span>
+                  <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', PERFIL_COLOR[u.perfil])}>
+                    {PERFIL_LABEL[u.perfil]}
+                  </span>
+                  <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium',
+                    u.status === 'ativo'
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400')}>
+                    {u.status === 'ativo' ? 'Ativo' : 'Aguardando liberação'}
+                  </span>
 
-                      {isAdmin && (
-                        <div className="flex items-center gap-1">
-                          <button type="button" onClick={() => startEdit(u)} title="Editar perfil"
-                            className="w-7 h-7 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-200 flex items-center justify-center transition-colors">
-                            <Pencil size={13} />
+                  {isAdmin && (
+                    <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => startEdit(u)} title="Editar perfil"
+                        className={cn(
+                          'w-7 h-7 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-200 flex items-center justify-center transition-colors',
+                          editingId === u.id && 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-300'
+                        )}>
+                        <Pencil size={13} />
+                      </button>
+                      <button type="button" onClick={() => abrirModalSenha(u)} title={u.clerk_user_id ? 'Alterar senha' : 'Vincular conta de login'}
+                        className="w-7 h-7 rounded-lg text-gray-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 flex items-center justify-center transition-colors">
+                        <KeyRound size={13} />
+                      </button>
+                      {u.id !== myProfile?.id && (
+                        <>
+                          <button type="button" onClick={() => toggleStatus(u)}
+                            className={cn('text-xs px-2 py-1 rounded-lg font-medium transition-colors',
+                              u.status === 'ativo'
+                                ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
+                                : 'text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20')}
+                            title={u.status === 'ativo' ? 'Desativar' : 'Liberar acesso'}>
+                            {u.status === 'ativo' ? 'Desativar' : 'Liberar'}
                           </button>
-                          <button type="button" onClick={() => abrirModalSenha(u)} title={u.clerk_user_id ? 'Alterar senha' : 'Vincular conta de login'}
-                            className="w-7 h-7 rounded-lg text-gray-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 flex items-center justify-center transition-colors">
-                            <KeyRound size={13} />
+                          <button type="button" onClick={() => setConfirmExcluirUser(u)}
+                            title="Excluir usuário"
+                            className="w-7 h-7 rounded-lg text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 flex items-center justify-center transition-colors">
+                            <Trash2 size={13} />
                           </button>
-                          {u.id !== myProfile?.id && (
-                            <>
-                              <button type="button" onClick={() => toggleStatus(u)}
-                                className={cn('text-xs px-2 py-1 rounded-lg font-medium transition-colors',
-                                  u.status === 'ativo'
-                                    ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
-                                    : 'text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20')}
-                                title={u.status === 'ativo' ? 'Desativar' : 'Liberar acesso'}>
-                                {u.status === 'ativo' ? 'Desativar' : 'Liberar'}
-                              </button>
-                              <button type="button" onClick={() => setConfirmExcluirUser(u)}
-                                title="Excluir usuário"
-                                className="w-7 h-7 rounded-lg text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 flex items-center justify-center transition-colors">
-                                <Trash2 size={13} />
-                              </button>
-                            </>
-                          )}
-                        </div>
+                        </>
                       )}
-                      {u.id === myProfile?.id && !isAdmin && (
-                        <span className="text-xs text-gray-400 dark:text-gray-600 italic">você</span>
-                      )}
-                    </>
+                    </div>
+                  )}
+                  {u.id === myProfile?.id && !isAdmin && (
+                    <span className="text-xs text-gray-400 dark:text-gray-600 italic">você</span>
                   )}
                 </div>
               </div>
                 )
               })()}
 
-              {editingId === u.id && editForm && (
-                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-4">
+            </div>
+          ))}
+
+          {editingId && editForm && editingUser && createPortal(
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+              onMouseDown={e => {
+                if (e.target === e.currentTarget) closeEditModal()
+              }}
+            >
+              <div className="w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shadow-2xl">
+                <div className="flex items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-800 px-6 py-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">Edição de usuário</p>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Editar dados do usuário</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(editingUser.id)}
+                      disabled={saving || !editForm}
+                      title="Salvar"
+                      className="px-4 py-2 rounded-xl bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-60"
+                    >
+                      {saving ? 'Salvando...' : 'Salvar'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => closeEditModal()}
+                      title="Cancelar"
+                      className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-800 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900"
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-[calc(92vh-73px)] overflow-y-auto p-6 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                     <ConfigInput label="Nome" value={editForm.nome} onChange={v => updateEdit('nome', v)} />
                     <ConfigInput label="Email" type="email" value={editForm.email} onChange={v => updateEdit('email', v)} />
@@ -1624,6 +1718,7 @@ function AbaUsuarios() {
                         <option value="agente_registro">Agente de Registro</option>
                         <option value="revendedor">Revendedor</option>
                         <option value="supervisor_chat">Supervisor do Chat</option>
+                        <option value="supervisor_renovacoes">Supervisor de Renovações</option>
                         {editForm.perfil === 'vendedor' && (
                           <option value="vendedor">Funcionário (perfil legado)</option>
                         )}
@@ -1632,7 +1727,7 @@ function AbaUsuarios() {
                     <label className="flex flex-col gap-1">
                       <span className="text-xs text-gray-500 dark:text-gray-400">Status</span>
                       <select value={editForm.status} onChange={e => updateEdit('status', e.target.value as 'ativo' | 'inativo')}
-                        disabled={u.id === myProfile?.id}
+                        disabled={editingUser.id === myProfile?.id}
                         className="border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
                         <option value="ativo">Ativo</option>
                         <option value="inativo">Aguardando liberação</option>
@@ -1684,7 +1779,6 @@ function AbaUsuarios() {
                     <ConfigInput label="Telefone" value={editForm.telefone} onChange={v => updateEdit('telefone', v)} />
                     <ConfigInput label="Cidade" value={editForm.cidade} onChange={v => updateEdit('cidade', v)} />
                   </div>
-
                   <label className="flex flex-col gap-1">
                     <span className="text-xs text-gray-500 dark:text-gray-400">Observações</span>
                     <textarea value={editForm.observacoes} onChange={e => updateEdit('observacoes', e.target.value)}
@@ -1692,17 +1786,35 @@ function AbaUsuarios() {
                       className="border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                       placeholder="Anotações administrativas sobre este usuário" />
                   </label>
-
                   <div>
                     <div className="flex items-center justify-between gap-3 mb-2">
                       <div>
                         <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Permissões na plataforma</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">Marque o que este usuário pode acessar no menu lateral.</p>
                       </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <button
+                        type="button"
+                        onClick={() => applyQuickPreset('supervisor_renovacoes')}
+                        className="px-3 py-1.5 text-xs rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300 transition-colors"
+                      >
+                        Supervisor de Renovações
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyQuickPreset('acesso_total')}
+                        className="px-3 py-1.5 text-xs rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 dark:border-purple-900/40 dark:bg-purple-950/20 dark:text-purple-300 transition-colors"
+                      >
+                        Acesso total
+                      </button>
                       {editForm.perfil !== 'admin' && (
-                        <button type="button" onClick={() => updateEdit('permissoes', DEFAULT_PERMISSIONS[editForm.perfil])}
-                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
-                          Usar padrão do perfil
+                        <button
+                          type="button"
+                          onClick={() => applyQuickPreset('padrao_perfil')}
+                          className="px-3 py-1.5 text-xs rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300 transition-colors"
+                        >
+                          Padrão do perfil
                         </button>
                       )}
                     </div>
@@ -1727,10 +1839,9 @@ function AbaUsuarios() {
                       ))}
                     </div>
                     <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
-                      Para o Daniel operar como Supervisor do Chat e ver todas as conversas, o perfil dele precisa estar como <strong>Supervisor do Chat</strong>, não apenas com permissão marcada manualmente.
+                      O perfil <strong>Supervisor de Renovações</strong> pode ver dashboard, comercial, clientes, renovações e relatórios.
                     </p>
                   </div>
-
                   <div>
                     <div className="flex items-center justify-between gap-3 mb-2">
                       <div>
@@ -1768,10 +1879,9 @@ function AbaUsuarios() {
                       })}
                     </div>
                   </div>
-
                   {editForm.perfil === 'vendedor' && (() => {
-                    const lojaDoVendedor = lojas.find(l => l.owner_profile_id === u.id)
-                    const isEditingLoja = editLojaUserId === u.id
+                    const lojaDoVendedor = lojas.find(l => l.owner_profile_id === editingUser.id)
+                    const isEditingLoja = editLojaUserId === editingUser.id
                     return (
                       <div className="rounded-xl border border-blue-200 dark:border-blue-900/30 bg-blue-50/60 dark:bg-blue-950/20 p-3 space-y-2">
                         <div className="flex items-center justify-between gap-3">
@@ -1779,7 +1889,7 @@ function AbaUsuarios() {
                           {!isEditingLoja && (
                             <button type="button"
                               onClick={() => {
-                                setEditLojaUserId(u.id)
+                                setEditLojaUserId(editingUser.id)
                                 setEditLojaForm({
                                   nome: lojaDoVendedor?.nome_loja ?? '',
                                   tabela_preco_id: lojaDoVendedor?.tabela_preco_id ?? (tabelas[0]?.id ?? ''),
@@ -1790,51 +1900,9 @@ function AbaUsuarios() {
                             </button>
                           )}
                         </div>
-                        {!isEditingLoja && lojaDoVendedor && (
-                          <div className="text-sm">
-                            <p className="font-medium text-gray-800 dark:text-gray-100">{lojaDoVendedor.nome_loja}</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">{tabelas.find(t => t.id === lojaDoVendedor.tabela_preco_id)?.nome ?? '—'} · /{lojaDoVendedor.slug}</p>
-                          </div>
-                        )}
-                        {!isEditingLoja && !lojaDoVendedor && (
-                          <p className="text-xs text-blue-600/70 dark:text-blue-400/70">Nenhuma loja configurada ainda.</p>
-                        )}
-                        {isEditingLoja && editLojaForm && (
-                          <div className="space-y-2">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Nome da loja</label>
-                              <input type="text" value={editLojaForm.nome}
-                                onChange={e => setEditLojaForm(p => p ? { ...p, nome: e.target.value } : p)}
-                                placeholder="Ex: Loja do João Silva"
-                                className="w-full border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tabela de preço</label>
-                              <select value={editLojaForm.tabela_preco_id}
-                                onChange={e => setEditLojaForm(p => p ? { ...p, tabela_preco_id: e.target.value } : p)}
-                                className="w-full border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <option value="">Selecione</option>
-                                {tabelas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                              </select>
-                            </div>
-                            <div className="flex gap-2 pt-1">
-                              <button type="button"
-                                onClick={() => { setEditLojaUserId(null); setEditLojaForm(null) }}
-                                className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                                Cancelar
-                              </button>
-                              <button type="button" onClick={() => void salvarLojaVendedor(u.id)} disabled={salvandoLoja}
-                                className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium transition-colors flex items-center gap-1.5">
-                                {salvandoLoja ? <><Loader2 size={11} className="animate-spin" /> Salvando...</> : <><Check size={11} /> Salvar loja</>}
-                              </button>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     )
                   })()}
-
-                  {/* Acesso a Conversas */}
                   <div className="rounded-xl border border-purple-200 dark:border-purple-900/30 bg-purple-50/60 dark:bg-purple-950/20 p-3 space-y-2">
                     <div className="flex items-center justify-between gap-3">
                       <div>
@@ -1842,73 +1910,17 @@ function AbaUsuarios() {
                         <p className="text-xs text-purple-600/70 dark:text-purple-400/70">Números que este usuário pode ver no chat independente do vínculo.</p>
                       </div>
                     </div>
-                    {convAccess.length === 0 && (
-                      <p className="text-xs text-purple-600/50 dark:text-purple-400/50">Nenhum número liberado manualmente.</p>
-                    )}
-                    {convAccess.length > 0 && (
-                      <div className="space-y-1">
-                        {convAccess.map(ac => (
-                          <div key={ac.id} className="flex items-center justify-between gap-2 bg-white dark:bg-gray-800 rounded-lg px-3 py-1.5 border border-purple-100 dark:border-purple-900/20">
-                            <span className="text-sm text-gray-700 dark:text-gray-300 font-mono">{ac.telefone}</span>
-                            <button type="button" title="Remover" disabled={savingConvAccess}
-                              onClick={() => {
-                                setSavingConvAccess(true)
-                                fetch(getApiUrl(`/chat/user-conversation-access/${ac.id}`), {
-                                  method: 'DELETE',
-                                })
-                                  .then(r => r.json())
-                                  .then(res => {
-                                    if (res.ok) setConvAccess(prev => prev.filter(x => x.id !== ac.id))
-                                    else showMsgU('Erro ao remover', 'err')
-                                  })
-                                  .catch(() => showMsgU('Erro ao remover', 'err'))
-                                  .finally(() => setSavingConvAccess(false))
-                              }}
-                              className="text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors">
-                              <X size={14} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex gap-2">
-                      <input type="text" value={novoTelefone}
-                        onChange={e => setNovoTelefone(e.target.value)}
-                        placeholder="+5511999999999"
-                        className="flex-1 border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-1.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono" />
-                      <button type="button" disabled={savingConvAccess || !novoTelefone.trim()}
-                        onClick={() => {
-                          setSavingConvAccess(true)
-                          fetch(getApiUrl('/chat/user-conversation-access'), {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ user_id: u.id, telefone: novoTelefone.trim() }),
-                          })
-                            .then(r => r.json())
-                            .then(res => {
-                              if (res.ok) {
-                                setConvAccess(prev => [...prev, { id: res.id, telefone: novoTelefone.trim() }])
-                                setNovoTelefone('')
-                              } else showMsgU(res.error ?? 'Erro ao adicionar', 'err')
-                            })
-                            .catch(() => showMsgU('Erro ao adicionar', 'err'))
-                            .finally(() => setSavingConvAccess(false))
-                        }}
-                        className="px-3 py-1.5 text-xs rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-medium transition-colors flex items-center gap-1.5 shrink-0">
-                        {savingConvAccess ? <Loader2 size={11} className="animate-spin" /> : <><Plus size={11} /> Adicionar</>}
-                      </button>
-                    </div>
                   </div>
-
                   {editErro && (
                     <p className="text-xs text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
                       {editErro}
                     </p>
                   )}
                 </div>
-              )}
-            </div>
-          ))}
+              </div>
+            </div>,
+            document.body,
+          )}
 
           {users.length === 0 && (
             <div className="text-center py-10 text-gray-400 dark:text-gray-600">

@@ -301,6 +301,8 @@ export default function Login() {
     e.preventDefault()
     setForgotResetError(null)
     if (forgotNewPass !== forgotNewConfirm) { setForgotResetError('As senhas não coincidem.'); return }
+    const passwordError = validateStrongPassword(forgotNewPass)
+    if (passwordError) { setForgotResetError(passwordError); return }
     setForgotResetLoading(true)
     const { error } = await confirmPasswordReset(forgotEmail, forgotCode.trim(), forgotNewPass)
     if (error) setForgotResetError(translateError(error))
@@ -383,8 +385,8 @@ export default function Login() {
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-medium text-white/90">Senha</span>
-                        <button type="button" onClick={() => { setLoginError(null); setView('forgot') }} className="text-xs text-white/90 hover:underline">
-                          Esqueci minha senha
+                        <button type="button" onClick={() => { window.location.href = '/?page=portal' }} className="text-xs text-white/90 hover:underline">
+                          Acesso do cliente
                         </button>
                       </div>
                       <PasswordInput label="" value={loginPassword} onChange={setLoginPassword} />
@@ -395,10 +397,17 @@ export default function Login() {
                     <SubmitButton loading={loginLoading} label="Entrar" loadingLabel="Validando..." primaryColor={agencyConfig.cor_primaria} />
                   </form>
 
-                  <div className="mt-6 pt-6 border-t border-white/15 text-center">
+                  <div className="mt-6 pt-6 border-t border-white/15 text-center space-y-3">
                     <p className="text-sm text-white/80">
-                      O acesso ao sistema é criado e liberado exclusivamente pelo administrador.
+                      O acesso ao sistema interno é criado e liberado exclusivamente pelo administrador.
                     </p>
+                    <button
+                      type="button"
+                      onClick={() => { window.location.href = '/?page=portal' }}
+                      className="text-sm font-semibold text-white hover:underline"
+                    >
+                      Entrar no portal do cliente
+                    </button>
                   </div>
                 </>
               ) : (
