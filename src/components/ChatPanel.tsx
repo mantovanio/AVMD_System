@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Send, Loader2, Smile, Paperclip, Mic, StopCircle, Trash2, MessageCircle, Phone, CalendarClock, Clock3, Copy, RefreshCw, Pencil, Save, CornerUpLeft } from 'lucide-react'
+import { X, Send, Loader2, Smile, Paperclip, Mic, StopCircle, Trash2, MessageCircle, Phone, CalendarClock, Clock3, Copy, RefreshCw, Pencil, Save, CornerUpLeft, MoreVertical, Check, Ban } from 'lucide-react'
 import { supabase, getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
@@ -7,7 +7,7 @@ import { DEFAULT_CONTACT_DOCUMENT_STORAGE, loadContactDocumentStorageConfig, typ
 import type { ChatContact, Lead } from '@/types'
 import { useAuth } from '@/contexts/AuthContext'
 import MediaPreview from '@/components/MediaPreview'
-import { getMediaProxyUrl } from '@/lib/api'
+import { getMediaProxyUrl, deleteWhatsAppMessage, editWhatsAppMessage } from '@/lib/api'
 
 // ── Public types ───────────────────────────────────────────────
 
@@ -216,6 +216,25 @@ async function resolveLeadAttachmentUrl(doc: LeadAttachment) {
   return data.signedUrl
 }
 
+function extractMessageId(payload: Record<string, unknown> | undefined): string | null {
+  if (!payload) return null
+  // Campo direto
+  if (typeof payload.messageId === 'string' && payload.messageId) return payload.messageId
+  if (typeof payload.id === 'string' && payload.id) return payload.id
+  // Dentro de key
+  const key = payload.key as Record<string, unknown> | undefined
+  if (key && typeof key.id === 'string' && key.id) return key.id
+  // Dentro de response.key
+  const response = payload.response as Record<string, unknown> | undefined
+  const responseKey = response?.key as Record<string, unknown> | undefined
+  if (responseKey && typeof responseKey.id === 'string' && responseKey.id) return responseKey.id
+  // Dentro de provider_payload.key
+  const providerPayload = payload.provider_payload as Record<string, unknown> | undefined
+  const providerKey = providerPayload?.key as Record<string, unknown> | undefined
+  if (providerKey && typeof providerKey.id === 'string' && providerKey.id) return providerKey.id
+  return null
+}
+
 function parseEvolutionEvents(events: Record<string, unknown>[]): Message[] {
   return events
     .map(row => {
@@ -224,6 +243,7 @@ function parseEvolutionEvents(events: Record<string, unknown>[]): Message[] {
       const messageType = (pld.messageType as string | null) ?? 'conversation'
       const mimeType = pld.mimeType as string | null
       const fileName = pld.fileName as string | null
+      const extractedMessageId = extractMessageId(pld)
       return {
         id:          (row.id as string),
         content:     buildMessageFallback(messageType, pld.content as string | null, mimeType, fileName),
@@ -231,7 +251,7 @@ function parseEvolutionEvents(events: Record<string, unknown>[]): Message[] {
         created_at:  (row.created_at as string) ?? new Date().toISOString(),
         source:      (row.source as string | null) ?? null,
         eventType:   (row.event_type as string | null) ?? null,
-        messageId:   (pld.messageId as string | null) ?? null,
+        messageId:   extractedMessageId,
         pushName:    (pld.pushName as string | null) ?? null,
         messageType,
         mediaUrl:    (pld.mediaUrl as string | null) ?? null,
@@ -346,6 +366,7 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
           const row = change.new as Record<string, unknown>
           const pld = row.payload as Record<string, unknown> | undefined
           if (!pld) return
+          const extractedMessageId = extractMessageId(pld)
           const msg: Message = {
             id:          row.id as string,
             content:     buildMessageFallback(
@@ -358,7 +379,7 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
             created_at:  row.created_at as string,
             source:      (row.source as string | null) ?? null,
             eventType:   (row.event_type as string | null) ?? null,
-            messageId:   (pld.messageId as string | null) ?? null,
+            messageId:   extractedMessageId,
             pushName:    (pld.pushName as string | null) ?? null,
             messageType: (pld.messageType as string | null) ?? 'conversation',
             mediaUrl:    (pld.mediaUrl as string | null) ?? null,
@@ -676,6 +697,7 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
         setMessages(prev => prev.map(m => m.id === tempId ? {
           ...m,
           id: data.messageId ?? tempId,
+          messageId: data.messageId ?? m.messageId,
           quoted: replyTo ? {
             messageId: replyTo.messageId ?? replyTo.id,
             content: replyTo.content ?? (replyTo.messageType === 'audioMessage' ? 'Audio' : 'Mensagem respondida'),
@@ -735,6 +757,46 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
     setReplyTo(null)
     setSending(false)
     inputRef.current?.focus()
+  }
+
+  // ── Delete / Edit message ───────────────────────────────────
+
+  async function handleDeleteMessage(message: Message) {
+    if (!message.messageId) {
+      alert('Nao e possivel apagar esta mensagem (sem ID externo).')
+      return
+    }
+    if (!confirm('Apagar esta mensagem? Ela sera removida para voce e o contato.')) return
+
+    try {
+      await deleteWhatsAppMessage(message.messageId, evolution?.instance_name)
+      setMessages(prev => prev.filter(m => m.id !== message.id && m.messageId !== message.messageId))
+      setCopyFeedback('Mensagem apagada')
+    } catch (err) {
+      logger.error('ChatPanel', 'falha ao apagar mensagem', String(err))
+      alert('Nao foi possivel apagar a mensagem.')
+    }
+  }
+
+  async function handleEditMessage(message: Message, newText: string) {
+    if (!message.messageId) {
+      alert('Nao e possivel editar esta mensagem (sem ID externo).')
+      return
+    }
+
+    try {
+      await editWhatsAppMessage(message.messageId, newText, evolution?.instance_name)
+      setMessages(prev => prev.map(m =>
+        m.id === message.id || m.messageId === message.messageId
+          ? { ...m, content: newText }
+          : m
+      ))
+      setCopyFeedback('Mensagem editada')
+    } catch (err) {
+      logger.error('ChatPanel', 'falha ao editar mensagem', String(err))
+      alert('Nao foi possivel editar a mensagem.')
+      throw err
+    }
   }
 
   // ── Send attachment ──────────────────────────────────────────
@@ -1331,6 +1393,8 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
                 message={msg}
                 evolution={evolution}
                 onReply={selected => setReplyTo(selected)}
+                onDelete={selected => void handleDeleteMessage(selected)}
+                onEdit={(selected, newText) => void handleEditMessage(selected, newText)}
               />
             ))}
             <div ref={bottomRef} />
@@ -1991,10 +2055,14 @@ function MessageBubble({
   message,
   evolution,
   onReply,
+  onDelete,
+  onEdit,
 }: {
   message: Message
   evolution: EvolutionCfg | null
   onReply?: (message: Message) => void
+  onDelete?: (message: Message) => void
+  onEdit?: (message: Message, newText: string) => void
 }) {
   const isOut     = message.fromMe
   const isInternalNote = message.messageType === 'internalNote' || message.eventType === 'internal_note' || message.source === 'crm'
@@ -2008,10 +2076,68 @@ function MessageBubble({
   const [mediaLoadError, setMediaLoadError] = useState(false)
   const audioLabel = message.fromMe ? 'Audio enviado' : 'Audio recebido'
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [showMenu, setShowMenu] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editText, setEditText] = useState(message.content ?? '')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const editInputRef = useRef<HTMLTextAreaElement>(null)
   const hasDirectUrl = Boolean(message.mediaUrl)
   const displayUrl = evolution && resolvedMediaUrl && !resolvedMediaUrl.startsWith('blob:')
     ? getMediaProxyUrl(resolvedMediaUrl, evolution.instance_name)
     : resolvedMediaUrl
+
+  // Fecha menu ao clicar fora
+  useEffect(() => {
+    if (!showMenu) return
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showMenu])
+
+  // Foca no input ao entrar em modo de edição
+  useEffect(() => {
+    if (isEditing) {
+      editInputRef.current?.focus()
+      editInputRef.current?.select()
+    }
+  }, [isEditing])
+
+  async function handleSaveEdit() {
+    const trimmed = editText.trim()
+    if (!trimmed || trimmed === message.content || !onEdit) {
+      setIsEditing(false)
+      return
+    }
+    setSavingEdit(true)
+    try {
+      await onEdit(message, trimmed)
+      setIsEditing(false)
+    } catch {
+      // erro já tratado no pai
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  function handleCancelEdit() {
+    setEditText(message.content ?? '')
+    setIsEditing(false)
+  }
+
+  function handleKeyDownEdit(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      void handleSaveEdit()
+    }
+    if (e.key === 'Escape') {
+      handleCancelEdit()
+    }
+  }
 
   useEffect(() => {
     if (!needsResolvedMedia) {
@@ -2168,20 +2294,90 @@ function MessageBubble({
             )}
 
             {message.content && !isDoc && !isAudio && !isVideo && (
-              <p className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
+              isEditing ? (
+                <div className="mt-1">
+                  <textarea
+                    ref={editInputRef}
+                    value={editText}
+                    onChange={e => setEditText(e.target.value)}
+                    onKeyDown={handleKeyDownEdit}
+                    rows={2}
+                    className="w-full rounded-lg border border-emerald-300 bg-white px-2 py-1.5 text-sm text-gray-900 outline-none focus:border-emerald-500 resize-none"
+                  />
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveEdit()}
+                      disabled={savingEdit || !editText.trim()}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs disabled:opacity-50"
+                    >
+                      {savingEdit ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                      Salvar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      disabled={savingEdit}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 bg-white text-gray-600 text-xs hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <Ban size={10} />
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
+              )
             )}
           </div>
 
-          {onReply && !isInternalNote && (
-            <button
-              type="button"
-              onClick={() => onReply(message)}
-              className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-black/5 hover:text-emerald-700"
-              title="Responder esta mensagem"
-            >
-              <CornerUpLeft size={14} />
-            </button>
-          )}
+          <div className="flex items-center gap-1 shrink-0">
+            {onReply && !isInternalNote && (
+              <button
+                type="button"
+                onClick={() => onReply(message)}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-black/5 hover:text-emerald-700"
+                title="Responder esta mensagem"
+              >
+                <CornerUpLeft size={14} />
+              </button>
+            )}
+
+            {isOut && !isInternalNote && !isEditing && (
+              <div className="relative" ref={menuRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowMenu(v => !v)}
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-black/5 hover:text-gray-600"
+                  title="Mais opcoes"
+                >
+                  <MoreVertical size={14} />
+                </button>
+                {showMenu && (
+                  <div className="absolute right-0 top-full mt-1 z-20 w-36 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 py-1 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => { setIsEditing(true); setShowMenu(false) }}
+                      disabled={!message.messageId}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title={!message.messageId ? 'ID da mensagem nao disponivel' : ''}
+                    >
+                      <Pencil size={14} /> Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { onDelete?.(message); setShowMenu(false) }}
+                      disabled={!message.messageId}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title={!message.messageId ? 'ID da mensagem nao disponivel' : ''}
+                    >
+                      <Trash2 size={14} /> Apagar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         <p className={cn('text-[10px] mt-0.5 text-right leading-none', isOut ? 'text-green-700 dark:text-green-300' : 'text-gray-400')}>
           {time}

@@ -85,6 +85,10 @@ type RemuneracaoSnapshot = {
 export class CommercialRepository {
   constructor(private readonly db: AivenSqlClient) {}
 
+  private canViewAll(viewerPerfil?: string | null) {
+    return !!viewerPerfil && ['admin', 'superadmin', 'supervisor_renovacoes'].includes(viewerPerfil)
+  }
+
   async listSales(input: CommercialSalesInput = {}) {
     const limit = Math.min(Math.max(Number(input.limit || 2000), 1), 5000)
     const params: unknown[] = []
@@ -108,7 +112,7 @@ export class CommercialRepository {
     }
     const viewerId = input.viewer_profile_id
     const viewerPerfil = input.viewer_perfil
-    if (viewerId && viewerPerfil && !['admin', 'superadmin'].includes(viewerPerfil)) {
+    if (viewerId && viewerPerfil && !this.canViewAll(viewerPerfil)) {
       params.push(viewerId)
       where.push(`(v.vendedor_id::text = $${params.length} OR v.agente_registro_id::text = $${params.length})`)
     }
@@ -334,7 +338,7 @@ export class CommercialRepository {
 
     const viewerId = input.viewer_profile_id
     const viewerPerfil = input.viewer_perfil
-    if (viewerId && viewerPerfil && !['admin', 'superadmin'].includes(viewerPerfil)) {
+    if (viewerId && viewerPerfil && !this.canViewAll(viewerPerfil)) {
       params.push(viewerId)
       filters.push(`a.agente_registro_id::text = $${params.length}`)
     }
@@ -433,7 +437,7 @@ export class CommercialRepository {
 
     const viewerId = input?.viewer_profile_id
     const viewerPerfil = input?.viewer_perfil
-    if (viewerId && viewerPerfil && !['admin', 'superadmin'].includes(viewerPerfil)) {
+    if (viewerId && viewerPerfil && !this.canViewAll(viewerPerfil)) {
       params.push(viewerId)
       where.push(`cb_sub.id IN (
         SELECT DISTINCT vc.cadastro_base_id
@@ -1202,7 +1206,7 @@ export class CommercialRepository {
     const like = `%${term.trim().toLowerCase()}%`
     const params: unknown[] = [like]
     let accessFilter = ''
-    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin'].includes(viewerPerfil)) {
+    if (viewerProfileId && viewerPerfil && !this.canViewAll(viewerPerfil)) {
       params.push(viewerProfileId)
       accessFilter = `AND cb.id IN (
         SELECT DISTINCT vc.cadastro_base_id
@@ -2005,7 +2009,7 @@ export class CommercialRepository {
     end`
     addFilter(tipo === 'vendas' ? 'v.status_venda = ?' : `${validationStatus} = ?`, input.status)
 
-    if (!['admin', 'superadmin'].includes(input.viewer_perfil)) {
+    if (!this.canViewAll(input.viewer_perfil)) {
       params.push(input.viewer_profile_id)
       where.push(`(v.vendedor_id = $${params.length}::uuid or coalesce(a.agente_registro_id, v.agente_registro_id) = $${params.length}::uuid)`)
     }
@@ -2132,7 +2136,7 @@ export class CommercialRepository {
   }) {
     const from = input.from?.trim() || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
     const to = input.to?.trim() || new Date().toISOString()
-    const canViewAll = ['admin', 'superadmin'].includes(input.viewer_perfil)
+    const canViewAll = this.canViewAll(input.viewer_perfil)
     const targetProfileId = canViewAll && input.target_profile_id?.trim()
       ? input.target_profile_id.trim()
       : input.viewer_profile_id
@@ -2315,6 +2319,9 @@ export class CommercialRepository {
     ])
   }
 }
+
+
+
 
 
 

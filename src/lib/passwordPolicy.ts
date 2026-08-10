@@ -9,7 +9,6 @@ export function validateStrongPassword(value: string) {
 
 export function translatePasswordPolicyError(message: string) {
   const normalized = message.toLowerCase()
-
   if (normalized.includes('invalid login credentials')) return 'Email ou senha incorretos.'
   if (normalized.includes("couldn't find your account") || normalized.includes('account does not exist') || normalized.includes('no account')) {
     return 'Conta não encontrada. Verifique o email ou crie uma conta.'

@@ -39,8 +39,8 @@ export class PortalRepository {
     private readonly commercialRepository: CommercialRepository,
   ) {}
 
-  async listOrders(profile: ProfileRow): Promise<PortalOrderRow[]> {
-    const matcher = this.buildProfileMatcher(profile)
+  async listOrdersByEmail(email: string): Promise<PortalOrderRow[]> {
+    const matcher = this.buildEmailMatcher(email)
     if (!matcher.hasAny) return []
 
     const result = await this.db.query<PortalOrderRow>(
@@ -82,8 +82,8 @@ export class PortalRepository {
     return result.rows
   }
 
-  async getScheduleContext(profile: ProfileRow, saleId: string) {
-    const sale = await this.findAuthorizedSale(profile, saleId)
+  async getScheduleContext(email: string, saleId: string) {
+    const sale = await this.findAuthorizedSale(email, saleId)
     if (!sale) return null
 
     return this.checkoutRepository.getCheckoutScheduleContext({
@@ -92,13 +92,13 @@ export class PortalRepository {
     })
   }
 
-  async saveSchedule(profile: ProfileRow, input: {
+  async saveSchedule(email: string, input: {
     saleId: string
     agente_registro_id: string
     ponto_atendimento_id: string
     data_agendada: string
   }) {
-    const sale = await this.findAuthorizedSale(profile, input.saleId)
+    const sale = await this.findAuthorizedSale(email, input.saleId)
     if (!sale) return null
 
     return this.commercialRepository.saveValidationAgenda({
@@ -113,8 +113,8 @@ export class PortalRepository {
     })
   }
 
-  private async findAuthorizedSale(profile: ProfileRow, saleId: string): Promise<AuthorizedSale | null> {
-    const matcher = this.buildProfileMatcher(profile, 2)
+  private async findAuthorizedSale(email: string, saleId: string): Promise<AuthorizedSale | null> {
+    const matcher = this.buildEmailMatcher(email, 2)
     if (!matcher.hasAny) return null
 
     const result = await this.db.query<AuthorizedSale>(
@@ -143,12 +143,12 @@ export class PortalRepository {
     return result.rows[0] ?? null
   }
 
-  private buildProfileMatcher(profile: ProfileRow, startIndex = 1) {
+  private buildEmailMatcher(emailValue: string, startIndex = 1) {
     const clauses: string[] = []
     const params: string[] = []
     let idx = startIndex
 
-    const email = String(profile.email ?? '').trim().toLowerCase()
+    const email = String(emailValue ?? '').trim().toLowerCase()
     if (email) {
       clauses.push(`lower(coalesce(v.email_faturamento, '')) = $${idx}`)
       params.push(email)
@@ -158,39 +158,10 @@ export class PortalRepository {
       idx += 1
     }
 
-    const documento = onlyDigits(profile.documento)
-    if (documento) {
-      clauses.push(`regexp_replace(coalesce(v.documento_faturamento, ''), '\D', '', 'g') = $${idx}`)
-      params.push(documento)
-      idx += 1
-      clauses.push(`regexp_replace(coalesce(cb.cpf_cnpj, ''), '\D', '', 'g') = $${idx}`)
-      params.push(documento)
-      idx += 1
-    }
-
-    const telefone = rightPhone(profile.telefone)
-    if (telefone) {
-      clauses.push(`right(regexp_replace(coalesce(v.telefone_faturamento, ''), '\D', '', 'g'), 11) = $${idx}`)
-      params.push(telefone)
-      idx += 1
-      clauses.push(`right(regexp_replace(coalesce(cb.telefone, ''), '\D', '', 'g'), 11) = $${idx}`)
-      params.push(telefone)
-      idx += 1
-    }
-
     return {
       hasAny: clauses.length > 0,
       whereSql: clauses.length > 0 ? `(${clauses.join(' or ')})` : 'false',
       params,
     }
   }
-}
-
-function onlyDigits(value: string | null | undefined) {
-  return String(value ?? '').replace(/\D/g, '')
-}
-
-function rightPhone(value: string | null | undefined) {
-  const digits = onlyDigits(value)
-  return digits ? digits.slice(-11) : ''
 }

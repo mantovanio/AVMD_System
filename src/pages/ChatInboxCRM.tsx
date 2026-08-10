@@ -14,7 +14,9 @@ import {
   Mail,
   MessageCircle,
   Mic,
+  MoreVertical,
   Paperclip,
+  Pencil,
   Phone,
   RefreshCw,
   Reply,
@@ -23,14 +25,16 @@ import {
   Smile,
   StopCircle,
   Save,
+  Trash2,
   User,
   UserCheck,
   UserPlus,
   UserRound,
   X,
+  Ban,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { getApiUrl, resolveChatMediaUrl } from '@/lib/api'
+import { getApiUrl, resolveChatMediaUrl, deleteWhatsAppMessage, editWhatsAppMessage } from '@/lib/api'
 import { logger } from '@/lib/logger'
 import { useAuth } from '@/contexts/AuthContext'
 import { applyOutgoingSignature, DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings } from '@/lib/crmChatSettings'
@@ -1364,7 +1368,8 @@ export default function ChatInboxCRM() {
   }
 
   async function fetchEvolutionIntegrations() {
-    const response = await fetch(getApiUrl('/chat/crm/integrations'))
+    if (!profile?.id) return []
+    const response = await fetch(getApiUrl(`/chat/crm/integrations?profile_id=${encodeURIComponent(profile.id)}`))
     if (!response.ok) throw new Error('Nao foi possivel carregar as integracoes Evolution.')
     const rows = await response.json() as EvolutionIntegration[]
     return rows ?? []
@@ -2096,7 +2101,7 @@ export default function ChatInboxCRM() {
       if (selectedIdRef.current === selectedConversation.id) {
         setHumanMessage(current => current.trim() === text ? '' : current)
       }
-      setMessages(prev => prev.map(item => item.id === tempId ? { ...item, id: payload.messageId ?? tempId } : item))
+      setMessages(prev => prev.map(item => item.id === tempId ? { ...item, id: payload.messageId ?? tempId, external_message_id: payload.messageId ?? item.external_message_id } : item))
       markConversationAsHuman(selectedConversation.id)
       fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}`), {
         method: 'PATCH',
@@ -2764,6 +2769,12 @@ export default function ChatInboxCRM() {
                                     message={message}
                                     fallbackHumanName={currentHumanAgentName}
                                     conversation={selectedConversation}
+                                    onMessageUpdated={(msgId, newContent) => {
+                                      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, mensagem: newContent } : m))
+                                    }}
+                                    onMessageDeleted={(msgId) => {
+                                      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, mensagem: 'Mensagem apagada', media_url: null, mime_type: null } : m))
+                                    }}
                                   />
                                 ))}
                               <div ref={messagesEndRef} />
@@ -3753,15 +3764,101 @@ function MessageRow({
   message,
   fallbackHumanName,
   conversation,
+  onMessageUpdated,
+  onMessageDeleted,
 }: {
   message: CrmMessage
   fallbackHumanName?: string | null
   conversation?: ConversationRow | null
+  onMessageUpdated?: (messageId: string, newContent: string) => void
+  onMessageDeleted?: (messageId: string) => void
 }) {
   const isOutgoing = message.direction === 'outgoing'
   const normalizedSenderName = normalizeDisplaySenderName(message.sender_name)
   const isContactMsg = message.sender_type === 'cliente' || message.sender_type === 'contact' || !isOutgoing
   const isIaMsg = message.sender_type === 'ia'
+  const [showMenu, setShowMenu] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editText, setEditText] = useState(message.mensagem ?? '')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const editInputRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (!showMenu) return
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showMenu])
+
+  useEffect(() => {
+    if (isEditing) {
+      editInputRef.current?.focus()
+      editInputRef.current?.select()
+    }
+  }, [isEditing])
+
+  async function handleDelete() {
+    const extId = message.external_message_id
+    if (!extId) {
+      alert('ID da mensagem nao disponivel para exclusao.')
+      setShowMenu(false)
+      return
+    }
+    if (!confirm('Apagar esta mensagem? Ela sera removida para voce e o contato.')) return
+    setDeleting(true)
+    try {
+      await deleteWhatsAppMessage(extId, conversation?.whatsapp_instance ?? undefined)
+      setShowMenu(false)
+      onMessageDeleted?.(message.id)
+    } catch (err) {
+      alert('Nao foi possivel apagar a mensagem: ' + String(err))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  async function handleSaveEdit() {
+    const extId = message.external_message_id
+    const trimmed = editText.trim()
+    if (!extId) {
+      alert('ID da mensagem nao disponivel para edicao.')
+      setIsEditing(false)
+      return
+    }
+    if (!trimmed || trimmed === message.mensagem) {
+      setIsEditing(false)
+      return
+    }
+    setSavingEdit(true)
+    try {
+      await editWhatsAppMessage(extId, trimmed, conversation?.whatsapp_instance ?? undefined)
+      onMessageUpdated?.(message.id, trimmed)
+      setIsEditing(false)
+    } catch (err) {
+      alert('Nao foi possivel editar a mensagem: ' + String(err))
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  function handleCancelEdit() {
+    setEditText(message.mensagem ?? '')
+    setIsEditing(false)
+  }
+
+  function handleKeyDownEdit(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      void handleSaveEdit()
+    }
+    if (e.key === 'Escape') handleCancelEdit()
+  }
   const senderLabel = isContactMsg
       ? displayConversationName(conversation)
         : isIaMsg
@@ -3853,6 +3950,38 @@ function MessageRow({
             <span>{senderLabel}</span>
             <span>•</span>
             <span>{detailLabel}</span>
+            {isOutgoing && message.external_message_id && !isEditing && (
+              <div className="relative ml-auto" ref={menuRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowMenu(v => !v)}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-black/5 hover:text-slate-600"
+                  title="Mais opcoes"
+                >
+                  <MoreVertical size={14} />
+                </button>
+                {showMenu && (
+                  <div className="absolute right-0 top-full mt-1 z-20 w-36 bg-white rounded-xl shadow-2xl border border-slate-200 py-1 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => { setIsEditing(true); setShowMenu(false) }}
+                      disabled={!message.external_message_id}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Pencil size={14} /> Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete()}
+                      disabled={deleting || !message.external_message_id}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Apagar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           {isImage && resolvedMediaUrl ? (
             <div className="space-y-2">
@@ -3880,7 +4009,40 @@ function MessageRow({
               Arquivo: {mediaLabel}
             </a>
           ) : (
-            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{normalizeStructuredMessage(isOutgoing ? stripOutgoingSignature(message.mensagem, message.sender_name) : message.mensagem) || mediaLabel || 'Mensagem sem texto'}</p>
+            isEditing ? (
+              <div className="space-y-2">
+                <textarea
+                  ref={editInputRef}
+                  value={editText}
+                  onChange={e => setEditText(e.target.value)}
+                  onKeyDown={handleKeyDownEdit}
+                  rows={3}
+                  className="w-full rounded-xl border border-emerald-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 resize-none"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveEdit()}
+                    disabled={savingEdit || !editText.trim()}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium disabled:opacity-50"
+                  >
+                    {savingEdit ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                    Salvar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    disabled={savingEdit}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 text-xs font-medium hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <Ban size={11} />
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{normalizeStructuredMessage(isOutgoing ? stripOutgoingSignature(message.mensagem, message.sender_name) : message.mensagem) || mediaLabel || 'Mensagem sem texto'}</p>
+            )
           )}
           <div className={`mt-2 flex items-center justify-end gap-1 text-[11px] ${isOutgoing ? 'text-emerald-800/80' : 'text-slate-400'}`}>
             <span>{formatDateTime(message.created_at)}</span>

@@ -2,6 +2,7 @@ import { createClerkClient } from '@clerk/backend'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ProfileRepository } from '../repositories/profileRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
+import { requireAdmin } from '../utils/authMiddleware.js'
 
 function buildTemporaryStrongPassword() {
   const stamp = Date.now().toString(36)
@@ -122,8 +123,11 @@ export async function handleAdminUsersRoutes(
     return true
   }
 
+  const authReq = await requireAdmin(req, res, clerkSecretKey, corsOrigin, profileRepository)
+  if (!authReq) return true
+
   const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
-  const body = await readJson<AdminUsersBody>(req)
+  const body = await readJson<AdminUsersBody>(authReq)
 
   if (body.action === 'create_user') {
     const { nome, email, senha, perfil, tipo_vinculo, permissoes, metadata } = body.payload

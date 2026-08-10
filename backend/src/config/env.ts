@@ -19,6 +19,7 @@ export type BackendConfig = {
   telegramAdminChatIds: string[]
   telegramWebhookUrl: string
   telegramWebhookSecret: string
+  mercadoPagoWebhookSecret: string
   // Canal de atendimento humano (dia a dia, sem IA)
   evolutionAtendimento: EvolutionInstanceConfig
   // Canal CertiID — renovações de certificados (com IA)
@@ -65,6 +66,7 @@ export function loadConfig(): BackendConfig {
     telegramAdminChatIds: parseCsvList(env('TELEGRAM_ADMIN_CHAT_IDS')),
     telegramWebhookUrl,
     telegramWebhookSecret: env('TELEGRAM_WEBHOOK_SECRET'),
+    mercadoPagoWebhookSecret: env('MERCADO_PAGO_WEBHOOK_SECRET'),
     evolutionAtendimento: {
       baseUrl,
       apiToken: env('EVOLUTION_ATENDIMENTO_API_TOKEN') || defaultToken,

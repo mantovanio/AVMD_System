@@ -2688,6 +2688,25 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
         </div>
       </div>
 
+      <footer className="px-4 pb-8 pt-4">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-center gap-3">
+          <a
+            href="/?page=portal"
+            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#17346b] hover:text-[#17346b]"
+          >
+            Meus pedidos
+            <ArrowRight size={14} />
+          </a>
+          <a
+            href="https://crm.certiid.mantovan.com.br/login"
+            className="text-[11px] font-medium tracking-[0.18em] text-slate-400 transition-colors hover:text-slate-600"
+            rel="noreferrer"
+          >
+            ACESSO INTERNO RESTRITO
+          </a>
+        </div>
+      </footer>
+
       <SchedulingModal
         open={isSchedulingOpen}
         onClose={() => setIsSchedulingOpen(false)}

@@ -1,11 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { createHmac, createHash, timingSafeEqual } from 'node:crypto'
+import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
 import type { PortalRepository } from '../repositories/portalRepository.js'
-import type { ProfileRepository } from '../repositories/profileRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
 
 type PortalAuthBody = {
-  userId?: string
   email?: string
+  token?: string
+  code?: string
 }
 
 type PortalScheduleBody = PortalAuthBody & {
@@ -15,44 +17,166 @@ type PortalScheduleBody = PortalAuthBody & {
   data_agendada?: string
 }
 
-async function resolveProfile(profileRepository: ProfileRepository, body: PortalAuthBody) {
-  if (!body.userId) return null
-  let profile = await profileRepository.findByClerkId(body.userId)
-  if (!profile && body.email) {
-    profile = await profileRepository.findByEmail(String(body.email).trim().toLowerCase())
+type PortalSessionPayload = {
+  email: string
+  exp: number
+}
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function hashCode(code: string) {
+  return createHash('sha256').update(code).digest('hex')
+}
+
+function buildPortalCode(email: string, secret: string) {
+  const bucket = Math.floor(Date.now() / (10 * 60 * 1000))
+  const digest = createHmac('sha256', secret).update(`${normalizeEmail(email)}|${bucket}`).digest('hex')
+  const value = Number.parseInt(digest.slice(0, 8), 16) % 1000000
+  return String(value).padStart(6, '0')
+}
+
+function buildPortalEmail(nome: string, code: string) {
+  const firstName = nome.trim().split(/\s+/)[0] || 'cliente'
+  return {
+    subject: 'Seu código de acesso ao portal',
+    body: `Olá, ${firstName}.
+
+Recebemos uma solicitação de acesso ao portal do cliente.
+
+Use este código para entrar:
+
+${code}
+
+Esse código é válido por 10 minutos.
+Se você não solicitou esse acesso, ignore esta mensagem.`,
   }
-  return profile
+}
+
+function issuePortalSession(payload: PortalSessionPayload, secret: string) {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const signature = createHmac('sha256', secret).update(body).digest('base64url')
+  return `${body}.${signature}`
+}
+
+function verifyPortalSession(token: string, secret: string): PortalSessionPayload | null {
+  const [body, signature] = token.split('.')
+  if (!body || !signature) return null
+  const expected = createHmac('sha256', secret).update(body).digest('base64url')
+  if (expected.length !== signature.length) return null
+  if (!timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) return null
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as PortalSessionPayload
+    if (!payload?.email || !payload.exp) return null
+    if (Date.now() > payload.exp) return null
+    return payload
+  } catch {
+    return null
+  }
+}
+
+function resolveEmail(body: PortalAuthBody, secret: string) {
+  const tokenPayload = body.token ? verifyPortalSession(body.token, secret) : null
+  if (tokenPayload?.email) return tokenPayload.email
+  return body.email ? normalizeEmail(body.email) : ''
 }
 
 export async function handlePortalRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   portalRepository: PortalRepository,
-  profileRepository: ProfileRepository,
+  outboxRepository: CommunicationOutboxRepository,
+  clerkSecretKey: string,
   corsOrigin: string,
 ): Promise<boolean> {
-  if (req.method === 'POST' && req.url === '/api/portal/overview') {
-    const body = await readJson<PortalAuthBody>(req)
-    const profile = await resolveProfile(profileRepository, body)
-    if (!profile) {
-      writeJson(res, 404, { ok: false, error: 'Perfil do cliente nao encontrado.' }, corsOrigin)
+  if (req.method === 'POST' && req.url === '/api/portal/auth/request') {
+    if (!clerkSecretKey) {
+      writeJson(res, 503, { ok: false, error: 'CLERK_SECRET_KEY não configurada no backend.' }, corsOrigin)
       return true
     }
 
-    const pedidos = await portalRepository.listOrders(profile)
+    const body = await readJson<{ email?: string }>(req)
+    const email = normalizeEmail(String(body?.email ?? ''))
+    if (!email) {
+      writeJson(res, 400, { ok: false, error: 'Informe o e-mail da compra.' }, corsOrigin)
+      return true
+    }
+
+    const code = buildPortalCode(email, clerkSecretKey)
+    const recoveryEmail = buildPortalEmail(email.split('@')[0] || 'cliente', code)
+    await outboxRepository.create({
+      channel: 'email',
+      provider: 'email_smtp',
+      to_address: email,
+      subject: recoveryEmail.subject,
+      body: recoveryEmail.body,
+      payload: {
+        context: 'portal_access',
+        email,
+        tipo: 'portal_access_code',
+      },
+    })
+
+    writeJson(res, 200, { ok: true, email }, corsOrigin)
+    return true
+  }
+
+  if (req.method === 'POST' && req.url === '/api/portal/auth/verify') {
+    if (!clerkSecretKey) {
+      writeJson(res, 503, { ok: false, error: 'CLERK_SECRET_KEY não configurada no backend.' }, corsOrigin)
+      return true
+    }
+
+    const body = await readJson<{ email?: string; code?: string }>(req)
+    const email = normalizeEmail(String(body?.email ?? ''))
+    const code = String(body?.code ?? '').replace(/\D/g, '').slice(0, 6)
+    if (!email || code.length !== 6) {
+      writeJson(res, 400, { ok: false, error: 'Informe e-mail e código de 6 dígitos.' }, corsOrigin)
+      return true
+    }
+
+    const expected = buildPortalCode(email, clerkSecretKey)
+    const previous = buildPortalCode(email, `${clerkSecretKey}:prev`)
+    if (code !== expected && code !== previous) {
+      writeJson(res, 404, { ok: false, error: 'Não encontramos pedidos para esse e-mail.' }, corsOrigin)
+      return true
+    }
+
+    const session = issuePortalSession(
+      {
+        email,
+        exp: Date.now() + 60 * 60 * 1000,
+      },
+      clerkSecretKey,
+    )
+
+    writeJson(res, 200, { ok: true, token: session, email }, corsOrigin)
+    return true
+  }
+
+  if (req.method === 'POST' && req.url === '/api/portal/overview') {
+    const body = await readJson<PortalAuthBody>(req)
+    const email = resolveEmail(body, clerkSecretKey)
+    if (!email) {
+      writeJson(res, 401, { ok: false, error: 'Sessão do portal inválida ou expirada.' }, corsOrigin)
+      return true
+    }
+
+    const pedidos = await portalRepository.listOrdersByEmail(email)
     writeJson(res, 200, { ok: true, pedidos }, corsOrigin)
     return true
   }
 
   if (req.method === 'POST' && req.url === '/api/portal/schedule-context') {
     const body = await readJson<PortalScheduleBody>(req)
-    const profile = await resolveProfile(profileRepository, body)
-    if (!profile || !body.saleId) {
-      writeJson(res, 400, { ok: false, error: 'Cliente ou venda invalida.' }, corsOrigin)
+    const email = resolveEmail(body, clerkSecretKey)
+    if (!email || !body.saleId) {
+      writeJson(res, 401, { ok: false, error: 'Cliente ou venda invalida.' }, corsOrigin)
       return true
     }
 
-    const context = await portalRepository.getScheduleContext(profile, body.saleId)
+    const context = await portalRepository.getScheduleContext(email, body.saleId)
     if (!context) {
       writeJson(res, 404, { ok: false, error: 'Venda nao encontrada para este cliente.' }, corsOrigin)
       return true
@@ -64,13 +188,13 @@ export async function handlePortalRoutes(
 
   if (req.method === 'POST' && req.url === '/api/portal/schedule') {
     const body = await readJson<PortalScheduleBody>(req)
-    const profile = await resolveProfile(profileRepository, body)
-    if (!profile || !body.saleId || !body.agente_registro_id || !body.ponto_atendimento_id || !body.data_agendada) {
-      writeJson(res, 400, { ok: false, error: 'Dados do agendamento incompletos.' }, corsOrigin)
+    const email = resolveEmail(body, clerkSecretKey)
+    if (!email || !body.saleId || !body.agente_registro_id || !body.ponto_atendimento_id || !body.data_agendada) {
+      writeJson(res, 401, { ok: false, error: 'Dados do agendamento incompletos.' }, corsOrigin)
       return true
     }
 
-    const agenda = await portalRepository.saveSchedule(profile, {
+    const agenda = await portalRepository.saveSchedule(email, {
       saleId: body.saleId,
       agente_registro_id: body.agente_registro_id,
       ponto_atendimento_id: body.ponto_atendimento_id,

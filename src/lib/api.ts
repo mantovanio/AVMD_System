@@ -47,9 +47,14 @@ export function resolveChatMediaUrl(mediaUrl: string | null | undefined, instanc
 }
 
 export async function postJson<T = unknown>(url: string, payload: unknown) {
+  const clerk = globalThis as typeof globalThis & { Clerk?: { session?: { getToken: () => Promise<string | null> } } }
+  const token = await clerk.Clerk?.session?.getToken().catch(() => null)
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(payload),
   })
 
@@ -62,4 +67,52 @@ export async function postJson<T = unknown>(url: string, payload: unknown) {
   }
 
   return data as T
+}
+
+export async function deleteWhatsAppMessage(messageId: string, instanceName?: string, canal?: string) {
+  const url = getApiUrl('api/whatsapp/delete-message')
+  const clerk = globalThis as typeof globalThis & { Clerk?: { session?: { getToken: () => Promise<string | null> } } }
+  const token = await clerk.Clerk?.session?.getToken().catch(() => null)
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ message_id: messageId, instance_name: instanceName, canal }),
+  })
+
+  const data = await response.json().catch(() => null)
+  if (!response.ok) {
+    const message = data && typeof data === 'object' && 'error' in data
+      ? (data as any).error
+      : response.statusText
+    throw new Error(String(message || 'Falha na requisicao'))
+  }
+
+  return data as { ok: boolean }
+}
+
+export async function editWhatsAppMessage(messageId: string, newText: string, instanceName?: string, canal?: string) {
+  const url = getApiUrl('api/whatsapp/edit-message')
+  const clerk = globalThis as typeof globalThis & { Clerk?: { session?: { getToken: () => Promise<string | null> } } }
+  const token = await clerk.Clerk?.session?.getToken().catch(() => null)
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ message_id: messageId, new_text: newText, instance_name: instanceName, canal }),
+  })
+
+  const data = await response.json().catch(() => null)
+  if (!response.ok) {
+    const message = data && typeof data === 'object' && 'error' in data
+      ? (data as any).error
+      : response.statusText
+    throw new Error(String(message || 'Falha na requisicao'))
+  }
+
+  return data as { ok: boolean }
 }

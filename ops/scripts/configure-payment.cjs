@@ -1,5 +1,13 @@
 const { Pool } = require('pg');
-const pool = new Pool({ connectionString: 'postgresql://avmd:avmd123ABC@127.0.0.1:5432/avmd?sslmode=disable' });
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgresql://127.0.0.1:5432/avmd?sslmode=disable',
+});
+
+const mercadoPagoToken = process.env.MERCADO_PAGO_API_TOKEN;
+if (!mercadoPagoToken) {
+  console.error('ERRO: defina MERCADO_PAGO_API_TOKEN antes de executar este script.');
+  process.exit(1);
+}
 
 (async () => {
   const c = await pool.connect();
@@ -21,20 +29,20 @@ const pool = new Pool({ connectionString: 'postgresql://avmd:avmd123ABC@127.0.0.
     if (existing.rows.length > 0) {
       await c.query(`
         UPDATE external_integrations 
-        SET api_token = 'APP_USR-3422359056026075-071318-e2c9aeff011e0bd2a811fcb8576ac9e2-3538197591',
+        SET api_token = $1,
             status = 'ativo',
             updated_at = NOW()
         WHERE provider = 'mercado_pago'
-      `);
+      `, [mercadoPagoToken]);
       console.log('OK: external_integrations atualizado');
     } else {
       await c.query(`
         INSERT INTO external_integrations (provider, name, status, base_url, webhook_url, api_token, metadata)
         VALUES ('mercado_pago', 'Mercado Pago', 'ativo', 'https://api.mercadopago.com', 
                 'https://api.certiid.mantovan.com.br/api/checkout/webhook/mercado-pago/orders',
-                'APP_USR-3422359056026075-071318-e2c9aeff011e0bd2a811fcb8576ac9e2-3538197591',
+                $1,
                 '{"is_sandbox": true}'::jsonb)
-      `);
+      `, [mercadoPagoToken]);
       console.log('OK: external_integrations inserido');
     }
 

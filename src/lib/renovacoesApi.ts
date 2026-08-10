@@ -1,11 +1,16 @@
 import { getApiUrl } from '@/lib/api'
+import { getSupabaseAccessToken } from '@/lib/supabase'
 import type {
   AutomationRule, CommunicationTemplate, LinkProduto, Profile, RenovacaoV2, StatusRenovacao,
 } from '@/types'
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = await getSupabaseAccessToken().catch(() => null)
   const res = await fetch(getApiUrl(path), {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...init,
   })
   const json = await res.json().catch(() => null) as T

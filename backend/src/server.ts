@@ -97,25 +97,48 @@ const checkoutPaymentService = new CheckoutPaymentService(checkoutRepository, co
 const portalRepository = new PortalRepository(db, checkoutRepository, commercialRepository)
 const service = new CheckoutService(checkoutRepository, checkoutPaymentService, communicationOutboxRepository, profileRepository, config.clerkSecretKey)
 
+function parseAllowedOrigins(corsOrigin: string) {
+  return corsOrigin.split(',').map(origin => origin.trim()).filter(Boolean)
+}
+
+function resolveCorsOrigin(requestOrigin: string | undefined, corsOrigin: string) {
+  const allowedOrigins = parseAllowedOrigins(corsOrigin)
+  if (!requestOrigin) return allowedOrigins[0] ?? corsOrigin
+  if (allowedOrigins.includes(requestOrigin)) return requestOrigin
+  return ''
+}
+
 const server = createServer(async (req, res) => {
   try {
+    const requestOrigin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined
+    const corsOrigin = resolveCorsOrigin(requestOrigin, config.corsOrigin)
+
     if (req.method === 'GET' && req.url === '/healthz') {
-      writeJson(res, 200, { ok: true, service: 'avmd-backend' }, config.corsOrigin)
+      writeJson(res, 200, { ok: true, service: 'avmd-backend' }, corsOrigin)
       return
     }
 
     if (req.method === 'OPTIONS') {
-      writeJson(res, 204, {}, config.corsOrigin)
+      if (requestOrigin && !corsOrigin) {
+        writeJson(res, 403, { ok: false, error: 'Origem não autorizada.' }, '')
+        return
+      }
+      writeJson(res, 204, {}, corsOrigin)
       return
     }
 
-    const handledProfile = await handleProfileRoutes(req, res, profileRepository, config.corsOrigin)
+    if (requestOrigin && !corsOrigin) {
+      writeJson(res, 403, { ok: false, error: 'Origem não autorizada.' }, '')
+      return
+    }
+
+    const handledProfile = await handleProfileRoutes(req, res, profileRepository, corsOrigin)
     if (handledProfile) return
 
-    const handledAdminUsers = await handleAdminUsersRoutes(req, res, profileRepository, config.clerkSecretKey, config.corsOrigin)
+    const handledAdminUsers = await handleAdminUsersRoutes(req, res, profileRepository, config.clerkSecretKey, corsOrigin)
     if (handledAdminUsers) return
 
-    const handledPublicAuth = await handlePublicAuthRoutes(req, res, profileRepository, communicationOutboxRepository, config.clerkSecretKey, config.corsOrigin)
+    const handledPublicAuth = await handlePublicAuthRoutes(req, res, profileRepository, communicationOutboxRepository, config.clerkSecretKey, corsOrigin)
     if (handledPublicAuth) return
 
     const handledPasswordRecovery = await handlePasswordRecoveryRoutes(
@@ -126,29 +149,36 @@ const server = createServer(async (req, res) => {
       passwordRecoveryAuditRepository,
       communicationOutboxRepository,
       config.clerkSecretKey,
-      config.corsOrigin,
+      corsOrigin,
     )
     if (handledPasswordRecovery) return
 
-    const handledPortal = await handlePortalRoutes(req, res, portalRepository, profileRepository, config.corsOrigin)
+    const handledPortal = await handlePortalRoutes(
+      req,
+      res,
+      portalRepository,
+      communicationOutboxRepository,
+      config.clerkSecretKey,
+      corsOrigin,
+    )
     if (handledPortal) return
 
-    const handledHierarquia = await handleHierarquiaRoutes(req, res, hierarquiaRepository, config.corsOrigin)
+    const handledHierarquia = await handleHierarquiaRoutes(req, res, hierarquiaRepository, corsOrigin)
     if (handledHierarquia) return
 
-    const handledIntegrations = await handleExternalIntegrationRoutes(req, res, externalIntegrationRepository, config.corsOrigin)
+    const handledIntegrations = await handleExternalIntegrationRoutes(req, res, externalIntegrationRepository, corsOrigin)
     if (handledIntegrations) return
 
-    const handledRenovacoes = await handleRenovacaoRoutes(req, res, renovacaoRepository, leadRepository, communicationOutboxRepository, catalogRepository, config.corsOrigin, db)
+    const handledRenovacoes = await handleRenovacaoRoutes(req, res, renovacaoRepository, leadRepository, communicationOutboxRepository, catalogRepository, corsOrigin, db)
     if (handledRenovacoes) return
 
-    const handledTemplates = await handleCommunicationTemplateRoutes(req, res, communicationTemplateRepository, config.corsOrigin)
+    const handledTemplates = await handleCommunicationTemplateRoutes(req, res, communicationTemplateRepository, corsOrigin)
     if (handledTemplates) return
 
-    const handledAutomation = await handleAutomationRulesRoutes(req, res, automationRulesRepository, config.corsOrigin)
+    const handledAutomation = await handleAutomationRulesRoutes(req, res, automationRulesRepository, corsOrigin)
     if (handledAutomation) return
 
-    const handledLinks = await handleLinksProdutosRoutes(req, res, linksProdutosRepository, config.corsOrigin)
+    const handledLinks = await handleLinksProdutosRoutes(req, res, linksProdutosRepository, corsOrigin)
     if (handledLinks) return
 
     const handledWhatsapp = await handleWhatsappSendRoutes(
@@ -158,7 +188,7 @@ const server = createServer(async (req, res) => {
       renovacaoRepository,
       linksProdutosRepository,
       communicationOutboxRepository,
-      config.corsOrigin,
+      corsOrigin,
       configRepository,
     )
     if (handledWhatsapp) return
@@ -169,12 +199,12 @@ const server = createServer(async (req, res) => {
       leadRepository,
       communicationEventRepository,
       config,
-      config.corsOrigin,
+      corsOrigin,
       configRepository,
     )
     if (handledEvolutionWebhook) return
 
-    const handledOutbox = await handleCommunicationOutboxRoutes(req, res, communicationOutboxRepository, config.corsOrigin)
+    const handledOutbox = await handleCommunicationOutboxRoutes(req, res, communicationOutboxRepository, corsOrigin)
     if (handledOutbox) return
 
     const handledScheduleAutomation = await handleScheduleAutomationRoutes(
@@ -182,7 +212,7 @@ const server = createServer(async (req, res) => {
       res,
       scheduleAutomationRepository,
       communicationOutboxRepository,
-      config.corsOrigin,
+      corsOrigin,
     )
     if (handledScheduleAutomation) return
 
@@ -190,7 +220,7 @@ const server = createServer(async (req, res) => {
       req,
       res,
       leadRepository,
-      config.corsOrigin,
+      corsOrigin,
     )
     if (handledClaraAutomation) return
 
@@ -199,11 +229,11 @@ const server = createServer(async (req, res) => {
       res,
       telegramNotifier,
       db,
-      config.corsOrigin,
+      corsOrigin,
     )
     if (handledTelegramWebhook) return
 
-    const handledPermissoes = await handlePermissoesRoutes(req, res, permissoesRepository, config.corsOrigin)
+    const handledPermissoes = await handlePermissoesRoutes(req, res, permissoesRepository, corsOrigin)
     if (handledPermissoes) return
 
     const handledChat = await handleChatRoutes(
@@ -215,22 +245,22 @@ const server = createServer(async (req, res) => {
       fileRepository,
       configRepository,
       db,
-      config.corsOrigin,
+      corsOrigin,
       config,
     )
     if (handledChat) return
 
-    const handledEngage = await handleEngageRoutes(req, res, engageRepository, config.corsOrigin)
+    const handledEngage = await handleEngageRoutes(req, res, engageRepository, corsOrigin)
     if (handledEngage) return
 
-    const handledCatalog = await handleCatalogRoutes(req, res, catalogRepository, renovacaoRepository, db, config.corsOrigin)
+    const handledCatalog = await handleCatalogRoutes(req, res, catalogRepository, renovacaoRepository, db, corsOrigin)
     if (handledCatalog) return
 
-    const handledCommercial = await handleCommercialRoutes(req, res, commercialRepository, config.corsOrigin, checkoutPaymentService)
+    const handledCommercial = await handleCommercialRoutes(req, res, commercialRepository, corsOrigin, checkoutPaymentService)
     if (handledCommercial) return
 
     const cancelamentoRepository = new CancelamentoRepository(db)
-    const handledCancelamento = await handleCancelamentoRoutes(req, res, cancelamentoRepository, commercialRepository, db, config.corsOrigin)
+    const handledCancelamento = await handleCancelamentoRoutes(req, res, cancelamentoRepository, commercialRepository, db, corsOrigin)
     if (handledCancelamento) return
 
     const handledIntegration = await handleIntegrationRoutes(
@@ -238,15 +268,15 @@ const server = createServer(async (req, res) => {
       res,
       integrationEventRepository,
       integrationEventProcessor,
-      config.corsOrigin,
+      corsOrigin,
     )
     if (handledIntegration) return
 
-    await handleCheckoutRoutes(req, res, service, config.corsOrigin, checkoutPaymentService)
+    await handleCheckoutRoutes(req, res, service, corsOrigin, checkoutPaymentService, config.mercadoPagoWebhookSecret)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro interno do servidor.'
     console.error(`[HTTP ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'}] ${message}`, error)
-    writeJson(res, 500, { ok: false, error: message }, config.corsOrigin)
+    writeJson(res, 500, { ok: false, error: 'Erro interno do servidor.' }, resolveCorsOrigin(typeof req.headers.origin === 'string' ? req.headers.origin : undefined, config.corsOrigin))
   }
 })
 
