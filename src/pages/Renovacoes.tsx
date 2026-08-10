@@ -475,7 +475,7 @@ function toMoneyNumber(value: unknown): number {
 export default function Renovacoes() {
   const { profile } = useAuth()
   const isAdmin = isAdminProfile(profile)
-  const canEditCadastro = hasPerfil(profile, 'admin', 'agente_registro')
+  const canEditCadastro = hasPerfil(profile, 'admin', 'agente_registro', 'supervisor_renovacoes')
   const pageScrollRef = useRef<HTMLDivElement>(null)
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
   const resizingColumnRef = useRef<{ key: RenovacoesColumnKey; startX: number; startWidth: number } | null>(null)
@@ -489,6 +489,7 @@ export default function Renovacoes() {
   const [filtro, setFiltro]         = useState<PrioridadeRenovacao | 'todos'>('todos')
   const [filtroEnvio, setFiltroEnvio] = useState<'todos' | 'enviado' | 'nao_enviado' | 'cadastro_incompleto'>('todos')
   const [filtroCanal, setFiltroCanal] = useState<'todos' | 'email' | 'whatsapp'>('todos')
+  const [filtroContato, setFiltroContato] = useState(false)
   const [visao, setVisao]           = useState<'operacional' | 'vencidas' | 'futuras' | 'historico'>('operacional')
   const [busca, setBusca]           = useState('')
   const [filtroDataInicio, setFiltroDataInicio] = useState('')
@@ -1567,7 +1568,8 @@ export default function Renovacoes() {
     const dataRef = String(r.data_vencimento ?? '').slice(0, 10)
     const matchDataInicio = !filtroDataInicio || dataRef >= filtroDataInicio
     const matchDataFim = !filtroDataFim || dataRef <= filtroDataFim
-    return matchFiltro && matchEnvio && matchCanal && matchBusca && matchDataInicio && matchDataFim
+    const matchContato = !filtroContato || (!!r.email && !!r.telefone)
+    return matchFiltro && matchEnvio && matchCanal && matchBusca && matchDataInicio && matchDataFim && matchContato
   })
 
   const allSelected   = listagem.length > 0 && selectedIds.size === listagem.length
@@ -1576,10 +1578,10 @@ export default function Renovacoes() {
   const totalResizableWidth = RENOVACOES_COLUMNS.reduce((sum, column) => sum + columnWidths[column.key], 0)
   const tableMinWidth = Math.max(RENOVACOES_MIN_TABLE_WIDTH, totalResizableWidth + 52)
   const kpis = {
-    total:      lista.length,
-    potencial:  lista.reduce((s, r) => s + toMoneyNumber(r.valor), 0),
-    urgentes:   lista.filter(r => r.prioridade === 'urgente').length,
-    contatados: lista.filter(r => r.status === 'contatado').length,
+      total:      lista.length,
+   potencial:  lista.reduce((s, r) => s + toMoneyNumber(r.valor), 0),
+      urgentes:   lista.filter(r => r.prioridade === 'urgente').length,
+      contatados: lista.filter(r => r.status === 'contatado').length,
     disparados: lista.filter(r => r.status_disparo === 'enviado' || !!r.ultimo_lembrete).length,
   }
   const operacionais = visao === 'operacional'
@@ -1928,6 +1930,28 @@ export default function Renovacoes() {
           })}
         </div>
 
+        {/* Disparo Segments */}
+        <div className="grid grid-cols-2 gap-3">
+          {([
+            { key: 'nao_enviado' as const, label: 'Não Disparados', icon: Send, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800/30', count: lista.filter(r => !r.ultimo_lembrete).length },
+            { key: 'enviado' as const, label: 'Já Disparados', icon: Send, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/10', count: lista.filter(r => !!r.ultimo_lembrete).length },
+          ]).map(item => {
+            const Icon = item.icon
+            return (
+              <button key={item.key} type="button" onClick={() => setFiltroEnvio(filtroEnvio === item.key ? 'todos' : item.key)}
+                className={cn('text-left rounded-xl border p-3 transition-all', item.bg,
+                  filtroEnvio === item.key ? 'ring-2 ring-offset-1 ring-purple-500' : 'border-gray-200 dark:border-gray-800 hover:border-purple-300')}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Icon size={16} className={item.color} />
+                  <span className={cn('text-sm font-semibold', item.color)}>{item.label}</span>
+                </div>
+                <p className="text-xl font-bold leading-tight">{loading ? '…' : item.count}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{item.key === 'enviado' ? 'com mensagem enviada' : 'aguardando disparo'}</p>
+              </button>
+            )
+          })}
+        </div>
+
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-2">
           {[
@@ -2014,10 +2038,23 @@ export default function Renovacoes() {
               setFiltroDataInicio('')
               setFiltroDataFim('')
               setFiltro('todos')
+              setFiltroContato(false)
             }}
             className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
             <X size={14} /> Limpar filtros
+          </button>
+          <button
+            type="button"
+            onClick={() => setFiltroContato(!filtroContato)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-2 border text-sm font-medium rounded-lg transition-colors',
+              filtroContato
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                : 'border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+            )}
+          >
+            <Users size={14} /> Com Contato (E-mail + Tel)
           </button>
           <button type="button" onClick={downloadSpreadsheetTemplate}
             className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
@@ -2803,9 +2840,9 @@ export default function Renovacoes() {
                         <span className="flex items-center gap-1.5">
                           <span className="truncate block">{r.cliente}</span>
                           {(r.status_disparo === 'enviado' || !!r.ultimo_lembrete) && (
-                            <span className="shrink-0 text-purple-500 dark:text-purple-400" aria-label="Mensagem já disparada">
-                              <Send size={10} />
-                            </span>
+                              <span className="shrink-0 text-purple-500 dark:text-purple-400" aria-label="Mensagem já disparada">
+                                <Send size={10} />
+                              </span>
                           )}
                         </span>
                       </td>
