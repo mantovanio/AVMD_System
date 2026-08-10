@@ -887,7 +887,7 @@ export default function ChatInboxCRM() {
 
   const replyChannelOptions = useMemo(() => (
     integrations
-      .filter(item => Boolean(item.id) && Boolean(item.instance_name) && Boolean(item.base_url) && Boolean(item.api_token))
+      .filter(item => Boolean(item.id) && Boolean(item.instance_name) && Boolean(item.base_url))
       .map(integration => ({
         id: integration.id,
         queue: inferQueueFromIntegration(integration),
@@ -1380,7 +1380,7 @@ export default function ChatInboxCRM() {
 
     const targetInstance = instanceName?.trim().toLowerCase()
     const integration = rows.find(item => item.instance_name?.trim().toLowerCase() === targetInstance) ?? rows[0]
-    if (!integration?.base_url || !integration?.api_token || !integration?.instance_name) {
+    if (!integration?.base_url || !integration?.instance_name) {
       throw new Error('Nenhuma integracao Evolution ativa foi encontrada para essa conversa.')
     }
 
@@ -1719,7 +1719,7 @@ export default function ChatInboxCRM() {
     const contactName = manualConversation.contactName.trim()
     const selectedChannel = manualChannelOptions.find(item => item.integration.id === manualConversation.integrationId)
 
-    if (!selectedChannel?.integration.instance_name || !selectedChannel.integration.base_url || !selectedChannel.integration.api_token) {
+    if (!selectedChannel?.integration.instance_name || !selectedChannel.integration.base_url) {
       setManualConversationError('Selecione um canal valido para iniciar a conversa.')
       return
     }
