@@ -115,8 +115,22 @@ function AppContent() {
   // Tema escuro
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark)
+    document.body.classList.toggle('dark', dark)
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
     localStorage.setItem('theme', dark ? 'dark' : 'light')
   }, [dark])
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as HTMLElement | null
+      if (!target) return
+      if (!target.closest('[data-user-menu]')) {
+        setUserMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // Navegação via evento customizado (usado pelo ChatPanel)
   useEffect(() => {
@@ -304,7 +318,7 @@ function AppContent() {
               aria-label={themeToggleLabel}>
               {dark ? <SunMedium size={16} /> : <MoonStar size={16} />}
             </button>
-            <div className="relative">
+            <div className="relative" data-user-menu>
               <button
                 type="button"
                 onClick={() => setUserMenuOpen(open => !open)}
@@ -323,7 +337,7 @@ function AppContent() {
                     onClick={() => { setUserMenuOpen(false); handleNavigate('configuracoes') }}
                     className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
-                    <UserCog size={16} className="text-gray-400" />
+                    <KeyRound size={16} className="text-gray-400" />
                     Configurações do usuário
                   </button>
                   <button
