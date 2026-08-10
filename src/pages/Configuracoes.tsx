@@ -959,7 +959,7 @@ function AbaUsuarios() {
         return {
           ...prev,
           perfil: 'supervisor_renovacoes',
-          permissoes: DEFAULT_PERMISSIONS.supervisor_renovacoes ?? DEFAULT_PERMISSIONS.usuario,
+          permissoes: DEFAULT_PERMISSIONS['supervisor_renovacoes' as PerfilAcesso] ?? DEFAULT_PERMISSIONS.usuario,
         }
       }
       if (preset === 'acesso_total') {
