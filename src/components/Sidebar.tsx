@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   PanelLeftClose,
   PanelLeftOpen,
+  UserCog,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AgencyConfig } from '@/lib/agencyConfig'
@@ -162,20 +163,7 @@ function IconRail({
         </nav>
       </div>
 
-      <div className="px-2 pt-3 mt-3 border-t border-gray-100 dark:border-gray-800">
-        <button
-          type="button"
-          title="Sair"
-          className={cn(
-            'flex items-center h-12 rounded-xl text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 transition-colors',
-            expanded ? 'w-full gap-3 px-3' : 'justify-center w-12 mx-auto',
-          )}
-          onClick={onLogout}
-        >
-          <LogOut size={18} className="shrink-0" />
-          {expanded && <span className="text-sm font-medium">Sair</span>}
-        </button>
-      </div>
+      <div className="px-2 pt-3 mt-3 border-t border-gray-100 dark:border-gray-800" />
     </div>
   )
 }
@@ -257,14 +245,6 @@ function MobileDrawer({
           {agencyConfig && (
             <p className="text-xs text-gray-400 mb-2 px-3">{agencyConfig.nome_agencia}</p>
           )}
-          <button
-            type="button"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 w-full transition-colors"
-            onClick={onLogout}
-          >
-            <LogOut size={18} />
-            <span>Sair</span>
-          </button>
         </div>
       </aside>
     </div>

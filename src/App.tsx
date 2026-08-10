@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import Sidebar, { type Page } from '@/components/Sidebar'
 import NotificationBell from '@/components/NotificationBell'
 import { useNotifications } from '@/hooks/useNotifications'
-import { Menu, MoonStar, SunMedium } from 'lucide-react'
+import { Menu, MoonStar, SunMedium, UserCog, LogOut, KeyRound } from 'lucide-react'
 import { APP_VERSION } from '@/lib/version'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig } from '@/lib/agencyConfig'
 import { PAGE_LABELS, PERFIL_LABEL, isAdminProfile, resolveAllowedPages as resolveLegacyPages, resolveDefaultPage } from '@/lib/security'
@@ -100,6 +100,7 @@ function AppContent() {
   const [claudeOpen, setClaudeOpen]     = useState(false)
   const [debugOpen,  setDebugOpen]      = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
 
   // Permissões por módulo — carregadas do backend
   const { loading: permLoading, resolveAllowedPages: resolveModulePages } = usePermissions()
@@ -303,6 +304,39 @@ function AppContent() {
               aria-label={themeToggleLabel}>
               {dark ? <SunMedium size={16} /> : <MoonStar size={16} />}
             </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen(open => !open)}
+                title="Menu do usuário"
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                  userMenuOpen ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
+                }`}
+                aria-label="Menu do usuário"
+              >
+                <UserCog size={16} />
+              </button>
+              {userMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-2xl overflow-hidden z-50">
+                  <button
+                    type="button"
+                    onClick={() => { setUserMenuOpen(false); handleNavigate('configuracoes') }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <UserCog size={16} className="text-gray-400" />
+                    Configurações do usuário
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setUserMenuOpen(false); void signOut() }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                  >
+                    <LogOut size={16} />
+                    Sair
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
