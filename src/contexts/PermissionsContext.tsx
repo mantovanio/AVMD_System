@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { useAuth } from './AuthContext'
 import type { Page } from '@/components/Sidebar'
+import { DEFAULT_PERMISSIONS } from '@/lib/security'
+import type { PerfilAcesso } from '@/types'
 
 type NivelAcesso = 'nenhum' | 'visualizar' | 'editar' | 'admin'
 
@@ -100,11 +102,8 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
 
   function resolveAllowedPages(): Page[] {
     const perfil = profile?.perfil as string | undefined
-    if (perfil === 'supervisor_chat') {
-      return ['chat']
-    }
-    if (perfil === 'supervisor_renovacoes') {
-      return ['dashboard', 'comercial', 'clientes', 'renovacoes', 'relatorios']
+    if (perfil && perfil in DEFAULT_PERMISSIONS) {
+      return DEFAULT_PERMISSIONS[perfil as PerfilAcesso] ?? []
     }
 
     const pages: Page[] = []
