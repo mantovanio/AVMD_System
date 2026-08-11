@@ -115,7 +115,8 @@ export async function handleAdminUsersRoutes(
   clerkSecretKey: string,
   corsOrigin: string,
 ): Promise<boolean> {
-  if (req.url !== '/api/admin/users') return false
+  const url = req.url ?? ''
+  if (!url.startsWith('/api/admin/users')) return false
   if (req.method !== 'POST') return false
 
   if (!clerkSecretKey) {
@@ -127,6 +128,45 @@ export async function handleAdminUsersRoutes(
   if (!authReq) return true
 
   const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
+
+  if (url === '/api/admin/users/disable-client-passwords') {
+    try {
+      const clientProfiles = await profileRepository.findClientProfilesWithClerkId()
+
+      let disabled = 0
+      let skipped = 0
+      const errors: string[] = []
+
+      for (const profile of clientProfiles) {
+        try {
+          const response = await fetch(`https://api.clerk.com/v1/users/${profile.clerk_user_id}`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${clerkSecretKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ password_enabled: false }),
+          })
+          if (response.ok) {
+            disabled++
+          } else if (response.status === 404) {
+            skipped++
+          } else {
+            const errBody = await response.text().catch(() => '')
+            errors.push(`${profile.email}: HTTP ${response.status} ${errBody}`)
+          }
+        } catch (error) {
+          errors.push(`${profile.email}: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+
+      writeJson(res, 200, { ok: true, disabled, skipped, total: clientProfiles.length, errors }, corsOrigin)
+    } catch (error) {
+      writeJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) }, corsOrigin)
+    }
+    return true
+  }
+
   const body = await readJson<AdminUsersBody>(authReq)
 
   if (body.action === 'create_user') {
@@ -281,8 +321,9 @@ export async function handleAdminUsersRoutes(
     return true
   }
 
-  writeJson(res, 400, { ok: false, error: 'action inválida' }, corsOrigin)
-  return true
-}
+    writeJson(res, 400, { ok: false, error: 'action inválida' }, corsOrigin)
+    return true
+  }
+
 
 

@@ -51,6 +51,16 @@ export class ProfileRepository {
     return result.rows[0] ?? null
   }
 
+  async findClientProfilesWithClerkId(): Promise<ProfileRow[]> {
+    const result = await this.db.query<ProfileRow>(
+      `SELECT * FROM profiles
+       WHERE clerk_user_id IS NOT NULL
+         AND tipo_vinculo = 'cliente_portal'
+         AND status = 'ativo'`,
+    )
+    return result.rows
+  }
+
   async findByEmail(email: string): Promise<ProfileRow | null> {
     const result = await this.db.query<ProfileRow>(
       'SELECT * FROM profiles WHERE email = $1 LIMIT 1',

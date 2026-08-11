@@ -413,6 +413,19 @@ export class CheckoutService {
       lastName,
     })
 
+    try {
+      await fetch(`https://api.clerk.com/v1/users/${clerkUser.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${this.clerkSecretKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ password_enabled: false }),
+      })
+    } catch {
+      // Ignorado — o usuario foi criado mas a desabilitacao de senha nao bloqueia o fluxo
+    }
+
     return clerkUser.id
   }
 
