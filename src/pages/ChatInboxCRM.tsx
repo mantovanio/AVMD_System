@@ -3,7 +3,6 @@ import {
   Archive,
   Bot,
   BookOpenCheck,
-  Calendar,
   Check,
   CheckCheck,
   ChevronDown,
@@ -2463,9 +2462,7 @@ export default function ChatInboxCRM() {
   const activeShortcut = useMemo(() => ({
     all: queueFilter === 'todas' && humanFilter === 'todos' && !aguardandoFilter,
     atendimento: queueFilter === 'atendimento' && humanFilter === 'todos' && !aguardandoFilter,
-    renovacao: queueFilter === 'renovacao' && humanFilter === 'todos' && !aguardandoFilter,
     email: queueFilter === 'email' && humanFilter === 'todos' && !aguardandoFilter,
-    agendamento: queueFilter === 'agendamento' && humanFilter === 'todos' && !aguardandoFilter,
     humano: queueFilter === 'todas' && humanFilter === 'humano' && !aguardandoFilter,
     aguardando: aguardandoFilter,
   }), [queueFilter, humanFilter, aguardandoFilter])
@@ -2493,7 +2490,7 @@ export default function ChatInboxCRM() {
     }
   }, [visibleConversations, selectedId])
 
-  function applySummaryShortcut(target: 'all' | 'atendimento' | 'renovacao' | 'agendamento' | 'email' | 'humano' | 'aguardando') {
+  function applySummaryShortcut(target: 'all' | 'atendimento' | 'email' | 'humano' | 'aguardando') {
     if (target === 'aguardando') {
       setAguardandoFilter(prev => !prev)
       setQueueFilter('todas')
@@ -2505,8 +2502,6 @@ export default function ChatInboxCRM() {
     setAguardandoFilter(false)
     const nextQueue: 'todas' | QueueType =
       target === 'atendimento' ? 'atendimento' :
-      target === 'renovacao' ? 'renovacao' :
-      target === 'agendamento' ? 'agendamento' :
       target === 'email' ? 'email' :
       'todas'
 
@@ -2546,10 +2541,8 @@ export default function ChatInboxCRM() {
               </div>
             </div>
 
-            <div className="grid w-full grid-cols-3 gap-2 sm:grid-cols-6">
+            <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4">
               <SummaryCard icon={MessageCircle} label="Atendimento" value={summary.atendimento} active={activeShortcut.atendimento} onClick={() => applySummaryShortcut('atendimento')} />
-              <SummaryCard icon={RefreshCw} label="Renovacao" value={summary.renovacao} active={activeShortcut.renovacao} onClick={() => applySummaryShortcut('renovacao')} />
-              <SummaryCard icon={Calendar} label="Agendamento" value={summary.agendamento} active={activeShortcut.agendamento} onClick={() => applySummaryShortcut('agendamento')} />
               <SummaryCard icon={Mail} label="Email" value={summary.email} active={activeShortcut.email} onClick={() => applySummaryShortcut('email')} />
               <SummaryCard icon={User} label="Humano" value={summary.humano} active={activeShortcut.humano} onClick={() => applySummaryShortcut('humano')} />
               <SummaryCard icon={Clock3} label="Aguardando" value={summary.aguardando} active={activeShortcut.aguardando} onClick={() => applySummaryShortcut('aguardando')} />
@@ -2573,50 +2566,45 @@ export default function ChatInboxCRM() {
             </div>
           </div>
 
-          <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_160px_160px_210px]">
-            <label className="flex h-11 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4">
-              <Search size={16} className="text-slate-400" />
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3">
+              <Search size={15} className="text-slate-400" />
               <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar contato ou mensagem" className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" />
             </label>
 
-            <select value={queueFilter} onChange={event => setQueueFilter(event.target.value as 'todas' | QueueType)} className="h-11 rounded-full border border-slate-200 bg-white px-4 text-sm outline-none">
-              <option value="todas">Todas as filas</option>
-              <option value="atendimento">Atendimento</option>
-              <option value="renovacao">Renovacao</option>
-              <option value="agendamento">Agendamento</option>
-              <option value="email">Email</option>
-            </select>
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={queueFilter} onChange={event => setQueueFilter(event.target.value as 'todas' | QueueType)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none">
+                <option value="todas">Todas as filas</option>
+                <option value="atendimento">Atendimento</option>
+                <option value="renovacao">Renovacao</option>
+                <option value="agendamento">Agendamento</option>
+                <option value="email">Email</option>
+              </select>
 
-            <select value={humanFilter} onChange={event => setHumanFilter(event.target.value as 'todos' | 'ia' | 'humano')} className="h-11 rounded-full border border-slate-200 bg-white px-4 text-sm outline-none">
-              <option value="todos">IA e humano</option>
-              <option value="ia">So IA</option>
-              <option value="humano">So humano</option>
-            </select>
+              <select value={humanFilter} onChange={event => setHumanFilter(event.target.value as 'todos' | 'ia' | 'humano')} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none">
+                <option value="todos">IA e humano</option>
+                <option value="ia">So IA</option>
+                <option value="humano">So humano</option>
+              </select>
 
-            <button
-              type="button"
-              onClick={() => setShowClosedConversations(prev => !prev)}
-              className={`h-11 rounded-full border px-4 text-sm font-medium transition ${
-                showClosedConversations                  ? 'border-sky-200 bg-sky-50 text-sky-700'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
-              }`}
-            >
-              {showClosedConversations ? `Ocultar encerradas (${filteredClosedConversations.length})` : `Mostrar encerradas (${filteredClosedConversations.length})`}
-            </button>
+              <button
+                type="button"
+                onClick={() => setShowClosedConversations(prev => !prev)}
+                className={`h-10 rounded-lg border px-3 text-sm font-medium transition ${
+                  showClosedConversations
+                    ? 'border-sky-200 bg-sky-50 text-sky-700'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                }`}
+              >
+                {showClosedConversations ? `Ocultar encerradas (${filteredClosedConversations.length})` : `Encerradas (${filteredClosedConversations.length})`}
+              </button>
+            </div>
           </div>
           {hiddenIncomingByFilters > 0 && (
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              <div className="space-y-1">
-                <span>
-                  {hiddenIncomingByFilters} conversa{hiddenIncomingByFilters > 1 ? 's' : ''} com mensagem recebida
-                  {hiddenIncomingByFilters > 1 ? ' estão ocultas' : ' está oculta'} pelos filtros atuais.
-                </span>
-                {hiddenIncomingSample.length > 0 && (
-                  <p className="text-xs text-amber-800/90">
-                    Exemplos: {hiddenIncomingSample.map(item => item.cliente_nome || item.nome_crm || item.telefone || 'Sem nome').join(' · ')}
-                  </p>
-                )}
-              </div>
+            <div className="mt-2 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-1.5 text-xs text-amber-700">
+              <span className="truncate">
+                {hiddenIncomingByFilters} conversa{hiddenIncomingByFilters > 1 ? 's' : ''} oculta{hiddenIncomingByFilters > 1 ? 's' : ''} pelo filtro.
+              </span>
               <button
                 type="button"
                 onClick={() => {
@@ -2624,7 +2612,7 @@ export default function ChatInboxCRM() {
                   setHumanFilter('todos')
                   setAguardandoFilter(false)
                 }}
-                className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                className="shrink-0 font-semibold text-amber-800 hover:text-amber-950 underline"
               >
                 Exibir todas
               </button>
