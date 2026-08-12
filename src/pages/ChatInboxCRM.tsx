@@ -3069,265 +3069,166 @@ export default function ChatInboxCRM() {
                 <div className="hidden w-2 shrink-0 cursor-col-resize rounded-full bg-slate-200/80 transition hover:bg-sky-300 xl:block" onMouseDown={() => setIsResizingRight(true)} />
 
                 <aside className="min-h-0 shrink-0 overflow-y-auto px-4 py-4" style={{ width: `${rightPanelWidth}px` }}>
-                  <div className="space-y-4">
-                    <PanelBlock title="Contato e histórico">
+                  <div className="space-y-3">
+                    {/* BLOCO 1: Perfil do Cliente */}
+                    <PanelBlock title="Perfil do Cliente" defaultOpen={true}>
                       <div className="space-y-3">
+                        {/* Cabecalho do contato */}
                         <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Contato</p>
                               <p className="truncate text-sm font-bold text-slate-900">{contactEdit.name || selectedConversation.nome_crm || selectedConversation.cliente_nome || 'Nao informado'}</p>
                               <p className="mt-0.5 truncate text-xs text-slate-500">{contactEdit.company || selectedConversation.empresa_nome || 'Empresa nao informada'}</p>
                             </div>
                             <button
                               type="button"
                               onClick={() => setShowContactDetails(prev => !prev)}
-                              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:bg-slate-100"
                             >
-                              {showContactDetails ? <ChevronDown size={13} className="rotate-180" /> : <ChevronDown size={13} />}
-                              {showContactDetails ? 'Ocultar detalhes' : 'Expandir detalhes'}
+                              {showContactDetails ? <ChevronDown size={12} className="rotate-180" /> : <ChevronDown size={12} />}
+                              {showContactDetails ? 'Ocultar' : 'Editar'}
                             </button>
                           </div>
 
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
                               {selectedConversation.fila === 'email' ? 'Email' : 'WhatsApp'}
                             </span>
-                            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
+                            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
                               {selectedConversation.contato_status || 'Sem status'}
                             </span>
                             {contactPhone(selectedConversation) && (
-                              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
                                 {contactPhone(selectedConversation)}
                               </span>
                             )}
                           </div>
                         </div>
 
+                        {/* Formulario de edicao (colapsavel) */}
                         {showContactDetails && (
-                          <div className="space-y-3">
+                          <div className="space-y-2.5 rounded-2xl border border-sky-200 bg-sky-50/50 p-3">
                             <label className="block space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Nome da pessoa</span>
-                              <input
-                                value={contactEdit.name}
-                                onChange={event => setContactEdit(prev => ({ ...prev, name: event.target.value }))}
-                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                                placeholder="Nome do contato"
-                              />
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Nome</span>
+                              <input value={contactEdit.name} onChange={event => setContactEdit(prev => ({ ...prev, name: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-sky-400" placeholder="Nome do contato" />
                             </label>
-
                             <label className="block space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Nome da empresa</span>
-                              <input
-                                value={contactEdit.company}
-                                onChange={event => setContactEdit(prev => ({ ...prev, company: event.target.value }))}
-                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                                placeholder="Razão social ou nome fantasia"
-                              />
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Empresa</span>
+                              <input value={contactEdit.company} onChange={event => setContactEdit(prev => ({ ...prev, company: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-sky-400" placeholder="Razao social" />
                             </label>
-
                             <label className="block space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Telefone</span>
-                              <input
-                                value={contactEdit.phone}
-                                onChange={event => setContactEdit(prev => ({ ...prev, phone: event.target.value }))}
-                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                                placeholder="5511999999999"
-                              />
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Telefone</span>
+                              <input value={contactEdit.phone} onChange={event => setContactEdit(prev => ({ ...prev, phone: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-sky-400" placeholder="5511999999999" />
                             </label>
-
                             <label className="block space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Email</span>
-                              <input
-                                value={contactEdit.email}
-                                onChange={event => setContactEdit(prev => ({ ...prev, email: event.target.value }))}
-                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                                placeholder="Opcional"
-                              />
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Produto</span>
+                              <input value={contactEdit.product} onChange={event => setContactEdit(prev => ({ ...prev, product: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-sky-400" placeholder="Ex.: e-CPF A1" />
                             </label>
-
                             <label className="block space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Produto</span>
-                              <input
-                                value={contactEdit.product}
-                                onChange={event => setContactEdit(prev => ({ ...prev, product: event.target.value }))}
-                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                                placeholder="Ex.: e-CPF A1"
-                              />
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Observacoes</span>
+                              <textarea value={contactEdit.observations} onChange={event => setContactEdit(prev => ({ ...prev, observations: event.target.value }))} rows={2} className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-sky-400 resize-none" placeholder="Notas sobre o contato" />
                             </label>
-
-                            <label className="block space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Vencimento</span>
-                              <input
-                                type="date"
-                                value={contactEdit.expiration}
-                                onChange={event => setContactEdit(prev => ({ ...prev, expiration: event.target.value }))}
-                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                              />
-                            </label>
-
-                            <label className="block space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Status CRM</span>
-                              <input
-                                value={contactEdit.status}
-                                onChange={event => setContactEdit(prev => ({ ...prev, status: event.target.value }))}
-                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                                placeholder="conversando"
-                              />
-                            </label>
-
-                            <label className="block space-y-1">
-                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Observações</span>
-                              <textarea
-                                value={contactEdit.observations}
-                                onChange={event => setContactEdit(prev => ({ ...prev, observations: event.target.value }))}
-                                rows={4}
-                                className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
-                                placeholder="Observações e histórico do contato"
-                              />
-                            </label>
-
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              <button
-                                type="button"
-                                onClick={() => void saveContactDetails()}
-                                disabled={contactEditSaving || !selectedConversation}
-                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-                              >
-                                {contactEditSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                                Salvar contato
+                            <div className="flex gap-2">
+                              <button type="button" onClick={() => void saveContactDetails()} disabled={contactEditSaving || !selectedConversation} className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-sky-600 px-2.5 py-1.5 text-xs font-medium text-white disabled:opacity-50">
+                                {contactEditSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                Salvar
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => void sendContactCard()}
-                                disabled={sendingHumanMessage || !selectedConversation}
-                                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
-                              >
-                                <UserRound size={15} />
-                                Enviar contato
+                              <button type="button" onClick={() => void sendContactCard()} disabled={sendingHumanMessage || !selectedConversation} className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-50">
+                                <UserRound size={12} /> Enviar
                               </button>
                             </div>
-
-                            {contactEditError && (
-                              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                                {contactEditError}
-                              </div>
-                            )}
+                            {contactEditError && <div className="rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">{contactEditError}</div>}
                           </div>
                         )}
+
+                        {/* Observacoes */}
+                        <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-2.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Observacoes</p>
+                          <p className="mt-1 text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">{selectedConversation.observacoes || 'Sem observacoes'}</p>
+                        </div>
                       </div>
                     </PanelBlock>
 
-                    <PanelBlock title="Resumo operacional">
-                      <InfoRow icon={<User size={14} />} label="Pessoa" value={selectedConversation.nome_crm || selectedConversation.cliente_nome || 'Nao informado'} />
-                      <InfoRow icon={<UserRound size={14} />} label="Empresa" value={selectedConversation.empresa_nome || 'Nao informada'} />
-                      <InfoRow icon={<Phone size={14} />} label="Telefone" value={contactPhone(selectedConversation)} mono />
-                      <InfoRow icon={<Mail size={14} />} label="Email" value={selectedConversation.email_principal || (selectedConversation.fila === 'email' ? selectedConversation.document_key : 'Nao informado')} />
-                      <InfoRow icon={<Clock3 size={14} />} label="Status CRM" value={selectedConversation.contato_status || 'Nao definido'} />
-                      <InfoRow icon={<UserCheck size={14} />} label="Agente atual" value={selectedConversation.agente_atual || selectedConversation.agente_nome || 'Nao atribuido'} />
+                    {/* BLOCO 2: Status do Atendimento */}
+                    <PanelBlock title="Status do Atendimento" defaultOpen={true}>
+                      <div className="space-y-2.5">
+                        <InfoRow icon={<User size={14} />} label="Agente" value={selectedConversation.agente_atual || selectedConversation.agente_nome || 'Nao atribuido'} />
+                        <InfoRow icon={<Clock3 size={14} />} label="Modo" value={humanModeActive ? 'Humano' : 'IA Clara'} />
+                        <InfoRow icon={<Mail size={14} />} label="Email" value={selectedConversation.email_principal || (selectedConversation.fila === 'email' ? selectedConversation.document_key : 'Nao informado')} />
+
+                        {/* Controles rapidos */}
+                        <div className="pt-2 border-t border-slate-100">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Fila e etapa</p>
+                          <select value={selectedConversation.fila} onChange={event => void changeConversationQueue(event.target.value as QueueType)} disabled={actionLoading} className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none">
+                            <option value="atendimento">Atendimento</option>
+                            <option value="renovacao">Renovacao</option>
+                            <option value="email">Email</option>
+                            <option value="agendamento">Agendamento</option>
+                          </select>
+                          <select value={normalizeKanbanStatus(selectedConversation.kanban_status)} onChange={event => void updateConversationStatus(event.target.value)} disabled={actionLoading} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none">
+                            {STATUS_OPTIONS.map(column => (
+                              <option key={column.key} value={column.key}>{column.label}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Botoes de acao */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <button type="button" disabled={actionLoading || humanModeActive} onClick={() => void toggleHumanMode(true)} className="rounded-xl bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white disabled:opacity-50">
+                            Humano
+                          </button>
+                          <button type="button" disabled={actionLoading || !humanModeActive} onClick={() => void toggleHumanMode(false)} className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-50">
+                            Voltar IA
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button type="button" disabled={actionLoading} onClick={() => void updateConversationStatus('resolvido')} className="rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 disabled:opacity-50">
+                            Resolver
+                          </button>
+                          <button type="button" disabled={actionLoading} onClick={() => void updateConversationStatus('arquivado')} className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-50">
+                            Arquivar
+                          </button>
+                        </div>
+
+                        {/* Atribuir agente */}
+                        <div className="pt-2 border-t border-slate-100">
+                          <select value={selectedAgentId} onChange={event => setSelectedAgentId(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none">
+                            <option value="">Atribuir agente</option>
+                            {agents.map(agent => (
+                              <option key={agent.id} value={agent.id}>{agent.nome}</option>
+                            ))}
+                          </select>
+                          <button type="button" onClick={() => void assignConversation()} disabled={actionLoading || !selectedAgentId} className="mt-2 w-full rounded-xl bg-sky-600 px-2.5 py-1.5 text-xs font-medium text-white disabled:opacity-50">
+                            Atribuir
+                          </button>
+                        </div>
+                      </div>
                     </PanelBlock>
 
+                    {/* BLOCO 3: Renovacoes (condicional) */}
                     {renovacoesCRM.length > 0 && (
-                      <PanelBlock title={`Renovacoes pendentes (${renovacoesCRM.length})`}>
-                        <div className="space-y-3">
-                          {renovacoesCRM.map(r => {
+                      <PanelBlock title={`Renovacoes (${renovacoesCRM.length})`} defaultOpen={false}>
+                        <div className="space-y-2">
+                          {renovacoesCRM.slice(0, 3).map(r => {
                             const dias = r.dias_restantes
-                            const urgencia = dias <= 0 ? 'text-red-600 bg-red-50' : dias <= 7 ? 'text-orange-600 bg-orange-50' : dias <= 15 ? 'text-yellow-600 bg-yellow-50' : 'text-blue-600 bg-blue-50'
-                            const diasLabel = dias <= 0 ? `Vencido há ${Math.abs(dias)} dias` : dias === 1 ? '1 dia restante' : `${dias} dias restantes`
+                            const urgencia = dias <= 0 ? 'text-red-600 bg-red-50' : dias <= 7 ? 'text-orange-600 bg-orange-50' : 'text-blue-600 bg-blue-50'
+                            const diasLabel = dias <= 0 ? `Vencido ${Math.abs(dias)}d` : `${dias}d`
                             return (
-                              <div key={r.id} className="rounded-xl border border-slate-200 bg-white p-3 space-y-1.5">
+                              <div key={r.id} className="rounded-xl border border-slate-200 bg-white p-2.5">
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="text-xs font-semibold text-slate-700 leading-tight">{r.tipo_certificado}</span>
-                                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${urgencia}`}>{diasLabel}</span>
+                                  <span className="text-xs font-semibold text-slate-700">{r.tipo_certificado}</span>
+                                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${urgencia}`}>{diasLabel}</span>
                                 </div>
-                                {r.pedido && <p className="text-[11px] text-slate-500">Pedido: <span className="font-mono text-slate-700">{r.pedido}</span></p>}
-                                {r.protocolo && <p className="text-[11px] text-slate-500">Protocolo: <span className="font-mono text-slate-700">{r.protocolo}</span></p>}
-                                <p className="text-[11px] text-slate-500">Vencimento: <span className="text-slate-700">{new Date(r.data_vencimento).toLocaleDateString('pt-BR')}</span></p>
-                                {r.valor != null && <p className="text-[11px] text-slate-500">Valor: <span className="font-semibold text-slate-700">R$ {r.valor.toFixed(2).replace('.', ',')}</span></p>}
+                                <p className="text-[10px] text-slate-500 mt-0.5">Venc: {new Date(r.data_vencimento).toLocaleDateString('pt-BR')}</p>
                               </div>
                             )
                           })}
+                          {renovacoesCRM.length > 3 && (
+                            <p className="text-[10px] text-slate-400 text-center">+{renovacoesCRM.length - 3} renovacoes</p>
+                          )}
                         </div>
                       </PanelBlock>
                     )}
-
-                    <PanelBlock title="Controles do atendimento">
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Fila</label>
-                      <select value={selectedConversation.fila} onChange={event => void changeConversationQueue(event.target.value as QueueType)} disabled={actionLoading} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none">
-                        <option value="atendimento">Atendimento</option>
-                        <option value="renovacao">Renovacao</option>
-                        <option value="email">Email</option>
-                        <option value="agendamento">Agendamento</option>
-                      </select>
-
-                      <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-slate-500">Etapa do Kanban</label>
-                      <select value={normalizeKanbanStatus(selectedConversation.kanban_status)} onChange={event => void updateConversationStatus(event.target.value)} disabled={actionLoading} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none">
-                        {STATUS_OPTIONS.map(column => (
-                          <option key={column.key} value={column.key}>{column.label}</option>
-                        ))}
-                      </select>
-
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        <button
-                          type="button"
-                          disabled={actionLoading}
-                          onClick={() => void updateConversationStatus('resolvido')}
-                          className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 disabled:opacity-50"
-                        >
-                          Resolver e sair
-                        </button>
-                        <button
-                          type="button"
-                          disabled={actionLoading}
-                          onClick={() => void updateConversationStatus('arquivado')}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
-                        >
-                          Arquivar da fila
-                        </button>
-                      </div>
-
-                      <p className="mt-2 text-[11px] text-slate-500">
-                        Ao resolver ou arquivar, a conversa sai da lista principal e continua acessivel em encerradas.
-                      </p>
-
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button type="button" disabled={actionLoading || humanModeActive} onClick={() => void toggleHumanMode(true)} className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
-                          Assumir humano
-                        </button>
-                        <button type="button" disabled={actionLoading || !humanModeActive} onClick={() => void toggleHumanMode(false)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50">
-                          Voltar para IA
-                        </button>
-                      </div>
-
-                      <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-slate-500">Atribuir agente</label>
-                      <select value={selectedAgentId} onChange={event => setSelectedAgentId(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none">
-                        <option value="">Selecione um agente</option>
-                        {agents.map(agent => (
-                          <option key={agent.id} value={agent.id}>{agent.nome} - {agent.perfil}</option>
-                        ))}
-                      </select>
-                      <button type="button" onClick={() => void assignConversation()} disabled={actionLoading || !selectedAgentId} className="mt-2 w-full rounded-xl bg-sky-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
-                        Atribuir conversa
-                      </button>
-                    </PanelBlock>
-
-                    <PanelBlock title="Observacoes do contato">
-                      <div className="space-y-2 text-sm leading-relaxed text-slate-700">
-                        <p><span className="font-semibold text-slate-500">Pessoa:</span> {selectedConversation.nome_crm || selectedConversation.cliente_nome || 'Nao informado'}</p>
-                        <p><span className="font-semibold text-slate-500">Empresa:</span> {selectedConversation.empresa_nome || 'Nao informada'}</p>
-                        <p className="whitespace-pre-wrap">{selectedConversation.observacoes || 'Sem observacoes no crm_customers.'}</p>
-                      </div>
-                    </PanelBlock>
-
-                    <PanelBlock title="Leitura operacional">
-                      <ul className="space-y-2 whitespace-pre-line text-sm text-slate-600">
-                        <li>Fila: <strong>{queueLabel(selectedConversation.fila)}</strong></li>
-                        <li>Modo atual: <strong>{humanModeActive ? 'Humano' : 'IA Clara'}</strong></li>
-                        <li>Documento-chave: <strong>{selectedConversation.document_key}</strong></li>
-                        <li>Agente desde: <strong>{formatDateTime(selectedConversation.agente_desde)}</strong></li>
-                        <li>Ultima mensagem: <strong>{normalizeStructuredMessage(selectedConversation.ultima_mensagem) || 'Sem resumo'}</strong></li>
-                      </ul>
-                    </PanelBlock>
                   </div>
                 </aside>
               </div>
