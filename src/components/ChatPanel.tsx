@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Send, Loader2, Smile, Paperclip, Mic, StopCircle, Trash2, MessageCircle, Phone, CalendarClock, Clock3, Copy, RefreshCw, Pencil, Save, CornerUpLeft, MoreVertical, Check, Ban } from 'lucide-react'
+import { X, Send, Loader2, Smile, Paperclip, Mic, StopCircle, Trash2, MessageCircle, Phone, CalendarClock, Clock3, Copy, RefreshCw, Pencil, Save, CornerUpLeft, MoreVertical, Check, Ban, User, Activity, Folder } from 'lucide-react'
 import { supabase, getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
@@ -288,6 +288,53 @@ async function fetchMediaObjectUrl(evolution: EvolutionCfg, messageId: string, c
   const byteArray = new Uint8Array(byteNumbers)
   const blob = new Blob([byteArray], { type: normalizeMimeType(data.mimetype) })
   return URL.createObjectURL(blob)
+}
+
+// ── Accordion Component ────────────────────────────────────────
+
+interface AccordionItemProps {
+  title: string
+  icon?: React.ReactNode
+  defaultOpen?: boolean
+  badge?: string
+  children: React.ReactNode
+}
+
+function AccordionItem({ title, icon, defaultOpen = true, badge, children }: AccordionItemProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+
+  return (
+    <div className="rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-3 bg-gray-50/80 dark:bg-gray-900/60 hover:bg-gray-100 dark:hover:bg-gray-800/60 transition-colors"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {icon && <span className="text-gray-500 shrink-0">{icon}</span>}
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400 truncate">{title}</p>
+          {badge && (
+            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 rounded-full">
+              {badge}
+            </span>
+          )}
+        </div>
+        <svg
+          className={cn('w-4 h-4 text-gray-400 transition-transform shrink-0', isOpen && 'rotate-180')}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {isOpen && (
+        <div className="p-3 space-y-3 border-t border-gray-100 dark:border-gray-800">
+          {children}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── Component ──────────────────────────────────────────────────
@@ -1598,189 +1645,199 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
           className="hidden min-h-0 overflow-y-auto bg-white dark:bg-gray-950 border-t xl:block xl:border-t-0 border-gray-200 dark:border-gray-800 shrink-0"
           style={{ width: `${sidebarWidth}px` }}
         >
-          <div className="p-4 space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs uppercase tracking-[0.18em] text-gray-400">Contato em tempo real</p>
-                <h3 className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100 truncate">{sidebarName}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 break-all">{sidebarPhone ?? 'Sem telefone cadastrado'}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void loadLeadInfo()}
-                className="w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600 flex items-center justify-center shrink-0"
-                title="Atualizar dados do contato"
-              >
-                <RefreshCw size={15} className={cn(leadLoading && 'animate-spin')} />
-              </button>
-            </div>
-
+          <div className="p-4 space-y-3">
+            {/* Feedback */}
             {copyFeedback && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
                 {copyFeedback}
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-2">
-              {sidebarHighlights.map(item => (
-                <div key={item.label} className={cn('rounded-2xl border px-3 py-3', item.tone)}>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide opacity-75">{item.label}</p>
-                  <p className="mt-1 text-sm font-medium leading-snug">{item.value}</p>
+            {/* BLOCO 1: Perfil do Cliente */}
+            <AccordionItem
+              title="Perfil do Cliente"
+              icon={<User size={14} />}
+              defaultOpen={true}
+            >
+              <div className="space-y-3">
+                {/* Cabecalho do contato */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">{sidebarName}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 break-all">{sidebarPhone ?? 'Sem telefone cadastrado'}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadLeadInfo()}
+                    className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600 flex items-center justify-center shrink-0"
+                    title="Atualizar dados do contato"
+                  >
+                    <RefreshCw size={14} className={cn(leadLoading && 'animate-spin')} />
+                  </button>
                 </div>
-              ))}
-            </div>
 
-            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/60 p-3 space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Acoes rapidas</p>
-              <div className="grid grid-cols-1 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingLead(true)}
-                  className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:border-indigo-300 hover:text-indigo-700"
-                >
-                  <Pencil size={14} /> Editar informacoes
-                </button>
-                <button
-                  type="button"
-                  onClick={() => leadDocInputRef.current?.click()}
-                  className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:border-amber-300 hover:text-amber-700"
-                >
-                  {uploadingLeadAttachment ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
-                  Salvar documento no contato
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void copyText(sidebarPhone, 'Telefone')}
-                  disabled={!sidebarPhone}
-                  className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:border-green-300 hover:text-green-700 disabled:opacity-50"
-                >
-                  <Copy size={14} /> Copiar telefone
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void copyText(remoteJid, 'JID')}
-                  disabled={!remoteJid}
-                  className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:border-blue-300 hover:text-blue-700 disabled:opacity-50"
-                >
-                  <MessageCircle size={14} /> Copiar identificador da conversa
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Dados do atendimento</p>
-              <InfoRow icon={<Phone size={14} />} label="Telefone" value={sidebarPhone} />
-              <InfoRow icon={<MessageCircle size={14} />} label="Responsavel atual" value={leadInfo?.responsavel_nome ?? 'Nao definido'} />
-              <InfoRow icon={<Clock3 size={14} />} label="Transferido em" value={formatDateTime(leadInfo?.transferido_em)} />
-              <InfoRow icon={<MessageCircle size={14} />} label="Transferido por" value={leadInfo?.transferido_por} />
-              <InfoRow icon={<Clock3 size={14} />} label="Criado em" value={formatDateTime(leadInfo?.created_at)} />
-              <InfoRow icon={<CalendarClock size={14} />} label="Agendamento" value={formatDateTime(leadInfo?.data_agendamento)} />
-              <InfoRow icon={<CalendarClock size={14} />} label="Retorno criado" value={formatDateTime(leadInfo?.agendamento_criado_em)} />
-              <InfoRow icon={<MessageCircle size={14} />} label="Instancia" value={leadInfo?.evolution_instance ?? contact.evolution_instance ?? evolution?.instance_name ?? 'Nao informada'} />
-              <InfoRow icon={<MessageCircle size={14} />} label="JID" value={remoteJid ?? leadInfo?.evolution_remote_jid ?? 'Ainda nao vinculado'} mono />
-            </div>
-
-            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Transferir conversa</p>
-                {!hasTransferFields && (
-                  <span className="text-[11px] text-amber-600">Migration pendente</span>
-                )}
-              </div>
-              <SidebarSelect
-                label="Atendente / agente responsavel"
-                value={selectedTransferId}
-                onChange={setSelectedTransferId}
-                options={[
-                  { value: '', label: loadingTargets ? 'Carregando...' : 'Selecione o destino' },
-                  ...transferTargets.map(target => ({
-                    value: target.id,
-                    label: `${target.nome} · ${target.perfil === 'agente_registro' ? 'Agente' : target.perfil === 'usuario' ? 'Operador' : 'Admin'}`,
-                  })),
-                ]}
-              />
-              <button
-                type="button"
-                onClick={() => void transferConversation()}
-                disabled={transferringLead || !selectedTransferId || loadingTargets}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-3 py-2.5 text-sm font-medium disabled:opacity-50"
-              >
-                {transferringLead ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                Transferir atendimento
-              </button>
-            </div>
-
-            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Documentos do contato</p>
-                {!hasDocumentTable && (
-                  <span className="text-[11px] text-amber-600">Migration pendente</span>
-                )}
-              </div>
-              <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-[11px] text-gray-600">
-                Armazenamento atual: <span className="font-semibold">{documentStorageConfig.mode === 'server' ? 'Servidor próprio' : 'Supabase Storage'}</span>
-              </div>
-
-              {leadAttachments.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-gray-200 px-3 py-4 text-sm text-gray-400">
-                  Nenhum documento salvo neste contato ainda.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {leadAttachments.map(doc => (
-                    <div key={doc.id} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{doc.nome_original}</p>
-                          <p className="text-xs text-gray-500">
-                            {doc.mime_type || 'arquivo'} · {doc.tamanho_bytes ? `${Math.round(doc.tamanho_bytes / 1024)} KB` : 'tamanho n/d'}
-                          </p>
-                          {doc.storage_provider && (
-                            <p className="text-[11px] text-gray-400 mt-1">
-                              {doc.storage_provider === 'server' ? 'Servidor próprio' : 'Supabase Storage'}
-                            </p>
-                          )}
-                          {doc.bucket && doc.storage_path && (
-                            <p className="text-[11px] text-gray-400 mt-1 truncate">
-                              {doc.bucket}/{doc.storage_path}
-                            </p>
-                          )}
-                          {doc.external_url && !doc.bucket && (
-                            <p className="text-[11px] text-gray-400 mt-1 truncate">
-                              {doc.external_url}
-                            </p>
-                          )}
-                          <p className="text-[11px] text-gray-400 mt-1">
-                            {formatDateTime(doc.uploaded_at)} · {doc.uploaded_by || 'Operador'}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => void openLeadAttachment(doc)}
-                            className="text-xs text-blue-600 hover:underline"
-                          >
-                            Abrir
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void removeLeadAttachment(doc.id)}
-                            className="text-xs text-red-500 hover:underline"
-                          >
-                            Remover
-                          </button>
-                        </div>
-                      </div>
+                {/* Highlights consolidados */}
+                <div className="grid grid-cols-1 gap-2">
+                  {sidebarHighlights.map(item => (
+                    <div key={item.label} className={cn('rounded-xl border px-3 py-2', item.tone)}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide opacity-75">{item.label}</p>
+                      <p className="mt-0.5 text-sm font-medium leading-snug">{item.value}</p>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
 
-            {editingLead ? (
+                {/* Resumo comercial inline */}
+                <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/60 p-2.5 space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Resumo</p>
+                  <LongTextBlock label="" value={leadInfo?.resumo_conversa} />
+                  {leadInfo?.anotacoes && (
+                    <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Anotacoes</p>
+                      <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400 line-clamp-3">{leadInfo.anotacoes}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </AccordionItem>
+
+            {/* BLOCO 2: Status do Atendimento */}
+            <AccordionItem
+              title="Status do Atendimento"
+              icon={<Activity size={14} />}
+              defaultOpen={true}
+            >
+              <div className="space-y-3">
+                {/* Dados consolidados */}
+                <div className="space-y-2">
+                  <InfoRow icon={<User size={14} />} label="Responsavel" value={leadInfo?.responsavel_nome ?? 'Nao definido'} />
+                  <InfoRow icon={<Clock3 size={14} />} label="Criado em" value={formatDateTime(leadInfo?.created_at)} />
+                  <InfoRow icon={<CalendarClock size={14} />} label="Agendamento" value={formatDateTime(leadInfo?.data_agendamento)} />
+                  <InfoRow icon={<MessageCircle size={14} />} label="Instancia" value={leadInfo?.evolution_instance ?? contact.evolution_instance ?? evolution?.instance_name ?? 'Nao informada'} />
+                  <InfoRow icon={<MessageCircle size={14} />} label="JID" value={remoteJid ?? leadInfo?.evolution_remote_jid ?? 'Ainda nao vinculado'} mono />
+                </div>
+
+                {/* Acoes rapidas */}
+                <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Acoes rapidas</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingLead(true)}
+                      className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-2 py-2 text-xs text-gray-700 dark:text-gray-200 hover:border-indigo-300 hover:text-indigo-700"
+                    >
+                      <Pencil size={12} /> Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copyText(sidebarPhone, 'Telefone')}
+                      disabled={!sidebarPhone}
+                      className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-2 py-2 text-xs text-gray-700 dark:text-gray-200 hover:border-green-300 hover:text-green-700 disabled:opacity-50"
+                    >
+                      <Copy size={12} /> Telefone
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </AccordionItem>
+
+            {/* BLOCO 3: Transferir e Documentos */}
+            <AccordionItem
+              title="Transferir e Documentos"
+              icon={<Folder size={14} />}
+              defaultOpen={false}
+              badge={!hasTransferFields || !hasDocumentTable ? 'Pendente' : undefined}
+            >
+              <div className="space-y-4">
+                {/* Transferencia */}
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Transferir conversa</p>
+                  <SidebarSelect
+                    label="Atendente / agente"
+                    value={selectedTransferId}
+                    onChange={setSelectedTransferId}
+                    options={[
+                      { value: '', label: loadingTargets ? 'Carregando...' : 'Selecione' },
+                      ...transferTargets.map(target => ({
+                        value: target.id,
+                        label: `${target.nome} · ${target.perfil === 'agente_registro' ? 'Agente' : target.perfil === 'usuario' ? 'Operador' : 'Admin'}`,
+                      })),
+                    ]}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void transferConversation()}
+                    disabled={transferringLead || !selectedTransferId || loadingTargets}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 text-sm font-medium disabled:opacity-50"
+                  >
+                    {transferringLead ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    Transferir
+                  </button>
+                </div>
+
+                {/* Documentos */}
+                <div className="pt-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Documentos</p>
+                    <button
+                      type="button"
+                      onClick={() => leadDocInputRef.current?.click()}
+                      className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700"
+                    >
+                      {uploadingLeadAttachment ? <Loader2 size={12} className="animate-spin" /> : <Paperclip size={12} />}
+                      Adicionar
+                    </button>
+                  </div>
+
+                  {leadAttachments.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-gray-200 px-3 py-3 text-xs text-gray-400 text-center">
+                      Nenhum documento salvo
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {leadAttachments.slice(0, 5).map(doc => (
+                        <div key={doc.id} className="rounded-xl border border-gray-200 bg-gray-50 px-2.5 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium text-gray-800 truncate">{doc.nome_original}</p>
+                              <p className="text-[10px] text-gray-400">
+                                {doc.tamanho_bytes ? `${Math.round(doc.tamanho_bytes / 1024)} KB` : ''}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => void openLeadAttachment(doc)}
+                                className="text-[10px] text-blue-600 hover:underline"
+                              >
+                                Abrir
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void removeLeadAttachment(doc.id)}
+                                className="text-[10px] text-red-500 hover:underline"
+                              >
+                                X
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {leadAttachments.length > 5 && (
+                        <p className="text-[10px] text-gray-400 text-center">
+                          +{leadAttachments.length - 5} documentos
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </AccordionItem>
+
+            {/* Formulario de edicao (quando ativo) */}
+            {editingLead && (
               <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-3 space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Editar contato e agendamento</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Editar contato</p>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -1843,41 +1900,14 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
                   label="Resumo da conversa"
                   value={leadForm.resumo_conversa}
                   onChange={value => setLeadForm(prev => ({ ...prev, resumo_conversa: value }))}
-                  rows={3}
+                  rows={2}
                 />
                 <SidebarTextArea
                   label="Anotacoes"
                   value={leadForm.anotacoes}
                   onChange={value => setLeadForm(prev => ({ ...prev, anotacoes: value }))}
-                  rows={3}
-                />
-                <SidebarTextArea
-                  label="Follow up 1"
-                  value={leadForm.follow_up_1}
-                  onChange={value => setLeadForm(prev => ({ ...prev, follow_up_1: value }))}
                   rows={2}
                 />
-                <SidebarTextArea
-                  label="Follow up 2"
-                  value={leadForm.follow_up_2}
-                  onChange={value => setLeadForm(prev => ({ ...prev, follow_up_2: value }))}
-                  rows={2}
-                />
-                <SidebarTextArea
-                  label="Follow up 3"
-                  value={leadForm.follow_up_3}
-                  onChange={value => setLeadForm(prev => ({ ...prev, follow_up_3: value }))}
-                  rows={2}
-                />
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Resumo comercial</p>
-                <LongTextBlock label="Resumo da conversa" value={leadInfo?.resumo_conversa} />
-                <LongTextBlock label="Anotacoes" value={leadInfo?.anotacoes} />
-                <LongTextBlock label="Follow up 1" value={leadInfo?.follow_up_1} />
-                <LongTextBlock label="Follow up 2" value={leadInfo?.follow_up_2} />
-                <LongTextBlock label="Follow up 3" value={leadInfo?.follow_up_3} />
               </div>
             )}
           </div>
