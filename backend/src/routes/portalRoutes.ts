@@ -122,6 +122,15 @@ function normalizePhone(value: string | null | undefined) {
   return digits
 }
 
+function maskPhone(value: string) {
+  const digits = value.replace(/\D/g, '')
+  if (digits.length <= 4) return 'final ' + digits
+  const local = digits.startsWith('55') ? digits.slice(2) : digits
+  const ddd = local.slice(0, 2)
+  const suffix = local.slice(-4)
+  return ddd ? `(${ddd}) *****-${suffix}` : `*****-${suffix}`
+}
+
 function buildPortalWhatsappMessage(code: string) {
   return `CertiID - Portal Minhas Compras
 
@@ -244,7 +253,7 @@ export async function handlePortalRoutes(
       },
     })))
 
-    writeJson(res, 200, { ok: true, email }, corsOrigin)
+    writeJson(res, 200, { ok: true, email, maskedPhones: phones.slice(0, 2).map(maskPhone) }, corsOrigin)
     return true
   }
 

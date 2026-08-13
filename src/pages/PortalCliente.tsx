@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { CalendarDays, CreditCard, ExternalLink, Loader2, MessageCircle, Package, Phone, ShieldCheck } from 'lucide-react'
+import { CalendarDays, CreditCard, ExternalLink, Loader2, MessageCircle, Package, ShieldCheck } from 'lucide-react'
 import { getApiUrl } from '@/lib/api'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig, type AgencyConfig } from '@/lib/agencyConfig'
 import { SchedulingModal, formatCurrency, formatDateTime } from '@/components/checkout'
@@ -86,6 +86,7 @@ export default function PortalCliente() {
   const [portalToken, setPortalToken] = useState('')
   const [codeInput, setCodeInput] = useState('')
   const [requestedEmail, setRequestedEmail] = useState('')
+  const [maskedPhones, setMaskedPhones] = useState<string[]>([])
   const [requestStep, setRequestStep] = useState<'email' | 'code' | 'portal'>('email')
   const [requestLoading, setRequestLoading] = useState(false)
   const [emailLoading, setEmailLoading] = useState(false)
@@ -239,15 +240,16 @@ export default function PortalCliente() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: normalized }),
       })
-      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; maskedPhones?: string[] } | null
       if (!response.ok || !data?.ok) throw new Error(data?.error || 'Nao foi possivel enviar o código.')
       window.localStorage.setItem('avmd_portal_email', normalized)
       setPortalEmail(normalized)
       setEmailInput(normalized)
       setRequestedEmail(normalized)
+      setMaskedPhones(Array.isArray(data.maskedPhones) ? data.maskedPhones : [])
       setCodeInput('')
       setRequestStep('code')
-      setSuccess('Enviamos um novo código. Use sempre o e-mail mais recente da CertiID.')
+      setSuccess('Enviamos um novo código para o e-mail e WhatsApp cadastrados. Use sempre a mensagem mais recente da CertiID.')
     } catch (err) {
       setError(formatPortalError(err, 'Nao foi possivel enviar o código.'))
     } finally {
@@ -373,7 +375,9 @@ export default function PortalCliente() {
                         maxLength={6}
                       />
                       <p className="mt-2 text-xs text-slate-500">
-                        Enviamos o código para {requestedEmail || emailInput.trim().toLowerCase()}. Use o e-mail com o texto "Portal Minhas Compras", não o e-mail de redefinição de senha do CRM.
+                        Enviamos o código para {requestedEmail || emailInput.trim().toLowerCase()}
+                        {maskedPhones.length ? ` e para o WhatsApp cadastrado ${maskedPhones.join(', ')}.` : ' e para o WhatsApp cadastrado na compra, quando houver telefone disponível.'}
+                        {' '}Use sempre a mensagem mais recente com o texto "Portal Minhas Compras".
                       </p>
                       <button
                         type="button"
@@ -443,19 +447,10 @@ export default function PortalCliente() {
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#ea7b18]">Acesso rápido</p>
               <h2 className="mt-1 text-lg font-semibold text-slate-900">Fale com a CertiID</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Aqui você consegue revisar o pedido, conferir a forma de pagamento, agendar ou reagendar a validação e chamar a equipe quando precisar.
+                Aqui você consegue revisar o pedido, conferir a forma de pagamento e agendar ou reagendar a validação. Para atendimento imediato, use o botão oficial no topo da página.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <a
-                href={buildWhatsappUrl(agencyConfig.telefone)}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-full bg-[#f88414] px-5 py-3 text-sm font-bold uppercase text-white shadow-lg shadow-orange-500/20 hover:bg-[#e87512]"
-              >
-                <Phone size={15} />
-                Fale conosco
-              </a>
               <a
                 href="mailto:contato@certiid.com.br"
                 className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
