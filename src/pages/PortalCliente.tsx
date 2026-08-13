@@ -223,7 +223,7 @@ export default function PortalCliente() {
           <div className="flex items-center justify-center bg-[linear-gradient(180deg,#ffffff_0%,#f4f7fb_100%)] p-5 sm:p-8">
             <div className="w-full max-w-xl">
               <div className="mb-7 flex items-center gap-4 lg:hidden">
-                <img src="/logo-certiid.png" alt="CertiID certificado digital" className="h-14 w-auto" />
+                <img src="/logo-certiid.png" alt="CertiID certificado digital" className="h-28 w-auto" />
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f88414]">Portal oficial</p>
                   <p className="text-sm text-slate-600">Minhas compras CertiID</p>
@@ -498,7 +498,7 @@ function PortalShell({ children, agencyConfig }: { children: ReactNode; agencyCo
         <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2.5 sm:px-6 lg:px-8">
             <a href="https://certiid.com.br" className="inline-flex items-center" aria-label="Ir para o site da CertiID">
-              <img src="/logo-certiid.png" alt="CertiID certificado digital" className="h-14 w-auto sm:h-16" />
+              <img src="/logo-certiid.png" alt="CertiID certificado digital" className="h-28 w-auto sm:h-32" />
             </a>
             <nav className="hidden items-center gap-6 text-xs font-bold uppercase tracking-[0.08em] text-slate-700 lg:flex">
               <a href="https://certiid.com.br/#loja" className="transition hover:text-[#f88414]">Loja de certificados</a>
