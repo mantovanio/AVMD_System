@@ -33,8 +33,8 @@ export const PAGE_PERMISSIONS: { id: PermissaoPagina; label: string; description
 
 export const DEFAULT_PERMISSIONS: Record<PerfilAcesso, PermissaoPagina[]> = {
   admin: PAGE_PERMISSIONS.map(p => p.id),
-  supervisor_chat: ['dashboard', 'comercial', 'clientes', 'chat', 'renovacoes', 'relatorios'],
-  supervisor_renovacoes: ['dashboard', 'comercial', 'clientes', 'chat', 'renovacoes', 'relatorios'],
+  supervisor_chat: ['chat'],
+  supervisor_renovacoes: ['renovacoes'],
   agente_registro: ['dashboard', 'comercial', 'clientes', 'chat', 'engage', 'renovacoes'],
   vendedor: ['dashboard', 'comercial', 'clientes', 'engage', 'parceiros', 'relatorios'],
   revendedor: ['dashboard', 'comercial', 'clientes', 'engage', 'parceiros', 'relatorios'],
@@ -42,7 +42,7 @@ export const DEFAULT_PERMISSIONS: Record<PerfilAcesso, PermissaoPagina[]> = {
 }
 
 const RESTRICTED_PAGE_PROFILES: Partial<Record<PermissaoPagina, PerfilAcesso[]>> = {
-  chat: ['admin', 'supervisor_chat', 'supervisor_renovacoes', 'agente_registro', 'usuario'],
+  chat: ['admin', 'supervisor_chat', 'agente_registro', 'usuario'],
   engage: ['admin', 'supervisor_chat', 'agente_registro', 'vendedor', 'revendedor', 'usuario'],
 }
 

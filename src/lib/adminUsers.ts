@@ -53,14 +53,9 @@ function normalizeAdminUserError(error: string | undefined) {
 }
 
 async function callAdminUsers(body: unknown) {
-  const clerk = globalThis as typeof globalThis & { Clerk?: { session?: { getToken: () => Promise<string | null> } } }
-  const token = await clerk.Clerk?.session?.getToken().catch(() => null)
   const res = await fetch(getApiUrl('/admin/users'), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
   const data = await res.json().catch(() => null) as { ok?: boolean; userId?: string; verified?: boolean; error?: string } | null
