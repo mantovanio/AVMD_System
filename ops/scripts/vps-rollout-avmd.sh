@@ -221,6 +221,15 @@ install_edge_config() {
       --mount-add type=bind,src="${PORTAL_DIR}",dst=/usr/share/nginx/portal,readonly \
       "${AVMD_WEB_SERVICE}" >/dev/null
   fi
+
+  docker service update \
+    --label-add "traefik.http.routers.avmd-portal.entrypoints=websecure" \
+    --label-add "traefik.http.routers.avmd-portal.rule=Host(\`portal.certiid.com.br\`)" \
+    --label-add "traefik.http.routers.avmd-portal.service=avmd-web" \
+    --label-add "traefik.http.routers.avmd-portal.tls=true" \
+    --label-add "traefik.http.routers.avmd-portal.tls.certresolver=letsencryptresolver" \
+    "${AVMD_WEB_SERVICE}" >/dev/null
+
   docker service update --force "${AVMD_WEB_SERVICE}" >/dev/null
 }
 
