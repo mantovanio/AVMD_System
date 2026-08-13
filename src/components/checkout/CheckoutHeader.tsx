@@ -24,10 +24,10 @@ export function CheckoutHeader({ lojaNome, paymentRuntime, logoUrl }: CheckoutHe
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <a
-            href="/?page=portal"
+            href="/portal"
             className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:border-[#17346b] hover:text-[#17346b] transition-colors"
           >
-            Login do cliente
+            Minhas compras
             <ArrowRight size={14} />
           </a>
           <span className="inline-flex items-center gap-2 rounded-full bg-[#fff4ea] px-3 py-2 text-xs font-semibold text-[#ad5207]">

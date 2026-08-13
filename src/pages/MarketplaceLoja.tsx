@@ -2691,7 +2691,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
       <footer className="px-4 pb-8 pt-4">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-center gap-3">
           <a
-            href="/?page=portal"
+            href="/portal"
             className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#17346b] hover:text-[#17346b]"
           >
             Meus pedidos

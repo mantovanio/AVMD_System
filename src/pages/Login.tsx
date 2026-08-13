@@ -385,7 +385,7 @@ export default function Login() {
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-medium text-white/90">Senha</span>
-                        <button type="button" onClick={() => { window.location.href = '/?page=portal' }} className="text-xs text-white/90 hover:underline">
+                        <button type="button" onClick={() => { window.location.href = '/portal' }} className="text-xs text-white/90 hover:underline">
                           Acesso do cliente
                         </button>
                       </div>
@@ -403,7 +403,7 @@ export default function Login() {
                     </p>
                     <button
                       type="button"
-                      onClick={() => { window.location.href = '/?page=portal' }}
+                      onClick={() => { window.location.href = '/portal' }}
                       className="text-sm font-semibold text-white hover:underline"
                     >
                       Entrar no portal do cliente
