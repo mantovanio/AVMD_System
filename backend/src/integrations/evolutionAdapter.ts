@@ -83,13 +83,8 @@ export class EvolutionAdapter implements IntegrationAdapter {
       }
     }
 
-    // Roteia para a instância correta com base no canal do evento.
-    // canal='renovacao' → CertiID (IA de renovações)
-    // canal='atendimento' ou ausente → atendimento humano (padrão)
-    const canal = String(event.payload.canal ?? 'atendimento').trim()
-    const instance = canal === 'renovacao'
-      ? this.config.evolutionCertiid
-      : this.config.evolutionAtendimento
+    // Canal unico temporario: todo envio passa pela instancia atendimento.
+    const instance = this.config.evolutionAtendimento
 
     return sendEvolutionMessage(instance, to, body)
   }

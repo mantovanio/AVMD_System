@@ -23,10 +23,6 @@ type ViewerProfile = {
   ponto_atendimento_id: string | null
 }
 
-function canManageChatSettings(viewer: ViewerProfile | null) {
-  return viewer !== null && ['admin', 'superadmin', 'supervisor_chat', 'supervisor_renovacoes'].includes(viewer.perfil)
-}
-
 
 type SendChatMessageInput = {
   lead_id?: string
@@ -68,7 +64,7 @@ function cleanBaseUrl(value: string | null | undefined) {
 function inferCanalFromInstance(instanceName: string | null | undefined) {
   const normalized = String(instanceName ?? '').trim().toLowerCase()
   if (!normalized) return 'atendimento'
-  if (normalized.includes('renov') || normalized.includes('certiid')) return 'renovacao'
+  if (normalized.includes('renov')) return 'renovacao'
   return 'atendimento'
 }
 
@@ -252,7 +248,7 @@ function buildConversationVisibilitySql(conversationAlias: string, viewerAlias =
   )`
 
   return `(
-    ${viewerAlias}.perfil IN ('admin', 'superadmin', 'supervisor_chat', 'supervisor_renovacoes')
+    ${viewerAlias}.perfil IN ('admin', 'superadmin', 'supervisor_chat')
     OR ${assignedToViewer}
     OR (
       ${viewerAlias}.perfil = 'vendedor'
@@ -357,11 +353,11 @@ async function resolveIntegration(
   const integrations = await integrationRepo.findActiveWhatsApp()
   if (!integrations.length) return null
 
-  const preferred = preferredInstanceName
-    ? integrations.find(item => item.instance_name === preferredInstanceName)
-    : null
+  void preferredInstanceName
+  // Canal unico temporario: evita envios pela instancia CertiID enquanto ela estiver instavel.
+  const atendimento = integrations.find(item => inferCanalFromInstance(item.instance_name) === 'atendimento')
 
-  return preferred ?? integrations[0] ?? null
+  return atendimento ?? integrations[0] ?? null
 }
 
 async function sendEvolutionTextMessage(
@@ -507,13 +503,14 @@ export async function handleChatRoutes(
 
   if (!url.startsWith('/api/chat')) return false
 
-  if (method === 'GET' && url.startsWith('/api/chat/crm/integrations')) {
+  if (method === 'GET' && url === '/api/chat/crm/integrations') {
     const integrations = await externalIntegrationRepository.findActiveWhatsApp()
     const rows = integrations.map(item => ({
       id: item.id,
       name: item.name,
       status: item.status,
       base_url: item.base_url,
+      api_token: item.api_token,
       instance_name: item.instance_name,
       sender_name: item.sender_name,
     }))
@@ -523,13 +520,6 @@ export async function handleChatRoutes(
 
   if (url === '/api/chat/crm/config') {
     if (method === 'GET') {
-      const parsed = new URL(url, 'http://localhost')
-      const viewerId = parsed.searchParams.get('profile_id') ?? ''
-      const viewer = viewerId ? await loadViewerProfile(db, viewerId) : null
-      if (!canManageChatSettings(viewer)) {
-        writeJson(res, 403, { ok: false, error: 'Sem permissao para acessar estas configuracoes.' }, corsOrigin)
-        return true
-      }
       const value = await configRepository.get<{
         enabled: boolean
         minutes: number
@@ -540,12 +530,6 @@ export async function handleChatRoutes(
     }
     if (method === 'PUT') {
       const body = await readJson<Record<string, unknown>>(req)
-      const viewerId = asString(body.profile_id)
-      const viewer = viewerId ? await loadViewerProfile(db, viewerId) : null
-      if (!canManageChatSettings(viewer)) {
-        writeJson(res, 403, { ok: false, error: 'Sem permissao para alterar estas configuracoes.' }, corsOrigin)
-        return true
-      }
       const enabled = Boolean(body.enabled)
       const minutes = Number(body.minutes) || 10
       const clara_webhook = String(body.clara_webhook ?? 'https://auto.mantovan.com.br/webhook/avmd-clara-inbound')
@@ -557,13 +541,6 @@ export async function handleChatRoutes(
 
   if (url === '/api/chat/crm/ai-control') {
     if (method === 'GET') {
-      const parsed = new URL(url, 'http://localhost')
-      const viewerId = parsed.searchParams.get('profile_id') ?? ''
-      const viewer = viewerId ? await loadViewerProfile(db, viewerId) : null
-      if (!canManageChatSettings(viewer)) {
-        writeJson(res, 403, { ok: false, error: 'Sem permissao para acessar o controle de IA.' }, corsOrigin)
-        return true
-      }
       const value = await configRepository.get<{
         enabled: boolean
         atendimento_ia_enabled: boolean
@@ -577,13 +554,7 @@ export async function handleChatRoutes(
         enabled?: boolean
         atendimento_ia_enabled?: boolean
         renovacao_ia_enabled?: boolean
-        profile_id?: string
       }>(req)
-      const viewer = body.profile_id ? await loadViewerProfile(db, body.profile_id) : null
-      if (!canManageChatSettings(viewer)) {
-        writeJson(res, 403, { ok: false, error: 'Sem permissao para alterar o controle de IA.' }, corsOrigin)
-        return true
-      }
       const current = await configRepository.get<{
         enabled: boolean
         atendimento_ia_enabled: boolean
@@ -840,7 +811,7 @@ export async function handleChatRoutes(
       `SELECT id, nome, perfil, email
        FROM profiles
        WHERE status = 'ativo'
-         AND perfil IN ('admin', 'superadmin', 'supervisor_chat', 'supervisor_renovacoes', 'usuario', 'vendedor', 'agente_registro', 'atendente')
+         AND perfil IN ('admin', 'superadmin', 'supervisor_chat', 'usuario', 'vendedor', 'agente_registro', 'atendente')
        ORDER BY nome ASC`,
     )
     writeJson(res, 200, result.rows, corsOrigin)
@@ -2167,6 +2138,5 @@ export async function handleChatRoutes(
 
   return false
 }
-
 
 

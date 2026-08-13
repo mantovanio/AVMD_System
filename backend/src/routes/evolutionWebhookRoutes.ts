@@ -130,7 +130,7 @@ function normalizeBase64Payload(value: string) {
 function inferCanalFromInstance(instanceName: string | null | undefined) {
   const normalized = String(instanceName ?? '').trim().toLowerCase()
   if (!normalized) return 'atendimento'
-  if (normalized.includes('renov') || normalized.includes('certiid')) {
+  if (normalized.includes('renov')) {
     return 'renovacao'
   }
   return 'atendimento'

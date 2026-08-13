@@ -10,10 +10,9 @@ export type OutboxProcessorResult = {
 }
 
 function pickInstance(config: BackendConfig, payload: Record<string, unknown>) {
-  const canal = String(payload.canal ?? 'atendimento').trim()
-  return canal === 'renovacao' || canal === 'checkout'
-    ? config.evolutionCertiid
-    : config.evolutionAtendimento
+  void payload
+  // Canal unico temporario: a instancia CertiID esta instavel, entao todo envio sai por atendimento.
+  return config.evolutionAtendimento
 }
 
 function normalizePhoneBR(value: string): string {
@@ -197,7 +196,7 @@ export class OutboxProcessor {
           [
             phoneDigits,
             resolvedPhone,
-            resolvedQueue === 'renovacao' ? 'CertiID' : 'atendimento',
+            'atendimento',
             resolvedQueue,
             item.body,
             resolvedName,
@@ -213,7 +212,7 @@ export class OutboxProcessor {
         await this.db.query(
           `UPDATE crm_chat_conversations
               SET fila = 'renovacao',
-                  whatsapp_instance = coalesce(whatsapp_instance, 'CertiID'),
+                  whatsapp_instance = 'atendimento',
                   telefone = coalesce($2, telefone),
                   cliente_nome = coalesce($3, nullif(cliente_nome, ''), cliente_nome),
                   crm_customer_id = coalesce($4::uuid, crm_customer_id)
