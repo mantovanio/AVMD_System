@@ -1,6 +1,8 @@
 import { AlertTriangle, ArrowRight, ShieldCheck } from 'lucide-react'
 import type { PaymentRuntime } from '@/lib/checkout'
 
+const CLIENT_PORTAL_URL = 'https://portal.certiid.com.br'
+
 interface CheckoutHeaderProps {
   lojaNome: string
   paymentRuntime: PaymentRuntime
@@ -24,7 +26,7 @@ export function CheckoutHeader({ lojaNome, paymentRuntime, logoUrl }: CheckoutHe
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <a
-            href="/portal"
+            href={CLIENT_PORTAL_URL}
             className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:border-[#17346b] hover:text-[#17346b] transition-colors"
           >
             Minhas compras
