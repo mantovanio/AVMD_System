@@ -51,13 +51,12 @@ function parseCsvList(value: string) {
 export function loadConfig(): BackendConfig {
   const baseUrl = env('EVOLUTION_BASE_URL')
   const defaultToken = env('EVOLUTION_API_TOKEN')
-  const publicApiBaseUrl = env('PUBLIC_API_BASE_URL', 'https://api.certiid.mantovan.com.br')
+  const publicApiBaseUrl = env('PUBLIC_API_BASE_URL', 'https://api.certiid.com.br')
   const telegramWebhookUrl = env('TELEGRAM_WEBHOOK_URL', `${publicApiBaseUrl.replace(/\/$/, '')}/api/webhooks/telegram`)
   const defaultEmailSendUrl = 'https://auto.mantovan.com.br/webhook/avmd-email-send'
-  const localDevDatabaseUrl = 'postgresql://avmd:avmd123ABC@127.0.0.1:5432/avmd?sslmode=disable'
   return {
     port: Number(env('PORT', '8787')),
-    databaseUrl: env('DATABASE_URL') || localDevDatabaseUrl,
+    databaseUrl: env('DATABASE_URL'),
     corsOrigin: env('CORS_ORIGIN', 'http://localhost:5173'),
     n8nWebhookUrl: env('N8N_WEBHOOK_URL'),
     n8nEmailSendUrl: env('N8N_EMAIL_SEND_URL', defaultEmailSendUrl),

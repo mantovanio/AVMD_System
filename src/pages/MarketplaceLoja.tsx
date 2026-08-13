@@ -2699,7 +2699,7 @@ export default function MarketplaceLoja({ slug }: { slug?: string | null }) {
             <ArrowRight size={14} />
           </a>
           <a
-            href="https://crm.certiid.mantovan.com.br/login"
+            href="https://crm.certiid.com.br/login"
             className="text-[11px] font-medium tracking-[0.18em] text-slate-400 transition-colors hover:text-slate-600"
             rel="noreferrer"
           >

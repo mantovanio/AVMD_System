@@ -101,6 +101,7 @@ const service = new CheckoutService(checkoutRepository, checkoutPaymentService, 
 
 function parseAllowedOrigins(corsOrigin: string) {
   const defaults = [
+    'https://crm.certiid.com.br',
     'https://crm.certiid.mantovan.com.br',
     'https://portal.certiid.com.br',
   ]

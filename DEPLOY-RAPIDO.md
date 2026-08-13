@@ -34,8 +34,10 @@ A estrutura real e:
 - Arquivo fonte versionado no repo: `ops/nginx/avmd-web.conf`
 
 Resumo:
-- `crm.certiid.mantovan.com.br` serve o frontend estatico
-- `api.certiid.mantovan.com.br` faz proxy para `http://172.18.0.1:8787`
+- `crm.certiid.com.br` serve o frontend estatico
+- `crm.certiid.mantovan.com.br` permanece como dominio legado/fallback
+- `api.certiid.com.br` faz proxy para `http://172.18.0.1:8787`
+- `api.certiid.mantovan.com.br` permanece como dominio legado/fallback
 
 ## Scripts importantes na VPS
 
@@ -105,8 +107,10 @@ npm run db:apply-sql:dry-run -- backend/sql/026_fix_legacy_email_schedule_phone.
 
 ## Publicacao e rotas reais
 
-- Dominio do frontend: `https://crm.certiid.mantovan.com.br`
-- Dominio da API: `https://api.certiid.mantovan.com.br/healthz`
+- Dominio do frontend: `https://crm.certiid.com.br`
+- Dominio legado do frontend: `https://crm.certiid.mantovan.com.br`
+- Dominio da API: `https://api.certiid.com.br/healthz`
+- Dominio legado da API: `https://api.certiid.mantovan.com.br/healthz`
 - Para o mapa completo da VPS: `ops/ROTAS-E-SERVICOS-VPS.md`
 
 ## Armadilhas conhecidas

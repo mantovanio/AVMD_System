@@ -9,8 +9,10 @@ AVMD_WEB_SERVICE="${AVMD_WEB_SERVICE:-avmd_web}"
 NGINX_SOURCE="${APP_DIR}/ops/nginx/avmd-web.conf"
 NGINX_TARGET="/opt/avmd/nginx-avmd.conf"
 NGINX_BACKUP_DIR="/opt/avmd/backups/nginx"
-PUBLIC_API_URL="https://api.certiid.mantovan.com.br/healthz"
-PUBLIC_CRM_URL="https://crm.certiid.mantovan.com.br"
+PUBLIC_API_URL="https://api.certiid.com.br/healthz"
+LEGACY_API_URL="https://api.certiid.mantovan.com.br/healthz"
+PUBLIC_CRM_URL="https://crm.certiid.com.br"
+LEGACY_CRM_URL="https://crm.certiid.mantovan.com.br"
 PUBLIC_PORTAL_URL="https://portal.certiid.com.br"
 PUBLIC_API_RETRIES="${PUBLIC_API_RETRIES:-8}"
 PUBLIC_API_RETRY_DELAY_SEC="${PUBLIC_API_RETRY_DELAY_SEC:-5}"
@@ -223,6 +225,10 @@ install_edge_config() {
   fi
 
   docker service update \
+    --label-add "traefik.http.routers.avmd-crm-http.rule=Host(\`crm.certiid.com.br\`) || Host(\`crm.certiid.mantovan.com.br\`)" \
+    --label-add "traefik.http.routers.avmd-crm.rule=Host(\`crm.certiid.com.br\`) || Host(\`crm.certiid.mantovan.com.br\`)" \
+    --label-add "traefik.http.routers.avmd-api-http.rule=Host(\`api.certiid.com.br\`) || Host(\`api.certiid.mantovan.com.br\`)" \
+    --label-add "traefik.http.routers.avmd-api.rule=Host(\`api.certiid.com.br\`) || Host(\`api.certiid.mantovan.com.br\`)" \
     --label-add "traefik.http.routers.avmd-portal-http.entrypoints=web" \
     --label-add "traefik.http.routers.avmd-portal-http.rule=Host(\`portal.certiid.com.br\`)" \
     --label-add "traefik.http.routers.avmd-portal-http.middlewares=avmd-portal-https" \
@@ -283,7 +289,7 @@ log "9) Smoke test local backend"
 curl -fsS "http://127.0.0.1:8787/healthz"
 
 log "10) Smoke test roteamento interno via Traefik"
-curl -fsS -H "Host: api.certiid.mantovan.com.br" "http://127.0.0.1/healthz"
+curl -fsS -H "Host: api.certiid.com.br" "http://127.0.0.1/healthz"
 
 log "11) Smoke test publico da API (GET)"
 smoke_test_public_api_get
@@ -293,5 +299,7 @@ smoke_test_public_api_head
 
 log "Rollout finalizado"
 log "Frontend: ${PUBLIC_CRM_URL}"
+log "Frontend legado: ${LEGACY_CRM_URL}"
 log "Portal: ${PUBLIC_PORTAL_URL}"
 log "API: ${PUBLIC_API_URL}"
+log "API legada: ${LEGACY_API_URL}"
