@@ -367,13 +367,13 @@ export async function handlePortalRoutes(
     const body = await readJson<PortalScheduleBody>(req)
     const email = resolveEmail(body, clerkSecretKey)
     if (!email || !body.saleId) {
-      writeJson(res, 401, { ok: false, error: 'Cliente ou venda invalida.' }, corsOrigin)
+      writeJson(res, 401, { ok: false, error: 'Cliente ou venda inválida.' }, corsOrigin)
       return true
     }
 
     const context = await portalRepository.getScheduleContext(email, body.saleId)
     if (!context) {
-      writeJson(res, 404, { ok: false, error: 'Venda nao encontrada para este cliente.' }, corsOrigin)
+      writeJson(res, 404, { ok: false, error: 'Venda não encontrada para este cliente.' }, corsOrigin)
       return true
     }
 
@@ -397,7 +397,7 @@ export async function handlePortalRoutes(
     })
 
     if (!agenda) {
-      writeJson(res, 404, { ok: false, error: 'Venda nao encontrada para este cliente.' }, corsOrigin)
+      writeJson(res, 404, { ok: false, error: 'Venda não encontrada para este cliente.' }, corsOrigin)
       return true
     }
 

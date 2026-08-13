@@ -59,7 +59,7 @@ function isInvalidPortalSession(message: string) {
 function paymentLabel(order: PortalOrder) {
   if (order.pago) return 'Pagamento confirmado'
   if (order.payment_charge_status) return `Pagamento: ${order.payment_charge_status}`
-  return 'Pagamento aguardando confirmacao'
+  return 'Pagamento aguardando confirmação'
 }
 
 function orderLabel(order: PortalOrder) {
@@ -144,7 +144,7 @@ export default function PortalCliente() {
       })
       const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; pedidos?: PortalOrder[]; pagamentos?: PaymentOption[] } | null
       if (!response.ok || !data?.ok) {
-        const message = data?.error || 'Nao foi possivel carregar seus pedidos.'
+        const message = data?.error || 'Não foi possível carregar seus pedidos.'
         if (response.status === 401 && isInvalidPortalSession(message)) {
           window.localStorage.removeItem('avmd_portal_token')
           setPortalToken('')
@@ -193,7 +193,7 @@ export default function PortalCliente() {
         body: JSON.stringify({ token: portalToken, saleId: order.id }),
       })
       const data = await response.json().catch(() => null) as ({ ok?: boolean; error?: string } & Partial<ScheduleContextResponse>) | null
-      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Nao foi possivel carregar os horarios.')
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Não foi possível carregar os horários.')
       setScheduleContext({
         agentes: data.agentes ?? [],
         pontos: data.pontos ?? [],
@@ -201,7 +201,7 @@ export default function PortalCliente() {
       })
       setScheduleOpen(true)
     } catch (err) {
-      setError(formatPortalError(err, 'Falha ao carregar os horarios.'))
+      setError(formatPortalError(err, 'Falha ao carregar os horários.'))
     } finally {
       setScheduleLoading(false)
     }
@@ -228,9 +228,9 @@ export default function PortalCliente() {
         }),
       })
       const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
-      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Nao foi possivel salvar o agendamento.')
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Não foi possível salvar o agendamento.')
       setScheduleOpen(false)
-      setSuccess('Agendamento salvo com sucesso. Seu pedido ja aparece atualizado abaixo.')
+      setSuccess('Agendamento salvo com sucesso. Seu pedido já aparece atualizado abaixo.')
       await loadOrders()
     } catch (err) {
       setError(formatPortalError(err, 'Falha ao salvar o agendamento.'))
@@ -267,7 +267,7 @@ export default function PortalCliente() {
         body: JSON.stringify({ email: normalized }),
       })
       const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; maskedPhones?: string[] } | null
-      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Nao foi possivel enviar o código.')
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Não foi possível enviar o código.')
       window.localStorage.setItem('avmd_portal_email', normalized)
       setPortalEmail(normalized)
       setEmailInput(normalized)
@@ -277,7 +277,7 @@ export default function PortalCliente() {
       setRequestStep('code')
       setSuccess('Enviamos um novo código para o e-mail e WhatsApp cadastrados. Use sempre a mensagem mais recente da CertiID.')
     } catch (err) {
-      setError(formatPortalError(err, 'Nao foi possivel enviar o código.'))
+      setError(formatPortalError(err, 'Não foi possível enviar o código.'))
     } finally {
       setRequestLoading(false)
     }
@@ -385,13 +385,13 @@ export default function PortalCliente() {
                   body: JSON.stringify({ email: normalized, code }),
                 })
                 const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; token?: string } | null
-                if (!response.ok || !data?.ok || !data.token) throw new Error(data?.error || 'Nao foi possivel validar o código.')
+                if (!response.ok || !data?.ok || !data.token) throw new Error(data?.error || 'Não foi possível validar o código.')
                 window.localStorage.setItem('avmd_portal_token', data.token)
                 setPortalToken(data.token)
                 await loadOrders(data.token)
                 setRequestStep('portal')
               } catch (err) {
-                setError(formatPortalError(err, 'Nao foi possivel validar o código.'))
+                setError(formatPortalError(err, 'Não foi possível validar o código.'))
               } finally {
                 setEmailLoading(false)
               }
@@ -478,7 +478,7 @@ export default function PortalCliente() {
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#f88414]">Portal oficial CertiID</p>
               <h1 className="mt-2 text-2xl font-semibold text-slate-900">Minhas compras</h1>
-              <p className="mt-2 text-sm text-slate-600">Aqui voce consegue acompanhar pagamento, protocolo e reservar sua videoconferencia.</p>
+              <p className="mt-2 text-sm text-slate-600">Aqui você consegue acompanhar pagamento, protocolo e reservar sua videoconferência.</p>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <SummaryCard icon={Package} label="Pedidos" value={String(orders.length)} />
@@ -522,7 +522,7 @@ export default function PortalCliente() {
           ) : orders.length === 0 ? (
             <div className="rounded-[28px] border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-sm">
               <ShieldCheck size={24} className="mx-auto text-slate-400" />
-              <p className="mt-3 text-sm">Assim que a compra for concluida, seus pedidos aparecerao aqui automaticamente.</p>
+              <p className="mt-3 text-sm">Assim que a compra for concluída, seus pedidos aparecerão aqui automaticamente.</p>
             </div>
           ) : orders.map(order => (
             <article key={order.id} className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -536,7 +536,7 @@ export default function PortalCliente() {
                   <div className="flex flex-wrap gap-2 text-xs">
                     <Badge text={paymentLabel(order)} tone={order.pago ? 'success' : 'warning'} />
                     <Badge text={`Status da venda: ${order.status_venda ?? 'pendente'}`} tone="neutral" />
-                    <Badge text={`Protocolo: ${order.protocolo_numero ?? 'aguardando geracao'}`} tone="neutral" />
+                    <Badge text={`Protocolo: ${order.protocolo_numero ?? 'aguardando geração'}`} tone="neutral" />
                   </div>
                 </div>
                 <div className="text-left xl:text-right">
@@ -552,13 +552,13 @@ export default function PortalCliente() {
                   changing={paymentChangingId === order.id}
                   onChangePayment={formaPagamentoId => void changePaymentMethod(order, formaPagamentoId)}
                 />
-                <InfoCard title="Protocolo" text={order.protocolo_numero ?? 'Assim que o processamento avancar, o numero aparecera aqui.'} />
+                <InfoCard title="Protocolo" text={order.protocolo_numero ?? 'Assim que o processamento avançar, o número aparecerá aqui.'} />
                 <InvoiceCard order={order} />
                 <InfoCard
-                  title="Videoconferencia"
+                  title="Videoconferência"
                   text={order.data_agendada
                     ? `${formatDateTime(order.data_agendada)} com ${order.agente_nome ?? 'agente'} em ${order.ponto_nome ?? 'ponto de atendimento'}`
-                    : 'Voce ainda pode reservar seu horario de validacao.'}
+                    : 'Você ainda pode reservar seu horário de validação.'}
                 />
               </div>
 
@@ -570,8 +570,8 @@ export default function PortalCliente() {
                   className="inline-flex items-center justify-center rounded-2xl bg-[#17346b] px-4 py-3 text-sm font-semibold text-white hover:bg-[#102654] disabled:opacity-60"
                 >
                   {scheduleLoading && selectedOrder?.id === order.id ? (
-                    <><Loader2 size={15} className="mr-2 animate-spin" />Carregando horarios...</>
-                  ) : order.data_agendada ? 'Reagendar videoconferencia' : 'Agendar videoconferencia'}
+                    <><Loader2 size={15} className="mr-2 animate-spin" />Carregando horários...</>
+                  ) : order.data_agendada ? 'Reagendar videoconferência' : 'Agendar videoconferência'}
                 </button>
                 <button
                   type="button"
