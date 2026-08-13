@@ -12,6 +12,7 @@ export type PortalOrderRow = {
   valor_venda: number | null
   tipo_produto: string | null
   pedido_status: string | null
+  pedido_numero: string | null
   protocolo_status: string | null
   protocolo_numero: string | null
   nome_faturamento: string | null
@@ -75,6 +76,7 @@ export class PortalRepository {
          v.valor_venda,
          v.tipo_produto,
          v.pedido_status,
+         v.pedido_numero,
          v.protocolo_status,
          v.protocolo_numero,
          v.nome_faturamento,

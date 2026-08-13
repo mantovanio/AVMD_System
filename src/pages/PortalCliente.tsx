@@ -13,6 +13,7 @@ type PortalOrder = {
   valor_venda: number | null
   tipo_produto: string | null
   pedido_status: string | null
+  pedido_numero: string | null
   protocolo_status: string | null
   protocolo_numero: string | null
   forma_pagamento_id: string | null
@@ -541,7 +542,7 @@ export default function PortalCliente() {
                 </div>
                 <div className="text-left xl:text-right">
                   <p className="text-2xl font-semibold text-emerald-600">{formatCurrency(Number(order.valor_venda ?? 0))}</p>
-                  <p className="mt-1 text-xs text-slate-500">Pedido #{order.id.slice(0, 8)}</p>
+                  <p className="mt-1 text-xs text-slate-500">Pedido #{order.pedido_numero ?? order.id.slice(0, 8)}</p>
                 </div>
               </div>
 
