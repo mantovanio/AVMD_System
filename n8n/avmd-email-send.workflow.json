@@ -16,7 +16,7 @@
     },
     {
       "parameters": {
-        "fromEmail": "=contato@certifast.com.br",
+        "fromEmail": "=naoresponda@certiid.com.br",
         "toEmail": "={{ $json.body?.to || $json.to }}",
         "subject": "={{ $json.body?.subject || $json.subject }}",
         "text": "={{ $json.body?.body || $json.body || '' }}",
@@ -29,17 +29,16 @@
       "typeVersion": 2.1,
       "position": [700, 300],
       "credentials": {
-        "smtp": {
-          "id": "6e47pVwT4AGiQadz",
-          "name": "SMTP account"
+          "smtp": {
+          "id": "jkjdGJa8eyLZvZko",
+          "name": "SMTP não responda certiid"
         }
-      },
-      "onError": "continueRegularOutput"
+      }
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { ok: true, sent: $json?.accepted?.length > 0, to: $json.to, subject: $json.subject } }}",
+        "responseBody": "={{ { ok: $json?.accepted?.length > 0, sent: $json?.accepted?.length > 0, accepted: $json?.accepted || [], rejected: $json?.rejected || [], response: $json?.response || null, to: $json.to, subject: $json.subject } }}",
         "options": {
           "responseCode": 200
         }

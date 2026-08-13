@@ -530,11 +530,11 @@ export class OutboxProcessor {
     const sentFlag = responseBody && typeof responseBody === 'object' && 'sent' in responseBody
       ? Boolean((responseBody as { sent?: unknown }).sent)
       : null
-    const ok = response.ok && sentFlag !== false
+    const ok = response.ok && sentFlag === true
     await this.outboxRepo.markProcessed({
       id: item.id,
       status: ok ? 'sent' : 'failed',
-      error: ok ? null : `Email n8n retornou HTTP ${response.status}${sentFlag === false ? ' com sent=false' : ''}`,
+      error: ok ? null : `Email n8n retornou HTTP ${response.status}${sentFlag !== true ? ' sem confirmacao sent=true' : ''}`,
     })
   }
 
