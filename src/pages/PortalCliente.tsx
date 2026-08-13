@@ -578,16 +578,16 @@ export default function PortalCliente() {
                   <div>
                     <p className="text-lg font-semibold text-slate-900">{orderLabel(order)}</p>
                     <p className="mt-1 text-xs text-slate-500">Compra em {formatDateTime(order.created_at)}</p>
-                    <div className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                        <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Certificado para</span>
-                        <span className="mt-1 block font-semibold text-slate-900">{certificateOwnerLabel(order)}</span>
-                      </div>
+                    <div className="mt-2 flex flex-col gap-1.5 text-xs text-slate-600">
+                      <p>
+                        <span className="font-bold uppercase tracking-[0.12em] text-slate-400">Certificado para: </span>
+                        <span className="font-semibold text-slate-900">{certificateOwnerLabel(order)}</span>
+                      </p>
                       {buyerLabel(order) && (
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Comprador / faturamento</span>
-                          <span className="mt-1 block font-semibold text-slate-900">{buyerLabel(order)}</span>
-                        </div>
+                        <p>
+                          <span className="font-bold uppercase tracking-[0.12em] text-slate-400">Comprador: </span>
+                          <span className="font-medium text-slate-800">{buyerLabel(order)}</span>
+                        </p>
                       )}
                     </div>
                     <p className="mt-2 text-sm text-slate-600">{orderGuidance(order)}</p>
@@ -823,15 +823,15 @@ function InvoiceCard({ order }: { order: PortalOrder }) {
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         {order.nfse_pdf_url && (
-          <a href={order.nfse_pdf_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#17346b] ring-1 ring-slate-200 hover:bg-slate-50">
+          <a href={order.nfse_pdf_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full bg-[#17346b] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#112957]">
             <FileText size={14} />
-            PDF
+            Baixar nota fiscal
           </a>
         )}
         {order.nfse_xml_url && (
           <a href={order.nfse_xml_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#17346b] ring-1 ring-slate-200 hover:bg-slate-50">
             <FileText size={14} />
-            XML
+            Baixar XML
           </a>
         )}
       </div>
