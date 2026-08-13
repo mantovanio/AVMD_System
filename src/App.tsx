@@ -38,7 +38,7 @@ const MODULE_PAGE_MAP: Partial<Record<string, Page[]>> = {
 }
 
 // Páginas não controladas por módulo (visíveis se o perfil permitir)
-const UNMODULATED_PAGES: Page[] = ['configuracoes']
+const UNMODULATED_PAGES: Page[] = ['portal', 'configuracoes']
 
 function getModuleEnabledPages(enabledModules: Record<string, boolean>): Page[] {
   const pages: Page[] = [...UNMODULATED_PAGES]
@@ -88,7 +88,6 @@ function AppContent() {
   const { user, profile, loading, signOut, isPasswordRecovery } = useAuth()
   const pathname = window.location.pathname
   const initialPortal = new URLSearchParams(window.location.search).get('page') === 'portal'
-  const isPublicPortalRoute = /^\/portal(?:\/.*)?$/.test(pathname) || initialPortal
   const isShopRoute  = /^\/shop\/?$/.test(pathname)
   const lojaMatch    = pathname.match(/^\/loja\/([^/]+)\/?$/)
   const lojaSlug     = lojaMatch?.[1] ? decodeURIComponent(lojaMatch[1]) : null
@@ -202,14 +201,6 @@ function AppContent() {
     return <FullScreenLoader />
   }
 
-  // Rotas públicas especiais
-  if (isPublicPortalRoute) {
-    return (
-      <Suspense fallback={<FullScreenLoader message="Carregando portal do cliente..." />}>
-        <PortalCliente />
-      </Suspense>
-    )
-  }
   if (isShopRoute) {
     return (
       <Suspense fallback={<FullScreenLoader message="Carregando checkout..." />}>
@@ -396,6 +387,7 @@ function AppContent() {
 
         <main className="flex-1 overflow-auto">
           <Suspense fallback={<PageLoader />}>
+            {activePage === 'portal'        && <PortalCliente />}
             {activePage === 'dashboard'     && <Dashboard />}
             {activePage === 'comercial'     && <Comercial />}
             {activePage === 'clientes'      && <Clientes />}

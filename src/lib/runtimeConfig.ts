@@ -20,8 +20,7 @@ export function getRuntimeConfig(): RuntimeConfig {
   const supabaseUrl = env('VITE_SUPABASE_URL')
   const supabaseAnonKey = env('VITE_SUPABASE_PUBLISHABLE_KEY') || env('VITE_SUPABASE_ANON_KEY')
   const apiBaseUrl = env('VITE_API_BASE_URL')
-  const isLocalDev = typeof window !== 'undefined' && ['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(window.location.hostname)
-  const useLegacySupabase = (env('VITE_USE_LEGACY_SUPABASE') || 'false').toLowerCase() === 'true'
+  const useLegacySupabase = (env('VITE_USE_LEGACY_SUPABASE') || 'true').toLowerCase() === 'true'
 
   return {
     clerkFrontendApi,
@@ -29,8 +28,8 @@ export function getRuntimeConfig(): RuntimeConfig {
     supabaseUrl,
     supabaseAnonKey,
     apiBaseUrl,
-    useLegacySupabase: isLocalDev ? false : useLegacySupabase,
-    mode: isLocalDev ? 'aiven_api' : (useLegacySupabase ? 'supabase_legacy' : 'aiven_api'),
+    useLegacySupabase,
+    mode: useLegacySupabase ? 'supabase_legacy' : 'aiven_api',
   }
 }
 
@@ -38,14 +37,8 @@ export function assertRuntimeConfig() {
   const config = getRuntimeConfig()
   const missing: string[] = []
   const isProductionBuild = Boolean(import.meta.env.PROD)
-  const isLocalDev = typeof window !== 'undefined' && ['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(window.location.hostname)
-
   if (!config.clerkPublishableKey) {
     missing.push('VITE_CLERK_PUBLISHABLE_KEY')
-  }
-
-  if (isLocalDev && config.clerkPublishableKey.startsWith('pk_live_')) {
-    missing.push('VITE_CLERK_PUBLISHABLE_KEY local deve usar chave de teste do Clerk')
   }
 
   if (config.useLegacySupabase) {
