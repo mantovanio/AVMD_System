@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { CalendarDays, CreditCard, ExternalLink, Loader2, LockKeyhole, MessageCircle, Package, Phone, ShieldCheck, Sparkles } from 'lucide-react'
+import { CalendarDays, CreditCard, ExternalLink, Loader2, MessageCircle, Package, Phone, ShieldCheck } from 'lucide-react'
 import { getApiUrl } from '@/lib/api'
-import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig } from '@/lib/agencyConfig'
+import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig, type AgencyConfig } from '@/lib/agencyConfig'
 import { SchedulingModal, formatCurrency, formatDateTime } from '@/components/checkout'
 import type { AgendaAgent, AgendaPoint, AgendaSlot } from '@/lib/checkout'
 
@@ -44,6 +44,13 @@ function orderGuidance(order: PortalOrder) {
   if (label.includes('e-cnpj')) return 'Confira se o pedido é para pessoa jurídica e valide a classe antes de concluir.'
   if (label.includes('e-cpf')) return 'Confira se o pedido é para pessoa física e confirme a validade antes de concluir.'
   return 'Revise o tipo, a classe e a validade do certificado antes de seguir.'
+}
+
+function buildWhatsappUrl(phone: string) {
+  const digits = phone.replace(/\D/g, '')
+  const normalized = digits.startsWith('55') ? digits : `55${digits}`
+  const text = encodeURIComponent('Olá, vim pelo portal Minhas Compras da CertiID e preciso de atendimento.')
+  return normalized.length > 4 ? `https://wa.me/${normalized}?text=${text}` : 'https://certiid.com.br/#contato'
 }
 
 export default function PortalCliente() {
@@ -182,28 +189,33 @@ export default function PortalCliente() {
 
   if (!portalToken) {
     return (
-      <PortalShell>
-        <section className="grid min-h-[620px] overflow-hidden rounded-[28px] border border-white/15 bg-white shadow-2xl shadow-black/25 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="relative hidden bg-[#0b2a63] p-8 text-white lg:block">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(248,132,20,0.45),transparent_30%),linear-gradient(135deg,#123a82_0%,#071d4a_100%)]" />
+      <PortalShell agencyConfig={agencyConfig}>
+        <section className="grid min-h-[620px] overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_24px_80px_-50px_rgba(23,52,107,0.45)] lg:grid-cols-[1fr_0.92fr]">
+          <div className="relative hidden bg-[#f7f8fb] p-8 lg:block">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_22%_18%,rgba(248,132,20,0.22),transparent_26%),linear-gradient(135deg,rgba(23,52,107,0.08)_0%,rgba(255,255,255,0)_62%)]" />
+            <div className="pointer-events-none absolute -bottom-8 left-8 text-[96px] font-black leading-none text-slate-200/70">
+              certificado
+            </div>
             <div className="relative flex h-full flex-col justify-between">
               <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-white/85">
-                  <LockKeyhole size={14} />
-                  Portal oficial CertiID
+                <div className="inline-flex items-center gap-2 rounded-full bg-[#fff2e5] px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-[#f88414]">
+                  <ShieldCheck size={14} />
+                  Portal oficial
                 </div>
-                <h1 className="mt-8 max-w-sm text-4xl font-semibold leading-tight">
-                  Suas compras digitais em um ambiente protegido.
+                <h1 className="mt-8 max-w-md text-5xl font-black leading-none text-[#17346b]">
+                  Rápido como você precisa.
                 </h1>
-                <p className="mt-4 max-w-sm text-sm leading-6 text-blue-100">
-                  Consulte pedidos, pagamento, protocolo e agendamento de videoconferência com a segurança da CertiID.
+                <p className="mt-4 max-w-sm text-xl font-bold text-[#17346b]">
+                  Compre, valide e acompanhe.
+                </p>
+                <p className="mt-5 max-w-sm text-sm leading-6 text-slate-600">
+                  Acesse suas compras, confira pagamento, protocolo e agendamento pelo canal oficial CertiID.
                 </p>
               </div>
 
               <div className="grid gap-3">
                 <TrustStrip icon={ShieldCheck} title="Acesso validado por e-mail" text="O código é enviado somente para o endereço usado na compra." />
                 <TrustStrip icon={CalendarDays} title="Agendamento centralizado" text="Acompanhe ou reagende sua validação em poucos passos." />
-                <TrustStrip icon={MessageCircle} title="Suporte CertiID" text="Quando precisar, fale com a equipe pelo canal oficial." />
               </div>
             </div>
           </div>
@@ -346,9 +358,9 @@ export default function PortalCliente() {
   }
 
   return (
-    <PortalShell>
+    <PortalShell agencyConfig={agencyConfig}>
       <div className="mx-auto max-w-6xl space-y-5">
-        <section className="rounded-[28px] border border-white/20 bg-white p-6 shadow-2xl shadow-black/20">
+        <section className="rounded-[18px] border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-54px_rgba(23,52,107,0.5)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#f88414]">Portal oficial CertiID</p>
@@ -364,7 +376,7 @@ export default function PortalCliente() {
           </div>
         </section>
 
-        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-[18px] border border-[#ffd7b4] bg-[#fff8f1] p-5 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#ea7b18]">Acesso rápido</p>
@@ -375,13 +387,13 @@ export default function PortalCliente() {
             </div>
             <div className="flex flex-wrap gap-2">
               <a
-                href={agencyConfig.telefone ? `https://wa.me/${agencyConfig.telefone.replace(/\D/g, '')}` : '#'}
+                href={buildWhatsappUrl(agencyConfig.telefone)}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#17346b] px-4 py-3 text-sm font-semibold text-white hover:bg-[#102654]"
+                className="inline-flex items-center gap-2 rounded-full bg-[#f88414] px-5 py-3 text-sm font-bold uppercase text-white shadow-lg shadow-orange-500/20 hover:bg-[#e87512]"
               >
                 <Phone size={15} />
-                WhatsApp da empresa
+                Fale conosco
               </a>
               <a
                 href="mailto:contato@certiid.com.br"
@@ -477,29 +489,36 @@ export default function PortalCliente() {
   )
 }
 
-function PortalShell({ children }: { children: ReactNode }) {
+function PortalShell({ children, agencyConfig }: { children: ReactNode; agencyConfig: AgencyConfig }) {
+  const whatsappUrl = buildWhatsappUrl(agencyConfig.telefone)
+
   return (
-    <main className="min-h-screen bg-[#082765] text-slate-950">
-      <div className="min-h-screen bg-[radial-gradient(circle_at_18%_18%,rgba(248,132,20,0.28),transparent_24%),radial-gradient(circle_at_78%_10%,rgba(255,255,255,0.18),transparent_22%),linear-gradient(135deg,#123f91_0%,#082765_46%,#03133a_100%)]">
-        <header className="border-b border-white/10 bg-white shadow-lg shadow-black/10">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-white text-slate-950">
+      <div className="min-h-screen bg-[radial-gradient(circle_at_8%_18%,rgba(23,52,107,0.06),transparent_24%),radial-gradient(circle_at_88%_10%,rgba(248,132,20,0.10),transparent_22%),linear-gradient(180deg,#ffffff_0%,#ffffff_48%,#f4f6fa_100%)]">
+        <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2.5 sm:px-6 lg:px-8">
             <a href="https://certiid.com.br" className="inline-flex items-center" aria-label="Ir para o site da CertiID">
-              <img src="/logo-certiid.png" alt="CertiID certificado digital" className="h-12 w-auto sm:h-14" />
+              <img src="/logo-certiid.png" alt="CertiID certificado digital" className="h-14 w-auto sm:h-16" />
             </a>
-            <nav className="hidden items-center gap-6 text-xs font-semibold uppercase tracking-[0.16em] text-[#17346b] lg:flex">
-              <a href="https://certiid.com.br/#loja" className="transition hover:text-[#f88414]">Loja</a>
+            <nav className="hidden items-center gap-6 text-xs font-bold uppercase tracking-[0.08em] text-slate-700 lg:flex">
+              <a href="https://certiid.com.br/#loja" className="transition hover:text-[#f88414]">Loja de certificados</a>
               <a href="https://certiid.com.br/#renovacao" className="transition hover:text-[#f88414]">Renovação</a>
               <a href="https://certiid.com.br/#contato" className="transition hover:text-[#f88414]">Contato</a>
-              <span className="rounded-full bg-[#f88414] px-4 py-2 text-white">Minhas compras</span>
+              <span className="text-[#17346b]">Minhas compras</span>
             </nav>
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#17346b]/10 bg-[#f3f7ff] px-3 py-2 text-xs font-semibold text-[#17346b]">
-              <Sparkles size={14} className="text-[#f88414]" />
-              Oficial
-            </div>
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-full bg-[#f88414] px-4 py-2.5 text-xs font-black uppercase tracking-[0.04em] text-white shadow-lg shadow-orange-500/20 transition hover:bg-[#e87512]"
+            >
+              <MessageCircle size={15} />
+              Fale conosco
+            </a>
           </div>
         </header>
 
-        <div className="mx-auto max-w-6xl px-4 py-7 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
           {children}
         </div>
       </div>
@@ -509,14 +528,14 @@ function PortalShell({ children }: { children: ReactNode }) {
 
 function TrustStrip({ icon: Icon, title, text }: { icon: typeof ShieldCheck; title: string; text: string }) {
   return (
-    <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f88414] text-white">
           <Icon size={18} />
         </div>
         <div>
-          <p className="text-sm font-semibold text-white">{title}</p>
-          <p className="mt-1 text-xs leading-5 text-blue-100">{text}</p>
+          <p className="text-sm font-bold text-[#17346b]">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-slate-600">{text}</p>
         </div>
       </div>
     </div>
