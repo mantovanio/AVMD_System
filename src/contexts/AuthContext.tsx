@@ -97,6 +97,10 @@ function isPasswordRequirementsError(message: string) {
     || normalized.includes('nao atende aos requisitos')
 }
 
+function isAlreadySignedInError(message: string) {
+  return message.toLowerCase().includes('already signed in')
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const clerk = useClerk()
   const { isLoaded: signInLoaded, signIn, setActive } = useSignIn()
@@ -274,6 +278,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      if (isSignedIn && !currentUser) {
+        await clerk.signOut()
+        pendingSecondFactorSignInRef.current = null
+      }
+
       const result = await withTimeout(
         signIn.create({
           identifier: normalizedEmail,
@@ -318,7 +327,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : `Não foi possível concluir a autenticação (${result.status}).`,
       }
     } catch (error) {
-      return { error: getClerkErrorMessage(error, 'Falha ao efetuar login. Tente novamente.') }
+      const message = getClerkErrorMessage(error, 'Falha ao efetuar login. Tente novamente.')
+      if (isAlreadySignedInError(message)) {
+        await clerk.signOut().catch(() => null)
+        pendingSecondFactorSignInRef.current = null
+        return { error: 'Havia uma sessão antiga presa no navegador. Tente entrar novamente agora.' }
+      }
+      return { error: message }
     }
   }
 
