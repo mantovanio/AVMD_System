@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { CalendarDays, CreditCard, ExternalLink, Loader2, MessageCircle, Package, ShieldCheck } from 'lucide-react'
+import { CalendarDays, CreditCard, Loader2, Mail, MessageCircle, Package, ShieldCheck } from 'lucide-react'
 import { getApiUrl } from '@/lib/api'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig, type AgencyConfig } from '@/lib/agencyConfig'
 import { SchedulingModal, formatCurrency, formatDateTime } from '@/components/checkout'
@@ -453,9 +453,9 @@ export default function PortalCliente() {
             <div className="flex flex-wrap gap-2">
               <a
                 href="mailto:contato@certiid.com.br"
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="inline-flex min-w-40 items-center justify-center gap-2 rounded-full border border-[#17346b]/20 bg-white px-5 py-3 text-sm font-bold text-[#17346b] shadow-sm transition hover:border-[#f88414]/40 hover:bg-[#fff8f1] hover:text-[#d96500]"
               >
-                <ExternalLink size={15} />
+                <Mail size={16} />
                 Enviar e-mail
               </a>
             </div>
