@@ -383,11 +383,8 @@ export default function Login() {
                     <InputField label="Email" type="email" value={loginEmail} onChange={setLoginEmail} placeholder="seu@email.com" autoFocus autoComplete="username" />
 
                     <div>
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="mb-1">
                         <span className="text-xs font-medium text-white/90">Senha</span>
-                        <button type="button" onClick={() => { window.location.href = '/portal' }} className="text-xs text-white/90 hover:underline">
-                          Acesso do cliente
-                        </button>
                       </div>
                       <PasswordInput label="" value={loginPassword} onChange={setLoginPassword} />
                     </div>
@@ -397,17 +394,10 @@ export default function Login() {
                     <SubmitButton loading={loginLoading} label="Entrar" loadingLabel="Validando..." primaryColor={agencyConfig.cor_primaria} />
                   </form>
 
-                  <div className="mt-6 pt-6 border-t border-white/15 text-center space-y-3">
+                  <div className="mt-6 pt-6 border-t border-white/15 text-center">
                     <p className="text-sm text-white/80">
                       O acesso ao sistema interno é criado e liberado exclusivamente pelo administrador.
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => { window.location.href = '/portal' }}
-                      className="text-sm font-semibold text-white hover:underline"
-                    >
-                      Entrar no portal do cliente
-                    </button>
                   </div>
                 </>
               ) : (
