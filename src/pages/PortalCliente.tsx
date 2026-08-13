@@ -53,7 +53,25 @@ function buildWhatsappUrl(phone: string) {
   return normalized.length > 4 ? `https://wa.me/${normalized}?text=${text}` : 'https://certiid.com.br/#contato'
 }
 
+function ensureSecurePortalUrl() {
+  if (typeof window === 'undefined') return true
+  if (window.location.hostname !== 'portal.certiid.com.br') return true
+  if (window.location.protocol === 'https:') return true
+
+  window.location.replace(`https://portal.certiid.com.br${window.location.pathname}${window.location.search}${window.location.hash}`)
+  return false
+}
+
+function formatPortalError(err: unknown, fallback: string) {
+  if (err instanceof TypeError && /fetch/i.test(err.message)) {
+    return 'Falha de conexão com a API. Recarregue o portal usando https://portal.certiid.com.br e tente novamente.'
+  }
+  return err instanceof Error ? err.message : fallback
+}
+
 export default function PortalCliente() {
+  if (!ensureSecurePortalUrl()) return null
+
   const [agencyConfig, setAgencyConfig] = useState(DEFAULT_AGENCY_CONFIG)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -98,7 +116,7 @@ export default function PortalCliente() {
       if (!response.ok || !data?.ok) throw new Error(data?.error || 'Nao foi possivel carregar seus pedidos.')
       setOrders(data.pedidos ?? [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao carregar o portal do cliente.')
+      setError(formatPortalError(err, 'Falha ao carregar o portal do cliente.'))
     } finally {
       setLoading(false)
     }
@@ -138,7 +156,7 @@ export default function PortalCliente() {
       })
       setScheduleOpen(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao carregar os horarios.')
+      setError(formatPortalError(err, 'Falha ao carregar os horarios.'))
     } finally {
       setScheduleLoading(false)
     }
@@ -170,7 +188,7 @@ export default function PortalCliente() {
       setSuccess('Agendamento salvo com sucesso. Seu pedido ja aparece atualizado abaixo.')
       await loadOrders()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao salvar o agendamento.')
+      setError(formatPortalError(err, 'Falha ao salvar o agendamento.'))
     } finally {
       setScheduleSubmitting(false)
     }
@@ -264,7 +282,7 @@ export default function PortalCliente() {
                   setRequestedEmail(normalized)
                   setRequestStep('code')
                 } catch (err) {
-                  setError(err instanceof Error ? err.message : 'Nao foi possivel enviar o código.')
+                  setError(formatPortalError(err, 'Nao foi possivel enviar o código.'))
                 } finally {
                   setRequestLoading(false)
                 }
@@ -296,7 +314,7 @@ export default function PortalCliente() {
                 await loadOrders(data.token)
                 setRequestStep('portal')
               } catch (err) {
-                setError(err instanceof Error ? err.message : 'Nao foi possivel validar o código.')
+                setError(formatPortalError(err, 'Nao foi possivel validar o código.'))
               } finally {
                 setEmailLoading(false)
               }
