@@ -65,6 +65,7 @@ export class PortalRepository {
          pa.nome as ponto_nome
        from vendas_certificados v
        left join cadastros_base cb on cb.id = v.cadastro_base_id
+       left join titulares_certificado t on t.id = v.titular_id
        left join lateral (
          select a.id, a.data_agendada, a.status_agendamento, a.agente_registro_id, a.ponto_atendimento_id
          from agendamentos_validacao a
@@ -126,6 +127,7 @@ export class PortalRepository {
          av.id as agendamento_id
        from vendas_certificados v
        left join cadastros_base cb on cb.id = v.cadastro_base_id
+       left join titulares_certificado t on t.id = v.titular_id
        left join lojas_marketplace lm on lm.id = v.loja_marketplace_id
        left join lateral (
          select a.id
@@ -153,7 +155,12 @@ export class PortalRepository {
       clauses.push(`lower(coalesce(v.email_faturamento, '')) = $${idx}`)
       params.push(email)
       idx += 1
+
       clauses.push(`lower(coalesce(cb.email, '')) = $${idx}`)
+      params.push(email)
+      idx += 1
+
+      clauses.push(`lower(coalesce(t.email, '')) = $${idx}`)
       params.push(email)
       idx += 1
     }
