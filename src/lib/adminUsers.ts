@@ -1,4 +1,5 @@
 import { getApiUrl } from '@/lib/api'
+import { getSupabaseAccessToken } from '@/lib/supabase'
 import type { PerfilAcesso, PermissaoPagina, TipoVinculoUsuario } from '@/types'
 
 type CreateUserPayload = {
@@ -53,9 +54,13 @@ function normalizeAdminUserError(error: string | undefined) {
 }
 
 async function callAdminUsers(body: unknown) {
+  const token = await getSupabaseAccessToken().catch(() => null)
   const res = await fetch(getApiUrl('/admin/users'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(body),
   })
   const data = await res.json().catch(() => null) as { ok?: boolean; userId?: string; verified?: boolean; error?: string } | null

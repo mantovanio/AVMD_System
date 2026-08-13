@@ -355,7 +355,7 @@ function AppContent() {
                 <UserCog size={16} />
               </button>
               {userMenuOpen && (
-                <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-2xl overflow-hidden z-50">
+                <div className="fixed right-5 top-16 z-[10000] w-56 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
                   <button
                     type="button"
                     onClick={() => { setUserMenuOpen(false); handleNavigate('configuracoes') }}
