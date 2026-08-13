@@ -108,7 +108,7 @@ Se você não solicitou esse acesso, ignore esta mensagem.`
   </body>
 </html>`
   return {
-    subject: `Código CertiID ${code.slice(-3)} - ${sentAt}`,
+    subject: `Minhas Compras CertiID - acesso ${code.slice(-3)} - ${sentAt}`,
     body,
     html,
   }
