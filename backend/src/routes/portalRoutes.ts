@@ -363,6 +363,28 @@ export async function handlePortalRoutes(
     return true
   }
 
+  if (req.method === 'POST' && requestPath === '/api/portal/protocol') {
+    const body = await readJson<PortalScheduleBody>(req)
+    const email = resolveEmail(body, clerkSecretKey)
+    if (!email || !body.saleId) {
+      writeJson(res, 401, { ok: false, error: 'Sessão ou venda inválida.' }, corsOrigin)
+      return true
+    }
+
+    try {
+      const generated = await portalRepository.generateProtocol(email, body.saleId)
+      if (!generated) {
+        writeJson(res, 400, { ok: false, error: 'O protocolo só pode ser gerado para pedido pago e ainda sem protocolo.' }, corsOrigin)
+        return true
+      }
+      const pedidos = await portalRepository.listOrdersByEmail(email)
+      writeJson(res, 200, { ok: true, protocolo: generated.protocolo_numero, pedidos }, corsOrigin)
+    } catch (error) {
+      writeJson(res, 400, { ok: false, error: error instanceof Error ? error.message : 'Não foi possível gerar o protocolo.' }, corsOrigin)
+    }
+    return true
+  }
+
   if (req.method === 'POST' && requestPath === '/api/portal/schedule-context') {
     const body = await readJson<PortalScheduleBody>(req)
     const email = resolveEmail(body, clerkSecretKey)

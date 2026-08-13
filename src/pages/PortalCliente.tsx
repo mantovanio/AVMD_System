@@ -165,6 +165,7 @@ export default function PortalCliente() {
   const [scheduleLoading, setScheduleLoading] = useState(false)
   const [scheduleSubmitting, setScheduleSubmitting] = useState(false)
   const [paymentChangingId, setPaymentChangingId] = useState<string | null>(null)
+  const [protocolGeneratingId, setProtocolGeneratingId] = useState<string | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<PortalOrder | null>(null)
   const [scheduleContext, setScheduleContext] = useState<ScheduleContextResponse>({ agentes: [], pontos: [], slots: [] })
 
@@ -349,6 +350,28 @@ export default function PortalCliente() {
       setError(formatPortalError(err, 'Não foi possível alterar a forma de pagamento.'))
     } finally {
       setPaymentChangingId(null)
+    }
+  }
+
+  async function generateProtocol(order: PortalOrder) {
+    if (!portalToken || order.protocolo_numero || !order.pago) return
+    setProtocolGeneratingId(order.id)
+    setError(null)
+    setSuccess(null)
+    try {
+      const response = await fetch(getApiUrl('/portal/protocol'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: portalToken, saleId: order.id }),
+      })
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; protocolo?: string; pedidos?: PortalOrder[] } | null
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Não foi possível gerar o protocolo.')
+      if (data.pedidos) setOrders(data.pedidos)
+      setSuccess(`Protocolo ${data.protocolo ?? ''} gerado com sucesso. Agora você já pode seguir para a validação.`.trim())
+    } catch (err) {
+      setError(formatPortalError(err, 'Não foi possível gerar o protocolo.'))
+    } finally {
+      setProtocolGeneratingId(null)
     }
   }
 
@@ -604,41 +627,25 @@ export default function PortalCliente() {
                 </div>
               </div>
 
-              <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <PaymentCard
                   order={order}
                   paymentOptions={paymentOptions}
                   changing={paymentChangingId === order.id}
                   onChangePayment={formaPagamentoId => void changePaymentMethod(order, formaPagamentoId)}
                 />
-                <InfoCard title="Protocolo" text={order.protocolo_numero ?? 'Assim que o processamento avançar, o número aparecerá aqui.'} />
-                <InvoiceCard order={order} />
-                <InfoCard
-                  title="Videoconferência"
-                  text={order.data_agendada
-                    ? `${formatDateTime(order.data_agendada)} com ${order.agente_nome ?? 'agente'} em ${order.ponto_nome ?? 'ponto de atendimento'}`
-                    : 'Você ainda pode reservar seu horário de validação.'}
+                <ProtocolCard
+                  order={order}
+                  generating={protocolGeneratingId === order.id}
+                  onGenerate={() => void generateProtocol(order)}
                 />
-              </div>
-
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={() => void openSchedule(order)}
-                  disabled={(scheduleLoading && selectedOrder?.id === order.id) || scheduleSubmitting}
-                  className="inline-flex items-center justify-center rounded-2xl bg-[#17346b] px-4 py-3 text-sm font-semibold text-white hover:bg-[#102654] disabled:opacity-60"
-                >
-                  {scheduleLoading && selectedOrder?.id === order.id ? (
-                    <><Loader2 size={15} className="mr-2 animate-spin" />Carregando horários...</>
-                  ) : order.data_agendada ? 'Reagendar videoconferência' : 'Agendar videoconferência'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void loadOrders()}
-                  className="inline-flex items-center justify-center rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Verificar atualização
-                </button>
+                <InvoiceCard order={order} />
+                <VideoCard
+                  order={order}
+                  loading={scheduleLoading && selectedOrder?.id === order.id}
+                  disabled={scheduleSubmitting}
+                  onSchedule={() => void openSchedule(order)}
+                />
               </div>
             </article>
           ))}
@@ -810,12 +817,45 @@ function PaymentCard({
   )
 }
 
+function ProtocolCard({
+  order,
+  generating,
+  onGenerate,
+}: {
+  order: PortalOrder
+  generating: boolean
+  onGenerate: () => void
+}) {
+  const canGenerate = order.pago && !order.protocolo_numero
+
+  return (
+    <div className="rounded-[20px] border border-slate-200 bg-slate-50/80 px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Protocolo</p>
+      <p className="mt-2 text-sm leading-relaxed text-slate-700">
+        {order.protocolo_numero ?? (order.pago ? 'Pedido pago. Gere o protocolo para iniciar a validação.' : 'Disponível após a confirmação do pagamento.')}
+      </p>
+      {canGenerate && (
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={generating}
+          className="mt-3 inline-flex w-full items-center justify-center rounded-2xl bg-[#17346b] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#102654] disabled:opacity-60"
+        >
+          {generating ? (
+            <><Loader2 size={15} className="mr-2 animate-spin" />Gerando...</>
+          ) : 'Gerar protocolo'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function InvoiceCard({ order }: { order: PortalOrder }) {
   const hasInvoice = Boolean(order.nfse_pdf_url || order.nfse_xml_url || order.nfse_numero)
 
   return (
-    <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Nota fiscal</p>
+    <div className="rounded-[20px] border border-slate-200 bg-slate-50/80 px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Nota fiscal</p>
       <p className="mt-2 text-sm leading-relaxed text-slate-700">
         {hasInvoice
           ? `NFS-e ${order.nfse_numero ?? ''} ${order.nfse_status ? `- ${order.nfse_status}` : ''}`.trim()
@@ -839,9 +879,42 @@ function InvoiceCard({ order }: { order: PortalOrder }) {
   )
 }
 
+function VideoCard({
+  order,
+  loading,
+  disabled,
+  onSchedule,
+}: {
+  order: PortalOrder
+  loading: boolean
+  disabled: boolean
+  onSchedule: () => void
+}) {
+  return (
+    <div className="rounded-[20px] border border-slate-200 bg-slate-50/80 px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Videoconferência</p>
+      <p className="mt-2 text-sm leading-relaxed text-slate-700">
+        {order.data_agendada
+          ? `${formatDateTime(order.data_agendada)} com ${order.agente_nome ?? 'agente'} em ${order.ponto_nome ?? 'ponto de atendimento'}`
+          : 'Reserve seu horário de validação.'}
+      </p>
+      <button
+        type="button"
+        onClick={onSchedule}
+        disabled={loading || disabled}
+        className="mt-3 inline-flex w-full items-center justify-center rounded-2xl bg-[#17346b] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#102654] disabled:opacity-60"
+      >
+        {loading ? (
+          <><Loader2 size={15} className="mr-2 animate-spin" />Carregando...</>
+        ) : order.data_agendada ? 'Reagendar' : 'Agendar'}
+      </button>
+    </div>
+  )
+}
+
 function InfoCard({ title, text }: { title: string; text: string }) {
   return (
-    <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
+    <div className="rounded-[20px] border border-slate-200 bg-slate-50/80 px-4 py-3">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{title}</p>
       <p className="mt-2 text-sm leading-relaxed text-slate-700">{text}</p>
     </div>

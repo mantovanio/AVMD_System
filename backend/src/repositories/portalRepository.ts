@@ -221,6 +221,39 @@ export class PortalRepository {
     return result.rows[0] ?? null
   }
 
+  async generateProtocol(email: string, saleId: string) {
+    const matcher = this.buildEmailMatcher(email, 3)
+    if (!matcher.hasAny) return null
+
+    const protocolo = `PROT${Date.now().toString().slice(-8)}`
+    const ownerWhereSql = matcher.whereSql.replace(/\bv\./g, 'v2.')
+    const result = await this.db.query<{ id: string; protocolo_numero: string }>(
+      `update vendas_certificados v
+          set protocolo_numero = $2,
+              protocolo_status = 'gerado',
+              pedido_status = coalesce(nullif(v.pedido_status, ''), 'gerado'),
+              api_payload_protocolo = coalesce(v.api_payload_protocolo, '{}'::jsonb) || jsonb_build_object(
+                'gerado_por', 'portal_cliente',
+                'gerado_em', now()
+              ),
+              updated_at = now()
+        where v.id = $1::uuid
+          and coalesce(v.pago, false) = true
+          and nullif(trim(coalesce(v.protocolo_numero, '')), '') is null
+          and exists (
+            select 1
+            from vendas_certificados v2
+            left join cadastros_base cb on cb.id = v2.cadastro_base_id
+            left join titulares_certificado t on t.id = v2.titular_id
+            where v2.id = v.id
+              and ${ownerWhereSql}
+          )
+        returning v.id, v.protocolo_numero`,
+      [saleId, protocolo, ...matcher.params],
+    )
+    return result.rows[0] ?? null
+  }
+
   private async findAuthorizedSale(email: string, saleId: string): Promise<AuthorizedSale | null> {
     const matcher = this.buildEmailMatcher(email, 2)
     if (!matcher.hasAny) return null
