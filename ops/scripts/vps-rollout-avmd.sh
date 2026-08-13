@@ -3,6 +3,7 @@ set -euo pipefail
 
 APP_DIR="/opt/avmd/AVMD_System"
 FRONT_DIR="/var/www/crm.certiid.mantovan.com.br"
+PORTAL_DIR="/var/www/portal.certiid.com.br"
 SERVICE_NAME="avmd-backend"
 AVMD_WEB_SERVICE="${AVMD_WEB_SERVICE:-avmd_web}"
 NGINX_SOURCE="${APP_DIR}/ops/nginx/avmd-web.conf"
@@ -10,6 +11,7 @@ NGINX_TARGET="/opt/avmd/nginx-avmd.conf"
 NGINX_BACKUP_DIR="/opt/avmd/backups/nginx"
 PUBLIC_API_URL="https://api.certiid.mantovan.com.br/healthz"
 PUBLIC_CRM_URL="https://crm.certiid.mantovan.com.br"
+PUBLIC_PORTAL_URL="https://portal.certiid.com.br"
 PUBLIC_API_RETRIES="${PUBLIC_API_RETRIES:-8}"
 PUBLIC_API_RETRY_DELAY_SEC="${PUBLIC_API_RETRY_DELAY_SEC:-5}"
 PUBLIC_CRM_RETRIES="${PUBLIC_CRM_RETRIES:-8}"
@@ -17,6 +19,8 @@ PUBLIC_CRM_RETRY_DELAY_SEC="${PUBLIC_CRM_RETRY_DELAY_SEC:-5}"
 FRONT_VALIDATOR="${APP_DIR}/ops/scripts/validate-frontend-assets.sh"
 FRONT_NEXT_DIR="${FRONT_DIR}.next"
 FRONT_PREVIOUS_DIR="${FRONT_DIR}.previous"
+PORTAL_NEXT_DIR="${PORTAL_DIR}.next"
+PORTAL_PREVIOUS_DIR="${PORTAL_DIR}.previous"
 DEPLOY_STATE_DIR="/opt/avmd/deploys"
 
 if [ "${DEPLOY_GATE_APPROVED:-0}" != "1" ]; then
@@ -62,6 +66,22 @@ validate_public_crm() {
   return 1
 }
 
+validate_public_portal() {
+  local attempt
+  for ((attempt=1; attempt<=PUBLIC_CRM_RETRIES; attempt++)); do
+    if bash "${FRONT_VALIDATOR}" url "${PUBLIC_PORTAL_URL}"; then
+      return 0
+    fi
+
+    log "Tentativa ${attempt}/${PUBLIC_CRM_RETRIES} da validacao visual do portal falhou."
+    if [ "${attempt}" -lt "${PUBLIC_CRM_RETRIES}" ]; then
+      sleep "${PUBLIC_CRM_RETRY_DELAY_SEC}"
+    fi
+  done
+
+  return 1
+}
+
 restore_previous_frontend() {
   if [ ! -d "${FRONT_PREVIOUS_DIR}" ]; then
     log "[ERRO] Nao existe frontend anterior para restaurar."
@@ -89,6 +109,37 @@ publish_frontend() {
     mv "${FRONT_DIR}" "${FRONT_PREVIOUS_DIR}"
   fi
   mv "${FRONT_NEXT_DIR}" "${FRONT_DIR}"
+}
+
+publish_portal() {
+  log "4.1) Publicando portal com versao anterior preservada"
+  rm -rf "${PORTAL_NEXT_DIR:?}"
+  mkdir -p "${PORTAL_NEXT_DIR}"
+  cp -R "${APP_DIR}/dist/." "${PORTAL_NEXT_DIR}/"
+  if [ ! -f "${PORTAL_NEXT_DIR}/portal.html" ]; then
+    log "[ERRO] Build do portal ausente em ${PORTAL_NEXT_DIR}/portal.html"
+    exit 1
+  fi
+
+  cp "${PORTAL_NEXT_DIR}/portal.html" "${PORTAL_NEXT_DIR}/index.html"
+
+  rm -rf "${PORTAL_PREVIOUS_DIR:?}"
+  if [ -d "${PORTAL_DIR}" ]; then
+    mv "${PORTAL_DIR}" "${PORTAL_PREVIOUS_DIR}"
+  fi
+  mv "${PORTAL_NEXT_DIR}" "${PORTAL_DIR}"
+}
+
+restore_previous_portal() {
+  if [ ! -d "${PORTAL_PREVIOUS_DIR}" ]; then
+    log "[ERRO] Nao existe portal anterior para restaurar."
+    return 1
+  fi
+
+  log "Restaurando portal anterior apos falha de validacao."
+  rm -rf "${PORTAL_DIR:?}"
+  mv "${PORTAL_PREVIOUS_DIR}" "${PORTAL_DIR}"
+  docker service update --force "${AVMD_WEB_SERVICE}" >/dev/null
 }
 
 record_frontend_release() {
@@ -157,6 +208,7 @@ install_edge_config() {
   docker run --rm \
     -v "${NGINX_SOURCE}:/etc/nginx/conf.d/default.conf:ro" \
     -v "${FRONT_DIR}:/usr/share/nginx/html:ro" \
+    -v "${PORTAL_DIR}:/usr/share/nginx/portal:ro" \
     nginx:1.27-alpine nginx -t
 
   log "6) Publicando config do edge"
@@ -164,6 +216,11 @@ install_edge_config() {
 
   log "7) Recarregando service ${AVMD_WEB_SERVICE}"
   docker service inspect "${AVMD_WEB_SERVICE}" >/dev/null
+  if ! docker service inspect --format '{{json .Spec.TaskTemplate.ContainerSpec.Mounts}}' "${AVMD_WEB_SERVICE}" | grep -q '/usr/share/nginx/portal'; then
+    docker service update \
+      --mount-add type=bind,src="${PORTAL_DIR}",dst=/usr/share/nginx/portal,readonly \
+      "${AVMD_WEB_SERVICE}" >/dev/null
+  fi
   docker service update --force "${AVMD_WEB_SERVICE}" >/dev/null
 }
 
@@ -178,6 +235,7 @@ npm run build
 npm run build:backend
 
 publish_frontend
+publish_portal
 
 log "5) Instalando/atualizando service do backend"
 require_file "${APP_DIR}/ops/systemd/avmd-backend.service"
@@ -198,6 +256,13 @@ if ! validate_public_crm; then
   log "[ERRO] O CRM publicado nao passou na validacao. A versao anterior foi restaurada."
   exit 1
 fi
+
+log "8.1) Validando layout publico do portal"
+if ! validate_public_portal; then
+  restore_previous_portal
+  log "[ERRO] O portal publico nao passou na validacao."
+  exit 1
+fi
 record_frontend_release
 
 log "9) Smoke test local backend"
@@ -214,4 +279,5 @@ smoke_test_public_api_head
 
 log "Rollout finalizado"
 log "Frontend: ${PUBLIC_CRM_URL}"
+log "Portal: ${PUBLIC_PORTAL_URL}"
 log "API: ${PUBLIC_API_URL}"

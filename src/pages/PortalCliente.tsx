@@ -82,7 +82,7 @@ export default function PortalCliente() {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch(getApiUrl('/public/portal/overview'), {
+      const response = await fetch(getApiUrl('/portal/overview'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
@@ -117,7 +117,7 @@ export default function PortalCliente() {
     setError(null)
     setSelectedOrder(order)
     try {
-      const response = await fetch(getApiUrl('/public/portal/schedule-context'), {
+      const response = await fetch(getApiUrl('/portal/schedule-context'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: portalToken, saleId: order.id }),
@@ -146,7 +146,7 @@ export default function PortalCliente() {
     setError(null)
     setSuccess(null)
     try {
-      const response = await fetch(getApiUrl('/public/portal/schedule'), {
+      const response = await fetch(getApiUrl('/portal/schedule'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -182,170 +182,140 @@ export default function PortalCliente() {
 
   if (!portalToken) {
     return (
-      <div className="min-h-full bg-[linear-gradient(180deg,#f7f9ff_0%,#edf4ff_100%)] p-4 sm:p-6">
-        <div className="mx-auto max-w-6xl">
-          <PortalTopBar />
-          <div className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="mb-6">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#ea7b18]">Minhas compras</p>
-                <h1 className="mt-2 text-3xl font-semibold text-slate-900">
-                  {requestStep === 'code' ? 'Confirmar código de acesso' : 'Consultar pedidos por e-mail'}
-                </h1>
-                <p className="mt-3 text-sm text-slate-600">
-                  Digite o e-mail usado na compra para receber o código e consultar pedidos, agendamentos e protocolo com segurança.
-                </p>
-              </div>
+      <div className="min-h-full bg-[linear-gradient(180deg,#f8fbff_0%,#eef4ff_100%)] p-4 sm:p-6">
+        <div className="mx-auto max-w-xl rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#ea7b18]">Acesso do cliente</p>
+          <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+            {requestStep === 'code' ? 'Digite o código enviado' : 'Entre com seu e-mail'}
+          </h1>
+          <p className="mt-2 text-sm text-slate-600">
+            Use o mesmo e-mail informado na compra para receber o código e acessar seus pedidos com segurança.
+          </p>
 
-              <form
-                className="space-y-5"
-                onSubmit={async e => {
-                  e.preventDefault()
-                  if (requestStep === 'email') {
-                    const normalized = emailInput.trim().toLowerCase()
-                    if (!normalized) {
-                      setError('Informe o e-mail usado na compra.')
-                      return
-                    }
-                    setRequestLoading(true)
-                    setError(null)
-                    try {
-                      const response = await fetch(getApiUrl('/public/portal/auth/request'), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email: normalized }),
-                      })
-                      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
-                      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Nao foi possivel enviar o código.')
-                      window.localStorage.setItem('avmd_portal_email', normalized)
-                      setPortalEmail(normalized)
-                      setRequestedEmail(normalized)
-                      setRequestStep('code')
-                    } catch (err) {
-                      setError(err instanceof Error ? err.message : 'Nao foi possivel enviar o código.')
-                    } finally {
-                      setRequestLoading(false)
-                    }
-                    return
-                  }
+          <form
+            className="mt-6 space-y-4"
+            onSubmit={async e => {
+              e.preventDefault()
+              if (requestStep === 'email') {
+                const normalized = emailInput.trim().toLowerCase()
+                if (!normalized) {
+                  setError('Informe o e-mail usado na compra.')
+                  return
+                }
+                setRequestLoading(true)
+                setError(null)
+                try {
+                  const response = await fetch(getApiUrl('/portal/auth/request'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: normalized }),
+                  })
+                  const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
+                  if (!response.ok || !data?.ok) throw new Error(data?.error || 'Nao foi possivel enviar o código.')
+                  window.localStorage.setItem('avmd_portal_email', normalized)
+                  setPortalEmail(normalized)
+                  setRequestedEmail(normalized)
+                  setRequestStep('code')
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Nao foi possivel enviar o código.')
+                } finally {
+                  setRequestLoading(false)
+                }
+                return
+              }
 
-                  const normalized = requestedEmail || emailInput.trim().toLowerCase()
-                  const code = codeInput.replace(/\D/g, '').slice(0, 6)
-                  if (!normalized) {
-                    setError('E-mail inválido.')
-                    return
-                  }
-                  if (code.length !== 6) {
-                    setError('Informe o código de 6 dígitos.')
-                    return
-                  }
-                  setEmailLoading(true)
-                  setError(null)
-                  try {
-                    const response = await fetch(getApiUrl('/public/portal/auth/verify'), {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ email: normalized, code }),
-                    })
-                    const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; token?: string } | null
-                    if (!response.ok || !data?.ok || !data.token) throw new Error(data?.error || 'Nao foi possivel validar o código.')
-                    window.localStorage.setItem('avmd_portal_token', data.token)
-                    setPortalToken(data.token)
-                    await loadOrders(data.token)
-                    setRequestStep('portal')
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : 'Nao foi possivel validar o código.')
-                  } finally {
-                    setEmailLoading(false)
-                  }
-                }}
-              >
-                <div>
-                  <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">E-mail para consulta</label>
-                  <input
-                    type="email"
-                    value={emailInput}
-                    onChange={e => setEmailInput(e.target.value)}
-                    placeholder="seu@email.com"
-                    className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#17346b] focus:bg-white focus:ring-2 focus:ring-[#17346b]/10"
-                    autoComplete="email"
-                    disabled={requestStep === 'code'}
-                  />
-                </div>
-
-                {requestStep === 'code' && (
-                  <div>
-                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Código recebido</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={codeInput}
-                      onChange={e => setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      placeholder="000000"
-                      className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-lg tracking-[0.5em] text-slate-900 outline-none transition focus:border-[#17346b] focus:bg-white focus:ring-2 focus:ring-[#17346b]/10"
-                      autoComplete="one-time-code"
-                      maxLength={6}
-                    />
-                    <p className="mt-2 text-xs text-slate-500">Enviamos o código para {requestedEmail || emailInput.trim().toLowerCase()}.</p>
-                  </div>
-                )}
-
-                {error && <MessageCard tone="error" message={error} />}
-
-                <button
-                  type="submit"
-                  disabled={emailLoading || requestLoading}
-                  className="inline-flex w-full items-center justify-center rounded-2xl bg-[#17346b] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#102654] disabled:opacity-60"
-                >
-                  {requestStep === 'email' ? (requestLoading ? (
-                    <>
-                      <Loader2 size={15} className="mr-2 animate-spin" />
-                      Enviando código...
-                    </>
-                  ) : 'Receber código') : (emailLoading ? (
-                    <>
-                      <Loader2 size={15} className="mr-2 animate-spin" />
-                      Validando código...
-                    </>
-                  ) : 'Entrar no portal')}
-                </button>
-              </form>
+              const normalized = requestedEmail || emailInput.trim().toLowerCase()
+              const code = codeInput.replace(/\D/g, '').slice(0, 6)
+              if (!normalized) {
+                setError('E-mail inválido.')
+                return
+              }
+              if (code.length !== 6) {
+                setError('Informe o código de 6 dígitos.')
+                return
+              }
+              setEmailLoading(true)
+              setError(null)
+              try {
+                const response = await fetch(getApiUrl('/portal/auth/verify'), {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ email: normalized, code }),
+                })
+                const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; token?: string } | null
+                if (!response.ok || !data?.ok || !data.token) throw new Error(data?.error || 'Nao foi possivel validar o código.')
+                window.localStorage.setItem('avmd_portal_token', data.token)
+                setPortalToken(data.token)
+                await loadOrders(data.token)
+                setRequestStep('portal')
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Nao foi possivel validar o código.')
+              } finally {
+                setEmailLoading(false)
+              }
+            }}
+          >
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-2">E-mail</label>
+              <input
+                type="email"
+                value={emailInput}
+                onChange={e => setEmailInput(e.target.value)}
+                placeholder="seu@email.com"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-[#17346b] focus:ring-2 focus:ring-[#17346b]/10"
+                autoComplete="email"
+                disabled={requestStep === 'code'}
+              />
             </div>
-
-            <aside className="rounded-[28px] border border-slate-200 bg-slate-900 p-6 text-white shadow-sm">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-200">Acesso seguro</p>
-              <h2 className="mt-3 text-2xl font-semibold">Rápido e protegido</h2>
-              <ul className="mt-6 space-y-4 text-sm text-slate-200">
-                <li className="flex gap-3">
-                  <span className="mt-1 h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                  <span>Consulta seus pedidos pelo e-mail de confirmação da compra.</span>
-                </li>
-                <li className="flex gap-3">
-                  <span className="mt-1 h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                  <span>Confirmação por código de 6 dígitos para acesso exclusivo.</span>
-                </li>
-                <li className="flex gap-3">
-                  <span className="mt-1 h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                  <span>Visualize status, protocolo, pagamento e agendamento da validação.</span>
-                </li>
-              </ul>
-            </aside>
-          </div>
+            {requestStep === 'code' && (
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-2">Código</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={codeInput}
+                  onChange={e => setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-[#17346b] focus:ring-2 focus:ring-[#17346b]/10"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                />
+                <p className="mt-2 text-xs text-slate-500">Enviamos o código para {requestedEmail || emailInput.trim().toLowerCase()}.</p>
+              </div>
+            )}
+            {error && <MessageCard tone="error" message={error} />}
+            <button
+              type="submit"
+              disabled={emailLoading || requestLoading}
+              className="inline-flex w-full items-center justify-center rounded-2xl bg-[#17346b] px-4 py-3 text-sm font-semibold text-white hover:bg-[#102654] disabled:opacity-60"
+            >
+              {requestStep === 'email' ? (requestLoading ? (
+                <>
+                  <Loader2 size={15} className="mr-2 animate-spin" />
+                  Enviando código...
+                </>
+              ) : 'Receber código') : (emailLoading ? (
+                <>
+                  <Loader2 size={15} className="mr-2 animate-spin" />
+                  Validando código...
+                </>
+              ) : 'Entrar no portal')}
+            </button>
+          </form>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-full bg-[linear-gradient(180deg,#f7f9ff_0%,#edf4ff_100%)] p-4 sm:p-6">
+    <div className="min-h-full bg-[linear-gradient(180deg,#f8fbff_0%,#eef4ff_100%)] p-4 sm:p-6">
       <div className="mx-auto max-w-6xl space-y-5">
-        <PortalTopBar />
         <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#ea7b18]">Portal do cliente</p>
-              <h1 className="mt-2 text-2xl font-semibold text-slate-900">Minhas compras</h1>
-              <p className="mt-2 text-sm text-slate-600">Aqui você consulta seu pedido, o status do pagamento e o agendamento da validação.</p>
+              <h1 className="mt-2 text-2xl font-semibold text-slate-900">Acompanhe seus pedidos e agendamentos</h1>
+              <p className="mt-2 text-sm text-slate-600">Aqui voce consegue acompanhar pagamento, protocolo e reservar sua videoconferencia.</p>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <SummaryCard icon={Package} label="Pedidos" value={String(orders.length)} />
@@ -465,25 +435,6 @@ export default function PortalCliente() {
         pointOptionsForAgent={pointOptionsForAgent}
         slots={scheduleContext.slots}
       />
-    </div>
-  )
-}
-
-function PortalTopBar() {
-  const items = ['Conexão', 'Certi ID', 'Certificação', 'Certifast', 'Ferramentas']
-
-  return (
-    <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700">
-          <span className="text-[10px] font-bold">C</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
-          {items.map(item => (
-            <span key={item} className="rounded-full border border-slate-200 px-2.5 py-1.5">{item}</span>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }

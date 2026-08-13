@@ -91,13 +91,14 @@ export async function handlePortalRoutes(
   clerkSecretKey: string,
   corsOrigin: string,
 ): Promise<boolean> {
-  const isLegacyPortalApi = req.method === 'POST' && /^\/api\/portal\//.test(String(req.url ?? ''))
+  const requestPath = String(req.url ?? '')
+  const isLegacyPortalApi = req.method === 'POST' && /^\/api\/public\/portal\//.test(requestPath)
   if (isLegacyPortalApi) {
-    writeJson(res, 410, { ok: false, error: 'Este fluxo de acesso do cliente foi movido para a API pública /api/public/portal.' }, corsOrigin)
+    writeJson(res, 410, { ok: false, error: 'Este fluxo de acesso do cliente foi movido para a API pública /api/portal.' }, corsOrigin)
     return true
   }
 
-  if (req.method === 'POST' && req.url === '/api/public/portal/auth/request') {
+  if (req.method === 'POST' && requestPath === '/api/portal/auth/request') {
     if (!clerkSecretKey) {
       writeJson(res, 503, { ok: false, error: 'CLERK_SECRET_KEY não configurada no backend.' }, corsOrigin)
       return true
@@ -146,7 +147,7 @@ export async function handlePortalRoutes(
     return true
   }
 
-  if (req.method === 'POST' && req.url === '/api/public/portal/auth/verify') {
+  if (req.method === 'POST' && requestPath === '/api/portal/auth/verify') {
     if (!clerkSecretKey) {
       writeJson(res, 503, { ok: false, error: 'CLERK_SECRET_KEY não configurada no backend.' }, corsOrigin)
       return true
@@ -179,7 +180,7 @@ export async function handlePortalRoutes(
     return true
   }
 
-  if (req.method === 'POST' && req.url === '/api/public/portal/overview') {
+  if (req.method === 'POST' && requestPath === '/api/portal/overview') {
     const body = await readJson<PortalAuthBody>(req)
     const email = resolveEmail(body, clerkSecretKey)
     if (!email) {
@@ -192,7 +193,7 @@ export async function handlePortalRoutes(
     return true
   }
 
-  if (req.method === 'POST' && req.url === '/api/public/portal/schedule-context') {
+  if (req.method === 'POST' && requestPath === '/api/portal/schedule-context') {
     const body = await readJson<PortalScheduleBody>(req)
     const email = resolveEmail(body, clerkSecretKey)
     if (!email || !body.saleId) {
@@ -210,7 +211,7 @@ export async function handlePortalRoutes(
     return true
   }
 
-  if (req.method === 'POST' && req.url === '/api/public/portal/schedule') {
+  if (req.method === 'POST' && requestPath === '/api/portal/schedule') {
     const body = await readJson<PortalScheduleBody>(req)
     const email = resolveEmail(body, clerkSecretKey)
     if (!email || !body.saleId || !body.agente_registro_id || !body.ponto_atendimento_id || !body.data_agendada) {

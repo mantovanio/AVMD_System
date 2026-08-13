@@ -10,4 +10,12 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      input: {
+        crm: path.resolve(__dirname, 'index.html'),
+        portal: path.resolve(__dirname, 'portal.html'),
+      },
+    },
+  },
 })
