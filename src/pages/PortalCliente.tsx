@@ -524,7 +524,7 @@ export default function PortalCliente() {
                   onClick={() => void loadOrders()}
                   className="inline-flex items-center justify-center rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
                 >
-                  Atualizar pedido
+                  Verificar atualização
                 </button>
               </div>
             </article>
