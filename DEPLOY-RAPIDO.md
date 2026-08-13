@@ -112,6 +112,7 @@ npm run db:apply-sql:dry-run -- backend/sql/026_fix_legacy_email_schedule_phone.
 - Dominio da API: `https://api.certiid.com.br/healthz`
 - Dominio legado da API: `https://api.certiid.mantovan.com.br/healthz`
 - Para o mapa completo da VPS: `ops/ROTAS-E-SERVICOS-VPS.md`
+- Para o historico da recuperacao do dominio novo, Clerk e DNS: `ops/RECUPERACAO-CRM-CERTIID-2026-08-13.md`
 
 ## Armadilhas conhecidas
 

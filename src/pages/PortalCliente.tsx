@@ -29,6 +29,10 @@ type ScheduleContextResponse = {
   slots: AgendaSlot[]
 }
 
+function isInvalidPortalSession(message: string) {
+  return /sess[aã]o do portal inv[aá]lida ou expirada/i.test(message)
+}
+
 function paymentLabel(order: PortalOrder) {
   if (order.pago) return 'Pagamento confirmado'
   if (order.payment_charge_status) return `Pagamento: ${order.payment_charge_status}`
@@ -113,7 +117,21 @@ export default function PortalCliente() {
         body: JSON.stringify({ token }),
       })
       const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; pedidos?: PortalOrder[] } | null
-      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Nao foi possivel carregar seus pedidos.')
+      if (!response.ok || !data?.ok) {
+        const message = data?.error || 'Nao foi possivel carregar seus pedidos.'
+        if (response.status === 401 && isInvalidPortalSession(message)) {
+          window.localStorage.removeItem('avmd_portal_token')
+          setPortalToken('')
+          setOrders([])
+          setRequestStep('email')
+          setSuccess(null)
+          setCodeInput('')
+          setRequestedEmail('')
+          setError('Sua sessão anterior expirou. Solicite um novo código para acessar suas compras.')
+          return
+        }
+        throw new Error(message)
+      }
       setOrders(data.pedidos ?? [])
     } catch (err) {
       setError(formatPortalError(err, 'Falha ao carregar o portal do cliente.'))
