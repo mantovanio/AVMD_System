@@ -37,6 +37,7 @@ export function assertRuntimeConfig() {
   const config = getRuntimeConfig()
   const missing: string[] = []
   const isProductionBuild = Boolean(import.meta.env.PROD)
+
   if (!config.clerkPublishableKey) {
     missing.push('VITE_CLERK_PUBLISHABLE_KEY')
   }
