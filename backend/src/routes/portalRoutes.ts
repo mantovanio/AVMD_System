@@ -43,11 +43,9 @@ function buildPortalEmail(nome: string, code: string) {
     timeStyle: 'short',
     timeZone: 'America/Sao_Paulo',
   }).format(new Date())
-  return {
-    subject: `Código CertiID ${code.slice(-3)} - ${sentAt}`,
-    body: `Olá, ${firstName}.
+  const body = `Olá, ${firstName}.
 
-Recebemos uma solicitação de acesso ao portal do cliente.
+Recebemos uma solicitação de acesso ao portal Minhas Compras da CertiID.
 
 Use este código para entrar:
 
@@ -56,7 +54,63 @@ ${code}
 Esse código é válido por 10 minutos.
 Se você pediu mais de um código, use sempre o e-mail mais recente.
 
-Se você não solicitou esse acesso, ignore esta mensagem.`,
+Se você não solicitou esse acesso, ignore esta mensagem.`
+  const html = `<!doctype html>
+<html lang="pt-BR">
+  <body style="margin:0;background:#f4f7fb;font-family:Arial,sans-serif;color:#17346b;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f7fb;padding:32px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border:1px solid #dbe4f0;border-radius:18px;padding:32px;">
+            <tr>
+              <td align="center" style="font-size:30px;font-weight:800;color:#17346b;">
+                Certi<span style="color:#f88414;">ID</span>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding-top:8px;font-size:11px;letter-spacing:4px;text-transform:uppercase;color:#52678f;">
+                Portal Minhas Compras
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-top:30px;font-size:16px;line-height:1.6;color:#132b57;">
+                Olá, <strong>${firstName}</strong>.
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-top:18px;font-size:15px;line-height:1.7;color:#30466f;">
+                Recebemos uma solicitação de acesso ao portal <strong>Minhas Compras da CertiID</strong>.
+                Use o código abaixo para acompanhar seus pedidos com segurança.
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:26px 0;">
+                <div style="border:1px solid #dbe4f0;border-radius:14px;background:#f8fbff;padding:22px;">
+                  <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#52678f;">Código de acesso</div>
+                  <div style="margin-top:12px;font-size:34px;font-weight:800;letter-spacing:8px;color:#f88414;">${code}</div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="border-left:4px solid #f88414;background:#fff8ef;padding:14px 16px;font-size:14px;line-height:1.6;color:#9b4a00;">
+                Este código expira em 10 minutos. Se você pediu mais de um código, use sempre o e-mail mais recente.
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-top:26px;font-size:12px;line-height:1.6;color:#7b8aa8;text-align:center;">
+                Mensagem automática de segurança enviada em ${sentAt}. Por favor, não responda.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`
+  return {
+    subject: `Código CertiID ${code.slice(-3)} - ${sentAt}`,
+    body,
+    html,
   }
 }
 
@@ -149,6 +203,8 @@ export async function handlePortalRoutes(
       payload: {
         context: 'portal_access',
         email,
+        code,
+        html: recoveryEmail.html,
         tipo: 'portal_access_code',
         token_expires_at: expiresAt,
       },

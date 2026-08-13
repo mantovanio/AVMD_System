@@ -354,7 +354,9 @@ export default function PortalCliente() {
                         autoComplete="one-time-code"
                         maxLength={6}
                       />
-                      <p className="mt-2 text-xs text-slate-500">Enviamos o código para {requestedEmail || emailInput.trim().toLowerCase()}.</p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        Enviamos o código para {requestedEmail || emailInput.trim().toLowerCase()}. Use o e-mail com o texto "Portal Minhas Compras", não o e-mail de redefinição de senha do CRM.
+                      </p>
                       <button
                         type="button"
                         onClick={() => void requestPortalCode(requestedEmail || emailInput)}
