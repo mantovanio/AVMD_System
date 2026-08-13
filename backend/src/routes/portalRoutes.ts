@@ -3,6 +3,7 @@ import { createHmac, createHash, timingSafeEqual } from 'node:crypto'
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
 import type { PortalRepository } from '../repositories/portalRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
+import { checkRateLimit } from '../utils/rateLimit.js'
 
 type PortalAuthBody = {
   email?: string
@@ -90,7 +91,13 @@ export async function handlePortalRoutes(
   clerkSecretKey: string,
   corsOrigin: string,
 ): Promise<boolean> {
-  if (req.method === 'POST' && req.url === '/api/portal/auth/request') {
+  const isLegacyPortalApi = req.method === 'POST' && /^\/api\/portal\//.test(String(req.url ?? ''))
+  if (isLegacyPortalApi) {
+    writeJson(res, 410, { ok: false, error: 'Este fluxo de acesso do cliente foi movido para a API pública /api/public/portal.' }, corsOrigin)
+    return true
+  }
+
+  if (req.method === 'POST' && req.url === '/api/public/portal/auth/request') {
     if (!clerkSecretKey) {
       writeJson(res, 503, { ok: false, error: 'CLERK_SECRET_KEY não configurada no backend.' }, corsOrigin)
       return true
@@ -100,6 +107,23 @@ export async function handlePortalRoutes(
     const email = normalizeEmail(String(body?.email ?? ''))
     if (!email) {
       writeJson(res, 400, { ok: false, error: 'Informe o e-mail da compra.' }, corsOrigin)
+      return true
+    }
+
+    const requestKey = `portal-auth-request:${String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? 'unknown').split(',')[0]?.trim() || 'unknown'}:${email}`
+    const requestLimit = checkRateLimit(requestKey, 3, 60_000)
+    if (!requestLimit.allowed) {
+      writeJson(res, 429, {
+        ok: false,
+        error: 'Muitas tentativas de acesso. Aguarde um minuto e tente novamente.',
+        retryAfter: Math.ceil((requestLimit.resetAt - Date.now()) / 1000),
+      }, corsOrigin)
+      return true
+    }
+
+    const vendas = await portalRepository.listOrdersByEmail(email)
+    if (!vendas.length) {
+      writeJson(res, 404, { ok: false, error: 'Nenhuma compra ativa foi encontrada para este e-mail.' }, corsOrigin)
       return true
     }
 
@@ -122,7 +146,7 @@ export async function handlePortalRoutes(
     return true
   }
 
-  if (req.method === 'POST' && req.url === '/api/portal/auth/verify') {
+  if (req.method === 'POST' && req.url === '/api/public/portal/auth/verify') {
     if (!clerkSecretKey) {
       writeJson(res, 503, { ok: false, error: 'CLERK_SECRET_KEY não configurada no backend.' }, corsOrigin)
       return true
@@ -155,7 +179,7 @@ export async function handlePortalRoutes(
     return true
   }
 
-  if (req.method === 'POST' && req.url === '/api/portal/overview') {
+  if (req.method === 'POST' && req.url === '/api/public/portal/overview') {
     const body = await readJson<PortalAuthBody>(req)
     const email = resolveEmail(body, clerkSecretKey)
     if (!email) {
@@ -168,7 +192,7 @@ export async function handlePortalRoutes(
     return true
   }
 
-  if (req.method === 'POST' && req.url === '/api/portal/schedule-context') {
+  if (req.method === 'POST' && req.url === '/api/public/portal/schedule-context') {
     const body = await readJson<PortalScheduleBody>(req)
     const email = resolveEmail(body, clerkSecretKey)
     if (!email || !body.saleId) {
@@ -186,7 +210,7 @@ export async function handlePortalRoutes(
     return true
   }
 
-  if (req.method === 'POST' && req.url === '/api/portal/schedule') {
+  if (req.method === 'POST' && req.url === '/api/public/portal/schedule') {
     const body = await readJson<PortalScheduleBody>(req)
     const email = resolveEmail(body, clerkSecretKey)
     if (!email || !body.saleId || !body.agente_registro_id || !body.ponto_atendimento_id || !body.data_agendada) {

@@ -35,6 +35,11 @@ import {
   importRenovacoesToBase as apiImportToBase,
   importRenovacoesToCrm as apiImportToCrm,
   enrichRenovacao,
+  fetchRecentDispatches,
+  fetchDispatchStats,
+  fetchDispatchesByRenovacaoId,
+  type OutboxDispatch,
+  type DispatchStats,
 } from '@/lib/renovacoesApi'
 import { useAuth } from '@/contexts/AuthContext'
 import { hasPerfil, isAdminProfile } from '@/lib/security'
@@ -552,6 +557,14 @@ export default function Renovacoes() {
   const [showLinks, setShowLinks]         = useState(false)
   const [links, setLinks]                 = useState<LinkProduto[]>([])
   const [loadingLinks, setLoadingLinks]   = useState(false)
+
+  // ── dispatch log ──────────────────────────────────────────────
+  const [showDispatchLog, setShowDispatchLog] = useState(false)
+  const [dispatchStats, setDispatchStats] = useState<DispatchStats | null>(null)
+  const [recentDispatches, setRecentDispatches] = useState<OutboxDispatch[]>([])
+  const [loadingDispatches, setLoadingDispatches] = useState(false)
+  const [selectedRenovacaoDispatches, setSelectedRenovacaoDispatches] = useState<OutboxDispatch[]>([])
+  const [showRenovacaoDispatches, setShowRenovacaoDispatches] = useState<string | null>(null)
   const [editingLink, setEditingLink]     = useState<LinkProduto | null>(null)
   const [linkForm, setLinkForm]           = useState<LinkForm>(EMPTY_LINK)
   const [savingLink, setSavingLink]       = useState(false)
@@ -703,8 +716,40 @@ export default function Renovacoes() {
     }
   }, [])
 
+  const loadDispatchStats = useCallback(async () => {
+    try {
+      const stats = await fetchDispatchStats()
+      setDispatchStats(stats)
+    } catch (err) {
+      logger.warn('Renovacoes', `Erro ao carregar estatisticas de disparo: ${err}`)
+    }
+  }, [])
+
+  const loadRecentDispatches = useCallback(async () => {
+    setLoadingDispatches(true)
+    try {
+      const dispatches = await fetchRecentDispatches()
+      setRecentDispatches(dispatches)
+    } catch (err) {
+      logger.warn('Renovacoes', `Erro ao carregar disparos recentes: ${err}`)
+    } finally {
+      setLoadingDispatches(false)
+    }
+  }, [])
+
+  const loadRenovacaoDispatches = useCallback(async (renovacaoId: string) => {
+    try {
+      const dispatches = await fetchDispatchesByRenovacaoId(renovacaoId)
+      setSelectedRenovacaoDispatches(dispatches)
+      setShowRenovacaoDispatches(renovacaoId)
+    } catch (err) {
+      logger.warn('Renovacoes', `Erro ao carregar disparos da renovacao: ${err}`)
+    }
+  }, [])
+
   useEffect(() => { void fetchRenovacoes() }, [fetchRenovacoes])
   useEffect(() => { void fetchTemplates() }, [fetchTemplates])
+  useEffect(() => { void loadDispatchStats() }, [loadDispatchStats])
 
   // mantém ref atualizada para uso no realtime sem stale closure
   useEffect(() => { listaRef.current = lista }, [lista])
@@ -1796,6 +1841,139 @@ export default function Renovacoes() {
         </div>
       )}
 
+      {/* Dispatch Log Modal */}
+      {showDispatchLog && (
+        <div className="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-800 shrink-0">
+              <div>
+                <h3 className="font-semibold text-gray-800 dark:text-gray-200">Log de Disparos (últimos 7 dias)</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Histórico de e-mails e WhatsApp enviados pelo sistema</p>
+              </div>
+              <button type="button" title="Fechar" onClick={() => setShowDispatchLog(false)}>
+                <X size={18} className="text-gray-400" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-5">
+              {loadingDispatches ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 size={24} className="animate-spin text-gray-400" />
+                  <span className="ml-2 text-sm text-gray-500">Carregando disparos...</span>
+                </div>
+              ) : recentDispatches.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-12">Nenhum disparo registrado nos últimos 7 dias.</p>
+              ) : (
+                <div className="space-y-2">
+                  {recentDispatches.map(d => (
+                    <div key={d.id} className={cn(
+                      'flex items-start gap-3 p-3 rounded-lg border',
+                      d.status === 'sent'
+                        ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800'
+                        : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800'
+                    )}>
+                      <div className="mt-0.5">
+                        {d.channel === 'email' ? (
+                          <Mail size={16} className={d.status === 'sent' ? 'text-emerald-600' : 'text-red-600'} />
+                        ) : (
+                          <MessageSquare size={16} className={d.status === 'sent' ? 'text-teal-600' : 'text-red-600'} />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">{d.channel}</span>
+                          <span className={cn('text-xs px-1.5 py-0.5 rounded', d.status === 'sent' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
+                            {d.status === 'sent' ? 'Enviado' : 'Falhou'}
+                          </span>
+                          <span className="text-xs text-gray-500">{d.to_address}</span>
+                        </div>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{d.body.slice(0, 120)}...</p>
+                        {d.error && <p className="text-xs text-red-500 mt-1">Erro: {d.error}</p>}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs text-gray-500">{new Date(d.sent_at ?? d.created_at).toLocaleString('pt-BR')}</p>
+                        {typeof d.payload?.['renovacao_id'] === 'string' && (
+                          <button
+                            type="button"
+                            onClick={() => void loadRenovacaoDispatches(d.payload['renovacao_id'] as string)}
+                            className="text-xs text-blue-600 hover:underline mt-1"
+                          >
+                            Ver histórico desta renovação
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end p-5 border-t border-gray-200 dark:border-gray-800 shrink-0">
+              <button type="button" onClick={() => setShowDispatchLog(false)}
+                className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Renovation Dispatch History Modal */}
+      {showRenovacaoDispatches && (
+        <div className="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-800 shrink-0">
+              <div>
+                <h3 className="font-semibold text-gray-800 dark:text-gray-200">Histórico de Disparos</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {lista.find(r => r.id === showRenovacaoDispatches)?.cliente ?? 'Renovação'}
+                </p>
+              </div>
+              <button type="button" title="Fechar" onClick={() => { setShowRenovacaoDispatches(null); setSelectedRenovacaoDispatches([]) }}>
+                <X size={18} className="text-gray-400" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-5">
+              {selectedRenovacaoDispatches.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-12">Nenhum disparo registrado para esta renovação.</p>
+              ) : (
+                <div className="space-y-3">
+                  {selectedRenovacaoDispatches.map(d => (
+                    <div key={d.id} className={cn(
+                      'p-3 rounded-lg border',
+                      d.status === 'sent'
+                        ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800'
+                        : d.status === 'failed'
+                        ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800'
+                        : 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800'
+                    )}>
+                      <div className="flex items-center gap-2 mb-2">
+                        {d.channel === 'email' ? (
+                          <Mail size={14} className={d.status === 'sent' ? 'text-emerald-600' : 'text-red-600'} />
+                        ) : (
+                          <MessageSquare size={14} className={d.status === 'sent' ? 'text-teal-600' : 'text-red-600'} />
+                        )}
+                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">{d.channel}</span>
+                        <span className={cn('text-xs px-1.5 py-0.5 rounded', 
+                          d.status === 'sent' ? 'bg-green-100 text-green-700' : 
+                          d.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                        )}>
+                          {d.status === 'sent' ? 'Enviado' : d.status === 'failed' ? 'Falhou' : 'Pendente'}
+                        </span>
+                        <span className="text-xs text-gray-500">{d.to_address}</span>
+                      </div>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-3">{d.body}</p>
+                      {d.error && <p className="text-xs text-red-500 mt-2">Erro: {d.error}</p>}
+                      <p className="text-xs text-gray-500 mt-2">{new Date(d.sent_at ?? d.created_at).toLocaleString('pt-BR')}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end p-5 border-t border-gray-200 dark:border-gray-800 shrink-0">
+              <button type="button" onClick={() => { setShowRenovacaoDispatches(null); setSelectedRenovacaoDispatches([]) }}
+                className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Contact Modal */}
       {editingContato && (
         <div className="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4">
@@ -1930,27 +2108,40 @@ export default function Renovacoes() {
           })}
         </div>
 
-        {/* Disparo Segments */}
-        <div className="grid grid-cols-2 gap-3">
-          {([
-            { key: 'nao_enviado' as const, label: 'Não Disparados', icon: Send, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800/30', count: lista.filter(r => !r.ultimo_lembrete).length },
-            { key: 'enviado' as const, label: 'Já Disparados', icon: Send, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/10', count: lista.filter(r => !!r.ultimo_lembrete).length },
-          ]).map(item => {
-            const Icon = item.icon
-            return (
-              <button key={item.key} type="button" onClick={() => setFiltroEnvio(filtroEnvio === item.key ? 'todos' : item.key)}
-                className={cn('text-left rounded-xl border p-3 transition-all', item.bg,
-                  filtroEnvio === item.key ? 'ring-2 ring-offset-1 ring-purple-500' : 'border-gray-200 dark:border-gray-800 hover:border-purple-300')}>
-                <div className="flex items-center gap-2 mb-1">
-                  <Icon size={16} className={item.color} />
-                  <span className={cn('text-sm font-semibold', item.color)}>{item.label}</span>
-                </div>
-                <p className="text-xl font-bold leading-tight">{loading ? '…' : item.count}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{item.key === 'enviado' ? 'com mensagem enviada' : 'aguardando disparo'}</p>
-              </button>
-            )
-          })}
-        </div>
+        {/* Dispatch Stats from Outbox */}
+        {dispatchStats && (
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800">
+              <Send size={14} className="text-purple-600 dark:text-purple-400" />
+              <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Enviados (7d):</span>
+              <span className="text-sm font-bold">{dispatchStats.totalEnviados}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800">
+              <Mail size={14} className="text-emerald-600 dark:text-emerald-400" />
+              <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Email:</span>
+              <span className="text-sm font-bold">{dispatchStats.enviadosEmail}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800">
+              <MessageSquare size={14} className="text-teal-600 dark:text-teal-400" />
+              <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">WhatsApp:</span>
+              <span className="text-sm font-bold">{dispatchStats.enviadosWhatsapp}</span>
+            </div>
+            {dispatchStats.falhas > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-200 dark:border-red-800">
+                <AlertTriangle size={14} className="text-red-600 dark:text-red-400" />
+                <span className="text-xs font-semibold text-red-600 dark:text-red-400">Falhas:</span>
+                <span className="text-sm font-bold text-red-600">{dispatchStats.falhas}</span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => { setShowDispatchLog(true); void loadRecentDispatches() }}
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              <Eye size={14} /> Ver Log de Disparos
+            </button>
+          </div>
+        )}
 
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-2">
@@ -2857,17 +3048,29 @@ export default function Renovacoes() {
                       <td className="px-3 py-3 text-xs text-gray-500 overflow-hidden" style={{ width: `${columnWidths.vendedor}px` }}><span className="truncate block">{r.vendedor ?? '—'}</span></td>
                       <td className="px-3 py-3 text-xs text-gray-500 overflow-hidden" style={{ width: `${columnWidths.contador}px` }}><span className="truncate block">{r.contador ?? '—'}</span></td>
                       <td className="px-3 py-3 whitespace-nowrap overflow-hidden" style={{ width: `${columnWidths.statusDisparo}px` }}>
-                        <span className={cn(
-                          'px-2.5 py-1 rounded-full text-xs font-semibold border inline-flex items-center gap-1',
-                          r.status_disparo === 'cadastro_incompleto'
-                            ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700'
-                            : disparoAtivo
-                            ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800'
-                            : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
-                        )}>
-                          {r.status_disparo === 'cadastro_incompleto' && <AlertTriangle size={10} />}
-                          {statusDisparoLabel}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className={cn(
+                            'px-2.5 py-1 rounded-full text-xs font-semibold border inline-flex items-center gap-1',
+                            r.status_disparo === 'cadastro_incompleto'
+                              ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700'
+                              : disparoAtivo
+                              ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800'
+                              : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
+                          )}>
+                            {r.status_disparo === 'cadastro_incompleto' && <AlertTriangle size={10} />}
+                            {statusDisparoLabel}
+                          </span>
+                          {disparoAtivo && (
+                            <button
+                              type="button"
+                              onClick={() => void loadRenovacaoDispatches(r.id)}
+                              className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                              title="Ver histórico de disparos"
+                            >
+                              <Eye size={12} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: `${columnWidths.ultimoEnvio}px` }}>
                         {ultimoEnvioLabel}

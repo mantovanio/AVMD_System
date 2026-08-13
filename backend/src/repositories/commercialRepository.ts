@@ -1216,12 +1216,15 @@ export class CommercialRepository {
       )`
     }
     const result = await this.db.query(`
-      select cb.id, cb.nome, cb.nome_fantasia, cb.cpf_cnpj, cb.telefone, cb.cidade, cb.uf, cb.status
+      select distinct cb.id, cb.nome, cb.nome_fantasia, cb.cpf_cnpj, cb.telefone, cb.cidade, cb.uf, cb.status
       from cadastros_base cb
+      left join vendas_certificados vc on vc.cadastro_base_id = cb.id
       where (lower(coalesce(cb.nome, '')) like $1
          or lower(coalesce(cb.nome_fantasia, '')) like $1
          or lower(coalesce(cb.cpf_cnpj, '')) like $1
-         or lower(coalesce(cb.telefone, '')) like $1)
+         or lower(coalesce(cb.telefone, '')) like $1
+         or lower(coalesce(vc.protocolo_numero, '')) like $1
+         or lower(coalesce(vc.pedido_numero, '')) like $1)
         ${accessFilter}
       order by cb.nome asc
       limit 10

@@ -152,4 +152,55 @@ export class CommunicationOutboxRepository {
     )
     return result.rows.length
   }
+
+  async listRecentDispatches(limit = 50): Promise<OutboxRow[]> {
+    const result = await this.db.query<OutboxRow>(
+      `SELECT *
+       FROM communication_outbox
+       WHERE status IN ('sent', 'failed')
+         AND created_at >= NOW() - INTERVAL '7 days'
+       ORDER BY created_at DESC
+       LIMIT $1`,
+      [limit],
+    )
+    return result.rows
+  }
+
+  async listDispatchesByRenovacaoId(renovacaoId: string): Promise<OutboxRow[]> {
+    const result = await this.db.query<OutboxRow>(
+      `SELECT *
+       FROM communication_outbox
+       WHERE payload->>'renovacao_id' = $1
+       ORDER BY created_at DESC
+       LIMIT 20`,
+      [renovacaoId],
+    )
+    return result.rows
+  }
+
+  async getDispatchStats(): Promise<{
+    totalEnviados: number
+    enviadosEmail: number
+    enviadosWhatsapp: number
+    falhas: number
+    pendentes: number
+  }> {
+    const result = await this.db.query<{
+      totalEnviados: number
+      enviadosEmail: number
+      enviadosWhatsapp: number
+      falhas: number
+      pendentes: number
+    }>(
+      `SELECT
+         COUNT(*) FILTER (WHERE status = 'sent') as "totalEnviados",
+         COUNT(*) FILTER (WHERE status = 'sent' AND channel = 'email') as "enviadosEmail",
+         COUNT(*) FILTER (WHERE status = 'sent' AND channel = 'whatsapp') as "enviadosWhatsapp",
+         COUNT(*) FILTER (WHERE status = 'failed') as "falhas",
+         COUNT(*) FILTER (WHERE status = 'pending') as "pendentes"
+       FROM communication_outbox
+       WHERE created_at >= NOW() - INTERVAL '7 days'`
+    )
+    return result.rows[0]
+  }
 }

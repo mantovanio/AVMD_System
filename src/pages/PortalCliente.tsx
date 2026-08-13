@@ -82,7 +82,7 @@ export default function PortalCliente() {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch(getApiUrl('/portal/overview'), {
+      const response = await fetch(getApiUrl('/public/portal/overview'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
@@ -117,7 +117,7 @@ export default function PortalCliente() {
     setError(null)
     setSelectedOrder(order)
     try {
-      const response = await fetch(getApiUrl('/portal/schedule-context'), {
+      const response = await fetch(getApiUrl('/public/portal/schedule-context'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: portalToken, saleId: order.id }),
@@ -146,7 +146,7 @@ export default function PortalCliente() {
     setError(null)
     setSuccess(null)
     try {
-      const response = await fetch(getApiUrl('/portal/schedule'), {
+      const response = await fetch(getApiUrl('/public/portal/schedule'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -205,7 +205,7 @@ export default function PortalCliente() {
                 setRequestLoading(true)
                 setError(null)
                 try {
-                  const response = await fetch(getApiUrl('/portal/auth/request'), {
+                  const response = await fetch(getApiUrl('/public/portal/auth/request'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email: normalized }),
@@ -237,7 +237,7 @@ export default function PortalCliente() {
               setEmailLoading(true)
               setError(null)
               try {
-                const response = await fetch(getApiUrl('/portal/auth/verify'), {
+                const response = await fetch(getApiUrl('/public/portal/auth/verify'), {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ email: normalized, code }),
