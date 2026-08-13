@@ -114,6 +114,24 @@ Se você não solicitou esse acesso, ignore esta mensagem.`
   }
 }
 
+function normalizePhone(value: string | null | undefined) {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  if (!digits) return ''
+  if (digits.startsWith('55') && digits.length >= 12) return digits
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`
+  return digits
+}
+
+function buildPortalWhatsappMessage(code: string) {
+  return `CertiID - Portal Minhas Compras
+
+Seu código de acesso é: ${code}
+
+Ele expira em 10 minutos. Se você pediu mais de um código, use sempre o mais recente.
+
+Se você não solicitou esse acesso, ignore esta mensagem.`
+}
+
 function issuePortalSession(payload: PortalSessionPayload, secret: string) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
   const signature = createHmac('sha256', secret).update(body).digest('base64url')
@@ -209,6 +227,22 @@ export async function handlePortalRoutes(
         token_expires_at: expiresAt,
       },
     })
+
+    const phones = Array.from(new Set(vendas.map(venda => normalizePhone(venda.telefone_faturamento)).filter(Boolean)))
+    await Promise.allSettled(phones.slice(0, 2).map(phone => outboxRepository.create({
+      channel: 'whatsapp',
+      provider: 'evolution',
+      to_address: phone,
+      subject: null,
+      body: buildPortalWhatsappMessage(code),
+      payload: {
+        context: 'portal_access',
+        canal: 'checkout',
+        email,
+        tipo: 'portal_access_code_whatsapp',
+        token_expires_at: expiresAt,
+      },
+    })))
 
     writeJson(res, 200, { ok: true, email }, corsOrigin)
     return true
