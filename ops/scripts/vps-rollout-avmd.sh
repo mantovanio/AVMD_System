@@ -12,6 +12,12 @@ PUBLIC_API_URL="https://api.certiid.mantovan.com.br/healthz"
 PUBLIC_CRM_URL="https://crm.certiid.mantovan.com.br"
 PUBLIC_API_RETRIES="${PUBLIC_API_RETRIES:-8}"
 PUBLIC_API_RETRY_DELAY_SEC="${PUBLIC_API_RETRY_DELAY_SEC:-5}"
+PUBLIC_CRM_RETRIES="${PUBLIC_CRM_RETRIES:-8}"
+PUBLIC_CRM_RETRY_DELAY_SEC="${PUBLIC_CRM_RETRY_DELAY_SEC:-5}"
+FRONT_VALIDATOR="${APP_DIR}/ops/scripts/validate-frontend-assets.sh"
+FRONT_NEXT_DIR="${FRONT_DIR}.next"
+FRONT_PREVIOUS_DIR="${FRONT_DIR}.previous"
+DEPLOY_STATE_DIR="/opt/avmd/deploys"
 
 if [ "${DEPLOY_GATE_APPROVED:-0}" != "1" ]; then
   echo "[ERRO] Deploy bloqueado: execute via /root/vps-deploy-gate.sh"
@@ -33,6 +39,65 @@ require_file() {
     log "[ERRO] Arquivo obrigatorio ausente: ${path}"
     exit 1
   fi
+}
+
+validate_frontend_directory() {
+  require_file "${FRONT_VALIDATOR}"
+  bash "${FRONT_VALIDATOR}" directory "$1"
+}
+
+validate_public_crm() {
+  local attempt
+  for ((attempt=1; attempt<=PUBLIC_CRM_RETRIES; attempt++)); do
+    if bash "${FRONT_VALIDATOR}" url "${PUBLIC_CRM_URL}"; then
+      return 0
+    fi
+
+    log "Tentativa ${attempt}/${PUBLIC_CRM_RETRIES} da validacao visual do CRM falhou."
+    if [ "${attempt}" -lt "${PUBLIC_CRM_RETRIES}" ]; then
+      sleep "${PUBLIC_CRM_RETRY_DELAY_SEC}"
+    fi
+  done
+
+  return 1
+}
+
+restore_previous_frontend() {
+  if [ ! -d "${FRONT_PREVIOUS_DIR}" ]; then
+    log "[ERRO] Nao existe frontend anterior para restaurar."
+    return 1
+  fi
+
+  log "Restaurando frontend anterior apos falha de validacao."
+  rm -rf "${FRONT_DIR:?}"
+  mv "${FRONT_PREVIOUS_DIR}" "${FRONT_DIR}"
+  docker service update --force "${AVMD_WEB_SERVICE}" >/dev/null
+}
+
+publish_frontend() {
+  log "3) Validando frontend antes da publicacao"
+  validate_frontend_directory "${APP_DIR}/dist"
+
+  log "4) Publicando frontend com versao anterior preservada"
+  rm -rf "${FRONT_NEXT_DIR:?}"
+  mkdir -p "${FRONT_NEXT_DIR}"
+  cp -R "${APP_DIR}/dist/." "${FRONT_NEXT_DIR}/"
+  validate_frontend_directory "${FRONT_NEXT_DIR}"
+
+  rm -rf "${FRONT_PREVIOUS_DIR:?}"
+  if [ -d "${FRONT_DIR}" ]; then
+    mv "${FRONT_DIR}" "${FRONT_PREVIOUS_DIR}"
+  fi
+  mv "${FRONT_NEXT_DIR}" "${FRONT_DIR}"
+}
+
+record_frontend_release() {
+  mkdir -p "${DEPLOY_STATE_DIR}"
+  {
+    echo "commit=$(git rev-parse HEAD)"
+    echo "published_at=$(date --iso-8601=seconds)"
+    echo "frontend_url=${PUBLIC_CRM_URL}"
+  } > "${DEPLOY_STATE_DIR}/frontend-last-known-good"
 }
 
 smoke_test_public_api_get() {
@@ -112,12 +177,9 @@ npm ci
 npm run build
 npm run build:backend
 
-log "3) Publicando frontend"
-mkdir -p "${FRONT_DIR}"
-rm -rf "${FRONT_DIR:?}"/*
-cp -R dist/* "${FRONT_DIR}/"
+publish_frontend
 
-log "4) Instalando/atualizando service do backend"
+log "5) Instalando/atualizando service do backend"
 require_file "${APP_DIR}/ops/systemd/avmd-backend.service"
 mkdir -p "${APP_DIR}/storage/attachments"
 chown -R www-data:www-data "${APP_DIR}/storage"
@@ -130,16 +192,24 @@ systemctl restart "${SERVICE_NAME}"
 
 install_edge_config
 
-log "8) Smoke test local backend"
+log "8) Validando layout publico do CRM"
+if ! validate_public_crm; then
+  restore_previous_frontend
+  log "[ERRO] O CRM publicado nao passou na validacao. A versao anterior foi restaurada."
+  exit 1
+fi
+record_frontend_release
+
+log "9) Smoke test local backend"
 curl -fsS "http://127.0.0.1:8787/healthz"
 
-log "9) Smoke test roteamento interno via Traefik"
+log "10) Smoke test roteamento interno via Traefik"
 curl -fsS -H "Host: api.certiid.mantovan.com.br" "http://127.0.0.1/healthz"
 
-log "10) Smoke test publico da API (GET)"
+log "11) Smoke test publico da API (GET)"
 smoke_test_public_api_get
 
-log "11) Smoke test publico da API (HEAD)"
+log "12) Smoke test publico da API (HEAD)"
 smoke_test_public_api_head
 
 log "Rollout finalizado"
