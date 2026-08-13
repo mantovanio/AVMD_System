@@ -496,9 +496,9 @@ function PortalShell({ children, agencyConfig }: { children: ReactNode; agencyCo
     <main className="min-h-screen bg-white text-slate-950">
       <div className="min-h-screen bg-[radial-gradient(circle_at_8%_18%,rgba(23,52,107,0.06),transparent_24%),radial-gradient(circle_at_88%_10%,rgba(248,132,20,0.10),transparent_22%),linear-gradient(180deg,#ffffff_0%,#ffffff_48%,#f4f6fa_100%)]">
         <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2.5 sm:px-6 lg:px-8">
-            <a href="https://certiid.com.br" className="inline-flex items-center" aria-label="Ir para o site da CertiID">
-              <img src="/logo-certiid.png" alt="CertiID certificado digital" className="h-28 w-auto sm:h-32" />
+          <div className="mx-auto flex min-h-28 max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+            <a href="https://certiid.com.br" className="inline-flex h-20 w-44 shrink-0 items-center overflow-visible" aria-label="Ir para o site da CertiID">
+              <img src="/logo-certiid.png" alt="CertiID certificado digital" className="h-full w-full origin-left scale-[2.15] object-contain" />
             </a>
             <nav className="hidden items-center gap-6 text-xs font-bold uppercase tracking-[0.08em] text-slate-700 lg:flex">
               <a href="https://certiid.com.br/#loja" className="transition hover:text-[#f88414]">Loja de certificados</a>

@@ -223,6 +223,11 @@ install_edge_config() {
   fi
 
   docker service update \
+    --label-add "traefik.http.routers.avmd-portal-http.entrypoints=web" \
+    --label-add "traefik.http.routers.avmd-portal-http.rule=Host(\`portal.certiid.com.br\`)" \
+    --label-add "traefik.http.routers.avmd-portal-http.middlewares=avmd-portal-https" \
+    --label-add "traefik.http.middlewares.avmd-portal-https.redirectscheme.scheme=https" \
+    --label-add "traefik.http.middlewares.avmd-portal-https.redirectscheme.permanent=true" \
     --label-add "traefik.http.routers.avmd-portal.entrypoints=websecure" \
     --label-add "traefik.http.routers.avmd-portal.rule=Host(\`portal.certiid.com.br\`)" \
     --label-add "traefik.http.routers.avmd-portal.service=avmd-web" \
