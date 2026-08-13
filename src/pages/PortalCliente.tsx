@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { CalendarDays, CreditCard, Loader2, Mail, MessageCircle, Package, ShieldCheck } from 'lucide-react'
+import { CalendarDays, CreditCard, FileText, Loader2, Mail, MessageCircle, Package, ShieldCheck } from 'lucide-react'
 import { getApiUrl } from '@/lib/api'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig, type AgencyConfig } from '@/lib/agencyConfig'
 import { SchedulingModal, formatCurrency, formatDateTime } from '@/components/checkout'
@@ -15,7 +15,22 @@ type PortalOrder = {
   pedido_status: string | null
   protocolo_status: string | null
   protocolo_numero: string | null
+  forma_pagamento_id: string | null
+  forma_pagamento_nome: string | null
   payment_charge_status: string | null
+  payment_charge_url: string | null
+  payment_charge_details: {
+    kind?: 'pix' | 'boleto' | 'card' | 'link' | null
+    ticket_url?: string | null
+    qr_code?: string | null
+    qr_code_base64?: string | null
+    digitable_line?: string | null
+    barcode_content?: string | null
+  } | null
+  nfse_numero: string | null
+  nfse_status: string | null
+  nfse_pdf_url: string | null
+  nfse_xml_url: string | null
   agendamento_id: string | null
   data_agendada: string | null
   status_agendamento: string | null
@@ -27,6 +42,14 @@ type ScheduleContextResponse = {
   agentes: AgendaAgent[]
   pontos: AgendaPoint[]
   slots: AgendaSlot[]
+}
+
+type PaymentOption = {
+  id: string
+  nome: string
+  codigo: string | null
+  tipo: string | null
+  gateway?: string | null
 }
 
 function isInvalidPortalSession(message: string) {
@@ -81,6 +104,7 @@ export default function PortalCliente() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [orders, setOrders] = useState<PortalOrder[]>([])
+  const [paymentOptions, setPaymentOptions] = useState<PaymentOption[]>([])
   const [portalEmail, setPortalEmail] = useState('')
   const [emailInput, setEmailInput] = useState('')
   const [portalToken, setPortalToken] = useState('')
@@ -93,6 +117,7 @@ export default function PortalCliente() {
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const [scheduleLoading, setScheduleLoading] = useState(false)
   const [scheduleSubmitting, setScheduleSubmitting] = useState(false)
+  const [paymentChangingId, setPaymentChangingId] = useState<string | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<PortalOrder | null>(null)
   const [scheduleContext, setScheduleContext] = useState<ScheduleContextResponse>({ agentes: [], pontos: [], slots: [] })
 
@@ -117,7 +142,7 @@ export default function PortalCliente() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
       })
-      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; pedidos?: PortalOrder[] } | null
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; pedidos?: PortalOrder[]; pagamentos?: PaymentOption[] } | null
       if (!response.ok || !data?.ok) {
         const message = data?.error || 'Nao foi possivel carregar seus pedidos.'
         if (response.status === 401 && isInvalidPortalSession(message)) {
@@ -134,6 +159,7 @@ export default function PortalCliente() {
         throw new Error(message)
       }
       setOrders(data.pedidos ?? [])
+      setPaymentOptions(data.pagamentos ?? [])
     } catch (err) {
       setError(formatPortalError(err, 'Falha ao carregar o portal do cliente.'))
     } finally {
@@ -254,6 +280,28 @@ export default function PortalCliente() {
       setError(formatPortalError(err, 'Nao foi possivel enviar o código.'))
     } finally {
       setRequestLoading(false)
+    }
+  }
+
+  async function changePaymentMethod(order: PortalOrder, formaPagamentoId: string) {
+    if (!portalToken || !formaPagamentoId || formaPagamentoId === order.forma_pagamento_id) return
+    setPaymentChangingId(order.id)
+    setError(null)
+    setSuccess(null)
+    try {
+      const response = await fetch(getApiUrl('/portal/payment-method'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: portalToken, saleId: order.id, forma_pagamento_id: formaPagamentoId }),
+      })
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; pedidos?: PortalOrder[] } | null
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Não foi possível alterar a forma de pagamento.')
+      if (data.pedidos) setOrders(data.pedidos)
+      setSuccess('Forma de pagamento atualizada. Use o novo link ou instrução de pagamento abaixo.')
+    } catch (err) {
+      setError(formatPortalError(err, 'Não foi possível alterar a forma de pagamento.'))
+    } finally {
+      setPaymentChangingId(null)
     }
   }
 
@@ -498,8 +546,14 @@ export default function PortalCliente() {
               </div>
 
               <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <InfoCard title="Pagamento" text={paymentLabel(order)} />
+                <PaymentCard
+                  order={order}
+                  paymentOptions={paymentOptions}
+                  changing={paymentChangingId === order.id}
+                  onChangePayment={formaPagamentoId => void changePaymentMethod(order, formaPagamentoId)}
+                />
                 <InfoCard title="Protocolo" text={order.protocolo_numero ?? 'Assim que o processamento avancar, o numero aparecera aqui.'} />
+                <InvoiceCard order={order} />
                 <InfoCard
                   title="Videoconferencia"
                   text={order.data_agendada
@@ -609,6 +663,118 @@ function SummaryCard({ icon: Icon, label, value }: { icon: typeof Package; label
           <p className="text-lg font-semibold text-slate-900">{value}</p>
           <p className="text-xs text-slate-500">{label}</p>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function PaymentCard({
+  order,
+  paymentOptions,
+  changing,
+  onChangePayment,
+}: {
+  order: PortalOrder
+  paymentOptions: PaymentOption[]
+  changing: boolean
+  onChangePayment: (formaPagamentoId: string) => void
+}) {
+  const details = order.payment_charge_details
+  const paymentUrl = order.payment_charge_url || details?.ticket_url || ''
+  const canChange = !order.pago && paymentOptions.length > 0
+  const kind = details?.kind
+
+  return (
+    <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Pagamento</p>
+      <p className="mt-2 text-sm font-semibold text-slate-800">{paymentLabel(order)}</p>
+      <p className="mt-1 text-xs text-slate-500">Forma atual: {order.forma_pagamento_nome ?? 'Não informada'}</p>
+
+      {paymentUrl && !order.pago && (
+        <a
+          href={paymentUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex w-full items-center justify-center rounded-2xl bg-[#17346b] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#102654]"
+        >
+          {kind === 'boleto' ? 'Abrir boleto' : kind === 'pix' ? 'Abrir Pix' : 'Abrir link de pagamento'}
+        </a>
+      )}
+
+      {details?.qr_code && !order.pago && (
+        <button
+          type="button"
+          onClick={() => void navigator.clipboard.writeText(details.qr_code || '')}
+          className="mt-2 inline-flex w-full items-center justify-center rounded-2xl border border-[#17346b]/20 bg-white px-4 py-2.5 text-sm font-semibold text-[#17346b] hover:bg-slate-50"
+        >
+          Copiar código Pix
+        </button>
+      )}
+
+      {details?.digitable_line && !order.pago && (
+        <button
+          type="button"
+          onClick={() => void navigator.clipboard.writeText(details.digitable_line || '')}
+          className="mt-2 inline-flex w-full items-center justify-center rounded-2xl border border-amber-300 bg-white px-4 py-2.5 text-sm font-semibold text-amber-700 hover:bg-amber-50"
+        >
+          Copiar linha digitável
+        </button>
+      )}
+
+      {canChange && (
+        <div className="mt-3">
+          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Trocar forma</label>
+          <select
+            value={order.forma_pagamento_id ?? ''}
+            disabled={changing}
+            onChange={event => onChangePayment(event.target.value)}
+            className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-[#17346b] focus:ring-2 focus:ring-[#17346b]/10 disabled:opacity-60"
+          >
+            <option value="">Selecione</option>
+            {paymentOptions.map(option => (
+              <option key={option.id} value={option.id}>{option.nome}</option>
+            ))}
+          </select>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            Disponível somente enquanto o pagamento ainda não foi confirmado.
+          </p>
+        </div>
+      )}
+
+      {changing && (
+        <p className="mt-3 inline-flex items-center text-xs font-semibold text-[#17346b]">
+          <Loader2 size={14} className="mr-2 animate-spin" />
+          Gerando nova cobrança...
+        </p>
+      )}
+    </div>
+  )
+}
+
+function InvoiceCard({ order }: { order: PortalOrder }) {
+  const hasInvoice = Boolean(order.nfse_pdf_url || order.nfse_xml_url || order.nfse_numero)
+
+  return (
+    <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Nota fiscal</p>
+      <p className="mt-2 text-sm leading-relaxed text-slate-700">
+        {hasInvoice
+          ? `NFS-e ${order.nfse_numero ?? ''} ${order.nfse_status ? `- ${order.nfse_status}` : ''}`.trim()
+          : 'A nota fiscal aparecerá aqui assim que for emitida pela CertiID.'}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {order.nfse_pdf_url && (
+          <a href={order.nfse_pdf_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#17346b] ring-1 ring-slate-200 hover:bg-slate-50">
+            <FileText size={14} />
+            PDF
+          </a>
+        )}
+        {order.nfse_xml_url && (
+          <a href={order.nfse_xml_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#17346b] ring-1 ring-slate-200 hover:bg-slate-50">
+            <FileText size={14} />
+            XML
+          </a>
+        )}
       </div>
     </div>
   )

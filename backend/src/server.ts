@@ -154,7 +154,7 @@ const server = createServer(async (req, res) => {
     )
     if (handledPasswordRecovery) return
 
-    const handledPortal = await handlePortalRoutes(req, res, portalRepository, portalAccessTokenRepository, communicationOutboxRepository, config.clerkSecretKey, corsOrigin)
+    const handledPortal = await handlePortalRoutes(req, res, portalRepository, portalAccessTokenRepository, communicationOutboxRepository, config.clerkSecretKey, corsOrigin, checkoutPaymentService)
     if (handledPortal) return
 
     const handledHierarquia = await handleHierarquiaRoutes(req, res, hierarquiaRepository, corsOrigin)

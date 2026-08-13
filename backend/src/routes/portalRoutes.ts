@@ -3,6 +3,7 @@ import { createHmac, createHash, randomInt, timingSafeEqual } from 'node:crypto'
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
 import type { PortalAccessTokenRepository } from '../repositories/portalAccessTokenRepository.js'
 import type { PortalRepository } from '../repositories/portalRepository.js'
+import type { CheckoutPaymentService } from '../services/checkoutPaymentService.js'
 import { readJson, writeJson } from '../utils/http.js'
 import { checkRateLimit } from '../utils/rateLimit.js'
 
@@ -177,6 +178,7 @@ export async function handlePortalRoutes(
   outboxRepository: CommunicationOutboxRepository,
   clerkSecretKey: string,
   corsOrigin: string,
+  paymentService?: CheckoutPaymentService,
 ): Promise<boolean> {
   const requestPath = String(req.url ?? '')
   const isLegacyPortalApi = req.method === 'POST' && /^\/api\/public\/portal\//.test(requestPath)
@@ -300,7 +302,64 @@ export async function handlePortalRoutes(
     }
 
     const pedidos = await portalRepository.listOrdersByEmail(email)
-    writeJson(res, 200, { ok: true, pedidos }, corsOrigin)
+    const pagamentos = await portalRepository.listPaymentMethods()
+    writeJson(res, 200, { ok: true, pedidos, pagamentos }, corsOrigin)
+    return true
+  }
+
+  if (req.method === 'POST' && requestPath === '/api/portal/payment-method') {
+    const body = await readJson<PortalScheduleBody & { forma_pagamento_id?: string }>(req)
+    const email = resolveEmail(body, clerkSecretKey)
+    if (!email || !body.saleId || !body.forma_pagamento_id) {
+      writeJson(res, 401, { ok: false, error: 'Sessão, venda ou forma de pagamento inválida.' }, corsOrigin)
+      return true
+    }
+    if (!paymentService) {
+      writeJson(res, 503, { ok: false, error: 'Serviço de pagamento indisponível.' }, corsOrigin)
+      return true
+    }
+
+    try {
+      const saleBefore = await portalRepository.findAuthorizedPaymentSale(email, body.saleId)
+      if (!saleBefore) {
+        writeJson(res, 404, { ok: false, error: 'Venda não encontrada para este cliente.' }, corsOrigin)
+        return true
+      }
+      await portalRepository.changePaymentMethod(email, { saleId: body.saleId, formaPagamentoId: body.forma_pagamento_id })
+      const sale = await portalRepository.findAuthorizedPaymentSale(email, body.saleId)
+      if (!sale?.forma_pagamento_id) {
+        writeJson(res, 404, { ok: false, error: 'Forma de pagamento não vinculada ao pedido.' }, corsOrigin)
+        return true
+      }
+      const charge = await paymentService.createChargeForSale({
+        vendaId: sale.id,
+        formaPagamentoId: sale.forma_pagamento_id,
+        valor: sale.valor,
+        descricao: sale.descricao,
+        comprador: {
+          nome: sale.nome,
+          email: sale.email,
+          telefone: sale.telefone,
+          documento: sale.documento,
+        },
+        fiscal: {
+          cep: sale.cep,
+          logradouro: sale.logradouro,
+          numero: sale.numero,
+          bairro: sale.bairro,
+          cidade: sale.cidade,
+          uf: sale.uf,
+        },
+      })
+      if (!charge.ok) {
+        writeJson(res, 502, { ok: false, charge, error: charge.error ?? 'Forma alterada, mas a nova cobrança não foi gerada.' }, corsOrigin)
+        return true
+      }
+      const pedidos = await portalRepository.listOrdersByEmail(email)
+      writeJson(res, 200, { ok: true, charge, pedidos }, corsOrigin)
+    } catch (error) {
+      writeJson(res, 400, { ok: false, error: error instanceof Error ? error.message : 'Não foi possível alterar a forma de pagamento.' }, corsOrigin)
+    }
     return true
   }
 
