@@ -205,6 +205,38 @@ export default function PortalCliente() {
     }
   }, [scheduleContext.pontos, scheduleContext.slots])
 
+  async function requestPortalCode(email: string) {
+    const normalized = email.trim().toLowerCase()
+    if (!normalized) {
+      setError('Informe o e-mail usado na compra.')
+      return
+    }
+
+    setRequestLoading(true)
+    setError(null)
+    setSuccess(null)
+    try {
+      const response = await fetch(getApiUrl('/portal/auth/request'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalized }),
+      })
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Nao foi possivel enviar o código.')
+      window.localStorage.setItem('avmd_portal_email', normalized)
+      setPortalEmail(normalized)
+      setEmailInput(normalized)
+      setRequestedEmail(normalized)
+      setCodeInput('')
+      setRequestStep('code')
+      setSuccess('Enviamos um novo código. Use sempre o e-mail mais recente da CertiID.')
+    } catch (err) {
+      setError(formatPortalError(err, 'Nao foi possivel enviar o código.'))
+    } finally {
+      setRequestLoading(false)
+    }
+  }
+
   if (!portalToken) {
     return (
       <PortalShell agencyConfig={agencyConfig}>
@@ -262,30 +294,7 @@ export default function PortalCliente() {
                   onSubmit={async e => {
               e.preventDefault()
               if (requestStep === 'email') {
-                const normalized = emailInput.trim().toLowerCase()
-                if (!normalized) {
-                  setError('Informe o e-mail usado na compra.')
-                  return
-                }
-                setRequestLoading(true)
-                setError(null)
-                try {
-                  const response = await fetch(getApiUrl('/portal/auth/request'), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: normalized }),
-                  })
-                  const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
-                  if (!response.ok || !data?.ok) throw new Error(data?.error || 'Nao foi possivel enviar o código.')
-                  window.localStorage.setItem('avmd_portal_email', normalized)
-                  setPortalEmail(normalized)
-                  setRequestedEmail(normalized)
-                  setRequestStep('code')
-                } catch (err) {
-                  setError(formatPortalError(err, 'Nao foi possivel enviar o código.'))
-                } finally {
-                  setRequestLoading(false)
-                }
+                await requestPortalCode(emailInput)
                 return
               }
 
@@ -346,8 +355,22 @@ export default function PortalCliente() {
                         maxLength={6}
                       />
                       <p className="mt-2 text-xs text-slate-500">Enviamos o código para {requestedEmail || emailInput.trim().toLowerCase()}.</p>
+                      <button
+                        type="button"
+                        onClick={() => void requestPortalCode(requestedEmail || emailInput)}
+                        disabled={requestLoading || emailLoading}
+                        className="mt-3 inline-flex w-full items-center justify-center rounded-2xl border border-[#f88414]/35 bg-[#fff8f1] px-4 py-3 text-sm font-bold text-[#d96500] transition hover:bg-[#fff0df] disabled:opacity-60"
+                      >
+                        {requestLoading ? (
+                          <>
+                            <Loader2 size={15} className="mr-2 animate-spin" />
+                            Enviando novo código...
+                          </>
+                        ) : 'Enviar novo código'}
+                      </button>
                     </div>
                   )}
+                  {success && requestStep === 'code' && <MessageCard tone="success" message={success} />}
                   {error && <MessageCard tone="error" message={error} />}
                   <button
                     type="submit"

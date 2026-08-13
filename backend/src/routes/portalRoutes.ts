@@ -38,8 +38,13 @@ function buildPortalCode() {
 
 function buildPortalEmail(nome: string, code: string) {
   const firstName = nome.trim().split(/\s+/)[0] || 'cliente'
+  const sentAt = new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date())
   return {
-    subject: 'Seu código de acesso ao portal',
+    subject: `Código CertiID ${code.slice(-3)} - ${sentAt}`,
     body: `Olá, ${firstName}.
 
 Recebemos uma solicitação de acesso ao portal do cliente.
@@ -49,6 +54,8 @@ Use este código para entrar:
 ${code}
 
 Esse código é válido por 10 minutos.
+Se você pediu mais de um código, use sempre o e-mail mais recente.
+
 Se você não solicitou esse acesso, ignore esta mensagem.`,
   }
 }
