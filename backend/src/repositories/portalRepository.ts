@@ -155,11 +155,9 @@ export class PortalRepository {
       clauses.push(`lower(coalesce(v.email_faturamento, '')) = $${idx}`)
       params.push(email)
       idx += 1
-
       clauses.push(`lower(coalesce(cb.email, '')) = $${idx}`)
       params.push(email)
       idx += 1
-
       clauses.push(`lower(coalesce(t.email, '')) = $${idx}`)
       params.push(email)
       idx += 1

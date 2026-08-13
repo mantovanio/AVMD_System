@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays, CreditCard, ExternalLink, Loader2, MessageCircle, Package, Phone, ShieldCheck } from 'lucide-react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { CalendarDays, CreditCard, ExternalLink, Loader2, LockKeyhole, MessageCircle, Package, Phone, ShieldCheck, Sparkles } from 'lucide-react'
 import { getApiUrl } from '@/lib/api'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig } from '@/lib/agencyConfig'
 import { SchedulingModal, formatCurrency, formatDateTime } from '@/components/checkout'
@@ -182,19 +182,54 @@ export default function PortalCliente() {
 
   if (!portalToken) {
     return (
-      <div className="min-h-full bg-[linear-gradient(180deg,#f8fbff_0%,#eef4ff_100%)] p-4 sm:p-6">
-        <div className="mx-auto max-w-xl rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#ea7b18]">Acesso do cliente</p>
-          <h1 className="mt-2 text-2xl font-semibold text-slate-900">
-            {requestStep === 'code' ? 'Digite o código enviado' : 'Entre com seu e-mail'}
-          </h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Use o mesmo e-mail informado na compra para receber o código e acessar seus pedidos com segurança.
-          </p>
+      <PortalShell>
+        <section className="grid min-h-[620px] overflow-hidden rounded-[28px] border border-white/15 bg-white shadow-2xl shadow-black/25 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="relative hidden bg-[#0b2a63] p-8 text-white lg:block">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(248,132,20,0.45),transparent_30%),linear-gradient(135deg,#123a82_0%,#071d4a_100%)]" />
+            <div className="relative flex h-full flex-col justify-between">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-white/85">
+                  <LockKeyhole size={14} />
+                  Portal oficial CertiID
+                </div>
+                <h1 className="mt-8 max-w-sm text-4xl font-semibold leading-tight">
+                  Suas compras digitais em um ambiente protegido.
+                </h1>
+                <p className="mt-4 max-w-sm text-sm leading-6 text-blue-100">
+                  Consulte pedidos, pagamento, protocolo e agendamento de videoconferência com a segurança da CertiID.
+                </p>
+              </div>
 
-          <form
-            className="mt-6 space-y-4"
-            onSubmit={async e => {
+              <div className="grid gap-3">
+                <TrustStrip icon={ShieldCheck} title="Acesso validado por e-mail" text="O código é enviado somente para o endereço usado na compra." />
+                <TrustStrip icon={CalendarDays} title="Agendamento centralizado" text="Acompanhe ou reagende sua validação em poucos passos." />
+                <TrustStrip icon={MessageCircle} title="Suporte CertiID" text="Quando precisar, fale com a equipe pelo canal oficial." />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center bg-[linear-gradient(180deg,#ffffff_0%,#f4f7fb_100%)] p-5 sm:p-8">
+            <div className="w-full max-w-xl">
+              <div className="mb-7 flex items-center gap-4 lg:hidden">
+                <img src="/logo-certiid.png" alt="CertiID certificado digital" className="h-14 w-auto" />
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f88414]">Portal oficial</p>
+                  <p className="text-sm text-slate-600">Minhas compras CertiID</p>
+                </div>
+              </div>
+
+              <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-xl shadow-slate-900/10 sm:p-7">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#f88414]">Minhas compras</p>
+                <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+                  {requestStep === 'code' ? 'Digite o código enviado' : 'Acesse pelo e-mail da compra'}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Use o mesmo e-mail informado na compra para receber o código e acessar seus pedidos com segurança.
+                </p>
+
+                <form
+                  className="mt-6 space-y-4"
+                  onSubmit={async e => {
               e.preventDefault()
               if (requestStep === 'email') {
                 const normalized = emailInput.trim().toLowerCase()
@@ -254,67 +289,70 @@ export default function PortalCliente() {
                 setEmailLoading(false)
               }
             }}
-          >
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-2">E-mail</label>
-              <input
-                type="email"
-                value={emailInput}
-                onChange={e => setEmailInput(e.target.value)}
-                placeholder="seu@email.com"
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-[#17346b] focus:ring-2 focus:ring-[#17346b]/10"
-                autoComplete="email"
-                disabled={requestStep === 'code'}
-              />
-            </div>
-            {requestStep === 'code' && (
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-2">Código</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={codeInput}
-                  onChange={e => setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="000000"
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-[#17346b] focus:ring-2 focus:ring-[#17346b]/10"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                />
-                <p className="mt-2 text-xs text-slate-500">Enviamos o código para {requestedEmail || emailInput.trim().toLowerCase()}.</p>
+                >
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">E-mail</label>
+                    <input
+                      type="email"
+                      value={emailInput}
+                      onChange={e => setEmailInput(e.target.value)}
+                      placeholder="seu@email.com"
+                      className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-[#17346b] focus:bg-white focus:ring-2 focus:ring-[#17346b]/15 disabled:bg-slate-100"
+                      autoComplete="email"
+                      disabled={requestStep === 'code'}
+                    />
+                  </div>
+                  {requestStep === 'code' && (
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Código</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={codeInput}
+                        onChange={e => setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="000000"
+                        className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-lg font-semibold tracking-[0.35em] text-slate-950 outline-none transition focus:border-[#17346b] focus:ring-2 focus:ring-[#17346b]/15"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                      />
+                      <p className="mt-2 text-xs text-slate-500">Enviamos o código para {requestedEmail || emailInput.trim().toLowerCase()}.</p>
+                    </div>
+                  )}
+                  {error && <MessageCard tone="error" message={error} />}
+                  <button
+                    type="submit"
+                    disabled={emailLoading || requestLoading}
+                    className="inline-flex w-full items-center justify-center rounded-2xl bg-[#17346b] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-[#17346b]/25 transition hover:bg-[#102654] disabled:opacity-60"
+                  >
+                    {requestStep === 'email' ? (requestLoading ? (
+                      <>
+                        <Loader2 size={15} className="mr-2 animate-spin" />
+                        Enviando código...
+                      </>
+                    ) : 'Receber código') : (emailLoading ? (
+                      <>
+                        <Loader2 size={15} className="mr-2 animate-spin" />
+                        Validando código...
+                      </>
+                    ) : 'Entrar no portal')}
+                  </button>
+                </form>
               </div>
-            )}
-            {error && <MessageCard tone="error" message={error} />}
-            <button
-              type="submit"
-              disabled={emailLoading || requestLoading}
-              className="inline-flex w-full items-center justify-center rounded-2xl bg-[#17346b] px-4 py-3 text-sm font-semibold text-white hover:bg-[#102654] disabled:opacity-60"
-            >
-              {requestStep === 'email' ? (requestLoading ? (
-                <>
-                  <Loader2 size={15} className="mr-2 animate-spin" />
-                  Enviando código...
-                </>
-              ) : 'Receber código') : (emailLoading ? (
-                <>
-                  <Loader2 size={15} className="mr-2 animate-spin" />
-                  Validando código...
-                </>
-              ) : 'Entrar no portal')}
-            </button>
-          </form>
-        </div>
-      </div>
+            </div>
+          </div>
+        </section>
+      </PortalShell>
     )
   }
 
   return (
-    <div className="min-h-full bg-[linear-gradient(180deg,#f8fbff_0%,#eef4ff_100%)] p-4 sm:p-6">
+    <PortalShell>
       <div className="mx-auto max-w-6xl space-y-5">
-        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-[28px] border border-white/20 bg-white p-6 shadow-2xl shadow-black/20">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#ea7b18]">Portal do cliente</p>
-              <h1 className="mt-2 text-2xl font-semibold text-slate-900">Acompanhe seus pedidos e agendamentos</h1>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#f88414]">Portal oficial CertiID</p>
+              <h1 className="mt-2 text-2xl font-semibold text-slate-900">Minhas compras</h1>
               <p className="mt-2 text-sm text-slate-600">Aqui voce consegue acompanhar pagamento, protocolo e reservar sua videoconferencia.</p>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -435,6 +473,52 @@ export default function PortalCliente() {
         pointOptionsForAgent={pointOptionsForAgent}
         slots={scheduleContext.slots}
       />
+    </PortalShell>
+  )
+}
+
+function PortalShell({ children }: { children: ReactNode }) {
+  return (
+    <main className="min-h-screen bg-[#082765] text-slate-950">
+      <div className="min-h-screen bg-[radial-gradient(circle_at_18%_18%,rgba(248,132,20,0.28),transparent_24%),radial-gradient(circle_at_78%_10%,rgba(255,255,255,0.18),transparent_22%),linear-gradient(135deg,#123f91_0%,#082765_46%,#03133a_100%)]">
+        <header className="border-b border-white/10 bg-white shadow-lg shadow-black/10">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+            <a href="https://certiid.com.br" className="inline-flex items-center" aria-label="Ir para o site da CertiID">
+              <img src="/logo-certiid.png" alt="CertiID certificado digital" className="h-12 w-auto sm:h-14" />
+            </a>
+            <nav className="hidden items-center gap-6 text-xs font-semibold uppercase tracking-[0.16em] text-[#17346b] lg:flex">
+              <a href="https://certiid.com.br/#loja" className="transition hover:text-[#f88414]">Loja</a>
+              <a href="https://certiid.com.br/#renovacao" className="transition hover:text-[#f88414]">Renovação</a>
+              <a href="https://certiid.com.br/#contato" className="transition hover:text-[#f88414]">Contato</a>
+              <span className="rounded-full bg-[#f88414] px-4 py-2 text-white">Minhas compras</span>
+            </nav>
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#17346b]/10 bg-[#f3f7ff] px-3 py-2 text-xs font-semibold text-[#17346b]">
+              <Sparkles size={14} className="text-[#f88414]" />
+              Oficial
+            </div>
+          </div>
+        </header>
+
+        <div className="mx-auto max-w-6xl px-4 py-7 sm:px-6 lg:px-8">
+          {children}
+        </div>
+      </div>
+    </main>
+  )
+}
+
+function TrustStrip({ icon: Icon, title, text }: { icon: typeof ShieldCheck; title: string; text: string }) {
+  return (
+    <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur">
+      <div className="flex gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f88414] text-white">
+          <Icon size={18} />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-white">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-blue-100">{text}</p>
+        </div>
+      </div>
     </div>
   )
 }

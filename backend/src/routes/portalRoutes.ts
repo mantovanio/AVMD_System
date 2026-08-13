@@ -31,8 +31,8 @@ function hashCode(code: string) {
   return createHash('sha256').update(code).digest('hex')
 }
 
-function buildPortalCode(email: string, secret: string) {
-  const bucket = Math.floor(Date.now() / (10 * 60 * 1000))
+function buildPortalCode(email: string, secret: string, bucketOffset = 0) {
+  const bucket = Math.floor(Date.now() / (10 * 60 * 1000)) + bucketOffset
   const digest = createHmac('sha256', secret).update(`${normalizeEmail(email)}|${bucket}`).digest('hex')
   const value = Number.parseInt(digest.slice(0, 8), 16) % 1000000
   return String(value).padStart(6, '0')
@@ -162,9 +162,9 @@ export async function handlePortalRoutes(
     }
 
     const expected = buildPortalCode(email, clerkSecretKey)
-    const previous = buildPortalCode(email, `${clerkSecretKey}:prev`)
+    const previous = buildPortalCode(email, clerkSecretKey, -1)
     if (code !== expected && code !== previous) {
-      writeJson(res, 404, { ok: false, error: 'Não encontramos pedidos para esse e-mail.' }, corsOrigin)
+      writeJson(res, 401, { ok: false, error: 'Código inválido ou expirado. Solicite um novo código e tente novamente.' }, corsOrigin)
       return true
     }
 
