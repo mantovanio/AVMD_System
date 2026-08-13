@@ -237,7 +237,7 @@ export async function handlePortalRoutes(
       body: buildPortalWhatsappMessage(code),
       payload: {
         context: 'portal_access',
-        canal: 'checkout',
+        canal: 'atendimento',
         email,
         tipo: 'portal_access_code_whatsapp',
         token_expires_at: expiresAt,

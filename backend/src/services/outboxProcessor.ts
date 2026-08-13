@@ -141,7 +141,8 @@ export class OutboxProcessor {
       return
     }
 
-    const instance = pickInstance(this.config, item.payload)
+    const fallbackInstance = pickInstance(this.config, item.payload)
+    const instance = await this.resolveEvolutionInstance(item.payload, fallbackInstance.instanceName) ?? fallbackInstance
     const result = await sendEvolutionMessage(instance, item.to_address, item.body)
     await this.outboxRepo.markProcessed({
       id: item.id,
@@ -242,6 +243,42 @@ export class OutboxProcessor {
       )
     } catch (err) {
       console.error('[OutboxProcessor] Erro ao registrar mensagem no CRM chat:', err)
+    }
+  }
+
+  private async resolveEvolutionInstance(payload: Record<string, unknown>, preferredInstanceName: string) {
+    if (!this.db) return null
+
+    const context = String(payload.context ?? '').trim()
+    const preferred = String(preferredInstanceName ?? '').trim()
+    const result = await this.db.query<{
+      base_url: string | null
+      api_token: string | null
+      instance_name: string | null
+    }>(
+      `SELECT base_url, api_token, instance_name
+         FROM external_integrations
+        WHERE provider = 'evolution'
+          AND status = 'ativo'
+          AND nullif(trim(coalesce(api_token, '')), '') IS NOT NULL
+          AND nullif(trim(coalesce(base_url, '')), '') IS NOT NULL
+          AND nullif(trim(coalesce(instance_name, '')), '') IS NOT NULL
+        ORDER BY
+          CASE
+            WHEN $1 = 'portal_access' AND instance_name = 'atendimento' THEN 0
+            WHEN instance_name = $2 THEN 1
+            ELSE 2
+          END,
+          updated_at DESC
+        LIMIT 1`,
+      [context, preferred],
+    )
+    const row = result.rows[0]
+    if (!row?.base_url || !row.api_token || !row.instance_name) return null
+    return {
+      baseUrl: row.base_url,
+      apiToken: row.api_token,
+      instanceName: row.instance_name,
     }
   }
 
