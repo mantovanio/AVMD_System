@@ -18,6 +18,10 @@ type PortalOrder = {
   protocolo_numero: string | null
   forma_pagamento_id: string | null
   forma_pagamento_nome: string | null
+  nome_faturamento: string | null
+  documento_faturamento: string | null
+  titular_nome: string | null
+  titular_documento: string | null
   payment_charge_status: string | null
   payment_charge_url: string | null
   payment_charge_details: {
@@ -59,12 +63,54 @@ function isInvalidPortalSession(message: string) {
 
 function paymentLabel(order: PortalOrder) {
   if (order.pago) return 'Pagamento confirmado'
-  if (order.payment_charge_status) return `Pagamento: ${order.payment_charge_status}`
+  if (order.payment_charge_status) return `Pagamento: ${paymentStatusLabel(order.payment_charge_status)}`
   return 'Pagamento aguardando confirmação'
+}
+
+function paymentStatusLabel(status: string) {
+  const normalized = status.toLowerCase().trim()
+  const labels: Record<string, string> = {
+    pending: 'pendente',
+    approved: 'aprovado',
+    paid: 'pago',
+    processing: 'em processamento',
+    in_process: 'em análise',
+    rejected: 'recusado',
+    cancelled: 'cancelado',
+    refunded: 'estornado',
+    error: 'erro',
+  }
+  return labels[normalized] ?? status
 }
 
 function orderLabel(order: PortalOrder) {
   return order.tipo_produto || 'Certificado digital'
+}
+
+function maskDocument(value: string | null) {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  if (digits.length === 11) return `CPF ***.${digits.slice(3, 6)}.${digits.slice(6, 9)}-**`
+  if (digits.length === 14) return `CNPJ **.${digits.slice(2, 5)}.${digits.slice(5, 8)}/****-${digits.slice(-2)}`
+  return ''
+}
+
+function certificateOwnerLabel(order: PortalOrder) {
+  const buyerName = String(order.nome_faturamento ?? '').trim()
+  const titularName = String(order.titular_nome ?? '').trim()
+  const ownerName = titularName || buyerName
+  if (!ownerName) return 'Titular ainda não identificado'
+
+  const titularDoc = maskDocument(order.titular_documento)
+  const buyerDoc = maskDocument(order.documento_faturamento)
+  const doc = titularDoc || buyerDoc
+  return doc ? `${ownerName} · ${doc}` : ownerName
+}
+
+function buyerLabel(order: PortalOrder) {
+  const name = String(order.nome_faturamento ?? '').trim()
+  if (!name) return ''
+  const doc = maskDocument(order.documento_faturamento)
+  return doc ? `${name} · ${doc}` : name
 }
 
 function orderGuidance(order: PortalOrder) {
@@ -532,6 +578,18 @@ export default function PortalCliente() {
                   <div>
                     <p className="text-lg font-semibold text-slate-900">{orderLabel(order)}</p>
                     <p className="mt-1 text-xs text-slate-500">Compra em {formatDateTime(order.created_at)}</p>
+                    <div className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                        <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Certificado para</span>
+                        <span className="mt-1 block font-semibold text-slate-900">{certificateOwnerLabel(order)}</span>
+                      </div>
+                      {buyerLabel(order) && (
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                          <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Comprador / faturamento</span>
+                          <span className="mt-1 block font-semibold text-slate-900">{buyerLabel(order)}</span>
+                        </div>
+                      )}
+                    </div>
                     <p className="mt-2 text-sm text-slate-600">{orderGuidance(order)}</p>
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs">

@@ -16,8 +16,11 @@ export type PortalOrderRow = {
   protocolo_status: string | null
   protocolo_numero: string | null
   nome_faturamento: string | null
+  documento_faturamento: string | null
   email_faturamento: string | null
   telefone_faturamento: string | null
+  titular_nome: string | null
+  titular_documento: string | null
   forma_pagamento_id: string | null
   forma_pagamento_nome: string | null
   payment_charge_status: string | null
@@ -80,8 +83,11 @@ export class PortalRepository {
          v.protocolo_status,
          v.protocolo_numero,
          v.nome_faturamento,
+         v.documento_faturamento,
          v.email_faturamento,
          v.telefone_faturamento,
+         t.nome as titular_nome,
+         t.cpf as titular_documento,
          v.forma_pagamento_id,
          fp.nome as forma_pagamento_nome,
          nullif(coalesce(v.metadata->'payment_charge'->>'status', ''), '') as payment_charge_status,
