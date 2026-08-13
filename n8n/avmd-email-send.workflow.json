@@ -17,10 +17,10 @@
     {
       "parameters": {
         "fromEmail": "=contato@certifast.com.br",
-        "toEmail": "={{ $json.to }}",
-        "subject": "={{ $json.subject }}",
-        "text": "={{ $json.body }}",
-        "html": "={{ $json.html || $json.payload?.html || $json.body }}",
+        "toEmail": "={{ $json.body?.to || $json.to }}",
+        "subject": "={{ $json.body?.subject || $json.subject }}",
+        "text": "={{ $json.body?.body || $json.body || '' }}",
+        "html": "={{ $json.body?.html || $json.html || $json.body?.payload?.html || $json.payload?.html || $json.body?.body || $json.body || '' }}",
         "options": {}
       },
       "id": "smtp-send",
