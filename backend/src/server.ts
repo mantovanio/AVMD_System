@@ -39,6 +39,7 @@ import { EngageRepository } from './repositories/engageRepository.js'
 import { FileRepository } from './repositories/fileRepository.js'
 import { PasswordRecoveryAuditRepository } from './repositories/passwordRecoveryAuditRepository.js'
 import { PasswordRecoveryRepository } from './repositories/passwordRecoveryRepository.js'
+import { PortalAccessTokenRepository } from './repositories/portalAccessTokenRepository.js'
 import { ScheduleAutomationRepository } from './repositories/scheduleAutomationRepository.js'
 import { OutboxProcessor } from './services/outboxProcessor.js'
 import { handleRenovacaoRoutes } from './routes/renovacaoRoutes.js'
@@ -80,6 +81,7 @@ const engageRepository = new EngageRepository(db)
 const fileRepository = new FileRepository(db)
 const passwordRecoveryAuditRepository = new PasswordRecoveryAuditRepository(db)
 const passwordRecoveryRepository = new PasswordRecoveryRepository(db)
+const portalAccessTokenRepository = new PortalAccessTokenRepository(db)
 const scheduleAutomationRepository = new ScheduleAutomationRepository(db)
 const permissoesRepository = new PermissoesRepository(db)
 const integrationRegistry = createIntegrationRegistry(config)
@@ -151,7 +153,7 @@ const server = createServer(async (req, res) => {
     )
     if (handledPasswordRecovery) return
 
-    const handledPortal = await handlePortalRoutes(req, res, portalRepository, communicationOutboxRepository, config.clerkSecretKey, corsOrigin)
+    const handledPortal = await handlePortalRoutes(req, res, portalRepository, portalAccessTokenRepository, communicationOutboxRepository, config.clerkSecretKey, corsOrigin)
     if (handledPortal) return
 
     const handledHierarquia = await handleHierarquiaRoutes(req, res, hierarquiaRepository, config.corsOrigin)

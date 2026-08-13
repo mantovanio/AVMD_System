@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { createHmac, createHash, timingSafeEqual } from 'node:crypto'
+import { createHmac, createHash, randomInt, timingSafeEqual } from 'node:crypto'
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
+import type { PortalAccessTokenRepository } from '../repositories/portalAccessTokenRepository.js'
 import type { PortalRepository } from '../repositories/portalRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
 import { checkRateLimit } from '../utils/rateLimit.js'
@@ -31,11 +32,8 @@ function hashCode(code: string) {
   return createHash('sha256').update(code).digest('hex')
 }
 
-function buildPortalCode(email: string, secret: string, bucketOffset = 0) {
-  const bucket = Math.floor(Date.now() / (10 * 60 * 1000)) + bucketOffset
-  const digest = createHmac('sha256', secret).update(`${normalizeEmail(email)}|${bucket}`).digest('hex')
-  const value = Number.parseInt(digest.slice(0, 8), 16) % 1000000
-  return String(value).padStart(6, '0')
+function buildPortalCode() {
+  return String(randomInt(0, 1000000)).padStart(6, '0')
 }
 
 function buildPortalEmail(nome: string, code: string) {
@@ -87,6 +85,7 @@ export async function handlePortalRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   portalRepository: PortalRepository,
+  portalAccessTokenRepository: PortalAccessTokenRepository,
   outboxRepository: CommunicationOutboxRepository,
   clerkSecretKey: string,
   corsOrigin: string,
@@ -128,7 +127,11 @@ export async function handlePortalRoutes(
       return true
     }
 
-    const code = buildPortalCode(email, clerkSecretKey)
+    const code = buildPortalCode()
+    const tokenHash = hashCode(code)
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+    await portalAccessTokenRepository.create({ email, tokenHash, expiresAt })
+
     const recoveryEmail = buildPortalEmail(email.split('@')[0] || 'cliente', code)
     await outboxRepository.create({
       channel: 'email',
@@ -140,6 +143,7 @@ export async function handlePortalRoutes(
         context: 'portal_access',
         email,
         tipo: 'portal_access_code',
+        token_expires_at: expiresAt,
       },
     })
 
@@ -161,12 +165,13 @@ export async function handlePortalRoutes(
       return true
     }
 
-    const expected = buildPortalCode(email, clerkSecretKey)
-    const previous = buildPortalCode(email, clerkSecretKey, -1)
-    if (code !== expected && code !== previous) {
+    const tokenHash = hashCode(code)
+    const token = await portalAccessTokenRepository.findValidByEmailAndTokenHash(email, tokenHash)
+    if (!token) {
       writeJson(res, 401, { ok: false, error: 'Código inválido ou expirado. Solicite um novo código e tente novamente.' }, corsOrigin)
       return true
     }
+    await portalAccessTokenRepository.consume(token.id)
 
     const session = issuePortalSession(
       {
