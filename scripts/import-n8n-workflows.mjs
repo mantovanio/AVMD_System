@@ -24,6 +24,7 @@ const orderedWorkflowFiles = [
   'avmd-schedule-email-router.workflow.json',
   'avmd-schedule-email-smoketest-certiid.workflow.json',
   'avmd-schedule-email-smoketest-certifast.workflow.json',
+  'avmd-email-send.workflow.json',
   'avmd-event-receiver.workflow.json',
   'avmd-clara-logger.workflow.json',
 ]
