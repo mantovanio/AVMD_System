@@ -1238,7 +1238,7 @@ export default function ChatInboxCRM() {
       loadAgents(),
       fetchEvolutionIntegrations()
         .then(rows => setIntegrations(rows))
-        .catch(() => setIntegrations([])),
+        .catch(() => setIntegrations(current => current)),
     ])
     setLoading(false)
   }
@@ -1367,19 +1367,26 @@ export default function ChatInboxCRM() {
   }
 
   async function fetchEvolutionIntegrations() {
-    if (!profile?.id) return []
-    const response = await fetch(getApiUrl(`/chat/crm/integrations?profile_id=${encodeURIComponent(profile.id)}`))
+    const response = await fetch(getApiUrl('/chat/crm/integrations'))
     if (!response.ok) throw new Error('Nao foi possivel carregar as integracoes Evolution.')
     const rows = await response.json() as EvolutionIntegration[]
     return rows ?? []
   }
 
   async function resolveEvolutionIntegration(instanceName?: string | null) {
-    const rows = await fetchEvolutionIntegrations()
+    let rows = integrations.length > 0 ? integrations : []
+    if (rows.length === 0) {
+      rows = await fetchEvolutionIntegrations()
+      setIntegrations(rows)
+    }
 
     const targetInstance = instanceName?.trim().toLowerCase()
-    const integration = rows.find(item => item.instance_name?.trim().toLowerCase() === targetInstance) ?? rows[0]
-    if (!integration?.base_url || !integration?.instance_name) {
+    const integration =
+      rows.find(item => item.instance_name?.trim().toLowerCase() === targetInstance)
+      ?? rows.find(item => item.instance_name?.trim().toLowerCase() === 'atendimento')
+      ?? rows.find(item => item.status === 'ativo')
+      ?? rows[0]
+    if (!integration?.base_url || !integration?.api_token || !integration?.instance_name) {
       throw new Error('Nenhuma integracao Evolution ativa foi encontrada para essa conversa.')
     }
 
