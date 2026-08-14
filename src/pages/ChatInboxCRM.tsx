@@ -1393,6 +1393,12 @@ export default function ChatInboxCRM() {
     return integration
   }
 
+  function resolveOutboundInstanceName(instanceName?: string | null) {
+    return selectedReplyIntegration?.instance_name
+      || instanceName?.trim()
+      || 'atendimento'
+  }
+
   function markConversationAsHuman(conversationId: string) {
     setHumanOverrideIds(prev => prev.includes(conversationId) ? prev : [...prev, conversationId])
   }
@@ -2081,10 +2087,7 @@ export default function ChatInboxCRM() {
     focusComposer()
 
     try {
-      const integration = selectedReplyIntegration ?? await resolveEvolutionIntegration(selectedConversation.whatsapp_instance)
-      if (!integration?.instance_name) {
-        throw new Error('Selecione um canal de saida valido para responder essa conversa.')
-      }
+      const instanceName = resolveOutboundInstanceName(selectedConversation.whatsapp_instance)
       const destinationNumber = selectedConversation.telefone || selectedConversation.document_key
       if (!destinationNumber) throw new Error('Nao foi possivel identificar o numero do contato para envio.')
 
@@ -2092,7 +2095,7 @@ export default function ChatInboxCRM() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          instance_name: integration.instance_name,
+          instance_name: instanceName,
           conversation_id: `${destinationNumber}@s.whatsapp.net`,
           content: text,
           lead_id: null,
@@ -2187,10 +2190,7 @@ export default function ChatInboxCRM() {
   async function sendHumanAttachment(file: File | Blob, filename: string, mimeType?: string) {
     if (!selectedConversation) return { ok: false, error: 'Nenhuma conversa selecionada.' }
 
-    const integration = selectedReplyIntegration ?? await resolveEvolutionIntegration(selectedConversation.whatsapp_instance)
-    if (!integration?.instance_name) {
-      return { ok: false, error: 'Selecione um canal de saida valido para enviar esse anexo.' }
-    }
+    const instanceName = resolveOutboundInstanceName(selectedConversation.whatsapp_instance)
     const destinationNumber = selectedConversation.telefone || selectedConversation.document_key
     if (!destinationNumber) return { ok: false, error: 'Nao foi possivel identificar o numero do contato.' }
 
@@ -2217,7 +2217,7 @@ export default function ChatInboxCRM() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          instance_name: integration.instance_name,
+          instance_name: instanceName,
           conversation_id: selectedConversation.id,
           destination_number: destinationNumber,
           file_base64: fileBase64,
