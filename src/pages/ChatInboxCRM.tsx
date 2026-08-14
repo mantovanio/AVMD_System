@@ -2753,39 +2753,47 @@ export default function ChatInboxCRM() {
                       )}
                     </div>
 
-                    {!humanModeActive ? (
-                      <div className="flex flex-1 flex-col items-center justify-center gap-4 bg-slate-50 px-6 py-10 text-center">
-                        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600">
-                          <Bot size={32} />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-700">Conversa sendo atendida pela IA</p>
-                          <p className="mt-1 text-xs text-slate-400">O robo esta respondendo automaticamente. Clique em "Assumir humano" no painel ao lado para assumir o atendimento.</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div ref={messagesViewportRef} className="min-h-0 flex-1 overflow-y-auto bg-slate-50 px-4 py-4">
-                          {loadingMessages ? (
-                            <div className="text-sm text-slate-400">Carregando mensagens...</div>
-                          ) : displayMessages.length === 0 ? (
-                            <EmptyState text="Ainda nao existem mensagens gravadas para esta conversa." />
-                          ) : (
-                            <div className="space-y-3">
-                                {displayMessages.map(message => (
-                                  <MessageRow
-                                    key={message.id}
-                                    message={message}
-                                    fallbackHumanName={currentHumanAgentName}
-                                    conversation={selectedConversation}
-                                  />
-                                ))}
-                              <div ref={messagesEndRef} />
+                    <div ref={messagesViewportRef} className="min-h-0 flex-1 overflow-y-auto bg-slate-50 px-4 py-4">
+                      {!humanModeActive && (
+                        <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                              <Bot size={21} />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold">IA Clara acompanhando e respondendo</p>
+                              <p className="mt-0.5 text-xs text-amber-700/80">
+                                O histórico continua visível para conferência. Assuma no painel lateral para liberar a resposta humana.
+                              </p>
                             </div>
-                          )}
+                          </div>
+                          <span className="hidden rounded-full bg-white/70 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-700 md:inline-flex">
+                            modo IA
+                          </span>
                         </div>
+                      )}
 
-                        <div className="relative shrink-0 border-t border-slate-200 bg-white px-4 py-3">
+                      {loadingMessages ? (
+                        <div className="text-sm text-slate-400">Carregando mensagens...</div>
+                      ) : displayMessages.length === 0 ? (
+                        <EmptyState text="Ainda nao existem mensagens gravadas para esta conversa." />
+                      ) : (
+                        <div className="space-y-3">
+                          {displayMessages.map(message => (
+                            <MessageRow
+                              key={message.id}
+                              message={message}
+                              fallbackHumanName={currentHumanAgentName}
+                              conversation={selectedConversation}
+                            />
+                          ))}
+                          <div ref={messagesEndRef} />
+                        </div>
+                      )}
+                    </div>
+
+                    {humanModeActive ? (
+                      <div className="relative shrink-0 border-t border-slate-200 bg-white px-4 py-3">
 
                       {pendingFile && (
                         <div className="mb-3 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
@@ -2955,8 +2963,21 @@ export default function ChatInboxCRM() {
                       {actionError && (
                         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">{actionError}</div>
                       )}
-                    </div>
-                    </>
+                      </div>
+                    ) : (
+                      <div className="shrink-0 border-t border-amber-200 bg-amber-50 px-4 py-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-amber-800">
+                          <span>A resposta manual está oculta para evitar envio acidental enquanto a IA conduz a conversa.</span>
+                          <button
+                            type="button"
+                            disabled={actionLoading}
+                            onClick={() => void toggleHumanMode(true)}
+                            className="inline-flex h-10 items-center justify-center rounded-xl bg-amber-600 px-4 text-sm font-semibold text-white shadow-sm disabled:opacity-60"
+                          >
+                            Assumir como humano
+                          </button>
+                        </div>
+                      </div>
                     )}
                 </div>
 
