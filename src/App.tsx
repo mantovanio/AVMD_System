@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import Sidebar, { type Page } from '@/components/Sidebar'
 import NotificationBell from '@/components/NotificationBell'
 import { useNotifications } from '@/hooks/useNotifications'
-import { Menu, MoonStar, SunMedium, UserCog, LogOut, KeyRound } from 'lucide-react'
+import { Camera, LogOut, Menu, MoonStar, Settings, SunMedium, UserCog } from 'lucide-react'
 import { APP_VERSION } from '@/lib/version'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig } from '@/lib/agencyConfig'
 import { PAGE_LABELS, PERFIL_LABEL, isAdminProfile, resolveAllowedPages as resolveLegacyPages, resolveDefaultPage } from '@/lib/security'
@@ -28,7 +28,6 @@ const Configuracoes = lazy(() => import('@/pages/Configuracoes'))
 const CatalogoIA = lazy(() => import('@/pages/CatalogoIA'))
 const MarketplaceLoja = lazy(() => import('@/pages/MarketplaceLoja'))
 const ContestacaoAssinatura = lazy(() => import('@/pages/ContestacaoAssinatura'))
-const ClaudeChat = lazy(() => import('@/components/ClaudeChat'))
 const DebugPanel = lazy(() => import('@/components/DebugPanel'))
 
 // ── Módulo → páginas controladas ───────────────────────────────
@@ -97,7 +96,6 @@ function AppContent() {
   const [page, setPage]         = useState<Page>(initialPortal ? 'portal' : 'dashboard')
   const [dark, setDark]         = useState(() => localStorage.getItem('theme') === 'dark')
   const [agencyConfig, setAgencyConfig] = useState(DEFAULT_AGENCY_CONFIG)
-  const [claudeOpen, setClaudeOpen]     = useState(false)
   const [debugOpen,  setDebugOpen]      = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -287,6 +285,13 @@ function AppContent() {
   const perfilLabel  = PERFIL_LABEL[profile.perfil] ?? ''
   const nomeDisplay  = profile.nome ?? user.email ?? 'Usuário'
   const themeToggleLabel = dark ? 'Alternar para tema claro' : 'Alternar para tema escuro'
+  const avatarUrl = typeof profile.metadata?.avatar_url === 'string' ? profile.metadata.avatar_url : ''
+  const userInitials = nomeDisplay
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase())
+    .join('') || 'U'
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
@@ -315,13 +320,7 @@ function AppContent() {
               <span className="truncate text-sm font-semibold text-blue-600 dark:text-blue-400">{PAGE_LABELS[activePage]}</span>
             </div>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 leading-none">{nomeDisplay}</p>
-              {perfilLabel && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{perfilLabel} — {agencyConfig.nome_agencia}</p>
-              )}
-            </div>
+          <div className="flex items-center gap-2 shrink-0">
             <span className="hidden md:inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-1 text-[11px] font-medium text-gray-500 dark:text-gray-400">
               v{APP_VERSION}
             </span>
@@ -329,15 +328,13 @@ function AppContent() {
             {isAdmin && (
               <button type="button" onClick={() => setDebugOpen(o => !o)} title="Debug logs"
                 className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors text-sm ${debugOpen ? 'bg-red-100 dark:bg-red-900/30' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
-                🪲
+                <span className="text-[10px] font-bold text-red-500">DBG</span>
               </button>
             )}
-            <button type="button" onClick={() => setClaudeOpen(o => !o)} title="Chat com Claude"
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${claudeOpen ? 'bg-orange-100 dark:bg-orange-900/30' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
-              <ClaudeBadge />
-            </button>
             <button type="button" onClick={() => setDark(d => !d)}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                dark ? 'bg-blue-950 text-amber-300 ring-1 ring-blue-800' : 'bg-gray-100 text-slate-600 hover:bg-gray-200'
+              }`}
               title={themeToggleLabel}
               aria-label={themeToggleLabel}>
               {dark ? <SunMedium size={16} /> : <MoonStar size={16} />}
@@ -347,22 +344,56 @@ function AppContent() {
                 type="button"
                 onClick={() => setUserMenuOpen(open => !open)}
                 title="Menu do usuário"
-                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                  userMenuOpen ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
+                className={`min-w-0 rounded-full pl-2 pr-3 py-1.5 flex items-center gap-2 transition-colors border ${
+                  userMenuOpen
+                    ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-300'
+                    : 'border-transparent text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
                 }`}
                 aria-label="Menu do usuário"
               >
-                <UserCog size={16} />
+                <span className="relative flex h-8 w-8 overflow-hidden rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-100">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt={nomeDisplay} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="m-auto text-xs font-bold">{userInitials}</span>
+                  )}
+                </span>
+                <span className="hidden lg:flex min-w-0 flex-col items-start leading-tight">
+                  <span className="max-w-[160px] truncate text-sm font-semibold">{nomeDisplay}</span>
+                  {perfilLabel && <span className="max-w-[160px] truncate text-[11px] text-gray-400 dark:text-gray-500">{perfilLabel}</span>}
+                </span>
+                <UserCog size={15} className="hidden sm:block opacity-70" />
               </button>
               {userMenuOpen && (
-                <div className="fixed right-5 top-16 z-[10000] w-56 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
+                <div className="fixed right-5 top-16 z-[10000] w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
+                  <div className="flex items-center gap-3 border-b border-gray-100 px-4 py-4 dark:border-gray-800">
+                    <span className="relative flex h-12 w-12 overflow-hidden rounded-2xl bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-100">
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt={nomeDisplay} className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="m-auto text-sm font-bold">{userInitials}</span>
+                      )}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{nomeDisplay}</p>
+                      <p className="truncate text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
+                    </div>
+                  </div>
                   <button
                     type="button"
                     onClick={() => { setUserMenuOpen(false); handleNavigate('configuracoes') }}
                     className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
-                    <KeyRound size={16} className="text-gray-400" />
+                    <Settings size={16} className="text-gray-400" />
                     Configurações do usuário
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setUserMenuOpen(false); handleNavigate('configuracoes') }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <Camera size={16} className="text-gray-400" />
+                    Foto de perfil
                   </button>
                   <button
                     type="button"
@@ -405,19 +436,9 @@ function AppContent() {
       </div>
 
       <Suspense fallback={null}>
-        {claudeOpen && <ClaudeChat onClose={() => setClaudeOpen(false)} />}
         {debugOpen  && <DebugPanel onClose={() => setDebugOpen(false)} />}
       </Suspense>
     </div>
-  )
-}
-
-function ClaudeBadge() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M9.74 4.5C8.97 4.5 8.32 4.98 8.07 5.67L4.55 15.5C4.22 16.4 4.88 17.35 5.83 17.35H7.05L8.26 13.97H12.5L11.89 12.25H8.85L10.32 8.05L13.56 17.35H15.28L11.57 6.2C11.32 5.47 10.65 4.97 9.87 4.97L9.74 4.5Z" fill="#CC785C" />
-      <path d="M14.13 4.5L17.86 14.95C18.09 15.6 18.09 16.31 17.86 16.96L17.5 18C17.25 18.7 16.59 19.16 15.83 19.16H14.72L13.5 15.67H9.26L9.87 17.35H13L14.21 20.5H16.05C17.43 20.5 18.67 19.63 19.13 18.31L19.5 17.25C19.91 16.11 19.91 14.85 19.5 13.71L15.77 3.27C15.53 2.6 14.89 2.16 14.17 2.16H12.45L14.13 4.5Z" fill="#CC785C" />
-    </svg>
   )
 }
 
