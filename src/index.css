@@ -19,6 +19,78 @@ html.dark body {
   color: #e5e7eb;
 }
 
+/*
+  Compatibilidade do tema escuro para telas legadas.
+  Muitas paginas antigas usam classes claras fixas; esta camada garante
+  contraste global sem exigir refatorar cada componente agora.
+*/
+html.dark .bg-white,
+html.dark .bg-slate-50,
+html.dark .bg-gray-50 {
+  background-color: #0f172a !important;
+}
+
+html.dark .bg-slate-100,
+html.dark .bg-gray-100 {
+  background-color: #111827 !important;
+}
+
+html.dark .bg-white\/70,
+html.dark .bg-white\/80,
+html.dark .bg-white\/90,
+html.dark .bg-white\/95 {
+  background-color: rgb(15 23 42 / 0.88) !important;
+}
+
+html.dark .border-slate-200,
+html.dark .border-gray-200,
+html.dark .border-slate-100,
+html.dark .border-gray-100 {
+  border-color: #334155 !important;
+}
+
+html.dark .text-slate-900,
+html.dark .text-gray-900,
+html.dark .text-slate-800,
+html.dark .text-gray-800,
+html.dark .text-slate-700,
+html.dark .text-gray-700 {
+  color: #e5e7eb !important;
+}
+
+html.dark .text-slate-600,
+html.dark .text-gray-600,
+html.dark .text-slate-500,
+html.dark .text-gray-500 {
+  color: #cbd5e1 !important;
+}
+
+html.dark .text-slate-400,
+html.dark .text-gray-400 {
+  color: #94a3b8 !important;
+}
+
+html.dark input,
+html.dark textarea,
+html.dark select {
+  background-color: #020617 !important;
+  border-color: #334155 !important;
+  color: #e5e7eb !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+html.dark .shadow-sm,
+html.dark .shadow,
+html.dark .shadow-lg,
+html.dark .shadow-xl,
+html.dark .shadow-2xl {
+  --tw-shadow-color: rgb(0 0 0 / 0.45) !important;
+}
+
 /* Glassmorphism chat container */
 .chat-container {
   background: rgba(255, 255, 255, 0.15);
