@@ -75,6 +75,13 @@ function normalizeText(value: unknown) {
   return text || null
 }
 
+function normalizeEmail(value: unknown) {
+  const text = normalizeText(value)
+  if (!text) return null
+  const match = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
+  return match?.[0]?.toLowerCase() ?? null
+}
+
 function onlyDigits(value: string | null | undefined) {
   const digits = String(value ?? '').replace(/\D/g, '')
   return digits || null
@@ -189,7 +196,7 @@ function extractCertifastFields(body: ScheduleEmailWebhookBody): ExtractedSchedu
       || matchFirst(content, [/Nome completo\s*:?\s*(.+?)(?:\s*(?:CNPJ \/ CPF|Telefone|E-?mail|$))/i]),
     customer_document: matchFirst(content, [/(?:CPF\/CNPJ|CNPJ\/CPF):\s*(.+)/i]),
     customer_phone: matchFirst(content, [/Telefone(?:\s*Celular)?:\s*(.+?)(?:\s*(?:E-?mail|Email|Pedido|Código|Produto|Posto|$))/i]),
-    customer_email: matchFirst(content, [/(?:E-?mail|Email):\s*([^\s]+@[^\s]+)/i]),
+    customer_email: normalizeEmail(matchFirst(content, [/(?:E-?mail|Email)\s*:?\s*([^\s<>,;]+@[^\s<>,;]+)/i, /([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i])),
     pedido_numero: matchFirst(content, [/Pedido:\s*(.+?)(?:\s*(?:Código|Produto|Posto|Data|Hora|$))/i, /pedido código\s*(\d+)/i]),
     protocolo_numero: matchFirst(content, [/Código:\s*(.+?)(?:\s*(?:Produto|Posto|Data|Hora|$))/i]),
     product_name: matchFirst(content, [/Produto:\s*(.+?)(?:\s*(?:Data|Hora|Nome completo|CNPJ|CPF|Telefone|E-?mail|$))/i]),
@@ -219,7 +226,7 @@ function extractCertiidFields(body: ScheduleEmailWebhookBody): ExtractedSchedule
     customer_name: matchFirst(joined, [/Nome completo\s*:?\s*(.+?)\s*(?:CNPJ \/ CPF|Telefone|E-mail|$)/i]),
     customer_document: matchFirst(joined, [/CNPJ \/ CPF\s*:?\s*(.+?)\s*(?:Telefone|E-mail|$)/i]),
     customer_phone: matchFirst(joined, [/Telefone\s*:?\s*(.+?)\s*(?:E-mail|$)/i]),
-    customer_email: matchFirst(joined, [/E-mail\s*:?\s*([^\s]+@[^\s]+)/i]),
+    customer_email: normalizeEmail(matchFirst(joined, [/E-mail\s*:?\s*([^\s<>,;]+@[^\s<>,;]+)/i, /([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i])),
     data_agendada: parsePtBrDateTime(dateTimeRaw),
     observacoes: compactSpaces([
       matchFirst(joined, [/Produto\s*:?\s*(.+?)\s*(?:Nome completo|CNPJ \/ CPF|Telefone|E-mail|$)/i]),
@@ -241,7 +248,7 @@ function mergeParsed(body: ScheduleEmailWebhookBody, extracted: ExtractedSchedul
   return {
     event_type: normalizeText(body.parsed?.event_type) ?? extracted.event_type ?? null,
     customer_name: normalizeText(body.parsed?.customer_name) ?? extracted.customer_name ?? null,
-    customer_email: normalizeText(body.parsed?.customer_email) ?? extracted.customer_email ?? null,
+    customer_email: normalizeEmail(body.parsed?.customer_email) ?? normalizeEmail(extracted.customer_email) ?? null,
     customer_phone: normalizeText(body.parsed?.customer_phone) ?? extracted.customer_phone ?? null,
     customer_document: normalizeText(body.parsed?.customer_document) ?? extracted.customer_document ?? null,
     protocolo_numero: normalizeText(body.parsed?.protocolo_numero) ?? extracted.protocolo_numero ?? null,

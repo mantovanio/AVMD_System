@@ -6,6 +6,13 @@ function normalizeText(value: unknown) {
   return text || null
 }
 
+function normalizeEmail(value: unknown) {
+  const text = normalizeText(value)
+  if (!text) return null
+  const match = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
+  return match?.[0]?.toLowerCase() ?? null
+}
+
 function onlyDigits(value: string | null | undefined) {
   const digits = String(value ?? '').replace(/\D/g, '')
   return digits || null
@@ -340,7 +347,7 @@ export class ScheduleAutomationRepository {
     const documentDigits = onlyDigits(input.customerDocument)
     const document = splitDocument(input.customerDocument)
     const normalizedCustomerName = normalizeText(input.customerName)
-    const normalizedCustomerEmail = normalizeText(input.customerEmail)
+    const normalizedCustomerEmail = normalizeEmail(input.customerEmail)
     const normalizedCustomerPhone = normalizeText(input.customerPhone)
     const normalizedFrom = normalizeText(input.from)
     const normalizedMailbox = normalizeText(input.mailbox)
