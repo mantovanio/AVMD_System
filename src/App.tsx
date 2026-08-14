@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ClerkProvider } from '@clerk/clerk-react'
 import { ptBR } from '@clerk/localizations'
 import { createPortal } from 'react-dom'
@@ -6,7 +6,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import Sidebar, { type Page } from '@/components/Sidebar'
 import NotificationBell from '@/components/NotificationBell'
 import { useNotifications } from '@/hooks/useNotifications'
-import { Camera, Loader2, LogOut, Menu, MoonStar, Save, Settings, SunMedium, UserCog, X } from 'lucide-react'
+import { Camera, Loader2, LogOut, Menu, MoonStar, Save, Settings, SunMedium, X } from 'lucide-react'
 import { APP_VERSION } from '@/lib/version'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig } from '@/lib/agencyConfig'
 import { PAGE_LABELS, PERFIL_LABEL, isAdminProfile, resolveAllowedPages as resolveLegacyPages, resolveDefaultPage } from '@/lib/security'
@@ -107,6 +107,7 @@ function AppContent() {
   const [profileForm, setProfileForm] = useState({ nome: '', telefone: '', cidade: '', avatarUrl: '' })
   const [newPassword, setNewPassword] = useState('')
   const [passwordSaving, setPasswordSaving] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   // Permissões por módulo — carregadas do backend
   const { loading: permLoading, resolveAllowedPages: resolveModulePages } = usePermissions()
@@ -357,6 +358,53 @@ function AppContent() {
     }
   }
 
+  async function handleAvatarFile(file: File | null) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setProfileFeedback({ type: 'error', text: 'Selecione um arquivo de imagem.' })
+      return
+    }
+
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result ?? ''))
+        reader.onerror = () => reject(new Error('Não foi possível ler a imagem.'))
+        reader.readAsDataURL(file)
+      })
+
+      const resized = await new Promise<string>((resolve, reject) => {
+        const image = new Image()
+        image.onload = () => {
+          const size = 256
+          const canvas = document.createElement('canvas')
+          canvas.width = size
+          canvas.height = size
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            reject(new Error('Não foi possível preparar a imagem.'))
+            return
+          }
+
+          const minSide = Math.min(image.width, image.height)
+          const sx = (image.width - minSide) / 2
+          const sy = (image.height - minSide) / 2
+          ctx.drawImage(image, sx, sy, minSide, minSide, 0, 0, size, size)
+          resolve(canvas.toDataURL('image/jpeg', 0.82))
+        }
+        image.onerror = () => reject(new Error('Imagem inválida ou corrompida.'))
+        image.src = dataUrl
+      })
+
+      setProfileForm(prev => ({ ...prev, avatarUrl: resized }))
+      setProfileFeedback({ type: 'ok', text: 'Foto carregada. Clique em Salvar dados pessoais para gravar.' })
+    } catch (error) {
+      setProfileFeedback({ type: 'error', text: error instanceof Error ? error.message : 'Falha ao carregar foto.' })
+    } finally {
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
+    }
+  }
+
   const perfilLabel  = PERFIL_LABEL[profile.perfil] ?? ''
   const nomeDisplay  = profile.nome ?? user.email ?? 'Usuário'
   const themeToggleLabel = dark ? 'Alternar para tema claro' : 'Alternar para tema escuro'
@@ -437,10 +485,9 @@ function AppContent() {
                   <span className="max-w-[160px] truncate text-sm font-semibold">{nomeDisplay}</span>
                   {perfilLabel && <span className="max-w-[160px] truncate text-[11px] text-gray-400 dark:text-gray-500">{perfilLabel}</span>}
                 </span>
-                <UserCog size={15} className="hidden sm:block opacity-70" />
               </button>
               {userMenuOpen && createPortal(
-                <div className="fixed right-5 top-16 z-[2147483647] w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
+                <div data-user-menu className="fixed right-5 top-16 z-[2147483647] w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
                   <div className="flex items-center gap-3 border-b border-gray-100 px-4 py-4 dark:border-gray-800">
                     <span className="relative flex h-12 w-12 overflow-hidden rounded-2xl bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-100">
                       {avatarUrl ? (
@@ -521,6 +568,38 @@ function AppContent() {
             </div>
 
             <div className="space-y-4 px-5 py-5">
+              <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950/50">
+                <span className="flex h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-100">
+                  {profileForm.avatarUrl ? (
+                    <img src={profileForm.avatarUrl} alt={profileForm.nome || nomeDisplay} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="m-auto text-lg font-bold">{userInitials}</span>
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Foto de perfil</p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Envie uma imagem quadrada ou retrato. O sistema ajusta automaticamente.</p>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={event => void handleAvatarFile(event.target.files?.[0] ?? null)}
+                  />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" onClick={() => avatarInputRef.current?.click()} className="inline-flex h-9 items-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white">
+                      <Camera size={14} />
+                      Escolher foto
+                    </button>
+                    {profileForm.avatarUrl && (
+                      <button type="button" onClick={() => setProfileForm(prev => ({ ...prev, avatarUrl: '' }))} className="inline-flex h-9 items-center rounded-xl border border-gray-200 px-3 text-xs font-semibold text-gray-600 dark:border-gray-700 dark:text-gray-300">
+                        Remover
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="space-y-1 sm:col-span-2">
                   <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Nome</span>
@@ -535,8 +614,8 @@ function AppContent() {
                   <input value={profileForm.cidade} onChange={event => setProfileForm(prev => ({ ...prev, cidade: event.target.value }))} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 dark:border-gray-700 dark:bg-gray-950" />
                 </label>
                 <label className="space-y-1 sm:col-span-2">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">URL da foto</span>
-                  <input value={profileForm.avatarUrl} onChange={event => setProfileForm(prev => ({ ...prev, avatarUrl: event.target.value }))} placeholder="https://..." className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 dark:border-gray-700 dark:bg-gray-950" />
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">URL da foto, opcional</span>
+                  <input value={profileForm.avatarUrl.startsWith('data:') ? '' : profileForm.avatarUrl} onChange={event => setProfileForm(prev => ({ ...prev, avatarUrl: event.target.value }))} placeholder="https://..." className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 dark:border-gray-700 dark:bg-gray-950" />
                 </label>
               </div>
 
