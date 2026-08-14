@@ -818,9 +818,6 @@ export default function ChatInboxCRM() {
   const humanModeActive = useMemo(() => {
     if (!selectedConversation) return false
     if (selectedConversation.atendimento_humano || humanOverrideIds.includes(selectedConversation.id)) return true
-    if (selectedConversation.fila !== 'renovacao') return true
-    const inst = String(selectedConversation.whatsapp_instance ?? '').trim().toLowerCase()
-    if (inst && !inst.includes('renov') && !inst.includes('certiid')) return true
     return false
   }, [humanOverrideIds, selectedConversation])
 
@@ -1565,6 +1562,15 @@ export default function ChatInboxCRM() {
       const payload = nextValue
         ? { atendimento_humano: true, agente_nome: profile?.nome ?? selectedConversation.agente_atual ?? selectedConversation.agente_nome }
         : { atendimento_humano: false, agente_nome: null }
+
+      setConversations(prev => prev.map(item => item.id === selectedConversation.id
+        ? {
+            ...item,
+            atendimento_humano: nextValue,
+            agente_atual: nextValue ? (profile?.nome ?? selectedConversation.agente_atual ?? selectedConversation.agente_nome) : null,
+          }
+        : item,
+      ))
 
       const response = await fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}`), {
         method: 'PATCH',
@@ -3106,15 +3112,6 @@ export default function ChatInboxCRM() {
                       </div>
                     </PanelBlock>
 
-                    <PanelBlock title="Resumo operacional">
-                      <InfoRow icon={<User size={14} />} label="Pessoa" value={selectedConversation.nome_crm || selectedConversation.cliente_nome || 'Nao informado'} />
-                      <InfoRow icon={<UserRound size={14} />} label="Empresa" value={selectedConversation.empresa_nome || 'Nao informada'} />
-                      <InfoRow icon={<Phone size={14} />} label="Telefone" value={contactPhone(selectedConversation)} mono />
-                      <InfoRow icon={<Mail size={14} />} label="Email" value={selectedConversation.email_principal || (selectedConversation.fila === 'email' ? selectedConversation.document_key : 'Nao informado')} />
-                      <InfoRow icon={<Clock3 size={14} />} label="Status CRM" value={selectedConversation.contato_status || 'Nao definido'} />
-                      <InfoRow icon={<UserCheck size={14} />} label="Agente atual" value={selectedConversation.agente_atual || selectedConversation.agente_nome || 'Nao atribuido'} />
-                    </PanelBlock>
-
                     {renovacoesCRM.length > 0 && (
                       <PanelBlock title={`Renovacoes pendentes (${renovacoesCRM.length})`}>
                         <div className="space-y-3">
@@ -3244,23 +3241,6 @@ export default function ChatInboxCRM() {
                       </button>
                     </PanelBlock>
 
-                    <PanelBlock title="Observacoes do contato">
-                      <div className="space-y-2 text-sm leading-relaxed text-slate-700">
-                        <p><span className="font-semibold text-slate-500">Pessoa:</span> {selectedConversation.nome_crm || selectedConversation.cliente_nome || 'Nao informado'}</p>
-                        <p><span className="font-semibold text-slate-500">Empresa:</span> {selectedConversation.empresa_nome || 'Nao informada'}</p>
-                        <p className="whitespace-pre-wrap">{selectedConversation.observacoes || 'Sem observacoes no crm_customers.'}</p>
-                      </div>
-                    </PanelBlock>
-
-                    <PanelBlock title="Leitura operacional">
-                      <ul className="space-y-2 whitespace-pre-line text-sm text-slate-600">
-                        <li>Fila: <strong>{queueLabel(selectedConversation.fila)}</strong></li>
-                        <li>Modo atual: <strong>{humanModeActive ? 'Humano' : 'IA Clara'}</strong></li>
-                        <li>Documento-chave: <strong>{selectedConversation.document_key}</strong></li>
-                        <li>Agente desde: <strong>{formatDateTime(selectedConversation.agente_desde)}</strong></li>
-                        <li>Ultima mensagem: <strong>{normalizeStructuredMessage(selectedConversation.ultima_mensagem) || 'Sem resumo'}</strong></li>
-                      </ul>
-                    </PanelBlock>
                   </div>
                 </aside>
               </div>
