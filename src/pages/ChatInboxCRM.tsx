@@ -340,6 +340,48 @@ function contactPhone(item: ConversationRow) {
   return raw.replace(/@.*$/, '')
 }
 
+function extractEmailFromText(value: string | null | undefined) {
+  const match = String(value ?? '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
+  return match?.[0]?.toLowerCase() ?? ''
+}
+
+function extractFieldFromText(value: string, labels: string[]) {
+  for (const label of labels) {
+    const pattern = new RegExp(`${label}\\s*:?\\s*(.+?)(?=\\n\\s*(?:Cliente|Nome completo|CPF\\/CNPJ|CNPJ \\/ CPF|Telefone Celular|Telefone|Email|E-mail|Pedido|Codigo|Código|Produto|Posto|Data|$))`, 'i')
+    const match = value.match(pattern)
+    const text = match?.[1]?.trim()
+    if (text) return text
+  }
+  return ''
+}
+
+function extractScheduleContactFromMessages(messages: CrmMessage[]) {
+  const text = messages
+    .filter(message => message.direction === 'incoming')
+    .map(message => message.mensagem ?? '')
+    .join('\n')
+
+  const email = extractEmailFromText(text)
+  const phone = extractFieldFromText(text, ['Telefone Celular', 'Telefone'])
+  const name = extractFieldFromText(text, ['Cliente', 'Nome completo'])
+  const product = extractFieldFromText(text, ['Produto'])
+  const documentText = extractFieldFromText(text, ['CPF/CNPJ', 'CNPJ / CPF'])
+  const documentDigits = documentText.replace(/\D/g, '')
+  const company = documentDigits.length > 11 ? name : ''
+
+  return {
+    name,
+    company,
+    phone,
+    email,
+    product,
+  }
+}
+
+function isEmailLike(value: string | null | undefined) {
+  return Boolean(extractEmailFromText(value))
+}
+
 function hasRegisteredCustomer(item: ConversationRow | null | undefined) {
   if (!item) return false
   return Boolean(item.crm_customer_id || item.nome_crm || item.email_principal || item.cpf || item.cnpj)
@@ -857,6 +899,11 @@ export default function ChatInboxCRM() {
     }]
   }, [messages, selectedConversation, currentHumanAgentName, humanOverrideIds])
 
+  const scheduleContactFromMessages = useMemo(
+    () => extractScheduleContactFromMessages(displayMessages),
+    [displayMessages],
+  )
+
   const manualChannelOptions = useMemo(() => {
     const preferredByQueue = new Map<QueueType, EvolutionIntegration>()
 
@@ -1052,12 +1099,19 @@ export default function ChatInboxCRM() {
 
   useEffect(() => {
     if (!selectedConversation) return
+    const documentKeyAsEmail = isEmailLike(selectedConversation.document_key) ? extractEmailFromText(selectedConversation.document_key) : ''
+    const selectedEmail = extractEmailFromText(selectedConversation.email_principal)
+      || scheduleContactFromMessages.email
+      || (selectedConversation.fila === 'email' ? documentKeyAsEmail : '')
+    const selectedPhone = selectedConversation.telefone
+      || scheduleContactFromMessages.phone
+      || (selectedConversation.fila === 'email' ? '' : selectedConversation.document_key)
     setContactEdit({
-      name: selectedConversation.nome_crm || selectedConversation.cliente_nome || '',
-      company: selectedConversation.empresa_nome || '',
-      phone: selectedConversation.fila === 'email' ? '' : (selectedConversation.telefone || selectedConversation.document_key || ''),
-      email: selectedConversation.email_principal || (selectedConversation.fila === 'email' ? selectedConversation.document_key : ''),
-      product: selectedConversation.produto || '',
+      name: selectedConversation.nome_crm || selectedConversation.cliente_nome || scheduleContactFromMessages.name || '',
+      company: selectedConversation.empresa_nome || scheduleContactFromMessages.company || '',
+      phone: selectedPhone || '',
+      email: selectedEmail,
+      product: selectedConversation.produto || scheduleContactFromMessages.product || '',
       expiration: selectedConversation.data_vencimento ? selectedConversation.data_vencimento.slice(0, 10) : '',
       status: selectedConversation.contato_status || '',
       observations: selectedConversation.observacoes || '',
@@ -1075,6 +1129,11 @@ export default function ChatInboxCRM() {
     selectedConversation?.data_vencimento,
     selectedConversation?.observacoes,
     selectedConversation?.telefone,
+    scheduleContactFromMessages.company,
+    scheduleContactFromMessages.email,
+    scheduleContactFromMessages.name,
+    scheduleContactFromMessages.phone,
+    scheduleContactFromMessages.product,
   ])
 
   useEffect(() => {
@@ -1856,8 +1915,11 @@ export default function ChatInboxCRM() {
     const cleanedObs = contactEdit.observations.trim()
     const resolvedName = cleanedName || selectedConversation.cliente_nome || selectedConversation.nome_crm || null
     const resolvedCompany = cleanedCompany || selectedConversation.empresa_nome || null
-    const resolvedPhone = cleanedPhone || selectedConversation.telefone || selectedConversation.document_key || null
-    const resolvedEmail = cleanedEmail || null
+    const fallbackPhone = selectedConversation.fila === 'email'
+      ? selectedConversation.telefone
+      : selectedConversation.telefone || selectedConversation.document_key
+    const resolvedPhone = cleanedPhone || fallbackPhone || null
+    const resolvedEmail = extractEmailFromText(cleanedEmail) || null
     const resolvedProduct = cleanedProduct || null
     const resolvedExpiration = cleanedExpiration || null
     const resolvedStatus = cleanedStatus || null

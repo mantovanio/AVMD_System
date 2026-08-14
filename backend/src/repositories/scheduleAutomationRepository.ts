@@ -359,6 +359,7 @@ export class ScheduleAutomationRepository {
     const normalizedDataAgendada = normalizeText(input.dataAgendada)
     const normalizedLocationName = normalizeText(input.locationName)
     const normalizedSourceSender = normalizeText(input.sourceSender)
+    const normalizedCompanyName = document.cnpj ? normalizedCustomerName : null
     const customerContextNotes = [
       `Origem: ${input.source}`,
       normalizedProductBrand ? `Marca do produto: ${normalizedProductBrand}` : null,
@@ -418,17 +419,19 @@ export class ScheduleAutomationRepository {
         await this.db.query(`
           update crm_customers
           set nome = coalesce($2, nome),
-              telefone = coalesce($3, telefone),
-              email = coalesce($4, email),
-              cpf = coalesce($5, cpf),
-              cnpj = coalesce($6, cnpj),
-              observacoes = concat_ws(E'\n\n', nullif(observacoes, ''), $7),
-              cadastro_base_id = coalesce($8::uuid, cadastro_base_id),
+              empresa_nome = coalesce($3, empresa_nome),
+              telefone = coalesce($4, telefone),
+              email = coalesce($5, email),
+              cpf = coalesce($6, cpf),
+              cnpj = coalesce($7, cnpj),
+              observacoes = concat_ws(E'\n\n', nullif(observacoes, ''), $8),
+              cadastro_base_id = coalesce($9::uuid, cadastro_base_id),
               updated_at = now()
           where id = $1::uuid
         `, [
           customerId,
           normalizedCustomerName,
+          normalizedCompanyName,
           normalizedCustomerPhone,
           normalizedCustomerEmail,
           document.cpf,
@@ -438,11 +441,12 @@ export class ScheduleAutomationRepository {
         ])
       } else {
         const created = await this.db.query<{ id: string }>(`
-          insert into crm_customers (nome, telefone, email, cpf, cnpj, observacoes, cadastro_base_id)
-          values ($1, $2, $3, $4, $5, $6, $7::uuid)
+          insert into crm_customers (nome, empresa_nome, telefone, email, cpf, cnpj, observacoes, cadastro_base_id)
+          values ($1, $2, $3, $4, $5, $6, $7, $8::uuid)
           returning id
         `, [
           normalizedCustomerName,
+          normalizedCompanyName,
           normalizedCustomerPhone,
           normalizedCustomerEmail,
           document.cpf,
