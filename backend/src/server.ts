@@ -213,6 +213,7 @@ const server = createServer(async (req, res) => {
     const handledClaraAutomation = await handleClaraAutomationRoutes(
       req,
       res,
+      db,
       leadRepository,
       corsOrigin,
     )
