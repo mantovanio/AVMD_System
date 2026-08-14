@@ -2923,13 +2923,10 @@ export default function ChatInboxCRM() {
                           disabled={actionLoading}
                           onClick={() => void toggleHumanMode(false)}
                           title="Voltar conversa para IA"
-                          className="relative inline-flex h-11 w-20 shrink-0 items-center rounded-xl bg-emerald-500 px-1 text-white shadow-sm transition disabled:opacity-60"
+                          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-[11px] font-black text-emerald-700 shadow-sm transition hover:bg-emerald-100 disabled:opacity-60"
                           aria-label="Voltar conversa para IA"
                         >
-                          <span className="absolute left-2 text-[10px] font-black opacity-70">IA</span>
-                          <span className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[11px] font-black text-emerald-600 shadow">
-                            H
-                          </span>
+                          H
                         </button>
                         <button type="button" onClick={() => setShowEmoji(current => !current)} className={`inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 ${showEmoji ? 'bg-amber-100 text-amber-700' : 'bg-white text-slate-500'}`}>
                           <Smile size={18} />
@@ -2986,13 +2983,10 @@ export default function ChatInboxCRM() {
                             disabled={actionLoading}
                             onClick={() => void toggleHumanMode(true)}
                             title="Assumir conversa como humano"
-                            className="relative inline-flex h-11 w-20 shrink-0 items-center rounded-xl bg-slate-300 px-1 text-slate-600 shadow-sm transition disabled:opacity-60"
+                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-200 bg-amber-100 text-[11px] font-black text-amber-700 shadow-sm transition hover:bg-amber-200 disabled:opacity-60"
                             aria-label="Assumir conversa como humano"
                           >
-                            <span className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[11px] font-black text-slate-500 shadow">
-                              IA
-                            </span>
-                            <span className="ml-auto pr-2 text-[10px] font-black opacity-70">H</span>
+                            IA
                           </button>
                         </div>
                       </div>

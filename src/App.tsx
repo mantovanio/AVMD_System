@@ -6,12 +6,13 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import Sidebar, { type Page } from '@/components/Sidebar'
 import NotificationBell from '@/components/NotificationBell'
 import { useNotifications } from '@/hooks/useNotifications'
-import { Camera, LogOut, Menu, MoonStar, Settings, SunMedium, UserCog } from 'lucide-react'
+import { Camera, Loader2, LogOut, Menu, MoonStar, Save, Settings, SunMedium, UserCog, X } from 'lucide-react'
 import { APP_VERSION } from '@/lib/version'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig } from '@/lib/agencyConfig'
 import { PAGE_LABELS, PERFIL_LABEL, isAdminProfile, resolveAllowedPages as resolveLegacyPages, resolveDefaultPage } from '@/lib/security'
 import { PermissionsProvider, usePermissions } from '@/contexts/PermissionsContext'
 import { assertRuntimeConfig } from '@/lib/runtimeConfig'
+import { getApiUrl } from '@/lib/api'
 
 const Login = lazy(() => import('@/pages/Login'))
 const PortalCliente = lazy(() => import('@/pages/PortalCliente'))
@@ -85,7 +86,7 @@ function PageLoader() {
 // ── Componente principal ────────────────────────────────────────
 
 function AppContent() {
-  const { user, profile, loading, signOut, isPasswordRecovery } = useAuth()
+  const { user, profile, loading, signOut, isPasswordRecovery, updatePassword, refreshProfile } = useAuth()
   const pathname = window.location.pathname
   const initialPortal = new URLSearchParams(window.location.search).get('page') === 'portal'
   const isShopRoute  = /^\/shop\/?$/.test(pathname)
@@ -100,6 +101,12 @@ function AppContent() {
   const [debugOpen,  setDebugOpen]      = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [profileModalOpen, setProfileModalOpen] = useState(false)
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileFeedback, setProfileFeedback] = useState<{ type: 'ok' | 'error'; text: string } | null>(null)
+  const [profileForm, setProfileForm] = useState({ nome: '', telefone: '', cidade: '', avatarUrl: '' })
+  const [newPassword, setNewPassword] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
 
   // Permissões por módulo — carregadas do backend
   const { loading: permLoading, resolveAllowedPages: resolveModulePages } = usePermissions()
@@ -154,6 +161,16 @@ function AppContent() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    if (!profile) return
+    setProfileForm({
+      nome: profile.nome ?? '',
+      telefone: profile.telefone ?? '',
+      cidade: profile.cidade ?? '',
+      avatarUrl: typeof profile.metadata?.avatar_url === 'string' ? profile.metadata.avatar_url : '',
+    })
+  }, [profile])
 
   // Navegação via evento customizado (usado pelo ChatPanel)
   useEffect(() => {
@@ -283,6 +300,63 @@ function AppContent() {
     if (allowedPages.includes(p)) setPage(p)
   }
 
+  function openProfileModal() {
+    setUserMenuOpen(false)
+    setProfileFeedback(null)
+    setNewPassword('')
+    setProfileModalOpen(true)
+  }
+
+  async function savePersonalProfile() {
+    if (!profile) return
+    setProfileSaving(true)
+    setProfileFeedback(null)
+    try {
+      const metadata = {
+        ...(profile.metadata ?? {}),
+        avatar_url: profileForm.avatarUrl.trim() || null,
+      }
+      const response = await fetch(getApiUrl(`/profiles/${encodeURIComponent(profile.id)}`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: profileForm.nome.trim() || profile.nome,
+          telefone: profileForm.telefone.trim() || null,
+          cidade: profileForm.cidade.trim() || null,
+          metadata,
+        }),
+      })
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
+      if (!response.ok || !data?.ok) throw new Error(data?.error ?? 'Não foi possível salvar seu perfil.')
+      await refreshProfile()
+      setProfileFeedback({ type: 'ok', text: 'Dados pessoais atualizados.' })
+    } catch (error) {
+      setProfileFeedback({ type: 'error', text: error instanceof Error ? error.message : 'Falha ao salvar perfil.' })
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
+  async function saveUserPassword() {
+    const password = newPassword.trim()
+    if (password.length < 8) {
+      setProfileFeedback({ type: 'error', text: 'A nova senha precisa ter pelo menos 8 caracteres.' })
+      return
+    }
+    setPasswordSaving(true)
+    setProfileFeedback(null)
+    try {
+      const result = await updatePassword(password)
+      if (result.error) throw new Error(result.error)
+      setNewPassword('')
+      setProfileFeedback({ type: 'ok', text: 'Senha atualizada com sucesso.' })
+    } catch (error) {
+      setProfileFeedback({ type: 'error', text: error instanceof Error ? error.message : 'Falha ao atualizar senha.' })
+    } finally {
+      setPasswordSaving(false)
+    }
+  }
+
   const perfilLabel  = PERFIL_LABEL[profile.perfil] ?? ''
   const nomeDisplay  = profile.nome ?? user.email ?? 'Usuário'
   const themeToggleLabel = dark ? 'Alternar para tema claro' : 'Alternar para tema escuro'
@@ -382,27 +456,19 @@ function AppContent() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => { setUserMenuOpen(false); handleNavigate('configuracoes') }}
+                    onClick={openProfileModal}
                     className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
                     <Settings size={16} className="text-gray-400" />
-                    Configurações do usuário
+                    Meus dados
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setUserMenuOpen(false); handleNavigate('configuracoes') }}
+                    onClick={openProfileModal}
                     className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
                     <Camera size={16} className="text-gray-400" />
                     Foto de perfil
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDark(prev => !prev)}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    {dark ? <SunMedium size={16} className="text-amber-500" /> : <MoonStar size={16} className="text-slate-500" />}
-                    {dark ? 'Alternar para tema claro' : 'Alternar para tema escuro'}
                   </button>
                   <button
                     type="button"
@@ -440,6 +506,66 @@ function AppContent() {
       <Suspense fallback={null}>
         {debugOpen  && <DebugPanel onClose={() => setDebugOpen(false)} />}
       </Suspense>
+
+      {profileModalOpen && createPortal(
+        <div className="fixed inset-0 z-[2147483646] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+              <div>
+                <p className="text-sm font-bold text-gray-900 dark:text-gray-100">Meu perfil</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Dados pessoais, foto e senha de acesso.</p>
+              </div>
+              <button type="button" onClick={() => setProfileModalOpen(false)} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 px-5 py-5">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1 sm:col-span-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Nome</span>
+                  <input value={profileForm.nome} onChange={event => setProfileForm(prev => ({ ...prev, nome: event.target.value }))} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 dark:border-gray-700 dark:bg-gray-950" />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Telefone</span>
+                  <input value={profileForm.telefone} onChange={event => setProfileForm(prev => ({ ...prev, telefone: event.target.value }))} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 dark:border-gray-700 dark:bg-gray-950" />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cidade</span>
+                  <input value={profileForm.cidade} onChange={event => setProfileForm(prev => ({ ...prev, cidade: event.target.value }))} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 dark:border-gray-700 dark:bg-gray-950" />
+                </label>
+                <label className="space-y-1 sm:col-span-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">URL da foto</span>
+                  <input value={profileForm.avatarUrl} onChange={event => setProfileForm(prev => ({ ...prev, avatarUrl: event.target.value }))} placeholder="https://..." className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 dark:border-gray-700 dark:bg-gray-950" />
+                </label>
+              </div>
+
+              <button type="button" onClick={() => void savePersonalProfile()} disabled={profileSaving} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white disabled:opacity-60">
+                {profileSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                Salvar dados pessoais
+              </button>
+
+              <div className="rounded-2xl border border-gray-200 p-4 dark:border-gray-800">
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Nova senha</span>
+                  <input type="password" value={newPassword} onChange={event => setNewPassword(event.target.value)} placeholder="Mínimo 8 caracteres" className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 dark:border-gray-700 dark:bg-gray-950" />
+                </label>
+                <button type="button" onClick={() => void saveUserPassword()} disabled={passwordSaving || !newPassword.trim()} className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 disabled:opacity-60 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+                  {passwordSaving ? <Loader2 size={16} className="animate-spin" /> : <Settings size={16} />}
+                  Atualizar senha
+                </button>
+              </div>
+
+              {profileFeedback && (
+                <div className={`rounded-xl px-3 py-2 text-sm ${profileFeedback.type === 'ok' ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300' : 'border border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300'}`}>
+                  {profileFeedback.text}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }
