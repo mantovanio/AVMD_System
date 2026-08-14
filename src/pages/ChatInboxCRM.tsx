@@ -3,6 +3,7 @@ import {
   Archive,
   Bot,
   BookOpenCheck,
+  Calendar,
   Check,
   CheckCheck,
   ChevronDown,
@@ -13,9 +14,7 @@ import {
   Mail,
   MessageCircle,
   Mic,
-  MoreVertical,
   Paperclip,
-  Pencil,
   Phone,
   RefreshCw,
   Reply,
@@ -24,16 +23,14 @@ import {
   Smile,
   StopCircle,
   Save,
-  Trash2,
   User,
   UserCheck,
   UserPlus,
   UserRound,
   X,
-  Ban,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { getApiUrl, resolveChatMediaUrl, deleteWhatsAppMessage, editWhatsAppMessage } from '@/lib/api'
+import { getApiUrl, resolveChatMediaUrl } from '@/lib/api'
 import { logger } from '@/lib/logger'
 import { useAuth } from '@/contexts/AuthContext'
 import { applyOutgoingSignature, DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings } from '@/lib/crmChatSettings'
@@ -886,7 +883,7 @@ export default function ChatInboxCRM() {
 
   const replyChannelOptions = useMemo(() => (
     integrations
-      .filter(item => Boolean(item.id) && Boolean(item.instance_name) && Boolean(item.base_url))
+      .filter(item => Boolean(item.id) && Boolean(item.instance_name) && Boolean(item.base_url) && Boolean(item.api_token))
       .map(integration => ({
         id: integration.id,
         queue: inferQueueFromIntegration(integration),
@@ -1731,7 +1728,7 @@ export default function ChatInboxCRM() {
     const contactName = manualConversation.contactName.trim()
     const selectedChannel = manualChannelOptions.find(item => item.integration.id === manualConversation.integrationId)
 
-    if (!selectedChannel?.integration.instance_name || !selectedChannel.integration.base_url) {
+    if (!selectedChannel?.integration.instance_name || !selectedChannel.integration.base_url || !selectedChannel.integration.api_token) {
       setManualConversationError('Selecione um canal valido para iniciar a conversa.')
       return
     }
@@ -2110,7 +2107,7 @@ export default function ChatInboxCRM() {
       if (selectedIdRef.current === selectedConversation.id) {
         setHumanMessage(current => current.trim() === text ? '' : current)
       }
-      setMessages(prev => prev.map(item => item.id === tempId ? { ...item, id: payload.messageId ?? tempId, external_message_id: payload.messageId ?? item.external_message_id } : item))
+      setMessages(prev => prev.map(item => item.id === tempId ? { ...item, id: payload.messageId ?? tempId } : item))
       markConversationAsHuman(selectedConversation.id)
       fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}`), {
         method: 'PATCH',
@@ -2469,7 +2466,9 @@ export default function ChatInboxCRM() {
   const activeShortcut = useMemo(() => ({
     all: queueFilter === 'todas' && humanFilter === 'todos' && !aguardandoFilter,
     atendimento: queueFilter === 'atendimento' && humanFilter === 'todos' && !aguardandoFilter,
+    renovacao: queueFilter === 'renovacao' && humanFilter === 'todos' && !aguardandoFilter,
     email: queueFilter === 'email' && humanFilter === 'todos' && !aguardandoFilter,
+    agendamento: queueFilter === 'agendamento' && humanFilter === 'todos' && !aguardandoFilter,
     humano: queueFilter === 'todas' && humanFilter === 'humano' && !aguardandoFilter,
     aguardando: aguardandoFilter,
   }), [queueFilter, humanFilter, aguardandoFilter])
@@ -2497,7 +2496,7 @@ export default function ChatInboxCRM() {
     }
   }, [visibleConversations, selectedId])
 
-  function applySummaryShortcut(target: 'all' | 'atendimento' | 'email' | 'humano' | 'aguardando') {
+  function applySummaryShortcut(target: 'all' | 'atendimento' | 'renovacao' | 'agendamento' | 'email' | 'humano' | 'aguardando') {
     if (target === 'aguardando') {
       setAguardandoFilter(prev => !prev)
       setQueueFilter('todas')
@@ -2509,6 +2508,8 @@ export default function ChatInboxCRM() {
     setAguardandoFilter(false)
     const nextQueue: 'todas' | QueueType =
       target === 'atendimento' ? 'atendimento' :
+      target === 'renovacao' ? 'renovacao' :
+      target === 'agendamento' ? 'agendamento' :
       target === 'email' ? 'email' :
       'todas'
 
@@ -2548,8 +2549,10 @@ export default function ChatInboxCRM() {
               </div>
             </div>
 
-            <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid w-full grid-cols-3 gap-2 sm:grid-cols-6">
               <SummaryCard icon={MessageCircle} label="Atendimento" value={summary.atendimento} active={activeShortcut.atendimento} onClick={() => applySummaryShortcut('atendimento')} />
+              <SummaryCard icon={RefreshCw} label="Renovacao" value={summary.renovacao} active={activeShortcut.renovacao} onClick={() => applySummaryShortcut('renovacao')} />
+              <SummaryCard icon={Calendar} label="Agendamento" value={summary.agendamento} active={activeShortcut.agendamento} onClick={() => applySummaryShortcut('agendamento')} />
               <SummaryCard icon={Mail} label="Email" value={summary.email} active={activeShortcut.email} onClick={() => applySummaryShortcut('email')} />
               <SummaryCard icon={User} label="Humano" value={summary.humano} active={activeShortcut.humano} onClick={() => applySummaryShortcut('humano')} />
               <SummaryCard icon={Clock3} label="Aguardando" value={summary.aguardando} active={activeShortcut.aguardando} onClick={() => applySummaryShortcut('aguardando')} />
@@ -2573,45 +2576,50 @@ export default function ChatInboxCRM() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <label className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3">
-              <Search size={15} className="text-slate-400" />
+          <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_160px_160px_210px]">
+            <label className="flex h-11 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4">
+              <Search size={16} className="text-slate-400" />
               <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar contato ou mensagem" className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" />
             </label>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <select value={queueFilter} onChange={event => setQueueFilter(event.target.value as 'todas' | QueueType)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none">
-                <option value="todas">Todas as filas</option>
-                <option value="atendimento">Atendimento</option>
-                <option value="renovacao">Renovacao</option>
-                <option value="agendamento">Agendamento</option>
-                <option value="email">Email</option>
-              </select>
+            <select value={queueFilter} onChange={event => setQueueFilter(event.target.value as 'todas' | QueueType)} className="h-11 rounded-full border border-slate-200 bg-white px-4 text-sm outline-none">
+              <option value="todas">Todas as filas</option>
+              <option value="atendimento">Atendimento</option>
+              <option value="renovacao">Renovacao</option>
+              <option value="agendamento">Agendamento</option>
+              <option value="email">Email</option>
+            </select>
 
-              <select value={humanFilter} onChange={event => setHumanFilter(event.target.value as 'todos' | 'ia' | 'humano')} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none">
-                <option value="todos">IA e humano</option>
-                <option value="ia">So IA</option>
-                <option value="humano">So humano</option>
-              </select>
+            <select value={humanFilter} onChange={event => setHumanFilter(event.target.value as 'todos' | 'ia' | 'humano')} className="h-11 rounded-full border border-slate-200 bg-white px-4 text-sm outline-none">
+              <option value="todos">IA e humano</option>
+              <option value="ia">So IA</option>
+              <option value="humano">So humano</option>
+            </select>
 
-              <button
-                type="button"
-                onClick={() => setShowClosedConversations(prev => !prev)}
-                className={`h-10 rounded-lg border px-3 text-sm font-medium transition ${
-                  showClosedConversations
-                    ? 'border-sky-200 bg-sky-50 text-sky-700'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
-                }`}
-              >
-                {showClosedConversations ? `Ocultar encerradas (${filteredClosedConversations.length})` : `Encerradas (${filteredClosedConversations.length})`}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowClosedConversations(prev => !prev)}
+              className={`h-11 rounded-full border px-4 text-sm font-medium transition ${
+                showClosedConversations                  ? 'border-sky-200 bg-sky-50 text-sky-700'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
+              }`}
+            >
+              {showClosedConversations ? `Ocultar encerradas (${filteredClosedConversations.length})` : `Mostrar encerradas (${filteredClosedConversations.length})`}
+            </button>
           </div>
           {hiddenIncomingByFilters > 0 && (
-            <div className="mt-2 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-1.5 text-xs text-amber-700">
-              <span className="truncate">
-                {hiddenIncomingByFilters} conversa{hiddenIncomingByFilters > 1 ? 's' : ''} oculta{hiddenIncomingByFilters > 1 ? 's' : ''} pelo filtro.
-              </span>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <div className="space-y-1">
+                <span>
+                  {hiddenIncomingByFilters} conversa{hiddenIncomingByFilters > 1 ? 's' : ''} com mensagem recebida
+                  {hiddenIncomingByFilters > 1 ? ' estão ocultas' : ' está oculta'} pelos filtros atuais.
+                </span>
+                {hiddenIncomingSample.length > 0 && (
+                  <p className="text-xs text-amber-800/90">
+                    Exemplos: {hiddenIncomingSample.map(item => item.cliente_nome || item.nome_crm || item.telefone || 'Sem nome').join(' · ')}
+                  </p>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -2619,7 +2627,7 @@ export default function ChatInboxCRM() {
                   setHumanFilter('todos')
                   setAguardandoFilter(false)
                 }}
-                className="shrink-0 font-semibold text-amber-800 hover:text-amber-950 underline"
+                className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
               >
                 Exibir todas
               </button>
@@ -2764,12 +2772,6 @@ export default function ChatInboxCRM() {
                                     message={message}
                                     fallbackHumanName={currentHumanAgentName}
                                     conversation={selectedConversation}
-                                    onMessageUpdated={(msgId, newContent) => {
-                                      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, mensagem: newContent } : m))
-                                    }}
-                                    onMessageDeleted={(msgId) => {
-                                      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, mensagem: 'Mensagem apagada', media_url: null, mime_type: null } : m))
-                                    }}
                                   />
                                 ))}
                               <div ref={messagesEndRef} />
@@ -2778,127 +2780,6 @@ export default function ChatInboxCRM() {
                         </div>
 
                         <div className="relative shrink-0 border-t border-slate-200 bg-white px-4 py-3">
-                        {!showHumanResponsePanel ? (
-                          <button
-                            type="button"
-                            onClick={() => setShowHumanResponsePanel(true)}
-                            className="mb-2 flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left hover:border-sky-300 hover:bg-sky-50/70"
-                          >
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-slate-700">Resposta humana</p>
-                              <p className="mt-0.5 truncate text-[11px] text-slate-500">Canal: {selectedReplyChannelLabel}</p>
-                            </div>
-                            <span className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
-                              Exibir painel
-                              <ChevronDown size={14} />
-                            </span>
-                          </button>
-                        ) : (
-                          <div className="mb-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="text-sm font-semibold text-slate-700">Resposta humana</p>
-                                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${showHumanResponseDetails ? 'bg-sky-100 text-sky-700' : 'border border-slate-200 bg-white text-slate-500'}`}>
-                                    {showHumanResponseDetails ? 'Opcoes abertas' : 'Modo compacto'}
-                                  </span>
-                                </div>
-                                <p className="mt-0.5 text-[11px] text-slate-400">
-                                  Canal: {selectedReplyChannelLabel} · Assinatura: {chatSettingsLoading ? 'carregando...' : (signOutgoingMessages ? 'ativa' : 'desativada')}
-                                </p>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                {selectedConversation.fila !== 'email' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowHumanResponseDetails(current => !current)}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-sky-300 hover:text-sky-700"
-                                  >
-                                    {showHumanResponseDetails ? 'Fechar opcoes' : 'Abrir opcoes'}
-                                    <ChevronDown size={14} className={`transition-transform ${showHumanResponseDetails ? 'rotate-180' : ''}`} />
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setShowHumanResponsePanel(false)
-                                    setShowHumanResponseDetails(false)
-                                  }}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-slate-300 hover:bg-slate-100"
-                                >
-                                  Ocultar
-                                  <X size={12} />
-                                </button>
-                              </div>
-                            </div>
-
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                              <Badge text={`Origem: ${selectedConversation.whatsapp_instance || 'Nao definida'}`} tone="blue" />
-                              <Badge text={selectedConversation.agente_atual || profile?.nome || 'Humano'} tone="green" />
-                            </div>
-
-                            {showHumanResponseDetails && selectedConversation.fila !== 'email' && (
-                              <div className="mt-2 border-t border-slate-200 pt-2.5">
-                                <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
-                                  <div>
-                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Canal de resposta</p>
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                      {replyQueueOptions.map(queue => {
-                                        const active = selectedReplyQueue === queue
-                                        return (
-                                          <button
-                                            key={queue}
-                                            type="button"
-                                            onClick={() => {
-                                              const nextOption = replyChannelOptions.find(item => item.queue === queue)
-                                              if (!nextOption) return
-                                              setSelectedReplyIntegrationId(nextOption.id)
-                                              setSelectedReplyIntegrationConversationId(selectedConversation.id)
-                                            }}
-                                            className={`rounded-xl px-3 py-2 text-sm font-medium transition ${active ? 'bg-sky-600 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:border-sky-300 hover:text-sky-700'}`}
-                                          >
-                                            {queueLabel(queue)}
-                                          </button>
-                                        )
-                                      })}
-                                    </div>
-                                  </div>
-
-                                  <div>
-                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Responder por</p>
-                                    {visibleReplyChannelOptions.length === 0 ? (
-                                      <div className="mt-2 rounded-xl border border-dashed border-slate-200 bg-white px-3 py-2 text-sm text-slate-400">
-                                        Nenhum canal disponivel para esta fila.
-                                      </div>
-                                    ) : (
-                                      <div className="mt-2 flex flex-wrap gap-2">
-                                        {visibleReplyChannelOptions.map(option => {
-                                          const active = selectedReplyIntegrationId === option.id
-                                          return (
-                                            <button
-                                              key={option.id}
-                                              type="button"
-                                              onClick={() => {
-                                                setSelectedReplyIntegrationId(option.id)
-                                                setSelectedReplyIntegrationConversationId(selectedConversation.id)
-                                              }}
-                                              className={`min-w-[220px] rounded-xl px-3 py-2 text-left text-sm transition ${active ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-700 hover:border-sky-300 hover:bg-sky-50'}`}
-                                            >
-                                              <span className="block font-medium">{integrationDisplayName(option.integration)}</span>
-                                              <span className={`mt-0.5 block text-[11px] ${active ? 'text-slate-200' : 'text-slate-500'}`}>
-                                                {option.integration.instance_name || 'Instancia sem nome'}
-                                              </span>
-                                            </button>
-                                          )
-                                        })}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
 
                       {pendingFile && (
                         <div className="mb-3 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
@@ -3076,166 +2957,310 @@ export default function ChatInboxCRM() {
                 <div className="hidden w-2 shrink-0 cursor-col-resize rounded-full bg-slate-200/80 transition hover:bg-sky-300 xl:block" onMouseDown={() => setIsResizingRight(true)} />
 
                 <aside className="min-h-0 shrink-0 overflow-y-auto px-4 py-4" style={{ width: `${rightPanelWidth}px` }}>
-                  <div className="space-y-3">
-                    {/* BLOCO 1: Perfil do Cliente */}
-                    <PanelBlock title="Perfil do Cliente" defaultOpen={true}>
+                  <div className="space-y-4">
+                    <PanelBlock title="Contato e histórico">
                       <div className="space-y-3">
-                        {/* Cabecalho do contato */}
                         <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Contato</p>
                               <p className="truncate text-sm font-bold text-slate-900">{contactEdit.name || selectedConversation.nome_crm || selectedConversation.cliente_nome || 'Nao informado'}</p>
                               <p className="mt-0.5 truncate text-xs text-slate-500">{contactEdit.company || selectedConversation.empresa_nome || 'Empresa nao informada'}</p>
                             </div>
                             <button
                               type="button"
                               onClick={() => setShowContactDetails(prev => !prev)}
-                              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:bg-slate-100"
+                              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
                             >
-                              {showContactDetails ? <ChevronDown size={12} className="rotate-180" /> : <ChevronDown size={12} />}
-                              {showContactDetails ? 'Ocultar' : 'Editar'}
+                              {showContactDetails ? <ChevronDown size={13} className="rotate-180" /> : <ChevronDown size={13} />}
+                              {showContactDetails ? 'Ocultar detalhes' : 'Expandir detalhes'}
                             </button>
                           </div>
 
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
                               {selectedConversation.fila === 'email' ? 'Email' : 'WhatsApp'}
                             </span>
-                            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
                               {selectedConversation.contato_status || 'Sem status'}
                             </span>
                             {contactPhone(selectedConversation) && (
-                              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
                                 {contactPhone(selectedConversation)}
                               </span>
                             )}
                           </div>
                         </div>
 
-                        {/* Formulario de edicao (colapsavel) */}
                         {showContactDetails && (
-                          <div className="space-y-2.5 rounded-2xl border border-sky-200 bg-sky-50/50 p-3">
+                          <div className="space-y-3">
                             <label className="block space-y-1">
-                              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Nome</span>
-                              <input value={contactEdit.name} onChange={event => setContactEdit(prev => ({ ...prev, name: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-sky-400" placeholder="Nome do contato" />
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Nome da pessoa</span>
+                              <input
+                                value={contactEdit.name}
+                                onChange={event => setContactEdit(prev => ({ ...prev, name: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                                placeholder="Nome do contato"
+                              />
                             </label>
+
                             <label className="block space-y-1">
-                              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Empresa</span>
-                              <input value={contactEdit.company} onChange={event => setContactEdit(prev => ({ ...prev, company: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-sky-400" placeholder="Razao social" />
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Nome da empresa</span>
+                              <input
+                                value={contactEdit.company}
+                                onChange={event => setContactEdit(prev => ({ ...prev, company: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                                placeholder="Razão social ou nome fantasia"
+                              />
                             </label>
+
                             <label className="block space-y-1">
-                              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Telefone</span>
-                              <input value={contactEdit.phone} onChange={event => setContactEdit(prev => ({ ...prev, phone: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-sky-400" placeholder="5511999999999" />
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Telefone</span>
+                              <input
+                                value={contactEdit.phone}
+                                onChange={event => setContactEdit(prev => ({ ...prev, phone: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                                placeholder="5511999999999"
+                              />
                             </label>
+
                             <label className="block space-y-1">
-                              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Produto</span>
-                              <input value={contactEdit.product} onChange={event => setContactEdit(prev => ({ ...prev, product: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-sky-400" placeholder="Ex.: e-CPF A1" />
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Email</span>
+                              <input
+                                value={contactEdit.email}
+                                onChange={event => setContactEdit(prev => ({ ...prev, email: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                                placeholder="Opcional"
+                              />
                             </label>
+
                             <label className="block space-y-1">
-                              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Observacoes</span>
-                              <textarea value={contactEdit.observations} onChange={event => setContactEdit(prev => ({ ...prev, observations: event.target.value }))} rows={2} className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-sky-400 resize-none" placeholder="Notas sobre o contato" />
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Produto</span>
+                              <input
+                                value={contactEdit.product}
+                                onChange={event => setContactEdit(prev => ({ ...prev, product: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                                placeholder="Ex.: e-CPF A1"
+                              />
                             </label>
-                            <div className="flex gap-2">
-                              <button type="button" onClick={() => void saveContactDetails()} disabled={contactEditSaving || !selectedConversation} className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-sky-600 px-2.5 py-1.5 text-xs font-medium text-white disabled:opacity-50">
-                                {contactEditSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                                Salvar
+
+                            <label className="block space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Vencimento</span>
+                              <input
+                                type="date"
+                                value={contactEdit.expiration}
+                                onChange={event => setContactEdit(prev => ({ ...prev, expiration: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                              />
+                            </label>
+
+                            <label className="block space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Status CRM</span>
+                              <input
+                                value={contactEdit.status}
+                                onChange={event => setContactEdit(prev => ({ ...prev, status: event.target.value }))}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                                placeholder="conversando"
+                              />
+                            </label>
+
+                            <label className="block space-y-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Observações</span>
+                              <textarea
+                                value={contactEdit.observations}
+                                onChange={event => setContactEdit(prev => ({ ...prev, observations: event.target.value }))}
+                                rows={4}
+                                className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-400"
+                                placeholder="Observações e histórico do contato"
+                              />
+                            </label>
+
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <button
+                                type="button"
+                                onClick={() => void saveContactDetails()}
+                                disabled={contactEditSaving || !selectedConversation}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                              >
+                                {contactEditSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                                Salvar contato
                               </button>
-                              <button type="button" onClick={() => void sendContactCard()} disabled={sendingHumanMessage || !selectedConversation} className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-50">
-                                <UserRound size={12} /> Enviar
+                              <button
+                                type="button"
+                                onClick={() => void sendContactCard()}
+                                disabled={sendingHumanMessage || !selectedConversation}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+                              >
+                                <UserRound size={15} />
+                                Enviar contato
                               </button>
                             </div>
-                            {contactEditError && <div className="rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">{contactEditError}</div>}
+
+                            {contactEditError && (
+                              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                                {contactEditError}
+                              </div>
+                            )}
                           </div>
                         )}
-
-                        {/* Observacoes */}
-                        <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-2.5">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Observacoes</p>
-                          <p className="mt-1 text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">{selectedConversation.observacoes || 'Sem observacoes'}</p>
-                        </div>
                       </div>
                     </PanelBlock>
 
-                    {/* BLOCO 2: Status do Atendimento */}
-                    <PanelBlock title="Status do Atendimento" defaultOpen={true}>
-                      <div className="space-y-2.5">
-                        <InfoRow icon={<User size={14} />} label="Agente" value={selectedConversation.agente_atual || selectedConversation.agente_nome || 'Nao atribuido'} />
-                        <InfoRow icon={<Clock3 size={14} />} label="Modo" value={humanModeActive ? 'Humano' : 'IA Clara'} />
-                        <InfoRow icon={<Mail size={14} />} label="Email" value={selectedConversation.email_principal || (selectedConversation.fila === 'email' ? selectedConversation.document_key : 'Nao informado')} />
-
-                        {/* Controles rapidos */}
-                        <div className="pt-2 border-t border-slate-100">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Fila e etapa</p>
-                          <select value={selectedConversation.fila} onChange={event => void changeConversationQueue(event.target.value as QueueType)} disabled={actionLoading} className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none">
-                            <option value="atendimento">Atendimento</option>
-                            <option value="renovacao">Renovacao</option>
-                            <option value="email">Email</option>
-                            <option value="agendamento">Agendamento</option>
-                          </select>
-                          <select value={normalizeKanbanStatus(selectedConversation.kanban_status)} onChange={event => void updateConversationStatus(event.target.value)} disabled={actionLoading} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none">
-                            {STATUS_OPTIONS.map(column => (
-                              <option key={column.key} value={column.key}>{column.label}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Botoes de acao */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <button type="button" disabled={actionLoading || humanModeActive} onClick={() => void toggleHumanMode(true)} className="rounded-xl bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white disabled:opacity-50">
-                            Humano
-                          </button>
-                          <button type="button" disabled={actionLoading || !humanModeActive} onClick={() => void toggleHumanMode(false)} className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-50">
-                            Voltar IA
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button type="button" disabled={actionLoading} onClick={() => void updateConversationStatus('resolvido')} className="rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 disabled:opacity-50">
-                            Resolver
-                          </button>
-                          <button type="button" disabled={actionLoading} onClick={() => void updateConversationStatus('arquivado')} className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-50">
-                            Arquivar
-                          </button>
-                        </div>
-
-                        {/* Atribuir agente */}
-                        <div className="pt-2 border-t border-slate-100">
-                          <select value={selectedAgentId} onChange={event => setSelectedAgentId(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none">
-                            <option value="">Atribuir agente</option>
-                            {agents.map(agent => (
-                              <option key={agent.id} value={agent.id}>{agent.nome}</option>
-                            ))}
-                          </select>
-                          <button type="button" onClick={() => void assignConversation()} disabled={actionLoading || !selectedAgentId} className="mt-2 w-full rounded-xl bg-sky-600 px-2.5 py-1.5 text-xs font-medium text-white disabled:opacity-50">
-                            Atribuir
-                          </button>
-                        </div>
-                      </div>
+                    <PanelBlock title="Resumo operacional">
+                      <InfoRow icon={<User size={14} />} label="Pessoa" value={selectedConversation.nome_crm || selectedConversation.cliente_nome || 'Nao informado'} />
+                      <InfoRow icon={<UserRound size={14} />} label="Empresa" value={selectedConversation.empresa_nome || 'Nao informada'} />
+                      <InfoRow icon={<Phone size={14} />} label="Telefone" value={contactPhone(selectedConversation)} mono />
+                      <InfoRow icon={<Mail size={14} />} label="Email" value={selectedConversation.email_principal || (selectedConversation.fila === 'email' ? selectedConversation.document_key : 'Nao informado')} />
+                      <InfoRow icon={<Clock3 size={14} />} label="Status CRM" value={selectedConversation.contato_status || 'Nao definido'} />
+                      <InfoRow icon={<UserCheck size={14} />} label="Agente atual" value={selectedConversation.agente_atual || selectedConversation.agente_nome || 'Nao atribuido'} />
                     </PanelBlock>
 
-                    {/* BLOCO 3: Renovacoes (condicional) */}
                     {renovacoesCRM.length > 0 && (
-                      <PanelBlock title={`Renovacoes (${renovacoesCRM.length})`} defaultOpen={false}>
-                        <div className="space-y-2">
-                          {renovacoesCRM.slice(0, 3).map(r => {
+                      <PanelBlock title={`Renovacoes pendentes (${renovacoesCRM.length})`}>
+                        <div className="space-y-3">
+                          {renovacoesCRM.map(r => {
                             const dias = r.dias_restantes
-                            const urgencia = dias <= 0 ? 'text-red-600 bg-red-50' : dias <= 7 ? 'text-orange-600 bg-orange-50' : 'text-blue-600 bg-blue-50'
-                            const diasLabel = dias <= 0 ? `Vencido ${Math.abs(dias)}d` : `${dias}d`
+                            const urgencia = dias <= 0 ? 'text-red-600 bg-red-50' : dias <= 7 ? 'text-orange-600 bg-orange-50' : dias <= 15 ? 'text-yellow-600 bg-yellow-50' : 'text-blue-600 bg-blue-50'
+                            const diasLabel = dias <= 0 ? `Vencido há ${Math.abs(dias)} dias` : dias === 1 ? '1 dia restante' : `${dias} dias restantes`
                             return (
-                              <div key={r.id} className="rounded-xl border border-slate-200 bg-white p-2.5">
+                              <div key={r.id} className="rounded-xl border border-slate-200 bg-white p-3 space-y-1.5">
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="text-xs font-semibold text-slate-700">{r.tipo_certificado}</span>
-                                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${urgencia}`}>{diasLabel}</span>
+                                  <span className="text-xs font-semibold text-slate-700 leading-tight">{r.tipo_certificado}</span>
+                                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${urgencia}`}>{diasLabel}</span>
                                 </div>
-                                <p className="text-[10px] text-slate-500 mt-0.5">Venc: {new Date(r.data_vencimento).toLocaleDateString('pt-BR')}</p>
+                                {r.pedido && <p className="text-[11px] text-slate-500">Pedido: <span className="font-mono text-slate-700">{r.pedido}</span></p>}
+                                {r.protocolo && <p className="text-[11px] text-slate-500">Protocolo: <span className="font-mono text-slate-700">{r.protocolo}</span></p>}
+                                <p className="text-[11px] text-slate-500">Vencimento: <span className="text-slate-700">{new Date(r.data_vencimento).toLocaleDateString('pt-BR')}</span></p>
+                                {r.valor != null && <p className="text-[11px] text-slate-500">Valor: <span className="font-semibold text-slate-700">R$ {r.valor.toFixed(2).replace('.', ',')}</span></p>}
                               </div>
                             )
                           })}
-                          {renovacoesCRM.length > 3 && (
-                            <p className="text-[10px] text-slate-400 text-center">+{renovacoesCRM.length - 3} renovacoes</p>
-                          )}
                         </div>
                       </PanelBlock>
                     )}
+
+                    <PanelBlock title="Controles do atendimento">
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Fila</label>
+                      <select value={selectedConversation.fila} onChange={event => void changeConversationQueue(event.target.value as QueueType)} disabled={actionLoading} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none">
+                        <option value="atendimento">Atendimento</option>
+                        <option value="renovacao">Renovacao</option>
+                        <option value="email">Email</option>
+                        <option value="agendamento">Agendamento</option>
+                      </select>
+
+                      <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-slate-500">Etapa do Kanban</label>
+                      <select value={normalizeKanbanStatus(selectedConversation.kanban_status)} onChange={event => void updateConversationStatus(event.target.value)} disabled={actionLoading} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none">
+                        {STATUS_OPTIONS.map(column => (
+                          <option key={column.key} value={column.key}>{column.label}</option>
+                        ))}
+                      </select>
+
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          disabled={actionLoading}
+                          onClick={() => void updateConversationStatus('resolvido')}
+                          className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 disabled:opacity-50"
+                        >
+                          Resolver e sair
+                        </button>
+                        <button
+                          type="button"
+                          disabled={actionLoading}
+                          onClick={() => void updateConversationStatus('arquivado')}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+                        >
+                          Arquivar da fila
+                        </button>
+                      </div>
+
+                      <p className="mt-2 text-[11px] text-slate-500">
+                        Ao resolver ou arquivar, a conversa sai da lista principal e continua acessivel em encerradas.
+                      </p>
+
+                      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Modo da conversa</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900">{humanModeActive ? 'Humano atendendo' : 'IA Clara atendendo'}</p>
+                            <p className="mt-1 text-[11px] leading-4 text-slate-500">
+                              Use a chave para decidir quem responde este cliente agora.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={actionLoading}
+                            onClick={() => void toggleHumanMode(!humanModeActive)}
+                            className={`relative h-8 w-16 shrink-0 rounded-full transition ${humanModeActive ? 'bg-emerald-500' : 'bg-slate-300'} disabled:opacity-60`}
+                            aria-label={humanModeActive ? 'Voltar conversa para IA' : 'Assumir conversa como humano'}
+                          >
+                            <span className={`absolute top-1 flex h-6 w-6 items-center justify-center rounded-full bg-white text-[10px] font-black shadow transition ${humanModeActive ? 'left-9 text-emerald-600' : 'left-1 text-slate-500'}`}>
+                              {humanModeActive ? 'H' : 'IA'}
+                            </span>
+                          </button>
+                        </div>
+
+                        <div className="mt-3 rounded-xl border border-white bg-white px-3 py-2 text-xs text-slate-500 shadow-sm">
+                          <p>Canal: <strong className="text-slate-700">{selectedReplyChannelLabel}</strong></p>
+                          <p>Instância: <strong className="text-slate-700">{selectedConversation.whatsapp_instance || 'atendimento'}</strong></p>
+                          <p>Assinatura: <strong className="text-slate-700">{chatSettingsLoading ? 'carregando...' : (signOutgoingMessages ? 'ativa' : 'desativada')}</strong></p>
+                        </div>
+
+                        {selectedConversation.fila !== 'email' && visibleReplyChannelOptions.length > 0 && (
+                          <div className="mt-3 space-y-2">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Responder por</p>
+                            {visibleReplyChannelOptions.map(option => {
+                              const active = selectedReplyIntegrationId === option.id
+                              return (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedReplyIntegrationId(option.id)
+                                    setSelectedReplyIntegrationConversationId(selectedConversation.id)
+                                  }}
+                                  className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${active ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-700 hover:border-sky-300 hover:bg-sky-50'}`}
+                                >
+                                  <span className="block font-medium">{integrationDisplayName(option.integration)}</span>
+                                  <span className={`mt-0.5 block text-[11px] ${active ? 'text-slate-200' : 'text-slate-500'}`}>
+                                    {option.integration.instance_name || 'Instância sem nome'}
+                                  </span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-slate-500">Atribuir agente</label>
+                      <select value={selectedAgentId} onChange={event => setSelectedAgentId(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none">
+                        <option value="">Selecione um agente</option>
+                        {agents.map(agent => (
+                          <option key={agent.id} value={agent.id}>{agent.nome} - {agent.perfil}</option>
+                        ))}
+                      </select>
+                      <button type="button" onClick={() => void assignConversation()} disabled={actionLoading || !selectedAgentId} className="mt-2 w-full rounded-xl bg-sky-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
+                        Atribuir conversa
+                      </button>
+                    </PanelBlock>
+
+                    <PanelBlock title="Observacoes do contato">
+                      <div className="space-y-2 text-sm leading-relaxed text-slate-700">
+                        <p><span className="font-semibold text-slate-500">Pessoa:</span> {selectedConversation.nome_crm || selectedConversation.cliente_nome || 'Nao informado'}</p>
+                        <p><span className="font-semibold text-slate-500">Empresa:</span> {selectedConversation.empresa_nome || 'Nao informada'}</p>
+                        <p className="whitespace-pre-wrap">{selectedConversation.observacoes || 'Sem observacoes no crm_customers.'}</p>
+                      </div>
+                    </PanelBlock>
+
+                    <PanelBlock title="Leitura operacional">
+                      <ul className="space-y-2 whitespace-pre-line text-sm text-slate-600">
+                        <li>Fila: <strong>{queueLabel(selectedConversation.fila)}</strong></li>
+                        <li>Modo atual: <strong>{humanModeActive ? 'Humano' : 'IA Clara'}</strong></li>
+                        <li>Documento-chave: <strong>{selectedConversation.document_key}</strong></li>
+                        <li>Agente desde: <strong>{formatDateTime(selectedConversation.agente_desde)}</strong></li>
+                        <li>Ultima mensagem: <strong>{normalizeStructuredMessage(selectedConversation.ultima_mensagem) || 'Sem resumo'}</strong></li>
+                      </ul>
+                    </PanelBlock>
                   </div>
                 </aside>
               </div>
@@ -3660,101 +3685,15 @@ function MessageRow({
   message,
   fallbackHumanName,
   conversation,
-  onMessageUpdated,
-  onMessageDeleted,
 }: {
   message: CrmMessage
   fallbackHumanName?: string | null
   conversation?: ConversationRow | null
-  onMessageUpdated?: (messageId: string, newContent: string) => void
-  onMessageDeleted?: (messageId: string) => void
 }) {
   const isOutgoing = message.direction === 'outgoing'
   const normalizedSenderName = normalizeDisplaySenderName(message.sender_name)
   const isContactMsg = message.sender_type === 'cliente' || message.sender_type === 'contact' || !isOutgoing
   const isIaMsg = message.sender_type === 'ia'
-  const [showMenu, setShowMenu] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
-  const [editText, setEditText] = useState(message.mensagem ?? '')
-  const [savingEdit, setSavingEdit] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const editInputRef = useRef<HTMLTextAreaElement>(null)
-
-  useEffect(() => {
-    if (!showMenu) return
-    function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowMenu(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showMenu])
-
-  useEffect(() => {
-    if (isEditing) {
-      editInputRef.current?.focus()
-      editInputRef.current?.select()
-    }
-  }, [isEditing])
-
-  async function handleDelete() {
-    const extId = message.external_message_id
-    if (!extId) {
-      alert('ID da mensagem nao disponivel para exclusao.')
-      setShowMenu(false)
-      return
-    }
-    if (!confirm('Apagar esta mensagem? Ela sera removida para voce e o contato.')) return
-    setDeleting(true)
-    try {
-      await deleteWhatsAppMessage(extId, conversation?.whatsapp_instance ?? undefined)
-      setShowMenu(false)
-      onMessageDeleted?.(message.id)
-    } catch (err) {
-      alert('Nao foi possivel apagar a mensagem: ' + String(err))
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  async function handleSaveEdit() {
-    const extId = message.external_message_id
-    const trimmed = editText.trim()
-    if (!extId) {
-      alert('ID da mensagem nao disponivel para edicao.')
-      setIsEditing(false)
-      return
-    }
-    if (!trimmed || trimmed === message.mensagem) {
-      setIsEditing(false)
-      return
-    }
-    setSavingEdit(true)
-    try {
-      await editWhatsAppMessage(extId, trimmed, conversation?.whatsapp_instance ?? undefined)
-      onMessageUpdated?.(message.id, trimmed)
-      setIsEditing(false)
-    } catch (err) {
-      alert('Nao foi possivel editar a mensagem: ' + String(err))
-    } finally {
-      setSavingEdit(false)
-    }
-  }
-
-  function handleCancelEdit() {
-    setEditText(message.mensagem ?? '')
-    setIsEditing(false)
-  }
-
-  function handleKeyDownEdit(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      void handleSaveEdit()
-    }
-    if (e.key === 'Escape') handleCancelEdit()
-  }
   const senderLabel = isContactMsg
       ? displayConversationName(conversation)
         : isIaMsg
@@ -3846,38 +3785,6 @@ function MessageRow({
             <span>{senderLabel}</span>
             <span>•</span>
             <span>{detailLabel}</span>
-            {isOutgoing && message.external_message_id && !isEditing && (
-              <div className="relative ml-auto" ref={menuRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowMenu(v => !v)}
-                  className="rounded-lg p-1 text-slate-400 hover:bg-black/5 hover:text-slate-600"
-                  title="Mais opcoes"
-                >
-                  <MoreVertical size={14} />
-                </button>
-                {showMenu && (
-                  <div className="absolute right-0 top-full mt-1 z-20 w-36 bg-white rounded-xl shadow-2xl border border-slate-200 py-1 overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => { setIsEditing(true); setShowMenu(false) }}
-                      disabled={!message.external_message_id}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <Pencil size={14} /> Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleDelete()}
-                      disabled={deleting || !message.external_message_id}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Apagar
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
           {isImage && resolvedMediaUrl ? (
             <div className="space-y-2">
@@ -3905,40 +3812,7 @@ function MessageRow({
               Arquivo: {mediaLabel}
             </a>
           ) : (
-            isEditing ? (
-              <div className="space-y-2">
-                <textarea
-                  ref={editInputRef}
-                  value={editText}
-                  onChange={e => setEditText(e.target.value)}
-                  onKeyDown={handleKeyDownEdit}
-                  rows={3}
-                  className="w-full rounded-xl border border-emerald-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 resize-none"
-                />
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleSaveEdit()}
-                    disabled={savingEdit || !editText.trim()}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium disabled:opacity-50"
-                  >
-                    {savingEdit ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-                    Salvar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCancelEdit}
-                    disabled={savingEdit}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 text-xs font-medium hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    <Ban size={11} />
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{normalizeStructuredMessage(isOutgoing ? stripOutgoingSignature(message.mensagem, message.sender_name) : message.mensagem) || mediaLabel || 'Mensagem sem texto'}</p>
-            )
+            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{normalizeStructuredMessage(isOutgoing ? stripOutgoingSignature(message.mensagem, message.sender_name) : message.mensagem) || mediaLabel || 'Mensagem sem texto'}</p>
           )}
           <div className={`mt-2 flex items-center justify-end gap-1 text-[11px] ${isOutgoing ? 'text-emerald-800/80' : 'text-slate-400'}`}>
             <span>{formatDateTime(message.created_at)}</span>
