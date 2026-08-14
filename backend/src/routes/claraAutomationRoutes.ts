@@ -27,6 +27,14 @@ type ClaraHandoffBody = {
   } | null
 }
 
+type ClaraMessageLogBody = ClaraHandoffBody & {
+  status?: 'sent' | 'error' | 'handoff' | 'skipped' | string | null
+  confidence?: number | string | null
+  handoff?: boolean | null
+  error_text?: string | null
+  error?: string | null
+}
+
 function normalizeText(value: unknown) {
   const text = String(value ?? '').trim()
   return text || null
@@ -35,6 +43,23 @@ function normalizeText(value: unknown) {
 function onlyDigits(value: string | null | undefined) {
   const digits = String(value ?? '').replace(/\D/g, '')
   return digits || null
+}
+
+async function findConversationForClara(
+  db: AivenSqlClient,
+  input: { conversationId?: string | null; phoneDigits?: string | null },
+) {
+  const result = await db.query<{ id: string; document_key: string }>(
+    `select id, document_key
+       from crm_chat_conversations
+      where ($1::text is not null and id::text = $1)
+         or ($1::text is not null and document_key = $1)
+         or ($2::text is not null and regexp_replace(coalesce(telefone, document_key, ''), '\\D', '', 'g') = $2)
+      order by updated_at desc
+      limit 1`,
+    [normalizeText(input.conversationId), input.phoneDigits ?? null],
+  )
+  return result.rows[0] ?? null
 }
 
 async function markConversationAsHuman(
@@ -53,18 +78,7 @@ async function markConversationAsHuman(
       ? 'agendamento'
       : 'atendimento'
 
-  const conversation = await db.query<{ id: string; document_key: string }>(
-    `select id, document_key
-       from crm_chat_conversations
-      where ($1::text is not null and id::text = $1)
-         or ($1::text is not null and document_key = $1)
-         or ($2::text is not null and regexp_replace(coalesce(telefone, document_key, ''), '\\D', '', 'g') = $2)
-      order by updated_at desc
-      limit 1`,
-    [normalizeText(input.conversationId), input.phoneDigits ?? null],
-  )
-
-  const row = conversation.rows[0]
+  const row = await findConversationForClara(db, input)
   if (!row) return { conversationId: null as string | null, updated: false }
 
   await db.query(
@@ -106,6 +120,116 @@ async function markConversationAsHuman(
   return { conversationId: row.id, updated: true }
 }
 
+async function handleClaraMessageLog(
+  db: AivenSqlClient,
+  body: ClaraMessageLogBody,
+) {
+  const phoneDigits = onlyDigits(body.customer_phone)
+  const flowType = normalizeText(body.context?.tipo_fluxo ?? body.context?.flow_type) ?? 'atendimento'
+  const status = normalizeText(body.status) ?? (body.handoff ? 'handoff' : body.error_text || body.error ? 'error' : 'sent')
+  const replyText = normalizeText(body.reply_text)
+  const errorText = normalizeText(body.error_text ?? body.error)
+  const intent = normalizeText(body.intent)
+  const routeTarget = normalizeText(body.route_target)
+  const confidence = body.confidence === null || body.confidence === undefined || body.confidence === ''
+    ? null
+    : Number(body.confidence)
+  const shouldHandoff = Boolean(body.handoff) || status === 'handoff'
+
+  const row = await findConversationForClara(db, {
+    conversationId: body.conversation_id,
+    phoneDigits,
+  })
+
+  const canvasText = errorText
+    ? [
+        'Clara tentou responder, mas houve falha no fluxo da IA.',
+        `Erro: ${errorText}`,
+        intent ? `Intencao: ${intent}` : null,
+      ].filter(Boolean).join('\n')
+    : replyText
+
+  let messageInserted = false
+  if (row && canvasText) {
+    const result = await db.query<{ id: string }>(
+      `insert into crm_chat_messages
+         (conversation_id, document_key, external_message_id, direction, sender_type, sender_name, mensagem)
+       select $1::uuid, $2, $3, 'outgoing', 'ia', 'IA Clara', $4
+       where not exists (
+         select 1
+           from crm_chat_messages
+          where conversation_id = $1::uuid
+            and sender_type = 'ia'
+            and sender_name = 'IA Clara'
+            and mensagem = $4
+            and created_at > now() - interval '5 minutes'
+       )
+       returning id`,
+      [row.id, row.document_key, normalizeText(body.message_id), canvasText],
+    )
+    messageInserted = Boolean(result.rows[0]?.id)
+
+    if (!errorText && replyText) {
+      await db.query(
+        `update crm_chat_conversations
+            set ultima_mensagem = $2,
+                ultima_mensagem_direcao = 'outgoing',
+                ultima_interacao_em = now(),
+                updated_at = now()
+          where id = $1::uuid`,
+        [row.id, replyText],
+      )
+    }
+  }
+
+  let handoff: { conversationId: string | null; updated: boolean } = { conversationId: row?.id ?? null, updated: false }
+  if (shouldHandoff) {
+    handoff = await markConversationAsHuman(db, {
+      conversationId: row?.id ?? body.conversation_id,
+      phoneDigits,
+      customerName: body.customer_name,
+      flowType,
+      messageText: body.message_text,
+    })
+  }
+
+  const event = await db.query<{ id: string }>(
+    `insert into communication_events
+       (source, event_type, conversation_id, contact, payload, external_id)
+     values ('clara', $1, $2, $3, $4::jsonb, $5)
+     returning id`,
+    [
+      status === 'error' ? 'clara.error' : shouldHandoff ? 'clara.handoff' : 'clara.reply',
+      row?.id ?? normalizeText(body.conversation_id),
+      phoneDigits ?? normalizeText(body.customer_phone),
+      JSON.stringify({
+        status,
+        intent,
+        route_target: routeTarget,
+        confidence: Number.isFinite(confidence) ? confidence : null,
+        handoff: shouldHandoff,
+        reply_text: replyText,
+        error_text: errorText,
+        customer_name: normalizeText(body.customer_name),
+        customer_phone: phoneDigits,
+        customer_email: normalizeText(body.customer_email ?? body.context?.customer_email),
+        message_text: normalizeText(body.message_text),
+        source: normalizeText(body.source ?? body.context?.source),
+        context: body.context ?? null,
+      }),
+      normalizeText(body.message_id),
+    ],
+  )
+
+  return {
+    eventId: event.rows[0]?.id ?? null,
+    conversationId: handoff.conversationId ?? row?.id ?? normalizeText(body.conversation_id),
+    conversationFound: Boolean(row),
+    messageInserted,
+    handoffUpdated: handoff.updated,
+  }
+}
+
 export async function handleClaraAutomationRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -113,6 +237,13 @@ export async function handleClaraAutomationRoutes(
   leadRepository: LeadRepository,
   corsOrigin: string,
 ) {
+  if (req.method === 'POST' && req.url === '/api/automation/clara-message-log') {
+    const body = await readJson<ClaraMessageLogBody>(req)
+    const result = await handleClaraMessageLog(db, body)
+    writeJson(res, 200, { ok: true, ...result }, corsOrigin)
+    return true
+  }
+
   if (req.method !== 'POST' || req.url !== '/api/automation/clara-handoff') {
     return false
   }
