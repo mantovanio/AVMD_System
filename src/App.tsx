@@ -1,6 +1,7 @@
 import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { ClerkProvider } from '@clerk/clerk-react'
 import { ptBR } from '@clerk/localizations'
+import { createPortal } from 'react-dom'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import Sidebar, { type Page } from '@/components/Sidebar'
 import NotificationBell from '@/components/NotificationBell'
@@ -364,8 +365,8 @@ function AppContent() {
                 </span>
                 <UserCog size={15} className="hidden sm:block opacity-70" />
               </button>
-              {userMenuOpen && (
-                <div className="fixed right-5 top-16 z-[10000] w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
+              {userMenuOpen && createPortal(
+                <div className="fixed right-5 top-16 z-[2147483647] w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
                   <div className="flex items-center gap-3 border-b border-gray-100 px-4 py-4 dark:border-gray-800">
                     <span className="relative flex h-12 w-12 overflow-hidden rounded-2xl bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-100">
                       {avatarUrl ? (
@@ -411,7 +412,8 @@ function AppContent() {
                     <LogOut size={16} />
                     Sair
                   </button>
-                </div>
+                </div>,
+                document.body,
               )}
             </div>
           </div>

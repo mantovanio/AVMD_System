@@ -2763,7 +2763,7 @@ export default function ChatInboxCRM() {
                             <div className="min-w-0">
                               <p className="text-sm font-semibold">IA Clara acompanhando e respondendo</p>
                               <p className="mt-0.5 text-xs text-amber-700/80">
-                                O histórico continua visível para conferência. Assuma no painel lateral para liberar a resposta humana.
+                                O histórico continua visível para conferência. Use a chaveta abaixo para liberar a resposta humana.
                               </p>
                             </div>
                           </div>
@@ -2918,6 +2918,19 @@ export default function ChatInboxCRM() {
                       ) : (
                       <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                         <input ref={fileInputRef} type="file" accept="image/*,.bmp,.pdf,.doc,.docx,.txt,.csv,.xls,.xlsx" className="hidden" onChange={handleFileSelect} />
+                        <button
+                          type="button"
+                          disabled={actionLoading}
+                          onClick={() => void toggleHumanMode(false)}
+                          title="Voltar conversa para IA"
+                          className="relative inline-flex h-11 w-20 shrink-0 items-center rounded-xl bg-emerald-500 px-1 text-white shadow-sm transition disabled:opacity-60"
+                          aria-label="Voltar conversa para IA"
+                        >
+                          <span className="absolute left-2 text-[10px] font-black opacity-70">IA</span>
+                          <span className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[11px] font-black text-emerald-600 shadow">
+                            H
+                          </span>
+                        </button>
                         <button type="button" onClick={() => setShowEmoji(current => !current)} className={`inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 ${showEmoji ? 'bg-amber-100 text-amber-700' : 'bg-white text-slate-500'}`}>
                           <Smile size={18} />
                         </button>
@@ -2966,15 +2979,20 @@ export default function ChatInboxCRM() {
                       </div>
                     ) : (
                       <div className="shrink-0 border-t border-amber-200 bg-amber-50 px-4 py-3">
-                        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-amber-800">
-                          <span>A resposta manual está oculta para evitar envio acidental enquanto a IA conduz a conversa.</span>
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-white/70 px-3 py-2 text-sm text-amber-800">
+                          <span>A resposta manual está oculta enquanto a IA conduz a conversa.</span>
                           <button
                             type="button"
                             disabled={actionLoading}
                             onClick={() => void toggleHumanMode(true)}
-                            className="inline-flex h-10 items-center justify-center rounded-xl bg-amber-600 px-4 text-sm font-semibold text-white shadow-sm disabled:opacity-60"
+                            title="Assumir conversa como humano"
+                            className="relative inline-flex h-11 w-20 shrink-0 items-center rounded-xl bg-slate-300 px-1 text-slate-600 shadow-sm transition disabled:opacity-60"
+                            aria-label="Assumir conversa como humano"
                           >
-                            Assumir como humano
+                            <span className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[11px] font-black text-slate-500 shadow">
+                              IA
+                            </span>
+                            <span className="ml-auto pr-2 text-[10px] font-black opacity-70">H</span>
                           </button>
                         </div>
                       </div>
@@ -3195,60 +3213,6 @@ export default function ChatInboxCRM() {
                       <p className="mt-2 text-[11px] text-slate-500">
                         Ao resolver ou arquivar, a conversa sai da lista principal e continua acessivel em encerradas.
                       </p>
-
-                      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Modo da conversa</p>
-                            <p className="mt-1 text-sm font-semibold text-slate-900">{humanModeActive ? 'Humano atendendo' : 'IA Clara atendendo'}</p>
-                            <p className="mt-1 text-[11px] leading-4 text-slate-500">
-                              Use a chave para decidir quem responde este cliente agora.
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            disabled={actionLoading}
-                            onClick={() => void toggleHumanMode(!humanModeActive)}
-                            className={`relative h-8 w-16 shrink-0 rounded-full transition ${humanModeActive ? 'bg-emerald-500' : 'bg-slate-300'} disabled:opacity-60`}
-                            aria-label={humanModeActive ? 'Voltar conversa para IA' : 'Assumir conversa como humano'}
-                          >
-                            <span className={`absolute top-1 flex h-6 w-6 items-center justify-center rounded-full bg-white text-[10px] font-black shadow transition ${humanModeActive ? 'left-9 text-emerald-600' : 'left-1 text-slate-500'}`}>
-                              {humanModeActive ? 'H' : 'IA'}
-                            </span>
-                          </button>
-                        </div>
-
-                        <div className="mt-3 rounded-xl border border-white bg-white px-3 py-2 text-xs text-slate-500 shadow-sm">
-                          <p>Canal: <strong className="text-slate-700">{selectedReplyChannelLabel}</strong></p>
-                          <p>Instância: <strong className="text-slate-700">{selectedConversation.whatsapp_instance || 'atendimento'}</strong></p>
-                          <p>Assinatura: <strong className="text-slate-700">{chatSettingsLoading ? 'carregando...' : (signOutgoingMessages ? 'ativa' : 'desativada')}</strong></p>
-                        </div>
-
-                        {selectedConversation.fila !== 'email' && visibleReplyChannelOptions.length > 0 && (
-                          <div className="mt-3 space-y-2">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Responder por</p>
-                            {visibleReplyChannelOptions.map(option => {
-                              const active = selectedReplyIntegrationId === option.id
-                              return (
-                                <button
-                                  key={option.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedReplyIntegrationId(option.id)
-                                    setSelectedReplyIntegrationConversationId(selectedConversation.id)
-                                  }}
-                                  className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${active ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-700 hover:border-sky-300 hover:bg-sky-50'}`}
-                                >
-                                  <span className="block font-medium">{integrationDisplayName(option.integration)}</span>
-                                  <span className={`mt-0.5 block text-[11px] ${active ? 'text-slate-200' : 'text-slate-500'}`}>
-                                    {option.integration.instance_name || 'Instância sem nome'}
-                                  </span>
-                                </button>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
 
                       <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-slate-500">Atribuir agente</label>
                       <select value={selectedAgentId} onChange={event => setSelectedAgentId(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none">
