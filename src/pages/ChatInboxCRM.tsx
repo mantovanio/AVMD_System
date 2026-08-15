@@ -556,6 +556,23 @@ function claraModeLabel(mode: string, confidence: number | null) {
   return 'IA flexível'
 }
 
+function claraAuditState(item: ConversationRow) {
+  const audit = readConversationClaraAudit(item)
+  const risk = audit?.risk === 'alto' || audit?.intent === 'humano_reclamacao_urgencia'
+  const attention = Boolean(audit) && !risk && (
+    audit?.intent === 'outros'
+    || audit?.confidence === null
+    || audit?.confidence === undefined
+    || audit.confidence < 0.8
+  )
+  return {
+    audit,
+    risk,
+    attention,
+    safe: Boolean(audit) && !risk && !attention,
+  }
+}
+
 function dedupeConversations(rows: ConversationRow[]) {
   const bestByKey = new Map<string, ConversationRow>()
 
@@ -2610,19 +2627,11 @@ export default function ChatInboxCRM() {
     const matchesHuman = humanFilter === 'todos'
       || (humanFilter === 'humano' && (item.atendimento_humano || humanOverrideIds.includes(item.id)))
       || (humanFilter === 'ia' && !item.atendimento_humano && !humanOverrideIds.includes(item.id))
-    const audit = readConversationClaraAudit(item)
-    const isRiskAudit = audit?.risk === 'alto' || audit?.intent === 'humano_reclamacao_urgencia'
-    const isAttentionAudit = Boolean(audit) && !isRiskAudit && (
-      audit?.intent === 'outros'
-      || audit?.confidence === null
-      || audit?.confidence === undefined
-      || audit.confidence < 0.8
-    )
-    const isSafeAudit = Boolean(audit) && !isRiskAudit && !isAttentionAudit
+    const auditState = claraAuditState(item)
     const matchesClaraAudit = claraAuditFilter === 'todos'
-      || (claraAuditFilter === 'segura' && isSafeAudit)
-      || (claraAuditFilter === 'atencao' && isAttentionAudit)
-      || (claraAuditFilter === 'risco' && isRiskAudit)
+      || (claraAuditFilter === 'segura' && auditState.safe)
+      || (claraAuditFilter === 'atencao' && auditState.attention)
+      || (claraAuditFilter === 'risco' && auditState.risk)
     const matchesAguardando = !aguardandoFilter || (
       item.ultima_mensagem_direcao === 'incoming'
       && !item.tem_resposta
@@ -2675,6 +2684,7 @@ export default function ChatInboxCRM() {
       email: activeConversations.filter(item => item.fila === 'email').length,
       agendamento: activeConversations.filter(item => item.fila === 'agendamento').length,
       humano: activeConversations.filter(item => item.atendimento_humano || humanOverrideIds.includes(item.id)).length,
+      riscoClara: activeConversations.filter(item => claraAuditState(item).risk).length,
       aguardando: activeConversations.filter(item => {
         if (item.ultima_mensagem_direcao !== 'incoming') return false
         if (item.tem_resposta) return false
@@ -2695,8 +2705,9 @@ export default function ChatInboxCRM() {
     email: queueFilter === 'email' && humanFilter === 'todos' && !aguardandoFilter,
     agendamento: queueFilter === 'agendamento' && humanFilter === 'todos' && !aguardandoFilter,
     humano: queueFilter === 'todas' && humanFilter === 'humano' && !aguardandoFilter,
+    riscoClara: claraAuditFilter === 'risco' && !aguardandoFilter,
     aguardando: aguardandoFilter,
-  }), [queueFilter, humanFilter, aguardandoFilter])
+  }), [queueFilter, humanFilter, claraAuditFilter, aguardandoFilter])
 
   const groupedByStatus = useMemo(() => {
       const kanbanStatuses = new Set<string>(STATUS_COLUMNS.map(c => c.key))
@@ -2721,16 +2732,27 @@ export default function ChatInboxCRM() {
     }
   }, [visibleConversations, selectedId])
 
-  function applySummaryShortcut(target: 'all' | 'atendimento' | 'renovacao' | 'agendamento' | 'email' | 'humano' | 'aguardando') {
+  function applySummaryShortcut(target: 'all' | 'atendimento' | 'renovacao' | 'agendamento' | 'email' | 'humano' | 'riscoClara' | 'aguardando') {
     if (target === 'aguardando') {
       setAguardandoFilter(prev => !prev)
       setQueueFilter('todas')
       setHumanFilter('todos')
+      setClaraAuditFilter('todos')
+      setSelectedId(null)
+      return
+    }
+
+    if (target === 'riscoClara') {
+      setAguardandoFilter(false)
+      setQueueFilter('todas')
+      setHumanFilter('todos')
+      setClaraAuditFilter(prev => prev === 'risco' ? 'todos' : 'risco')
       setSelectedId(null)
       return
     }
 
     setAguardandoFilter(false)
+    setClaraAuditFilter('todos')
     const nextQueue: 'todas' | QueueType =
       target === 'atendimento' ? 'atendimento' :
       target === 'renovacao' ? 'renovacao' :
@@ -2774,12 +2796,13 @@ export default function ChatInboxCRM() {
               </div>
             </div>
 
-            <div className="grid w-full grid-cols-3 gap-2 sm:grid-cols-6">
+            <div className="grid w-full grid-cols-3 gap-2 sm:grid-cols-7">
               <SummaryCard icon={MessageCircle} label="Atendimento" value={summary.atendimento} active={activeShortcut.atendimento} onClick={() => applySummaryShortcut('atendimento')} />
               <SummaryCard icon={RefreshCw} label="Renovacao" value={summary.renovacao} active={activeShortcut.renovacao} onClick={() => applySummaryShortcut('renovacao')} />
               <SummaryCard icon={Calendar} label="Agendamento" value={summary.agendamento} active={activeShortcut.agendamento} onClick={() => applySummaryShortcut('agendamento')} />
               <SummaryCard icon={Mail} label="Email" value={summary.email} active={activeShortcut.email} onClick={() => applySummaryShortcut('email')} />
               <SummaryCard icon={User} label="Humano" value={summary.humano} active={activeShortcut.humano} onClick={() => applySummaryShortcut('humano')} />
+              <SummaryCard icon={Bot} label="Risco Clara" value={summary.riscoClara} active={activeShortcut.riscoClara} onClick={() => applySummaryShortcut('riscoClara')} tone="red" />
               <SummaryCard icon={Clock3} label="Aguardando" value={summary.aguardando} active={activeShortcut.aguardando} onClick={() => applySummaryShortcut('aguardando')} />
             </div>
 
@@ -3814,24 +3837,31 @@ function SummaryCard({
   value,
   active = false,
   onClick,
+  tone = 'sky',
 }: {
   icon: React.ComponentType<{ size?: number; className?: string }>
   label: string
   value: number
   active?: boolean
   onClick?: () => void
+  tone?: 'sky' | 'red'
 }) {
+  const activeClass = tone === 'red'
+    ? 'border-red-200 bg-red-50 text-red-900 shadow-[0_10px_24px_rgba(220,38,38,0.08)]'
+    : 'border-sky-200 bg-sky-50 text-sky-900 shadow-[0_10px_24px_rgba(14,116,144,0.08)]'
+  const activeIconClass = tone === 'red' ? 'text-red-700' : 'text-sky-700'
+  const activeValueClass = tone === 'red' ? 'text-red-950' : 'text-sky-950'
   const className = `flex flex-col items-center justify-center gap-1 rounded-[18px] border px-2 py-2.5 text-center transition-all ${
     active
-      ? 'border-sky-200 bg-sky-50 text-sky-900 shadow-[0_10px_24px_rgba(14,116,144,0.08)]'
+      ? activeClass
       : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
   }`
 
   if (onClick) {
     return (
       <button type="button" onClick={onClick} className={className} title={label}>
-        <Icon size={22} className={active ? 'text-sky-700' : 'text-slate-400'} />
-        <p className={`text-[22px] font-semibold leading-none tracking-[-0.02em] ${active ? 'text-sky-950' : 'text-slate-900'}`}>{value}</p>
+        <Icon size={22} className={active ? activeIconClass : 'text-slate-400'} />
+        <p className={`text-[22px] font-semibold leading-none tracking-[-0.02em] ${active ? activeValueClass : 'text-slate-900'}`}>{value}</p>
       </button>
     )
   }
@@ -3898,19 +3928,22 @@ function ConversationCard({
   onSaveContact?: () => void
 }) {
     const hasCrmCustomer = hasRegisteredCustomer(item)
-    const claraAudit = readConversationClaraAudit(item)
+    const auditState = claraAuditState(item)
+    const claraAudit = auditState.audit
     const claraConfidenceLabel = claraAudit?.confidence !== null && claraAudit?.confidence !== undefined
       ? `${Math.round(claraAudit.confidence * 100)}%`
       : ''
-    const claraTone = claraAudit?.risk === 'alto' || claraAudit?.intent === 'humano_reclamacao_urgencia'
+    const claraTone = auditState.risk
       ? 'red'
-      : claraAudit && (claraAudit.intent === 'outros' || claraAudit.confidence === null || claraAudit.confidence === undefined || claraAudit.confidence < 0.8)
+      : auditState.attention
         ? 'amber'
         : 'sky'
     const selectedClass = selected
       ? 'border-sky-200 bg-sky-50 shadow-[0_10px_24px_rgba(14,116,144,0.08)]'
       : closed
         ? 'border-slate-200 bg-slate-50 hover:border-slate-300'
+        : auditState.risk
+          ? 'border-red-200 bg-red-50/80 shadow-[0_10px_24px_rgba(220,38,38,0.06)] hover:border-red-300'
         : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
 
     return (
