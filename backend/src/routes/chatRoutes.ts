@@ -869,6 +869,72 @@ export async function handleChatRoutes(
     return true
   }
 
+  if (method === 'GET' && url.startsWith('/api/chat/crm/clara-feedback')) {
+    const parsedUrl = new URL(url, 'http://localhost')
+    const viewerId = parsedUrl.searchParams.get('profile_id') ?? ''
+    const limit = Math.min(Number(parsedUrl.searchParams.get('limit') ?? 50) || 50, 100)
+
+    if (!viewerId) {
+      writeJson(res, 400, { ok: false, error: 'profile_id obrigatorio.' }, corsOrigin)
+      return true
+    }
+
+    const viewer = await loadViewerProfile(db, viewerId)
+    if (!viewer) {
+      writeJson(res, 404, { ok: false, error: 'Perfil do usuario nao encontrado.' }, corsOrigin)
+      return true
+    }
+
+    const result = await db.query<any>(
+      `WITH viewer AS (
+         SELECT
+           $1::text AS id,
+           $2::text AS perfil,
+           $3::text AS tipo_vinculo,
+           $4::text AS parceiro_id,
+           lower(btrim(coalesce($5::text, ''))) AS nome_norm,
+           lower(btrim(coalesce($6::text, ''))) AS vinculo_nome_norm,
+           $7::text AS ponto_atendimento_id
+       )
+       SELECT
+         f.id,
+         f.conversation_id,
+         f.message_id,
+         f.rating,
+         f.original_message,
+         f.corrected_response,
+         f.notes,
+         f.metadata,
+         f.created_at,
+         reviewer.nome AS reviewer_name,
+         conv.document_key,
+         conv.telefone,
+         conv.cliente_nome,
+         conv.empresa_nome,
+         conv.fila,
+         conv.kanban_status
+       FROM clara_response_feedback f
+       LEFT JOIN profiles reviewer ON reviewer.id = f.reviewer_profile_id
+       LEFT JOIN crm_chat_admin_view conv ON conv.id = f.conversation_id
+       CROSS JOIN viewer
+       WHERE conv.id IS NULL OR ${buildConversationVisibilitySql('conv')}
+       ORDER BY f.created_at DESC
+       LIMIT $8`,
+      [
+        viewer.id,
+        viewer.perfil,
+        viewer.tipo_vinculo,
+        viewer.parceiro_id,
+        viewer.nome,
+        viewer.vinculo_nome,
+        viewer.ponto_atendimento_id,
+        limit,
+      ],
+    )
+    writeJson(res, 200, { ok: true, data: result.rows }, corsOrigin)
+    return true
+  }
+
   if (method === 'GET' && url === '/api/chat/crm/agents') {
     const result = await db.query<any>(
       `SELECT id, nome, perfil, email

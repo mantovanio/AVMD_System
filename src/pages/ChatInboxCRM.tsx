@@ -105,6 +105,25 @@ interface ClaraFeedbackDraft {
   notes: string
 }
 
+interface ClaraFeedbackRow {
+  id: string
+  conversation_id: string | null
+  message_id: string | null
+  rating: ClaraFeedbackRating
+  original_message: string | null
+  corrected_response: string | null
+  notes: string | null
+  metadata: Record<string, unknown> | null
+  created_at: string
+  reviewer_name: string | null
+  document_key: string | null
+  telefone: string | null
+  cliente_nome: string | null
+  empresa_nome: string | null
+  fila: string | null
+  kanban_status: string | null
+}
+
 interface EvolutionEventRow {
   id: string
   event_type: string | null
@@ -873,6 +892,9 @@ export default function ChatInboxCRM() {
   const [showContactDetails, setShowContactDetails] = useState(false)
   const [claraFeedbackDraft, setClaraFeedbackDraft] = useState<ClaraFeedbackDraft | null>(null)
   const [savingClaraFeedback, setSavingClaraFeedback] = useState(false)
+  const [claraFeedbackPanelOpen, setClaraFeedbackPanelOpen] = useState(false)
+  const [claraFeedbackRows, setClaraFeedbackRows] = useState<ClaraFeedbackRow[]>([])
+  const [loadingClaraFeedbackRows, setLoadingClaraFeedbackRows] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(420)
   const [rightPanelWidth, setRightPanelWidth] = useState(330)
   const [isResizingLeft, setIsResizingLeft] = useState(false)
@@ -1421,6 +1443,26 @@ export default function ChatInboxCRM() {
     } catch {
       setConversationPreviews({})
     }
+  }
+
+  async function loadClaraFeedbackRows() {
+    if (!viewerQueryString) return
+    setLoadingClaraFeedbackRows(true)
+    try {
+      const response = await fetch(getApiUrl(`/chat/crm/clara-feedback?limit=80&${viewerQueryString}`))
+      const json = await response.json().catch(() => null) as { ok?: boolean; data?: ClaraFeedbackRow[]; error?: string } | null
+      if (!response.ok || !json?.ok) throw new Error(json?.error || 'Nao foi possivel carregar as revisoes da Clara.')
+      setClaraFeedbackRows(json.data ?? [])
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoadingClaraFeedbackRows(false)
+    }
+  }
+
+  function openClaraFeedbackPanel() {
+    setClaraFeedbackPanelOpen(true)
+    void loadClaraFeedbackRows()
   }
 
   async function loadMessages(conversationId: string, options: { background?: boolean } = {}) {
@@ -2745,6 +2787,9 @@ export default function ChatInboxCRM() {
               <button type="button" onClick={() => void loadConversations(true)} className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900">
                 <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} /> Atualizar
               </button>
+              <button type="button" onClick={openClaraFeedbackPanel} className="inline-flex h-9 items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3.5 text-sm font-medium text-sky-700 transition hover:bg-sky-100">
+                <Bot size={15} /> Revisoes Clara
+              </button>
               <div className="inline-flex rounded-full border border-slate-200 bg-slate-100/80 p-1">
                 <button type="button" onClick={closeKanban} className={`inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium transition ${!kanbanOpen ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-500 hover:text-sky-700'}`}>
                   <List size={15} /> Chat
@@ -3600,6 +3645,90 @@ export default function ChatInboxCRM() {
                   Salvar aprendizado
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {claraFeedbackPanelOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-[2px]">
+          <div className="flex h-[min(88vh,820px)] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-sky-500">Fila de melhoria</p>
+                <h3 className="text-lg font-semibold text-slate-900">Revisões da Clara</h3>
+                <p className="text-sm text-slate-500">Correções salvas no atendimento para virar regra depois.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => void loadClaraFeedbackRows()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                  <RefreshCw size={15} className={loadingClaraFeedbackRows ? 'animate-spin' : ''} /> Atualizar
+                </button>
+                <button type="button" onClick={() => setClaraFeedbackPanelOpen(false)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                  <X size={15} /> Fechar
+                </button>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              {loadingClaraFeedbackRows ? (
+                <div className="flex h-48 items-center justify-center text-sm text-slate-500">
+                  <Loader2 size={18} className="mr-2 animate-spin" /> Carregando revisões...
+                </div>
+              ) : claraFeedbackRows.length === 0 ? (
+                <EmptyState text="Ainda não há correções registradas para a Clara." />
+              ) : (
+                <div className="space-y-3">
+                  {claraFeedbackRows.map(row => {
+                    const audit = readClaraAuditFromMetadata(row.metadata)
+                    const contact = row.cliente_nome || row.empresa_nome || row.telefone || row.document_key || 'Conversa sem contato'
+                    const tone = row.rating === 'risco' ? 'red' : row.rating === 'corrigir' ? 'amber' : 'green'
+                    return (
+                      <div key={row.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="font-semibold text-slate-900">{contact}</h4>
+                              <Badge text={row.rating === 'boa' ? 'Boa resposta' : row.rating === 'risco' ? 'Risco alto' : 'Precisa corrigir'} tone={tone} />
+                              {audit && <Badge text={claraIntentLabel(audit.intent)} tone="sky" />}
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {formatDateTime(row.created_at)} · {row.reviewer_name || 'Revisor'} · {queueLabel(row.fila || '')}
+                            </p>
+                          </div>
+                          {row.conversation_id && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedId(row.conversation_id)
+                                setClaraFeedbackPanelOpen(false)
+                              }}
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              Abrir conversa
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Resposta original</p>
+                            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{row.original_message || 'Sem texto original'}</p>
+                          </div>
+                          <div className="rounded-2xl bg-sky-50 px-3 py-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-600">Resposta ideal</p>
+                            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{row.corrected_response || row.notes || 'Sem resposta ideal registrada'}</p>
+                          </div>
+                        </div>
+                        {row.notes && row.corrected_response && (
+                          <p className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            Observação: {row.notes}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
