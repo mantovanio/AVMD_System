@@ -32,10 +32,26 @@ export class CommunicationOutboxRepository {
   async create(input: CreateOutboxInput): Promise<OutboxRow> {
     const payload = input.payload ?? {}
     const scheduledFor = input.scheduled_for ?? new Date().toISOString()
+    const eventKey = typeof payload.event_key === 'string' ? payload.event_key.trim() : ''
     const tipo = typeof payload.tipo === 'string' ? payload.tipo : null
     const saleId = typeof payload.sale_id === 'string' ? payload.sale_id : null
     const renovacaoId = typeof payload.renovacao_id === 'string' ? payload.renovacao_id : null
     const followupRound = typeof payload.followup_round === 'number' ? payload.followup_round : null
+
+    if (eventKey) {
+      const existing = await this.db.query<OutboxRow>(
+        `SELECT *
+           FROM communication_outbox
+          WHERE channel = $1
+            AND to_address = $2
+            AND payload->>'event_key' = $3
+            AND status IN ('pending', 'processing', 'sent')
+          ORDER BY created_at DESC
+          LIMIT 1`,
+        [input.channel, input.to_address, eventKey],
+      )
+      if (existing.rows[0]) return existing.rows[0]
+    }
 
     if (renovacaoId && tipo && tipo.startsWith('renovacao')) {
       const isFollowup = tipo === 'renovacao_followup_auto' && followupRound !== null
@@ -151,56 +167,5 @@ export class CommunicationOutboxRepository {
       [phoneDigits],
     )
     return result.rows.length
-  }
-
-  async listRecentDispatches(limit = 50): Promise<OutboxRow[]> {
-    const result = await this.db.query<OutboxRow>(
-      `SELECT *
-       FROM communication_outbox
-       WHERE status IN ('sent', 'failed')
-         AND created_at >= NOW() - INTERVAL '7 days'
-       ORDER BY created_at DESC
-       LIMIT $1`,
-      [limit],
-    )
-    return result.rows
-  }
-
-  async listDispatchesByRenovacaoId(renovacaoId: string): Promise<OutboxRow[]> {
-    const result = await this.db.query<OutboxRow>(
-      `SELECT *
-       FROM communication_outbox
-       WHERE payload->>'renovacao_id' = $1
-       ORDER BY created_at DESC
-       LIMIT 20`,
-      [renovacaoId],
-    )
-    return result.rows
-  }
-
-  async getDispatchStats(): Promise<{
-    totalEnviados: number
-    enviadosEmail: number
-    enviadosWhatsapp: number
-    falhas: number
-    pendentes: number
-  }> {
-    const result = await this.db.query<{
-      totalEnviados: number
-      enviadosEmail: number
-      enviadosWhatsapp: number
-      falhas: number
-      pendentes: number
-    }>(
-      `SELECT
-         COUNT(*) FILTER (WHERE status = 'sent') as "totalEnviados",
-         COUNT(*) FILTER (WHERE status = 'sent' AND channel = 'email') as "enviadosEmail",
-         COUNT(*) FILTER (WHERE status = 'sent' AND channel = 'whatsapp') as "enviadosWhatsapp",
-         COUNT(*) FILTER (WHERE status = 'failed') as "falhas",
-         COUNT(*) FILTER (WHERE status = 'pending') as "pendentes"
-       FROM communication_outbox
-       WHERE created_at >= NOW() - INTERVAL '7 days'`
-    )
-    return result.rows[0]
   }
 }

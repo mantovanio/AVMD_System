@@ -413,19 +413,6 @@ export class CheckoutService {
       lastName,
     })
 
-    try {
-      await fetch(`https://api.clerk.com/v1/users/${clerkUser.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${this.clerkSecretKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ password_enabled: false }),
-      })
-    } catch {
-      // Ignorado — o usuario foi criado mas a desabilitacao de senha nao bloqueia o fluxo
-    }
-
     return clerkUser.id
   }
 
@@ -458,9 +445,13 @@ export class CheckoutService {
     ].join(' ')
 
     const payload = {
+      event_key: `checkout_payment_link:${input.saleId}`,
       sale_id: input.saleId,
       tipo: 'checkout_payment_link',
       canal: 'checkout',
+      source: 'clara',
+      clara_mode: 'automation',
+      clara_intent: 'compra_realizada',
       payment_status: input.paymentStatus,
       mocked: input.mocked,
       link_pagamento: link,

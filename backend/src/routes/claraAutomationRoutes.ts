@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AivenSqlClient } from '../db/aivenClient.js'
 import type { LeadRepository } from '../repositories/leadRepository.js'
+import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
+import { ClaraWhatsappAutomationService, type ClaraWhatsappAutomationInput } from '../services/claraWhatsappAutomationService.js'
 import { readJson, writeJson } from '../utils/http.js'
 
 type ClaraHandoffBody = {
@@ -235,8 +237,22 @@ export async function handleClaraAutomationRoutes(
   res: ServerResponse,
   db: AivenSqlClient,
   leadRepository: LeadRepository,
+  outboxRepository: CommunicationOutboxRepository,
   corsOrigin: string,
 ) {
+  if (req.method === 'POST' && req.url === '/api/automation/clara-whatsapp') {
+    const body = await readJson<ClaraWhatsappAutomationInput>(req)
+    if (!body?.type || !body?.phone) {
+      writeJson(res, 400, { ok: false, error: 'type e phone são obrigatórios.' }, corsOrigin)
+      return true
+    }
+
+    const service = new ClaraWhatsappAutomationService(outboxRepository)
+    const outbox = await service.queue(body)
+    writeJson(res, 201, { ok: true, outbox }, corsOrigin)
+    return true
+  }
+
   if (req.method === 'POST' && req.url === '/api/automation/clara-message-log') {
     const body = await readJson<ClaraMessageLogBody>(req)
     const result = await handleClaraMessageLog(db, body)

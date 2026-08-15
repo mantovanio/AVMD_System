@@ -1,7 +1,7 @@
 import type { AivenSqlClient } from '../db/aivenClient.js'
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
 
-const DEFAULT_REMINDER_BODY = 'Olá {{primeiro_nome}}! Seu certificado {{tipo_certificado}} vence em {{dias_restantes}} dias ({{data_vencimento}}). Podemos ajudar com a renovação?'
+const DEFAULT_REMINDER_BODY = 'Olá, {{primeiro_nome}}. Aqui é a Clara da CertiID. Seu certificado {{tipo_certificado}} vence em {{dias_restantes}} dias, em {{data_vencimento}}. Posso te ajudar a renovar com segurança antes do prazo?'
 const DEFAULT_REMINDER_SUBJECT = 'Renovação do seu certificado {{tipo_certificado}}'
 
 function extrairPrimeiroNome(nome: string | null | undefined): string {
@@ -125,10 +125,15 @@ export class RenewalReminderService {
           to_address: phone,
           body: whatsappBody,
           payload: {
+            event_key: `renovacao_aviso:${row.id}:round1`,
             renovacao_id: row.id,
             canal: 'renovacao',
             tipo: 'renovacao_followup_auto',
             followup_round: 1,
+            source: 'clara',
+            clara_mode: 'automation',
+            clara_intent: 'renovacao_aviso',
+            clara_risk_level: 'baixo',
           },
         })
       }
@@ -141,10 +146,15 @@ export class RenewalReminderService {
           subject: emailSubject,
           body: emailBody,
           payload: {
+            event_key: `renovacao_aviso_email:${row.id}:round1`,
             renovacao_id: row.id,
             canal: 'renovacao',
             tipo: 'renovacao_followup_auto',
             followup_round: 1,
+            source: 'clara',
+            clara_mode: 'automation',
+            clara_intent: 'renovacao_aviso',
+            clara_risk_level: 'baixo',
           },
         })
       }

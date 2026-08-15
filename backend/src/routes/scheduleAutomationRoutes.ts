@@ -472,10 +472,14 @@ export async function handleScheduleAutomationRoutes(
       to_address: recipientPhone,
       body: messages.whatsapp,
       payload: {
+        event_key: `agendamento_${eventType}:${schedule.id}:confirmacao`,
         context: 'schedule_email_automation',
         venda_id: match.venda_id,
         agendamento_id: schedule.id,
         source,
+        clara_source: 'clara',
+        clara_mode: 'automation',
+        clara_intent: 'agendamento_lembrete',
         event_type: eventType,
       },
     })
@@ -487,10 +491,14 @@ export async function handleScheduleAutomationRoutes(
         to_address: recipientPhone,
         body: messages.docsWhatsapp,
         payload: {
+          event_key: `agendamento_${eventType}:${schedule.id}:documentos`,
           context: 'schedule_email_documents',
           venda_id: match.venda_id,
           agendamento_id: schedule.id,
           source,
+          clara_source: 'clara',
+          clara_mode: 'automation',
+          clara_intent: 'documentos_validacao',
           event_type: eventType,
         },
       })
