@@ -2,6 +2,10 @@
 
 Este documento registra ajustes de atendimento feitos a partir de conversas reais.
 
+## Documentos Relacionados
+
+- Matriz de interacoes reais e playbook de intents: `docs/clara-matriz-interacoes.md`
+
 ## Token A3
 
 - Token A3 e cartao A3 sao usados em computador ou notebook com porta USB/leitora e driver instalado.
