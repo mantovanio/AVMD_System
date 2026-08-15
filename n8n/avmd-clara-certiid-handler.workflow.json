@@ -278,7 +278,7 @@
         "sendHeaders": true,
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ ({ channel: 'whatsapp', provider: 'n8n', to_address: $('setar_informacoes1').first().json.msg.whatsapp_lead || '00000000000', subject: null, body: $json.output, payload: { source: 'clara', lead_id: $('setar_informacoes1').first().json.leadId || null, instance: $('setar_informacoes1').first().json.instance || null, conversation_id: $('setar_informacoes1').first().json.leadId || null, pushName: $('setar_informacoes1').first().json.pushName || null } }) }}",
+        "jsonBody": "={{ (() => { const info = $('setar_informacoes1').first().json; const audit = $('injetarContexto').first().json; return ({ channel: 'whatsapp', provider: 'n8n', to_address: info.msg.whatsapp_lead || '00000000000', subject: null, body: $json.output, payload: { source: 'clara', lead_id: info.leadId || null, instance: info.instance || null, conversation_id: info.leadId || null, pushName: info.pushName || null, clara_intent: audit.clara_intent || null, clara_confidence: audit.clara_confidence ?? null, clara_risk_level: audit.clara_risk_level || null, clara_primeira_resposta_modelo: audit.clara_primeira_resposta_modelo || null, clara_mode: Number(audit.clara_confidence || 0) >= 0.8 ? 'regra_orientada' : 'ia_flexivel' } }) })() }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",

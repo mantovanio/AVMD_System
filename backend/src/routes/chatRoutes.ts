@@ -779,6 +779,7 @@ export async function handleChatRoutes(
            m.delivered_at,
            m.read_at,
            m.status_updated_at,
+           m.metadata,
            m.created_at
          FROM crm_chat_messages m
          LEFT JOIN LATERAL (

@@ -91,6 +91,7 @@ interface CrmMessage {
   delivered_at?: string | null
   read_at?: string | null
   status_updated_at?: string | null
+  metadata?: Record<string, unknown> | null
   created_at: string
 }
 
@@ -475,6 +476,47 @@ function stripOutgoingSignature(text: string | null | undefined, senderName?: st
   const suffix = `\n\n— ${senderName}`
   if (trimmed.endsWith(suffix)) return trimmed.slice(0, -suffix.length).trimEnd()
   return text
+}
+
+function readClaraAudit(message: CrmMessage) {
+  const metadata = message.metadata && typeof message.metadata === 'object' ? message.metadata : {}
+  const source = typeof metadata.source === 'string' ? metadata.source : ''
+  const intent = typeof metadata.clara_intent === 'string' ? metadata.clara_intent : ''
+  const confidenceRaw = metadata.clara_confidence
+  const confidence = typeof confidenceRaw === 'number'
+    ? confidenceRaw
+    : Number.isFinite(Number(confidenceRaw)) ? Number(confidenceRaw) : null
+  const risk = typeof metadata.clara_risk_level === 'string' ? metadata.clara_risk_level : ''
+  const mode = typeof metadata.clara_mode === 'string' ? metadata.clara_mode : ''
+  const firstResponse = typeof metadata.clara_primeira_resposta_modelo === 'string'
+    ? metadata.clara_primeira_resposta_modelo
+    : ''
+
+  if (source !== 'clara' && !intent && message.sender_type !== 'ia') return null
+  return { intent, confidence, risk, mode, firstResponse }
+}
+
+function claraIntentLabel(intent: string) {
+  const labels: Record<string, string> = {
+    saudacao_curta: 'Saudação curta',
+    agendamento_video: 'Agendamento por vídeo',
+    documentos_dados: 'Documentos e dados',
+    pagamento_link_boleto_pix: 'Pagamento, link ou boleto',
+    preco_compra_renovacao: 'Preço, compra ou renovação',
+    suporte_a1_instalacao: 'Suporte A1 / instalação',
+    suporte_token_a3: 'Suporte token A3',
+    ecac_gov_receita: 'e-CAC / gov.br / Receita',
+    humano_reclamacao_urgencia: 'Humano, reclamação ou urgência',
+    outros: 'Outros',
+  }
+  return labels[intent] || intent || 'Não identificada'
+}
+
+function claraModeLabel(mode: string, confidence: number | null) {
+  if (mode === 'regra_orientada') return 'Regra orientada'
+  if (mode === 'ia_flexivel') return 'IA flexível'
+  if (confidence !== null && confidence >= 0.8) return 'Regra orientada'
+  return 'IA flexível'
 }
 
 function dedupeConversations(rows: ConversationRow[]) {
@@ -3798,6 +3840,11 @@ function MessageRow({
   const isDocument = detectedMediaKind === 'document'
   const hasMedia = isImage || isAudio || isVideo || isDocument
   const mediaLabel = message.file_name || message.mensagem || downloadFileName || (isAudio ? 'Audio' : isImage ? 'Imagem' : isVideo ? 'Video' : isDocument ? 'Arquivo' : '')
+  const claraAudit = readClaraAudit(message)
+  const claraConfidenceLabel = claraAudit?.confidence !== null && claraAudit?.confidence !== undefined
+    ? `${Math.round(claraAudit.confidence * 100)}%`
+    : 'Sem score'
+  const claraRiskTone = claraAudit?.risk === 'alto' ? 'red' : claraAudit?.risk === 'medio' ? 'amber' : 'green'
 
   return (
       <div className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'}`}>
@@ -3834,6 +3881,27 @@ function MessageRow({
             </a>
           ) : (
             <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{normalizeStructuredMessage(isOutgoing ? stripOutgoingSignature(message.mensagem, message.sender_name) : message.mensagem) || mediaLabel || 'Mensagem sem texto'}</p>
+          )}
+          {claraAudit && (
+            <div className="mt-3 rounded-2xl border border-sky-200 bg-white/75 px-3 py-2 text-xs text-slate-700 shadow-sm dark:border-sky-500/30 dark:bg-slate-950/60 dark:text-slate-200">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 font-semibold text-sky-700 dark:text-sky-300">
+                  <Bot size={13} />
+                  Auditoria Clara
+                </span>
+                <Badge text={claraModeLabel(claraAudit.mode, claraAudit.confidence)} tone="sky" />
+                <Badge text={`Risco ${claraAudit.risk || 'baixo'}`} tone={claraRiskTone} />
+              </div>
+              <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                <span><strong>Intenção:</strong> {claraIntentLabel(claraAudit.intent)}</span>
+                <span><strong>Confiança:</strong> {claraConfidenceLabel}</span>
+              </div>
+              {claraAudit.firstResponse && (
+                <p className="mt-2 border-t border-slate-200 pt-2 text-[11px] leading-relaxed text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  <strong>Roteiro:</strong> {claraAudit.firstResponse}
+                </p>
+              )}
+            </div>
           )}
           <div className={`mt-2 flex items-center justify-end gap-1 text-[11px] ${isOutgoing ? 'text-emerald-800/80' : 'text-slate-400'}`}>
             <span>{formatDateTime(message.created_at)}</span>

@@ -163,7 +163,28 @@ export class OutboxProcessor {
       const phoneKey = normalizePhoneBRWithoutDdi(item.to_address)
       const canal = String(item.payload.canal ?? 'atendimento').trim()
       const tipo = String(item.payload.tipo ?? '').trim()
-      const senderName = tipo.includes('renovacao') ? 'Clara (IA)' : 'Sistema'
+      const isClaraMessage = String(item.payload.source ?? '').trim().toLowerCase() === 'clara'
+        || item.payload.clara_intent !== undefined
+      const senderName = isClaraMessage
+        ? 'Clara (IA)'
+        : tipo.includes('renovacao') ? 'Clara (IA)' : 'Sistema'
+      const senderType = isClaraMessage ? 'ia' : 'automation'
+      const confidenceRaw = item.payload.clara_confidence
+      const claraConfidence = typeof confidenceRaw === 'number'
+        ? confidenceRaw
+        : Number.isFinite(Number(confidenceRaw)) ? Number(confidenceRaw) : null
+      const metadata = {
+        source: String(item.payload.source ?? '').trim() || null,
+        clara_intent: typeof item.payload.clara_intent === 'string' ? item.payload.clara_intent : null,
+        clara_confidence: claraConfidence,
+        clara_risk_level: typeof item.payload.clara_risk_level === 'string' ? item.payload.clara_risk_level : null,
+        clara_primeira_resposta_modelo: typeof item.payload.clara_primeira_resposta_modelo === 'string'
+          ? item.payload.clara_primeira_resposta_modelo
+          : null,
+        clara_mode: typeof item.payload.clara_mode === 'string' ? item.payload.clara_mode : null,
+        lead_id: typeof item.payload.lead_id === 'string' ? item.payload.lead_id : null,
+        instance: typeof item.payload.instance === 'string' ? item.payload.instance : null,
+      }
       const context = await this.resolveChatCustomerContext({
         phoneKey,
         renovacaoId: typeof item.payload.renovacao_id === 'string' ? item.payload.renovacao_id : null,
@@ -231,9 +252,9 @@ export class OutboxProcessor {
       }
 
       await this.db.query(
-        `INSERT INTO crm_chat_messages (conversation_id, document_key, external_message_id, direction, sender_type, sender_name, mensagem)
-         VALUES ($1, $2, $3, 'outgoing', 'automation', $4, $5)`,
-        [convId, phoneDigits, externalId, senderName, item.body],
+        `INSERT INTO crm_chat_messages (conversation_id, document_key, external_message_id, direction, sender_type, sender_name, mensagem, metadata)
+         VALUES ($1, $2, $3, 'outgoing', $4, $5, $6, $7::jsonb)`,
+        [convId, phoneDigits, externalId, senderType, senderName, item.body, JSON.stringify(metadata)],
       )
 
       await this.db.query(
