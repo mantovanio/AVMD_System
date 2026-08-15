@@ -267,3 +267,37 @@ Regra:
 - Criar arquivo `docs/clara-playbook-respostas.md` com scripts finais de resposta.
 - Atualizar o workflow `1- Clara | CertiID` para receber `intent` antes do prompt.
 - Atualizar `AVMD - Clara Suporte Handler` para responder por intent de forma deterministica quando houver alta confianca.
+
+## Implementado em producao
+
+Em 14/08/2026 foi implantado no workflow `1- Clara | CertiID` um classificador deterministico dentro do node `injetarContexto`.
+
+Campos gerados:
+- `clara_intent`
+- `clara_confidence`
+- `clara_risk_level`
+- `clara_primeira_resposta_modelo`
+
+Intencoes cobertas:
+- `saudacao_curta`
+- `agendamento_video`
+- `documentos_dados`
+- `pagamento_link_boleto_pix`
+- `preco_compra_renovacao`
+- `suporte_a1_instalacao`
+- `suporte_token_a3`
+- `ecac_gov_receita`
+- `humano_reclamacao_urgencia`
+- `outros`
+
+Testes de producao executados:
+- "meu token nao esta funcionando" -> `suporte_token_a3`
+- "meu certificado A1 nao instala" -> `suporte_a1_instalacao`
+- "nao consigo acessar o eCAC" -> `ecac_gov_receita`
+- "quero fazer a validacao por video" -> `agendamento_video`
+
+Resultado esperado nos testes:
+- Execucao n8n `success`.
+- Resposta com uma pergunta objetiva.
+- Nenhuma transferencia prematura para humano.
+- Nenhuma orientacao de token A3 em celular.
