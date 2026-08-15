@@ -869,6 +869,107 @@ export async function handleChatRoutes(
     return true
   }
 
+  if (method === 'GET' && url.startsWith('/api/chat/crm/clara-feedback/report')) {
+    const parsedUrl = new URL(url, 'http://localhost')
+    const viewerId = parsedUrl.searchParams.get('profile_id') ?? ''
+    if (!viewerId) {
+      writeJson(res, 400, { ok: false, error: 'profile_id obrigatorio.' }, corsOrigin)
+      return true
+    }
+    const viewer = await loadViewerProfile(db, viewerId)
+    if (!viewer) {
+      writeJson(res, 404, { ok: false, error: 'Perfil do usuario nao encontrado.' }, corsOrigin)
+      return true
+    }
+    const result = await db.query<any>(
+      `WITH viewer AS (
+         SELECT
+           $1::text AS id,
+           $2::text AS perfil,
+           $3::text AS tipo_vinculo,
+           $4::text AS parceiro_id,
+           lower(btrim(coalesce($5::text, ''))) AS nome_norm,
+           lower(btrim(coalesce($6::text, ''))) AS vinculo_nome_norm,
+           $7::text AS ponto_atendimento_id
+       ),
+       visible_feedback AS (
+         SELECT f.*
+         FROM clara_response_feedback f
+         LEFT JOIN crm_chat_admin_view conv ON conv.id = f.conversation_id
+         CROSS JOIN viewer
+         WHERE conv.id IS NULL OR ${buildConversationVisibilitySql('conv')}
+       )
+       SELECT
+         count(*)::int AS total,
+         count(*) FILTER (WHERE review_status = 'pendente')::int AS pendentes,
+         count(*) FILTER (WHERE review_status = 'aplicada')::int AS aplicadas,
+         count(*) FILTER (WHERE review_status = 'ignorada')::int AS ignoradas,
+         count(*) FILTER (WHERE rating = 'risco')::int AS risco,
+         count(*) FILTER (WHERE rating = 'corrigir')::int AS corrigir,
+         count(*) FILTER (WHERE rating = 'boa')::int AS boas
+       FROM visible_feedback`,
+      [
+        viewer.id,
+        viewer.perfil,
+        viewer.tipo_vinculo,
+        viewer.parceiro_id,
+        viewer.nome,
+        viewer.vinculo_nome,
+        viewer.ponto_atendimento_id,
+      ],
+    )
+    writeJson(res, 200, { ok: true, data: result.rows[0] ?? null }, corsOrigin)
+    return true
+  }
+
+  const claraFeedbackStatusMatch = url.match(/^\/api\/chat\/crm\/clara-feedback\/([^/]+)$/)
+  if (method === 'PATCH' && claraFeedbackStatusMatch) {
+    const feedbackId = claraFeedbackStatusMatch[1]
+    const body = await readJson<Record<string, unknown>>(req)
+    const viewerId = asString(body.profile_id)
+    const reviewStatus = asString(body.review_status)
+    const appliedRule = asString(body.applied_rule)
+
+    if (!viewerId) {
+      writeJson(res, 400, { ok: false, error: 'profile_id obrigatorio.' }, corsOrigin)
+      return true
+    }
+    if (!['pendente', 'aplicada', 'ignorada'].includes(reviewStatus)) {
+      writeJson(res, 400, { ok: false, error: 'review_status invalido.' }, corsOrigin)
+      return true
+    }
+
+    const feedback = await db.query<{ conversation_id: string | null }>(
+      `SELECT conversation_id FROM clara_response_feedback WHERE id = $1::uuid LIMIT 1`,
+      [feedbackId],
+    )
+    if (feedback.rows.length === 0) {
+      writeJson(res, 404, { ok: false, error: 'Feedback nao encontrado.' }, corsOrigin)
+      return true
+    }
+    const conversationId = feedback.rows[0]?.conversation_id
+    const allowed = conversationId
+      ? await canViewerAccessConversation(db, viewerId, conversationId, '')
+      : Boolean(await loadViewerProfile(db, viewerId))
+    if (!allowed) {
+      writeJson(res, 403, { ok: false, error: 'Sem permissao para atualizar essa revisao.' }, corsOrigin)
+      return true
+    }
+
+    const result = await db.query<{ id: string }>(
+      `UPDATE clara_response_feedback
+          SET review_status = $2,
+              applied_rule = CASE WHEN $2 = 'aplicada' THEN NULLIF($3, '') ELSE applied_rule END,
+              applied_at = CASE WHEN $2 = 'aplicada' THEN NOW() ELSE applied_at END,
+              ignored_at = CASE WHEN $2 = 'ignorada' THEN NOW() ELSE ignored_at END
+        WHERE id = $1::uuid
+        RETURNING id`,
+      [feedbackId, reviewStatus, appliedRule],
+    )
+    writeJson(res, 200, { ok: true, id: result.rows[0]?.id ?? null }, corsOrigin)
+    return true
+  }
+
   if (method === 'GET' && url.startsWith('/api/chat/crm/clara-feedback')) {
     const parsedUrl = new URL(url, 'http://localhost')
     const viewerId = parsedUrl.searchParams.get('profile_id') ?? ''
@@ -904,6 +1005,10 @@ export async function handleChatRoutes(
          f.original_message,
          f.corrected_response,
          f.notes,
+         f.review_status,
+         f.applied_rule,
+         f.applied_at,
+         f.ignored_at,
          f.metadata,
          f.created_at,
          reviewer.nome AS reviewer_name,

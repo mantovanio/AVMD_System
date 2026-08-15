@@ -113,6 +113,10 @@ interface ClaraFeedbackRow {
   original_message: string | null
   corrected_response: string | null
   notes: string | null
+  review_status: 'pendente' | 'aplicada' | 'ignorada'
+  applied_rule: string | null
+  applied_at: string | null
+  ignored_at: string | null
   metadata: Record<string, unknown> | null
   created_at: string
   reviewer_name: string | null
@@ -122,6 +126,16 @@ interface ClaraFeedbackRow {
   empresa_nome: string | null
   fila: string | null
   kanban_status: string | null
+}
+
+interface ClaraFeedbackReport {
+  total: number
+  pendentes: number
+  aplicadas: number
+  ignoradas: number
+  risco: number
+  corrigir: number
+  boas: number
 }
 
 interface EvolutionEventRow {
@@ -911,7 +925,9 @@ export default function ChatInboxCRM() {
   const [savingClaraFeedback, setSavingClaraFeedback] = useState(false)
   const [claraFeedbackPanelOpen, setClaraFeedbackPanelOpen] = useState(false)
   const [claraFeedbackRows, setClaraFeedbackRows] = useState<ClaraFeedbackRow[]>([])
+  const [claraFeedbackReport, setClaraFeedbackReport] = useState<ClaraFeedbackReport | null>(null)
   const [loadingClaraFeedbackRows, setLoadingClaraFeedbackRows] = useState(false)
+  const [updatingClaraFeedbackId, setUpdatingClaraFeedbackId] = useState<string | null>(null)
   const [leftPanelWidth, setLeftPanelWidth] = useState(420)
   const [rightPanelWidth, setRightPanelWidth] = useState(330)
   const [isResizingLeft, setIsResizingLeft] = useState(false)
@@ -1466,9 +1482,14 @@ export default function ChatInboxCRM() {
     if (!viewerQueryString) return
     setLoadingClaraFeedbackRows(true)
     try {
-      const response = await fetch(getApiUrl(`/chat/crm/clara-feedback?limit=80&${viewerQueryString}`))
+      const [response, reportResponse] = await Promise.all([
+        fetch(getApiUrl(`/chat/crm/clara-feedback?limit=80&${viewerQueryString}`)),
+        fetch(getApiUrl(`/chat/crm/clara-feedback/report?${viewerQueryString}`)),
+      ])
       const json = await response.json().catch(() => null) as { ok?: boolean; data?: ClaraFeedbackRow[]; error?: string } | null
+      const reportJson = await reportResponse.json().catch(() => null) as { ok?: boolean; data?: ClaraFeedbackReport; error?: string } | null
       if (!response.ok || !json?.ok) throw new Error(json?.error || 'Nao foi possivel carregar as revisoes da Clara.')
+      if (reportResponse.ok && reportJson?.ok) setClaraFeedbackReport(reportJson.data ?? null)
       setClaraFeedbackRows(json.data ?? [])
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err))
@@ -1480,6 +1501,44 @@ export default function ChatInboxCRM() {
   function openClaraFeedbackPanel() {
     setClaraFeedbackPanelOpen(true)
     void loadClaraFeedbackRows()
+  }
+
+  function buildClaraAppliedRule(row: ClaraFeedbackRow) {
+    const audit = readClaraAuditFromMetadata(row.metadata)
+    const intent = audit?.intent || 'outros'
+    const ideal = row.corrected_response || row.notes || ''
+    return [
+      `Intent: ${intent}`,
+      `Quando o caso for parecido com: ${row.original_message || 'sem mensagem original'}`,
+      `A Clara deve responder assim: ${ideal || 'revisar manualmente antes de aplicar'}`,
+      row.notes ? `Observacao operacional: ${row.notes}` : null,
+      'Regra criada por revisao humana. Aplicar ao playbook somente apos conferencia.',
+    ].filter(Boolean).join('\n')
+  }
+
+  async function updateClaraFeedbackStatus(row: ClaraFeedbackRow, reviewStatus: 'pendente' | 'aplicada' | 'ignorada') {
+    if (!profile?.id) return
+    setUpdatingClaraFeedbackId(row.id)
+    setActionError(null)
+    try {
+      const appliedRule = reviewStatus === 'aplicada' ? buildClaraAppliedRule(row) : ''
+      const response = await fetch(getApiUrl(`/chat/crm/clara-feedback/${row.id}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_id: profile.id,
+          review_status: reviewStatus,
+          applied_rule: appliedRule,
+        }),
+      })
+      const json = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
+      if (!response.ok || !json?.ok) throw new Error(json?.error || 'Nao foi possivel atualizar a revisao.')
+      await loadClaraFeedbackRows()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUpdatingClaraFeedbackId(null)
+    }
   }
 
   async function loadMessages(conversationId: string, options: { background?: boolean } = {}) {
@@ -3693,6 +3752,17 @@ export default function ChatInboxCRM() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              {claraFeedbackReport && (
+                <div className="mb-4 grid gap-2 sm:grid-cols-4 lg:grid-cols-7">
+                  <MiniMetric label="Total" value={claraFeedbackReport.total} />
+                  <MiniMetric label="Pendentes" value={claraFeedbackReport.pendentes} tone="amber" />
+                  <MiniMetric label="Aplicadas" value={claraFeedbackReport.aplicadas} tone="green" />
+                  <MiniMetric label="Ignoradas" value={claraFeedbackReport.ignoradas} />
+                  <MiniMetric label="Risco" value={claraFeedbackReport.risco} tone="red" />
+                  <MiniMetric label="Corrigir" value={claraFeedbackReport.corrigir} tone="amber" />
+                  <MiniMetric label="Boas" value={claraFeedbackReport.boas} tone="green" />
+                </div>
+              )}
               {loadingClaraFeedbackRows ? (
                 <div className="flex h-48 items-center justify-center text-sm text-slate-500">
                   <Loader2 size={18} className="mr-2 animate-spin" /> Carregando revisões...
@@ -3705,6 +3775,7 @@ export default function ChatInboxCRM() {
                     const audit = readClaraAuditFromMetadata(row.metadata)
                     const contact = row.cliente_nome || row.empresa_nome || row.telefone || row.document_key || 'Conversa sem contato'
                     const tone = row.rating === 'risco' ? 'red' : row.rating === 'corrigir' ? 'amber' : 'green'
+                    const statusTone = row.review_status === 'aplicada' ? 'green' : row.review_status === 'ignorada' ? 'slate' : 'amber'
                     return (
                       <div key={row.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3712,6 +3783,7 @@ export default function ChatInboxCRM() {
                             <div className="flex flex-wrap items-center gap-2">
                               <h4 className="font-semibold text-slate-900">{contact}</h4>
                               <Badge text={row.rating === 'boa' ? 'Boa resposta' : row.rating === 'risco' ? 'Risco alto' : 'Precisa corrigir'} tone={tone} />
+                              <Badge text={row.review_status === 'aplicada' ? 'Aplicada' : row.review_status === 'ignorada' ? 'Ignorada' : 'Pendente'} tone={statusTone} />
                               {audit && <Badge text={claraIntentLabel(audit.intent)} tone="sky" />}
                             </div>
                             <p className="mt-1 text-xs text-slate-500">
@@ -3719,16 +3791,38 @@ export default function ChatInboxCRM() {
                             </p>
                           </div>
                           {row.conversation_id && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedId(row.conversation_id)
-                                setClaraFeedbackPanelOpen(false)
-                              }}
-                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                            >
-                              Abrir conversa
-                            </button>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {row.review_status !== 'aplicada' && (
+                                <button
+                                  type="button"
+                                  disabled={updatingClaraFeedbackId === row.id}
+                                  onClick={() => void updateClaraFeedbackStatus(row, 'aplicada')}
+                                  className="rounded-xl bg-sky-600 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
+                                >
+                                  Aplicar ao playbook
+                                </button>
+                              )}
+                              {row.review_status !== 'ignorada' && (
+                                <button
+                                  type="button"
+                                  disabled={updatingClaraFeedbackId === row.id}
+                                  onClick={() => void updateClaraFeedbackStatus(row, 'ignorada')}
+                                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                >
+                                  Ignorar
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedId(row.conversation_id)
+                                  setClaraFeedbackPanelOpen(false)
+                                }}
+                                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                              >
+                                Abrir conversa
+                              </button>
+                            </div>
                           )}
                         </div>
 
@@ -3746,6 +3840,11 @@ export default function ChatInboxCRM() {
                           <p className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                             Observação: {row.notes}
                           </p>
+                        )}
+                        {row.applied_rule && (
+                          <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                            {row.applied_rule}
+                          </pre>
                         )}
                       </div>
                     )
@@ -3870,6 +3969,21 @@ function SummaryCard({
     <div className={className} title={label}>
       <Icon size={22} className="text-slate-400" />
       <p className="text-[22px] font-semibold leading-none tracking-[-0.02em] text-slate-900">{value}</p>
+    </div>
+  )
+}
+
+function MiniMetric({ label, value, tone = 'slate' }: { label: string; value: number; tone?: 'slate' | 'green' | 'amber' | 'red' }) {
+  const styles = {
+    slate: 'border-slate-200 bg-slate-50 text-slate-800',
+    green: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    amber: 'border-amber-200 bg-amber-50 text-amber-800',
+    red: 'border-red-200 bg-red-50 text-red-800',
+  }[tone]
+  return (
+    <div className={`rounded-2xl border px-3 py-2 ${styles}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-wide opacity-70">{label}</p>
+      <p className="mt-1 text-xl font-bold">{value}</p>
     </div>
   )
 }
