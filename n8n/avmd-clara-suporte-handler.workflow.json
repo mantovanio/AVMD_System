@@ -1,0 +1,92 @@
+{
+  "name": "AVMD - Clara Suporte Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "avmd-clara-suporte",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Clara Handler Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [320, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "function firstName(name) {\n  return String(name || 'cliente').trim().split(/\\s+/)[0] || 'cliente';\n}\nfunction norm(value) {\n  return String(value || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n}\nconst data = $json;\nconst text = norm(data.message_text);\nconst nome = firstName(data.customer_name);\nlet reply = '';\nif (/\\b(token|cartao|cartao|a3|safesign|leitora)\\b/.test(text)) {\n  reply = 'Entendi, ' + nome + '. O token esta conectado no computador e aparece alguma mensagem de erro na tela?';\n} else if (/\\b(a1|arquivo|pfx|p12|instalar certificado|importar certificado)\\b/.test(text)) {\n  reply = 'Entendi, ' + nome + '. Voce ja abriu o Assistente de Certificado Digital da Safeweb e em qual etapa apareceu o erro? https://instalacaocertificado-acsafeweb.safewebpss.com.br/';\n} else if (/\\b(e-cac|ecac|receita|govbr|gov\\.br)\\b/.test(text)) {\n  reply = 'Entendi, ' + nome + '. Quando voce entra no e-CAC, o certificado aparece para selecionar no navegador?';\n} else if (/\\b(video|videoconferencia|videoconferencia|validacao|validacao)\\b/.test(text)) {\n  reply = 'Entendi, ' + nome + '. Esse atendimento e para primeiro certificado ou renovacao?';\n} else if (/\\b(driver|download|baixar|instalador)\\b/.test(text)) {\n  reply = 'Entendi, ' + nome + '. Para drivers de token da Safeweb, acesse pelo computador: https://www.safeweb.com.br/centraldedownloads/token';\n} else {\n  reply = 'Entendi, ' + nome + '. Me diga qual mensagem de erro aparece ou em qual etapa voce travou para eu te orientar pelo caminho certo.';\n}\nreturn [{ json: { ...data, reply_text: reply, reply_subject: 'Suporte CertiID', event_type: 'automation.support', entity_type: 'crm_chat_conversations' } }];"
+      },
+      "id": "prepare-node",
+      "name": "Prepare Clara Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.certiid.com.br/api/communication/outbox",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ channel: 'whatsapp', provider: 'n8n', to_address: $json.customer_phone || '00000000000', subject: $json.reply_subject || null, body: $json.reply_text, payload: { source: 'clara', conversation_id: $json.conversation_id || null, message_id: $json.message_id || null, intent: $json.intent || null, route_target: $json.route_target || null, context: $json.context || {} } }) }}",
+        "options": {}
+      },
+      "id": "outbox-node",
+      "name": "Queue WhatsApp Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.certiid.com.br/api/automation/clara-message-log",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => { const d = $('Prepare Clara Reply').first().json; return { conversation_id: d.conversation_id || null, customer_phone: d.customer_phone || null, customer_name: d.customer_name || null, customer_email: d.customer_email || d.context?.customer_email || null, reply_text: d.reply_text || null, message_text: d.message_text || null, message_id: d.message_id || null, intent: d.intent || 'suporte_tecnico', route_target: d.route_target || 'suporte', confidence: d.confidence || null, status: 'sent', handoff: false, source: d.source || 'clara', context: d.context || {} }; })() }}",
+        "options": {}
+      },
+      "id": "trace-node",
+      "name": "Registrar Clara no CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ (() => { const d = $('Prepare Clara Reply').first().json; return { ok: true, workflow: $workflow.name, customer_phone: d.customer_phone || null, intent: d.intent || null, route_target: d.route_target || null, reply_text: d.reply_text || null }; })() }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-node",
+      "name": "Ack Clara Flow",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1440, 300]
+    }
+  ],
+  "connections": {
+    "Clara Handler Webhook": {
+      "main": [[{ "node": "Prepare Clara Reply", "type": "main", "index": 0 }]]
+    },
+    "Prepare Clara Reply": {
+      "main": [[{ "node": "Queue WhatsApp Reply", "type": "main", "index": 0 }]]
+    },
+    "Queue WhatsApp Reply": {
+      "main": [[{ "node": "Registrar Clara no CRM", "type": "main", "index": 0 }]]
+    },
+    "Registrar Clara no CRM": {
+      "main": [[{ "node": "Ack Clara Flow", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "1"
+}
