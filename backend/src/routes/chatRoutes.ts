@@ -815,6 +815,60 @@ export async function handleChatRoutes(
     return true
   }
 
+  if (method === 'POST' && url === '/api/chat/crm/clara-feedback') {
+    const body = await readJson<Record<string, unknown>>(req)
+    const conversationId = asString(body.conversation_id)
+    const messageId = asString(body.message_id)
+    const reviewerProfileId = asString(body.profile_id)
+    const rating = asString(body.rating)
+    const originalMessage = asString(body.original_message)
+    const correctedResponse = asString(body.corrected_response)
+    const notes = asString(body.notes)
+    const metadata = body.metadata && typeof body.metadata === 'object' ? body.metadata : {}
+
+    if (!conversationId || !messageId) {
+      writeJson(res, 400, { ok: false, error: 'conversation_id e message_id sao obrigatorios.' }, corsOrigin)
+      return true
+    }
+    if (!['boa', 'corrigir', 'risco'].includes(rating)) {
+      writeJson(res, 400, { ok: false, error: 'rating invalido.' }, corsOrigin)
+      return true
+    }
+    if ((rating === 'corrigir' || rating === 'risco') && !correctedResponse && !notes) {
+      writeJson(res, 400, { ok: false, error: 'Informe a resposta correta ou uma observacao.' }, corsOrigin)
+      return true
+    }
+
+    const allowed = reviewerProfileId
+      ? await canViewerAccessConversation(db, reviewerProfileId, conversationId, '')
+      : false
+    if (!allowed) {
+      writeJson(res, 403, { ok: false, error: 'Sem permissao para registrar feedback nessa conversa.' }, corsOrigin)
+      return true
+    }
+
+    const result = await db.query<{ id: string }>(
+      `INSERT INTO clara_response_feedback (
+         conversation_id, message_id, reviewer_profile_id, rating,
+         original_message, corrected_response, notes, metadata
+       )
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::jsonb)
+       RETURNING id`,
+      [
+        conversationId,
+        messageId,
+        reviewerProfileId,
+        rating,
+        originalMessage || null,
+        correctedResponse || null,
+        notes || null,
+        JSON.stringify(metadata),
+      ],
+    )
+    writeJson(res, 200, { ok: true, id: result.rows[0]?.id ?? null }, corsOrigin)
+    return true
+  }
+
   if (method === 'GET' && url === '/api/chat/crm/agents') {
     const result = await db.query<any>(
       `SELECT id, nome, perfil, email
