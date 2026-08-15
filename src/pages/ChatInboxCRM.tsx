@@ -42,6 +42,7 @@ type QueueType = 'atendimento' | 'renovacao' | 'email' | 'agendamento'
 type DirectionType = 'incoming' | 'outgoing'
 type SenderType = 'cliente' | 'ia' | 'humano' | 'contact' | 'agent'
 type RecState = 'idle' | 'recording' | 'preview'
+type ClaraAuditFilter = 'todos' | 'segura' | 'atencao' | 'risco'
 
 interface ConversationRow {
   id: string
@@ -73,6 +74,7 @@ interface ConversationRow {
   contato_status: string | null
   agente_atual: string | null
   agente_desde: string | null
+  clara_audit_metadata?: Record<string, unknown> | null
 }
 
 interface CrmMessage {
@@ -478,8 +480,8 @@ function stripOutgoingSignature(text: string | null | undefined, senderName?: st
   return text
 }
 
-function readClaraAudit(message: CrmMessage) {
-  const metadata = message.metadata && typeof message.metadata === 'object' ? message.metadata : {}
+function readClaraAuditFromMetadata(metadataValue: Record<string, unknown> | null | undefined, fallbackIsIa = false) {
+  const metadata = metadataValue && typeof metadataValue === 'object' ? metadataValue : {}
   const source = typeof metadata.source === 'string' ? metadata.source : ''
   const intent = typeof metadata.clara_intent === 'string' ? metadata.clara_intent : ''
   const confidenceRaw = metadata.clara_confidence
@@ -492,8 +494,16 @@ function readClaraAudit(message: CrmMessage) {
     ? metadata.clara_primeira_resposta_modelo
     : ''
 
-  if (source !== 'clara' && !intent && message.sender_type !== 'ia') return null
+  if (source !== 'clara' && !intent && !fallbackIsIa) return null
   return { intent, confidence, risk, mode, firstResponse }
+}
+
+function readClaraAudit(message: CrmMessage) {
+  return readClaraAuditFromMetadata(message.metadata, message.sender_type === 'ia')
+}
+
+function readConversationClaraAudit(item: ConversationRow) {
+  return readClaraAuditFromMetadata(item.clara_audit_metadata)
 }
 
 function claraIntentLabel(intent: string) {
@@ -826,6 +836,7 @@ export default function ChatInboxCRM() {
   const [search, setSearch] = useState('')
   const [queueFilter, setQueueFilter] = useState<'todas' | QueueType>('todas')
   const [humanFilter, setHumanFilter] = useState<'todos' | 'ia' | 'humano'>('todos')
+  const [claraAuditFilter, setClaraAuditFilter] = useState<ClaraAuditFilter>('todos')
   const [aguardandoFilter, setAguardandoFilter] = useState(false)
   const [showClosedConversations, setShowClosedConversations] = useState(false)
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
@@ -1361,6 +1372,7 @@ export default function ChatInboxCRM() {
           item.atendimento_humano ? '1' : '0',
           item.agente_atual ?? '',
           item.ultima_mensagem ?? '',
+          JSON.stringify(item.clara_audit_metadata ?? {}),
         ].join('|'))
         .join('||')
 
@@ -2508,34 +2520,47 @@ export default function ChatInboxCRM() {
     const matchesHuman = humanFilter === 'todos'
       || (humanFilter === 'humano' && (item.atendimento_humano || humanOverrideIds.includes(item.id)))
       || (humanFilter === 'ia' && !item.atendimento_humano && !humanOverrideIds.includes(item.id))
+    const audit = readConversationClaraAudit(item)
+    const isRiskAudit = audit?.risk === 'alto' || audit?.intent === 'humano_reclamacao_urgencia'
+    const isAttentionAudit = Boolean(audit) && !isRiskAudit && (
+      audit?.intent === 'outros'
+      || audit?.confidence === null
+      || audit?.confidence === undefined
+      || audit.confidence < 0.8
+    )
+    const isSafeAudit = Boolean(audit) && !isRiskAudit && !isAttentionAudit
+    const matchesClaraAudit = claraAuditFilter === 'todos'
+      || (claraAuditFilter === 'segura' && isSafeAudit)
+      || (claraAuditFilter === 'atencao' && isAttentionAudit)
+      || (claraAuditFilter === 'risco' && isRiskAudit)
     const matchesAguardando = !aguardandoFilter || (
       item.ultima_mensagem_direcao === 'incoming'
       && !item.tem_resposta
       && minutesSince(item.ultima_interacao_em) >= 8
     )
-    return matchesQueue && matchesHuman && matchesAguardando
+    return matchesQueue && matchesHuman && matchesClaraAudit && matchesAguardando
   }
 
   const filteredConversations = useMemo(() => {
     return activeConversations.filter(matchesOperationalFilters)
-  }, [activeConversations, queueFilter, humanFilter, humanOverrideIds, aguardandoFilter])
+  }, [activeConversations, queueFilter, humanFilter, claraAuditFilter, humanOverrideIds, aguardandoFilter])
 
   const hiddenIncomingByFilters = useMemo(() => (
     activeConversations.filter(item => (
       item.ultima_mensagem_direcao === 'incoming'
       && !matchesOperationalFilters(item)
     )).length
-  ), [activeConversations, queueFilter, humanFilter, humanOverrideIds, aguardandoFilter])
+  ), [activeConversations, queueFilter, humanFilter, claraAuditFilter, humanOverrideIds, aguardandoFilter])
 
   const hiddenIncomingSample = useMemo(() => (
     activeConversations
       .filter(item => item.ultima_mensagem_direcao === 'incoming' && !matchesOperationalFilters(item))
       .slice(0, 5)
-  ), [activeConversations, queueFilter, humanFilter, humanOverrideIds, aguardandoFilter])
+  ), [activeConversations, queueFilter, humanFilter, claraAuditFilter, humanOverrideIds, aguardandoFilter])
 
   const filteredClosedConversations = useMemo(() => (
     closedConversations.filter(matchesOperationalFilters)
-  ), [closedConversations, queueFilter, humanFilter, humanOverrideIds])
+  ), [closedConversations, queueFilter, humanFilter, claraAuditFilter, humanOverrideIds])
 
   const filteredConversationIds = useMemo(
     () => filteredConversations.map(item => item.id),
@@ -2686,7 +2711,7 @@ export default function ChatInboxCRM() {
             </div>
           </div>
 
-          <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_160px_160px_210px]">
+          <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_160px_160px_190px_210px]">
             <label className="flex h-11 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4">
               <Search size={16} className="text-slate-400" />
               <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar contato ou mensagem" className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" />
@@ -2704,6 +2729,13 @@ export default function ChatInboxCRM() {
               <option value="todos">IA e humano</option>
               <option value="ia">So IA</option>
               <option value="humano">So humano</option>
+            </select>
+
+            <select value={claraAuditFilter} onChange={event => setClaraAuditFilter(event.target.value as ClaraAuditFilter)} className="h-11 rounded-full border border-slate-200 bg-white px-4 text-sm outline-none">
+              <option value="todos">Clara: todos</option>
+              <option value="segura">Clara segura</option>
+              <option value="atencao">Clara atencao</option>
+              <option value="risco">Clara risco alto</option>
             </select>
 
             <button
@@ -2735,6 +2767,7 @@ export default function ChatInboxCRM() {
                 onClick={() => {
                   setQueueFilter('todas')
                   setHumanFilter('todos')
+                  setClaraAuditFilter('todos')
                   setAguardandoFilter(false)
                 }}
                 className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
@@ -3610,6 +3643,15 @@ function ConversationCard({
   onSaveContact?: () => void
 }) {
     const hasCrmCustomer = hasRegisteredCustomer(item)
+    const claraAudit = readConversationClaraAudit(item)
+    const claraConfidenceLabel = claraAudit?.confidence !== null && claraAudit?.confidence !== undefined
+      ? `${Math.round(claraAudit.confidence * 100)}%`
+      : ''
+    const claraTone = claraAudit?.risk === 'alto' || claraAudit?.intent === 'humano_reclamacao_urgencia'
+      ? 'red'
+      : claraAudit && (claraAudit.intent === 'outros' || claraAudit.confidence === null || claraAudit.confidence === undefined || claraAudit.confidence < 0.8)
+        ? 'amber'
+        : 'sky'
     const selectedClass = selected
       ? 'border-sky-200 bg-sky-50 shadow-[0_10px_24px_rgba(14,116,144,0.08)]'
       : closed
@@ -3675,6 +3717,7 @@ function ConversationCard({
           {unreadCount > 0 && (
             <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">{unreadCount} nova{unreadCount > 1 ? 's' : ''}</span>
           )}
+          {claraAudit && <Badge text={`Clara ${claraConfidenceLabel || claraIntentLabel(claraAudit.intent)}`} tone={claraTone} />}
           {closed && <Badge text="Encerrada" tone="slate" />}
           <span className="ml-auto text-[10px] font-medium text-slate-400">{formatRelative(item.ultima_interacao_em)}</span>
         </button>

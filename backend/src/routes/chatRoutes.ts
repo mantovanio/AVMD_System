@@ -703,6 +703,14 @@ export async function handleChatRoutes(
        ranked AS (
          SELECT conv.*,
                 EXISTS (SELECT 1 FROM crm_chat_messages WHERE conversation_id = conv.id AND direction = 'outgoing') AS tem_resposta,
+                (
+                  SELECT m.metadata
+                  FROM crm_chat_messages m
+                  WHERE m.conversation_id = conv.id
+                    AND m.metadata->>'source' = 'clara'
+                  ORDER BY m.created_at DESC
+                  LIMIT 1
+                ) AS clara_audit_metadata,
                  ROW_NUMBER() OVER (
                    PARTITION BY conv.fila,
                      CASE
