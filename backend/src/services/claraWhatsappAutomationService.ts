@@ -90,7 +90,7 @@ function buildMessage(input: ClaraWhatsappAutomationInput) {
   if (input.type === 'renovacao_aviso') {
     const expiration = dateTime(payload.expires_at ?? payload.data_vencimento)
     return [
-      `Olá, ${name}. Aqui é a equipe CertiID.`,
+      `Olá, ${name}. Aqui é a Clara da CertiID.`,
       `Seu ${product}${expiration ? ` vence em ${expiration}` : ' está no período de renovação'}.`,
       'Posso te ajudar a renovar de forma simples, sem perder prazo e sem interromper o uso do certificado.',
       text(payload.renewal_link ?? payload.link_renovacao) ? `Para seguir agora: ${text(payload.renewal_link ?? payload.link_renovacao)}` : `Se preferir, acesse: ${portalUrl}`,
@@ -165,7 +165,9 @@ export class ClaraWhatsappAutomationService {
         event_key: eventKey,
         tipo: input.type,
         canal: text(payload.canal) ?? 'atendimento',
-        source: 'sistema',
+        source: 'clara',
+        clara_mode: 'automation',
+        clara_intent: input.type,
         entity_id: input.entity_id ?? text(payload.entity_id),
         entity_type: input.entity_type ?? text(payload.entity_type),
       },

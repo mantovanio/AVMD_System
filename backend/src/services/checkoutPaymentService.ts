@@ -901,7 +901,7 @@ export class CheckoutPaymentService {
       sale_id: input.saleId,
       tipo: 'checkout_payment_link',
       canal: 'checkout',
-      source: 'sistema',
+      source: 'clara',
       payment_status: input.paymentStatus,
       mocked: input.mocked,
       link_pagamento: link,

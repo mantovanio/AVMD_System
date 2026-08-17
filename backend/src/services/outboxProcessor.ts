@@ -1,7 +1,6 @@
 import type { AivenSqlClient } from '../db/aivenClient.js'
 import type { BackendConfig } from '../config/env.js'
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
-import type { ConfigRepository } from '../repositories/configRepository.js'
 import { sendEvolutionMessage } from '../integrations/evolutionAdapter.js'
 
 export type OutboxProcessorResult = {
@@ -55,7 +54,6 @@ export class OutboxProcessor {
     private readonly outboxRepo: CommunicationOutboxRepository,
     private readonly config: BackendConfig,
     private readonly db?: AivenSqlClient,
-    private readonly configRepository?: ConfigRepository,
   ) {}
 
   start(intervalMs = 5_000) {
@@ -87,29 +85,12 @@ export class OutboxProcessor {
       const items = await this.outboxRepo.listPending(limit)
       if (items.length === 0) return { processed: 0, sent: 0, failed: 0 }
 
-      let aiEnabled = true
-      if (this.configRepository) {
-        try {
-          const aiControl = await this.configRepository.get<{ enabled: boolean }>('ai_control')
-          aiEnabled = aiControl.enabled
-        } catch { /* se falhar, assume ligado por seguranca */ }
-      }
-
       let sent = 0
       let failed = 0
 
       for (let index = 0; index < items.length; index += 1) {
         const item = items[index]
         try {
-          if (!aiEnabled && this.isAiMessage(item.payload)) {
-            await this.outboxRepo.markProcessed({
-              id: item.id,
-              status: 'failed',
-              error: 'IA desligada por ai_control; envio bloqueado.',
-            })
-            failed++
-            continue
-          }
           if (item.channel === 'whatsapp') {
             await this.sendWhatsApp(item)
             if (items.slice(index + 1).some(next => next.channel === 'whatsapp')) {
@@ -185,9 +166,9 @@ export class OutboxProcessor {
       const isClaraMessage = String(item.payload.source ?? '').trim().toLowerCase() === 'clara'
         || item.payload.clara_intent !== undefined
       const senderName = isClaraMessage
-        ? 'Sistema'
-        : tipo.includes('renovacao') ? 'Sistema' : 'Sistema'
-      const senderType = isClaraMessage ? 'automation' : 'automation'
+        ? 'Clara (IA)'
+        : tipo.includes('renovacao') ? 'Clara (IA)' : 'Sistema'
+      const senderType = isClaraMessage ? 'ia' : 'automation'
       const confidenceRaw = item.payload.clara_confidence
       const claraConfidence = typeof confidenceRaw === 'number'
         ? confidenceRaw
@@ -576,15 +557,6 @@ export class OutboxProcessor {
       status: ok ? 'sent' : 'failed',
       error: ok ? null : `Email n8n retornou HTTP ${response.status}${sentFlag !== true ? ' sem confirmacao sent=true' : ''}`,
     })
-  }
-
-  private isAiMessage(payload: Record<string, unknown>): boolean {
-    const source = String(payload.source ?? '').trim().toLowerCase()
-    if (source === 'clara') return true
-    if (payload.clara_intent !== undefined) return true
-    if (payload.clara_source !== undefined) return true
-    if (payload.clara_mode !== undefined) return true
-    return false
   }
 
   private async sleep(ms: number) {

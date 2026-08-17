@@ -477,6 +477,9 @@ export async function handleScheduleAutomationRoutes(
         venda_id: match.venda_id,
         agendamento_id: schedule.id,
         source,
+        clara_source: 'clara',
+        clara_mode: 'automation',
+        clara_intent: 'agendamento_lembrete',
         event_type: eventType,
       },
     })
@@ -493,6 +496,9 @@ export async function handleScheduleAutomationRoutes(
           venda_id: match.venda_id,
           agendamento_id: schedule.id,
           source,
+          clara_source: 'clara',
+          clara_mode: 'automation',
+          clara_intent: 'documentos_validacao',
           event_type: eventType,
         },
       })

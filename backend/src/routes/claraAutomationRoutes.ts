@@ -245,10 +245,6 @@ export async function handleClaraAutomationRoutes(
   if (configRepository) {
     const aiControl = await configRepository.get<{ enabled: boolean }>('ai_control')
     if (!aiControl.enabled) {
-      if (req.method === 'POST' && req.url === '/api/automation/clara-whatsapp') {
-        writeJson(res, 200, { ok: true, skipped: true, reason: 'ai_disabled' }, corsOrigin)
-        return true
-      }
       if (req.method === 'POST' && (req.url === '/api/automation/clara-message-log' || req.url === '/api/automation/clara-handoff')) {
         writeJson(res, 200, { ok: true, skipped: true, reason: 'ai_disabled' }, corsOrigin)
         return true
