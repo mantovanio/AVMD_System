@@ -5,6 +5,8 @@ import { readJson, writeJson } from '../utils/http.js'
 type GetProfileBody = {
   userId?: string
   email?: string
+  firstName?: string
+  lastName?: string
 }
 
 type UpdateProfileBody = Partial<{
@@ -59,6 +61,22 @@ export async function handleProfileRoutes(
     let profile = await profileRepository.findByClerkId(body.userId)
     if (!profile && body.email) {
       profile = await profileRepository.findByEmail(body.email)
+    }
+
+    if (!profile && body.email) {
+      const nome = [body.firstName, body.lastName].filter(Boolean).join(' ').trim() || body.email.split('@')[0]
+      try {
+        profile = await profileRepository.createProfile({
+          clerk_user_id: body.userId,
+          nome,
+          email: body.email,
+          perfil: 'usuario',
+          tipo_vinculo: 'funcionario',
+          permissoes: [],
+          metadata: { auto_provisioned: true },
+        })
+      } catch {
+      }
     }
 
     writeJson(res, 200, { ok: true, profile: profile ?? null }, corsOrigin)

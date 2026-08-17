@@ -203,7 +203,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             signal: controller.signal,
-            body: JSON.stringify({ userId, email }),
+            body: JSON.stringify({ userId, email, firstName: user?.firstName, lastName: user?.lastName }),
           })
           const data = await response.json().catch(() => null) as { ok: boolean; profile: Profile | null } | null
           setProfile(data?.profile ?? null)
