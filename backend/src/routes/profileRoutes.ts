@@ -63,6 +63,16 @@ export async function handleProfileRoutes(
       profile = await profileRepository.findByEmail(body.email)
     }
 
+    if (profile && body.userId && !profile.clerk_user_id) {
+      await profileRepository.update(profile.id, { clerk_user_id: body.userId })
+      profile = { ...profile, clerk_user_id: body.userId }
+    }
+
+    if (profile && profile.status === 'removido' && body.userId) {
+      await profileRepository.update(profile.id, { status: 'ativo' })
+      profile = { ...profile, status: 'ativo' }
+    }
+
     if (!profile && body.email) {
       const nome = [body.firstName, body.lastName].filter(Boolean).join(' ').trim() || body.email.split('@')[0]
       try {
