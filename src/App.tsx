@@ -292,7 +292,7 @@ function AppContent() {
   const rolePages   = resolveLegacyPages(profile)
   const modulePages = getModuleEnabledPages(enabledModules)
   const allowedPages = moduleBasedPages.length > 0
-    ? moduleBasedPages.filter(p => rolePages.includes(p) && modulePages.includes(p))
+    ? moduleBasedPages.filter(p => modulePages.includes(p))
     : rolePages.filter(p => modulePages.includes(p))
   const defaultPage  = resolveDefaultPage(profile)
   const activePage: Page = allowedPages.includes(page) ? page : (allowedPages[0] ?? defaultPage)
