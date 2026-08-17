@@ -15,15 +15,15 @@ export type AIControlConfig = {
 
 const DEFAULTS: Record<string, TimeoutAutomationConfig | AIControlConfig> = {
   timeout_automation: {
-    enabled: true,
+    enabled: false,
     minutes: 10,
     clara_webhook: 'https://auto.mantovan.com.br/webhook/avmd-clara-inbound',
   },
   ai_control: {
-    enabled: true,
+    enabled: false,
     atendimento_ia_enabled: false,
-    renovacao_ia_enabled: true,
-    description: 'Controla se a IA (Clara/N8N) responde automaticamente. atendimento_ia_enabled=false desliga IA no canal Atendimento; renovacao_ia_enabled controla canal Renovacoes.',
+    renovacao_ia_enabled: false,
+    description: 'Controla se a IA responde automaticamente. Todos os canais desativados por padrao — somente atendimento humano.',
   },
 }
 

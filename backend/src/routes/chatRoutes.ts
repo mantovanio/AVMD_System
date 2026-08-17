@@ -576,6 +576,11 @@ export async function handleChatRoutes(
       writeJson(res, 200, { ok: true, triggered: 0, message: 'timeout desligado' }, corsOrigin)
       return true
     }
+    const aiControl = await configRepository.get<{ enabled: boolean }>('ai_control')
+    if (!aiControl.enabled) {
+      writeJson(res, 200, { ok: true, triggered: 0, message: 'ai_control desligado' }, corsOrigin)
+      return true
+    }
     const instanceAtend = String(process.env.EVOLUTION_ATENDIMENTO_INSTANCE_NAME ?? 'atendimento').toLowerCase()
     const stale = await db.query<any>(
       `SELECT c.id, c.document_key, c.whatsapp_instance, c.cliente_nome, c.ultima_mensagem, c.ultima_interacao_em, c.fila,

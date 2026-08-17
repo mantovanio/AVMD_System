@@ -166,9 +166,9 @@ export class OutboxProcessor {
       const isClaraMessage = String(item.payload.source ?? '').trim().toLowerCase() === 'clara'
         || item.payload.clara_intent !== undefined
       const senderName = isClaraMessage
-        ? 'Clara (IA)'
-        : tipo.includes('renovacao') ? 'Clara (IA)' : 'Sistema'
-      const senderType = isClaraMessage ? 'ia' : 'automation'
+        ? 'Sistema'
+        : tipo.includes('renovacao') ? 'Sistema' : 'Sistema'
+      const senderType = isClaraMessage ? 'automation' : 'automation'
       const confidenceRaw = item.payload.clara_confidence
       const claraConfidence = typeof confidenceRaw === 'number'
         ? confidenceRaw

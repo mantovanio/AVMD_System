@@ -217,6 +217,7 @@ const server = createServer(async (req, res) => {
       leadRepository,
       communicationOutboxRepository,
       corsOrigin,
+      configRepository,
     )
     if (handledClaraAutomation) return
 

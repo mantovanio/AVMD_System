@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AivenSqlClient } from '../db/aivenClient.js'
 import type { LeadRepository } from '../repositories/leadRepository.js'
 import type { CommunicationOutboxRepository } from '../repositories/communicationOutboxRepository.js'
+import type { ConfigRepository } from '../repositories/configRepository.js'
 import { ClaraWhatsappAutomationService, type ClaraWhatsappAutomationInput } from '../services/claraWhatsappAutomationService.js'
 import { readJson, writeJson } from '../utils/http.js'
 
@@ -99,20 +100,20 @@ async function markConversationAsHuman(
   )
 
   const message = [
-    'Clara transferiu esta conversa para atendimento humano.',
+    'Transferido para atendimento humano.',
     input.messageText ? `Ultima mensagem do cliente: ${input.messageText}` : null,
   ].filter(Boolean).join('\n')
 
   await db.query(
     `insert into crm_chat_messages
        (conversation_id, document_key, direction, sender_type, sender_name, mensagem)
-     select $1::uuid, $2, 'outgoing', 'ia', 'IA Clara', $3
+     select $1::uuid, $2, 'outgoing', 'automation', 'Sistema', $3
      where not exists (
        select 1
          from crm_chat_messages
         where conversation_id = $1::uuid
-          and sender_type = 'ia'
-          and sender_name = 'IA Clara'
+          and sender_type = 'automation'
+          and sender_name = 'Sistema'
           and mensagem = $3
           and created_at > now() - interval '5 minutes'
      )`,
@@ -145,7 +146,7 @@ async function handleClaraMessageLog(
 
   const canvasText = errorText
     ? [
-        'Clara tentou responder, mas houve falha no fluxo da IA.',
+        'Tentativa de resposta automatizada falhou.',
         `Erro: ${errorText}`,
         intent ? `Intencao: ${intent}` : null,
       ].filter(Boolean).join('\n')
@@ -156,13 +157,13 @@ async function handleClaraMessageLog(
     const result = await db.query<{ id: string }>(
       `insert into crm_chat_messages
          (conversation_id, document_key, external_message_id, direction, sender_type, sender_name, mensagem)
-       select $1::uuid, $2, $3, 'outgoing', 'ia', 'IA Clara', $4
+       select $1::uuid, $2, $3, 'outgoing', 'automation', 'Sistema', $4
        where not exists (
          select 1
            from crm_chat_messages
           where conversation_id = $1::uuid
-            and sender_type = 'ia'
-            and sender_name = 'IA Clara'
+            and sender_type = 'automation'
+            and sender_name = 'Sistema'
             and mensagem = $4
             and created_at > now() - interval '5 minutes'
        )
@@ -239,7 +240,21 @@ export async function handleClaraAutomationRoutes(
   leadRepository: LeadRepository,
   outboxRepository: CommunicationOutboxRepository,
   corsOrigin: string,
+  configRepository?: ConfigRepository,
 ) {
+  if (configRepository) {
+    const aiControl = await configRepository.get<{ enabled: boolean }>('ai_control')
+    if (!aiControl.enabled) {
+      if (req.method === 'POST' && req.url === '/api/automation/clara-whatsapp') {
+        writeJson(res, 200, { ok: true, skipped: true, reason: 'ai_disabled' }, corsOrigin)
+        return true
+      }
+      if (req.method === 'POST' && (req.url === '/api/automation/clara-message-log' || req.url === '/api/automation/clara-handoff')) {
+        writeJson(res, 200, { ok: true, skipped: true, reason: 'ai_disabled' }, corsOrigin)
+        return true
+      }
+    }
+  }
   if (req.method === 'POST' && req.url === '/api/automation/clara-whatsapp') {
     const body = await readJson<ClaraWhatsappAutomationInput>(req)
     if (!body?.type || !body?.phone) {
@@ -270,12 +285,12 @@ export async function handleClaraAutomationRoutes(
   const flowType = normalizeText(body.context?.tipo_fluxo ?? body.context?.flow_type) ?? 'atendimento'
   const source = normalizeText(body.context?.source ?? body.source) ?? 'clara'
   const motivoContato = flowType === 'agendamento'
-    ? 'agendamento_clara'
+    ? 'agendamento_automacao'
     : flowType === 'renovacao'
-      ? 'renovacao_clara'
-      : 'atendimento_clara'
+      ? 'renovacao_automacao'
+      : 'atendimento_automacao'
   const noteParts = [
-    'Transferido automaticamente da IA Clara para atendimento humano.',
+    'Transferido automaticamente para atendimento humano.',
     'Fluxo: ' + flowType + '.',
     'Origem: ' + source + '.',
     body.context?.renovacao_id ? 'Renovacao: ' + body.context.renovacao_id + '.' : null,
