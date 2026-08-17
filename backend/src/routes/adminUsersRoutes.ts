@@ -2,11 +2,24 @@ import { createClerkClient } from '@clerk/backend'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ProfileRepository } from '../repositories/profileRepository.js'
 import { readJson, writeJson } from '../utils/http.js'
-import { requireAdmin } from '../utils/authMiddleware.js'
 
 function buildTemporaryStrongPassword() {
   const stamp = Date.now().toString(36)
   return `Tmp#${stamp}aA1!`
+}
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase()
+}
+
+type ClerkUserLike = {
+  id: string
+  emailAddresses?: Array<{ emailAddress?: string }>
+}
+
+function clerkUserHasEmail(user: ClerkUserLike, email: string) {
+  const normalizedEmail = normalizeEmail(email)
+  return user.emailAddresses?.some(item => normalizeEmail(item.emailAddress ?? '') === normalizedEmail) ?? false
 }
 
 type CreateUserBody = {
@@ -115,8 +128,7 @@ export async function handleAdminUsersRoutes(
   clerkSecretKey: string,
   corsOrigin: string,
 ): Promise<boolean> {
-  const url = req.url ?? ''
-  if (!url.startsWith('/api/admin/users')) return false
+  if (req.url !== '/api/admin/users') return false
   if (req.method !== 'POST') return false
 
   if (!clerkSecretKey) {
@@ -124,85 +136,59 @@ export async function handleAdminUsersRoutes(
     return true
   }
 
-  const authReq = await requireAdmin(req, res, clerkSecretKey, corsOrigin, profileRepository)
-  if (!authReq) return true
-
   const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
-
-  if (url === '/api/admin/users/disable-client-passwords') {
-    try {
-      const clientProfiles = await profileRepository.findClientProfilesWithClerkId()
-
-      let disabled = 0
-      let skipped = 0
-      const errors: string[] = []
-
-      for (const profile of clientProfiles) {
-        try {
-          const response = await fetch(`https://api.clerk.com/v1/users/${profile.clerk_user_id}`, {
-            method: 'PATCH',
-            headers: {
-              'Authorization': `Bearer ${clerkSecretKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ password_enabled: false }),
-          })
-          if (response.ok) {
-            disabled++
-          } else if (response.status === 404) {
-            skipped++
-          } else {
-            const errBody = await response.text().catch(() => '')
-            errors.push(`${profile.email}: HTTP ${response.status} ${errBody}`)
-          }
-        } catch (error) {
-          errors.push(`${profile.email}: ${error instanceof Error ? error.message : String(error)}`)
-        }
-      }
-
-      writeJson(res, 200, { ok: true, disabled, skipped, total: clientProfiles.length, errors }, corsOrigin)
-    } catch (error) {
-      writeJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) }, corsOrigin)
-    }
-    return true
-  }
-
-  const body = await readJson<AdminUsersBody>(authReq)
+  const body = await readJson<AdminUsersBody>(req)
 
   if (body.action === 'create_user') {
     const { nome, email, senha, perfil, tipo_vinculo, permissoes, metadata } = body.payload
-    const [firstNameRaw, ...rest] = nome.trim().split(/\s+/)
-    const firstName = firstNameRaw || 'Usuario'
-    const lastName = rest.join(' ').trim() || undefined
-    const usernameBase = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '')
-    const username = ((usernameBase || 'usuario') + Date.now().toString(36)).slice(0, 24)
 
     try {
-      const clerkUser = await clerkClient.users.createUser({
-        emailAddress: [email],
-        username,
-        password: buildTemporaryStrongPassword(),
-        firstName,
-        lastName,
-      })
+      const normalizedEmail = normalizeEmail(email)
+      const existingClerkUsers = await clerkClient.users.getUserList({ emailAddress: [normalizedEmail], limit: 5 })
+      const matched = existingClerkUsers.data.find(u => clerkUserHasEmail(u, normalizedEmail))
 
-      await clerkClient.users.updateUser(clerkUser.id, {
+      let clerkUserId: string
+      if (matched) {
+        clerkUserId = matched.id
+      } else {
+        const [firstNameRaw, ...rest] = nome.trim().split(/\s+/)
+        const firstName = firstNameRaw || 'Usuario'
+        const lastName = rest.join(' ').trim() || undefined
+        const usernameBase = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '')
+        const username = ((usernameBase || 'usuario') + Date.now().toString(36)).slice(0, 24)
+
+        const clerkUser = await clerkClient.users.createUser({
+          emailAddress: [email],
+          username,
+          password: buildTemporaryStrongPassword(),
+          firstName,
+          lastName,
+        })
+        clerkUserId = clerkUser.id
+      }
+
+      await clerkClient.users.updateUser(clerkUserId, {
         password: senha,
         skipPasswordChecks: true,
         signOutOfOtherSessions: true,
       })
 
-      await profileRepository.createProfile({
-        clerk_user_id: clerkUser.id,
-        nome,
-        email,
-        perfil,
-        tipo_vinculo,
-        permissoes: permissoes ?? [],
-        metadata: metadata ?? {},
-      })
-
-      writeJson(res, 200, { ok: true, userId: clerkUser.id }, corsOrigin)
+      const existingProfile = await profileRepository.findInternalAccessByEmail(email)
+      if (existingProfile) {
+        await profileRepository.update(existingProfile.id, { clerk_user_id: clerkUserId })
+        writeJson(res, 200, { ok: true, userId: clerkUserId, linked: true }, corsOrigin)
+      } else {
+        await profileRepository.createProfile({
+          clerk_user_id: clerkUserId,
+          nome,
+          email,
+          perfil,
+          tipo_vinculo,
+          permissoes: permissoes ?? [],
+          metadata: metadata ?? {},
+        })
+        writeJson(res, 200, { ok: true, userId: clerkUserId }, corsOrigin)
+      }
     } catch (error) {
       writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
     }
@@ -262,29 +248,39 @@ export async function handleAdminUsersRoutes(
       return true
     }
 
-    const [firstNameRaw, ...rest] = profile.nome.trim().split(/\s+/)
-    const firstName = firstNameRaw || 'Usuario'
-    const lastName = rest.join(' ').trim() || undefined
-    const usernameBase = profile.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '')
-    const username = ((usernameBase || 'usuario') + Date.now().toString(36)).slice(0, 24)
-
     try {
-      const clerkUser = await clerkClient.users.createUser({
-        emailAddress: [profile.email],
-        username,
-        password: buildTemporaryStrongPassword(),
-        firstName,
-        lastName,
-      })
+      const normalizedEmail = normalizeEmail(profile.email)
+      const existingClerkUsers = await clerkClient.users.getUserList({ emailAddress: [normalizedEmail], limit: 5 })
+      const matched = existingClerkUsers.data.find(u => clerkUserHasEmail(u, normalizedEmail))
 
-      await clerkClient.users.updateUser(clerkUser.id, {
+      let clerkUserId: string
+      if (matched) {
+        clerkUserId = matched.id
+      } else {
+        const [firstNameRaw, ...rest] = profile.nome.trim().split(/\s+/)
+        const firstName = firstNameRaw || 'Usuario'
+        const lastName = rest.join(' ').trim() || undefined
+        const usernameBase = profile.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '')
+        const username = ((usernameBase || 'usuario') + Date.now().toString(36)).slice(0, 24)
+
+        const clerkUser = await clerkClient.users.createUser({
+          emailAddress: [profile.email],
+          username,
+          password: buildTemporaryStrongPassword(),
+          firstName,
+          lastName,
+        })
+        clerkUserId = clerkUser.id
+      }
+
+      await clerkClient.users.updateUser(clerkUserId, {
         password,
         skipPasswordChecks: true,
         signOutOfOtherSessions: true,
       })
 
-      await profileRepository.update(profile.id, { clerk_user_id: clerkUser.id })
-      writeJson(res, 200, { ok: true, userId: clerkUser.id }, corsOrigin)
+      await profileRepository.update(profile.id, { clerk_user_id: clerkUserId })
+      writeJson(res, 200, { ok: true, userId: clerkUserId }, corsOrigin)
     } catch (error) {
       writeJson(res, 400, { ok: false, error: getClerkErrorMessage(error) }, corsOrigin)
     }
@@ -321,9 +317,8 @@ export async function handleAdminUsersRoutes(
     return true
   }
 
-    writeJson(res, 400, { ok: false, error: 'action inválida' }, corsOrigin)
-    return true
-  }
-
+  writeJson(res, 400, { ok: false, error: 'action inválida' }, corsOrigin)
+  return true
+}
 
 

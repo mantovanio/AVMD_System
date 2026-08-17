@@ -112,6 +112,38 @@ async function sendRecoveryCode(
   _skipRiskCheck = false,
 ) {
   const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
+
+  if (!profile.clerk_user_id && profile.email && profile.nome.trim()) {
+    try {
+      const normalizedEmail = normalizeEmail(profile.email)
+      const existingClerkUsers = await clerkClient.users.getUserList({ emailAddress: [normalizedEmail], limit: 5 })
+      const matched = existingClerkUsers.data.find(u => clerkUserHasEmail(u, normalizedEmail))
+
+      if (matched) {
+        await profileRepository.update(profile.id, { clerk_user_id: matched.id })
+        profile = { ...profile, clerk_user_id: matched.id }
+      } else {
+        const [firstNameRaw, ...rest] = profile.nome.trim().split(/\s+/)
+        const firstName = firstNameRaw || 'Usuario'
+        const lastName = rest.join(' ').trim() || undefined
+        const usernameBase = profile.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '')
+        const username = ((usernameBase || 'usuario') + Date.now().toString(36)).slice(0, 24)
+
+        const clerkUser = await clerkClient.users.createUser({
+          emailAddress: [profile.email],
+          username,
+          password: `Tmp#${Date.now().toString(36)}aA1!`,
+          firstName,
+          lastName,
+        })
+
+        await profileRepository.update(profile.id, { clerk_user_id: clerkUser.id })
+        profile = { ...profile, clerk_user_id: clerkUser.id }
+      }
+    } catch {
+    }
+  }
+
   const risk = await findEmailRisk(clerkClient, profile, email)
   if (risk.blocked || !risk.clerkUserId) {
     throw new Error(risk.reason ?? 'Recuperação bloqueada para este cadastro.')
@@ -208,7 +240,7 @@ export async function handlePasswordRecoveryRoutes(
       return true
     }
 
-    const profile = await profileRepository.findInternalAccessByEmail(email)
+    let profile = await profileRepository.findInternalAccessByEmail(email)
     if (!profile) {
       await passwordRecoveryAuditRepository.create({
         email,
@@ -241,6 +273,37 @@ export async function handlePasswordRecoveryRoutes(
     }
 
     const clerkClient = createClerkClient({ secretKey: clerkSecretKey })
+
+    if (!profile.clerk_user_id && profile.email && profile.nome.trim()) {
+      try {
+        const normalizedEmail = normalizeEmail(profile.email)
+        const existingClerkUsers = await clerkClient.users.getUserList({ emailAddress: [normalizedEmail], limit: 5 })
+        const matched = existingClerkUsers.data.find(u => clerkUserHasEmail(u, normalizedEmail))
+
+        if (matched) {
+          await profileRepository.update(profile.id, { clerk_user_id: matched.id })
+          profile = { ...profile, clerk_user_id: matched.id }
+        } else {
+          const [firstNameRaw, ...rest] = profile.nome.trim().split(/\s+/)
+          const firstName = firstNameRaw || 'Usuario'
+          const lastName = rest.join(' ').trim() || undefined
+          const usernameBase = profile.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '')
+          const username = ((usernameBase || 'usuario') + Date.now().toString(36)).slice(0, 24)
+
+          const clerkUser = await clerkClient.users.createUser({
+            emailAddress: [profile.email],
+            username,
+            password: `Tmp#${Date.now().toString(36)}aA1!`,
+            firstName,
+            lastName,
+          })
+
+          await profileRepository.update(profile.id, { clerk_user_id: clerkUser.id })
+          profile = { ...profile, clerk_user_id: clerkUser.id }
+        }
+      } catch {
+      }
+    }
 
     try {
       const risk = await findEmailRisk(clerkClient, profile, email)
