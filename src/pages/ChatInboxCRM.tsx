@@ -3362,7 +3362,7 @@ export default function ChatInboxCRM() {
                             className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-200 bg-amber-100 text-amber-700 shadow-sm transition hover:bg-amber-200 disabled:opacity-60"
                             aria-label="Desligar IA"
                           >
-                            <Bot size={18} />
+                            <User size={18} />
                           </button>
                           <span>A resposta manual está oculta enquanto a IA conduz a conversa.</span>
                         </div>
