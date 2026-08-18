@@ -1794,9 +1794,9 @@ export default function ChatInboxCRM() {
     setActionError(null)
 
     if (nextValue) {
-      markConversationAsHuman(selectedConversation.id)
-    } else {
       unmarkConversationAsHuman(selectedConversation.id)
+    } else {
+      markConversationAsHuman(selectedConversation.id)
     }
 
     try {
