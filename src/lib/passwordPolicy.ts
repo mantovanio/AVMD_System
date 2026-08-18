@@ -44,7 +44,7 @@ export function translatePasswordPolicyError(message: string) {
     if (normalized.includes('digit') || normalized.includes('number')) return 'Inclua pelo menos 1 número.'
   }
   if (normalized.includes('password_found_in_breach') || normalized.includes('found in a list') || normalized.includes('data breach') || normalized.includes('pwned')) {
-    return 'Esta senha foi encontrada em vazamentos de dados. Por segurança, escolha uma senha diferente.'
+    return 'Esta senha foi encontrada em vazamentos de dados. Por segurança, use "Esqueceu a senha?" para definir uma nova senha.'
   }
   return message
 }
