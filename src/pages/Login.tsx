@@ -383,8 +383,11 @@ export default function Login() {
                     <InputField label="Email" type="email" value={loginEmail} onChange={setLoginEmail} placeholder="seu@email.com" autoFocus autoComplete="username" />
 
                     <div>
-                      <div className="mb-1">
+                      <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-medium text-white/90">Senha</span>
+                        <button type="button" onClick={() => setView('forgot')} className="text-xs text-white/90 hover:underline">
+                          Esqueceu a senha?
+                        </button>
                       </div>
                       <PasswordInput label="" value={loginPassword} onChange={setLoginPassword} />
                     </div>
