@@ -28,6 +28,7 @@ import {
   UserPlus,
   UserRound,
   X,
+  Stethoscope,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getApiUrl, resolveChatMediaUrl } from '@/lib/api'
@@ -2337,6 +2338,61 @@ export default function ChatInboxCRM() {
     return err.message || 'Nao foi possivel acessar o microfone.'
   }
 
+  async function runMicDiagnostic() {
+    setActionError(null)
+    const logs: string[] = []
+    logs.push('=== DIAGNÓSTICO MICROFONE ===')
+    logs.push(`isSecureContext: ${window.isSecureContext}`)
+    logs.push(`Protocol: ${location.protocol}`)
+    logs.push(`Host: ${location.host}`)
+    logs.push(`UserAgent: ${navigator.userAgent.slice(0, 80)}`)
+
+    // Permissions API
+    try {
+      const perm = await navigator.permissions.query({ name: 'microphone' as PermissionName })
+      logs.push(`Permission state: ${perm.state}`)
+    } catch (e) {
+      logs.push(`Permissions API: ${e instanceof Error ? e.message : String(e)}`)
+    }
+
+    // Dispositivos
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      const mics = devices.filter(d => d.kind === 'audioinput')
+      logs.push(`Microfones detectados: ${mics.length}`)
+      mics.forEach(m => logs.push(`  - ${m.label || '(sem label)'} (${m.deviceId.slice(0, 12)}...)`))
+    } catch (e) {
+      logs.push(`enumerateDevices: ${e instanceof Error ? e.message : String(e)}`)
+    }
+
+    // getUserMedia real
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const track = stream.getAudioTracks()[0]
+      logs.push(`✅ getUserMedia OK`)
+      logs.push(`  Track: ${track.label} | enabled: ${track.enabled} | state: ${track.readyState}`)
+      logs.push(`  Settings: ${JSON.stringify(track.getSettings())}`)
+      stream.getTracks().forEach(t => t.stop())
+    } catch (e) {
+      const err = e as Error & { name?: string }
+      logs.push(`❌ getUserMedia FALHOU: ${err.name} - ${err.message}`)
+    }
+
+    // MediaRecorder support
+    if (typeof MediaRecorder !== 'undefined') {
+      logs.push(`MediaRecorder: OK`)
+      logs.push(`  audio/webm;codecs=opus: ${MediaRecorder.isTypeSupported('audio/webm;codecs=opus')}`)
+      logs.push(`  audio/ogg;codecs=opus: ${MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')}`)
+      logs.push(`  audio/webm: ${MediaRecorder.isTypeSupported('audio/webm')}`)
+    } else {
+      logs.push(`MediaRecorder: NÃO SUPORTADO`)
+    }
+
+    // Mostra no console e no toast
+    console.log(logs.join('\n'))
+    setActionError(logs.join('\n'))
+  }
+
   function discardAudio() {
     if (recTimerRef.current) clearInterval(recTimerRef.current)
     mediaRecorderRef.current?.stream?.getTracks().forEach(track => track.stop())
@@ -3276,9 +3332,20 @@ export default function ChatInboxCRM() {
                             Enviar
                           </button>
                         ) : (
-                          <button type="button" onClick={recState === 'idle' ? () => void startRecording() : stopRecording} disabled={sendingHumanMessage || recState === 'preview'} className={`inline-flex h-11 w-11 items-center justify-center rounded-xl ${recState === 'recording' ? 'bg-red-500 text-white' : 'border border-slate-200 bg-white text-slate-500'} disabled:opacity-50`}>
-                            {recState === 'recording' ? <StopCircle size={18} /> : <Mic size={18} />}
-                          </button>
+                          <>
+                            <button type="button" onClick={recState === 'idle' ? () => void startRecording() : stopRecording} disabled={sendingHumanMessage || recState === 'preview'} className={`inline-flex h-11 w-11 items-center justify-center rounded-xl ${recState === 'recording' ? 'bg-red-500 text-white' : 'border border-slate-200 bg-white text-slate-500'} disabled:opacity-50`}>
+                              {recState === 'recording' ? <StopCircle size={18} /> : <Mic size={18} />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void runMicDiagnostic()}
+                              disabled={sendingHumanMessage}
+                              title="Diagnosticar microfone"
+                              className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              <Stethoscope size={18} />
+                            </button>
+                          </>
                         )}
                       </div>
                       )}

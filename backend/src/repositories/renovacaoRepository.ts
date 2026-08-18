@@ -200,7 +200,7 @@ export class RenovacaoRepository {
   async findAll(limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
     const params: unknown[] = []
     let viewerFilter = ''
-    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor_renovacoes'].includes(viewerPerfil)) {
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor', 'supervisor_renovacoes', 'supervisor_chat'].includes(viewerPerfil)) {
       params.push(viewerProfileId)
       viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
     }
@@ -218,7 +218,7 @@ export class RenovacaoRepository {
   async findOperacionais(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
     const params: unknown[] = []
     let viewerFilter = ''
-    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor_renovacoes'].includes(viewerPerfil)) {
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor', 'supervisor_renovacoes', 'supervisor_chat'].includes(viewerPerfil)) {
       params.push(viewerProfileId)
       viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
     }
@@ -241,7 +241,7 @@ export class RenovacaoRepository {
   async findVencidas(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
     const params: unknown[] = []
     let viewerFilter = ''
-    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor_renovacoes'].includes(viewerPerfil)) {
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor', 'supervisor_renovacoes', 'supervisor_chat'].includes(viewerPerfil)) {
       params.push(viewerProfileId)
       viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
     }
@@ -264,7 +264,7 @@ export class RenovacaoRepository {
   async findFuturas(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
     const params: unknown[] = []
     let viewerFilter = ''
-    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor_renovacoes'].includes(viewerPerfil)) {
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor', 'supervisor_renovacoes', 'supervisor_chat'].includes(viewerPerfil)) {
       params.push(viewerProfileId)
       viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
     }
@@ -286,7 +286,7 @@ export class RenovacaoRepository {
   async findHistorico(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
     const params: unknown[] = []
     let viewerFilter = ''
-    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor_renovacoes'].includes(viewerPerfil)) {
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor', 'supervisor_renovacoes', 'supervisor_chat'].includes(viewerPerfil)) {
       params.push(viewerProfileId)
       viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
     }

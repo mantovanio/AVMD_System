@@ -606,8 +606,12 @@ const TIPO_PARCEIRO_OPTS: { value: TipoParceiro; label: string }[] = [
 
 const PERFIL_OPTS: { value: PerfilAcesso; label: string }[] = [
   { value: 'admin',           label: 'Admin'           },
+  { value: 'supervisor',      label: 'Supervisor Geral' },
+  { value: 'supervisor_renovacoes', label: 'Supervisor Renovações' },
+  { value: 'supervisor_chat', label: 'Supervisor Chat' },
   { value: 'vendedor',        label: 'Vendedor'        },
   { value: 'agente_registro', label: 'Agente Registro' },
+  { value: 'revendedor',      label: 'Revendedor'      },
   { value: 'usuario',         label: 'Usuário'         },
 ]
 

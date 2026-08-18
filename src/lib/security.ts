@@ -33,17 +33,13 @@ export const PAGE_PERMISSIONS: { id: PermissaoPagina; label: string; description
 
 export const DEFAULT_PERMISSIONS: Record<PerfilAcesso, PermissaoPagina[]> = {
   admin: PAGE_PERMISSIONS.map(p => p.id),
-  supervisor_chat: ['chat'],
-  supervisor_renovacoes: ['renovacoes'],
+  supervisor: ['dashboard', 'comercial', 'clientes', 'chat', 'engage', 'renovacoes', 'financeiro', 'relatorios', 'parceiros', 'catalogo_ia'],
+  supervisor_chat: ['dashboard', 'chat', 'engage', 'clientes', 'relatorios'],
+  supervisor_renovacoes: ['dashboard', 'renovacoes', 'clientes', 'comercial', 'relatorios'],
   agente_registro: ['dashboard', 'comercial', 'clientes', 'chat', 'engage', 'renovacoes'],
   vendedor: ['dashboard', 'comercial', 'clientes', 'engage', 'parceiros', 'relatorios'],
   revendedor: ['dashboard', 'comercial', 'clientes', 'engage', 'parceiros', 'relatorios'],
   usuario: ['dashboard', 'relatorios', 'chat', 'engage'],
-}
-
-const RESTRICTED_PAGE_PROFILES: Partial<Record<PermissaoPagina, PerfilAcesso[]>> = {
-  chat: ['admin', 'supervisor_chat', 'agente_registro', 'usuario'],
-  engage: ['admin', 'supervisor_chat', 'agente_registro', 'vendedor', 'revendedor', 'usuario'],
 }
 
 const LEGACY_REQUIRED_PERMISSIONS: Partial<Record<PerfilAcesso, PermissaoPagina[]>> = {
@@ -62,6 +58,7 @@ function normalizePermissions(
 
 export const PERFIL_LABEL: Record<PerfilAcesso, string> = {
   admin: 'Administrador',
+  supervisor: 'Supervisor Geral',
   supervisor_chat: 'Supervisor do Chat',
   supervisor_renovacoes: 'Supervisor de Renovações',
   agente_registro: 'Agente de Registro',
@@ -85,7 +82,12 @@ export function isProfileActive(profile: Profile | null | undefined) {
 }
 
 export function isAdminProfile(profile: Profile | null | undefined) {
-  return profile?.perfil === 'admin' && isProfileActive(profile)
+  return (profile?.perfil === 'admin' || profile?.perfil === ('superadmin' as PerfilAcesso)) && isProfileActive(profile)
+}
+
+export function isSupervisorProfile(profile: Profile | null | undefined) {
+  if (!profile || !isProfileActive(profile)) return false
+  return ['supervisor', 'supervisor_chat', 'supervisor_renovacoes'].includes(profile.perfil)
 }
 
 export function hasPerfil(profile: Profile | null | undefined, ...perfis: PerfilAcesso[]) {
@@ -96,9 +98,7 @@ export function hasPerfil(profile: Profile | null | undefined, ...perfis: Perfil
 export function hasPagePermission(profile: Profile | null | undefined, page: PermissaoPagina) {
   if (!profile || !isProfileActive(profile)) return false
   if (profile.perfil === 'admin') return true
-  const allowedPerfis = RESTRICTED_PAGE_PROFILES[page]
-  if (allowedPerfis && !allowedPerfis.includes(profile.perfil)) return false
-  const basePermissions = profile.permissoes?.length ? profile.permissoes : DEFAULT_PERMISSIONS[profile.perfil]
+  const basePermissions = profile.permissoes?.length ? profile.permissoes : (DEFAULT_PERMISSIONS[profile.perfil] ?? [])
   const permissoes = normalizePermissions(profile.perfil, basePermissions)
   return permissoes.includes(page)
 }
@@ -107,11 +107,8 @@ export function resolveAllowedPages(profile: Profile | null | undefined): Page[]
   if (!profile || !isProfileActive(profile)) return []
   if (profile.perfil === 'admin') return DEFAULT_PERMISSIONS.admin
   const customPermissions = profile.permissoes?.filter((p): p is Page => p in PAGE_LABELS) ?? []
-  const basePermissions = customPermissions.length > 0 ? customPermissions : DEFAULT_PERMISSIONS[profile.perfil]
-  return (normalizePermissions(profile.perfil, basePermissions) as Page[]).filter(page => {
-    const allowedPerfis = RESTRICTED_PAGE_PROFILES[page]
-    return !allowedPerfis || allowedPerfis.includes(profile.perfil)
-  })
+  const basePermissions = customPermissions.length > 0 ? customPermissions : (DEFAULT_PERMISSIONS[profile.perfil] ?? [])
+  return normalizePermissions(profile.perfil, basePermissions) as Page[]
 }
 
 export function resolveDefaultPage(profile: Profile | null | undefined): Page {
@@ -150,7 +147,15 @@ export function canPerformCommercialAction(
   if (!profile || !isProfileActive(profile)) return false
   if (profile.perfil === 'admin') return true
 
+  const isSupervisor = ['supervisor', 'supervisor_renovacoes', 'supervisor_chat'].includes(profile.perfil)
   const locked = isSaleLockedForOperations(sale)
+
+  if (isSupervisor) {
+    if (action === 'delete_sale') {
+      return profile.perfil === 'supervisor' || profile.perfil === 'supervisor_renovacoes'
+    }
+    return true
+  }
 
   switch (profile.perfil) {
     case 'vendedor':
@@ -167,7 +172,7 @@ export function canPerformCommercialAction(
     case 'usuario':
       return action === 'view'
     default:
-      return false
+      return action === 'view'
   }
 }
 
@@ -181,7 +186,7 @@ export function canDeleteSale(profile: Profile | null | undefined, sale?: Commer
 
 export function canChangeProtocol(profile: Profile | null | undefined, _sale?: CommercialSaleLike | null) {
   if (!profile || !isProfileActive(profile)) return false
-  if (profile.perfil === 'admin') return true
+  if (profile.perfil === 'admin' || profile.perfil === 'supervisor' || profile.perfil === 'supervisor_renovacoes') return true
   return false
 }
 
@@ -191,7 +196,7 @@ export function canChangePayment(profile: Profile | null | undefined, sale?: Com
 
 export function canReleaseEmission(profile: Profile | null | undefined, _sale?: CommercialSaleLike | null) {
   if (!profile || !isProfileActive(profile)) return false
-  if (profile.perfil === 'admin') return true
+  if (profile.perfil === 'admin' || profile.perfil === 'supervisor' || profile.perfil === 'supervisor_renovacoes') return true
   return false
 }
 

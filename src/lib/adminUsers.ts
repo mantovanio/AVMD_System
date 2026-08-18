@@ -26,6 +26,7 @@ type DeleteUserPayload = {
 
 const DEFAULT_VINCULO_BY_PERFIL: Record<PerfilAcesso, TipoVinculoUsuario> = {
   admin: 'usuario_comum',
+  supervisor: 'usuario_comum',
   supervisor_chat: 'usuario_comum',
   supervisor_renovacoes: 'usuario_comum',
   agente_registro: 'agente_registro',

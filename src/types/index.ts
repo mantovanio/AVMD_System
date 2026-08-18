@@ -466,7 +466,7 @@ export interface CommunicationOutbox {
 }
 
 // ── auth / profiles ───────────────────────────────────────────
-export type PerfilAcesso = 'admin' | 'supervisor_chat' | 'supervisor_renovacoes' | 'usuario' | 'vendedor' | 'revendedor' | 'agente_registro'
+export type PerfilAcesso = 'admin' | 'supervisor' | 'supervisor_chat' | 'supervisor_renovacoes' | 'usuario' | 'vendedor' | 'revendedor' | 'agente_registro'
 export type TipoVinculoUsuario = 'agente_registro' | 'parceiro' | 'vendedor' | 'revendedor' | 'contador' | 'usuario_comum' | 'cliente_portal'
 
 export type NivelAcesso = 'nenhum' | 'visualizar' | 'editar' | 'admin'

@@ -136,7 +136,7 @@ export class CatalogRepository {
         or regexp_replace(coalesce(v.metadata->'safeweb_financeiro'->>'documento', ''), '\\D', '', 'g') = $1)`,
     ]
 
-    if (input.viewer_profile_id && input.viewer_perfil && !['admin', 'superadmin'].includes(input.viewer_perfil)) {
+    if (input.viewer_profile_id && input.viewer_perfil && !['admin', 'superadmin', 'supervisor', 'supervisor_chat', 'supervisor_renovacoes'].includes(input.viewer_perfil)) {
       params.push(input.viewer_profile_id)
       where.push(`(v.vendedor_id::text = $${params.length} OR v.agente_registro_id::text = $${params.length})`)
     }

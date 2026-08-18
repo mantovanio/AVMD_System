@@ -86,7 +86,7 @@ export class CommercialRepository {
   constructor(private readonly db: AivenSqlClient) {}
 
   private canViewAll(viewerPerfil?: string | null) {
-    return !!viewerPerfil && ['admin', 'superadmin', 'supervisor_renovacoes'].includes(viewerPerfil)
+    return !!viewerPerfil && ['admin', 'superadmin', 'supervisor', 'supervisor_renovacoes', 'supervisor_chat'].includes(viewerPerfil)
   }
 
   async listSales(input: CommercialSalesInput = {}) {

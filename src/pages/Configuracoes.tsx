@@ -65,6 +65,7 @@ const ADMIN_ONLY_TABS: Tab[] = ['fiscal', 'permissoes']
 
 const PERFIL_LABEL: Record<string, string> = {
   admin:           'Administrador',
+  supervisor:      'Supervisor Geral',
   supervisor_chat: 'Supervisor do Chat',
   supervisor_renovacoes: 'Supervisor de Renovações',
   agente_registro: 'Agente de Registro',
@@ -75,6 +76,7 @@ const PERFIL_LABEL: Record<string, string> = {
 
 const PERFIL_COLOR: Record<string, string> = {
   admin:           'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  supervisor:      'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
   supervisor_chat: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
   supervisor_renovacoes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
   agente_registro: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
@@ -94,7 +96,9 @@ const TIPO_VINCULO_LABEL: Record<TipoVinculoUsuario, string> = {
 }
 
 const FUNCOES_EXTRAS = [
+  { id: 'supervisor', label: 'Supervisor Geral', description: 'Acesso amplo a comercial, chat, renovações, clientes, relatórios e gestão.' },
   { id: 'supervisor_chat', label: 'Supervisor do chat', description: 'Pode acompanhar e gerenciar conversas do chat ao vivo.' },
+  { id: 'supervisor_renovacoes', label: 'Supervisor de Renovações', description: 'Gestão da base de renovações, follow-up e vendas de renovação.' },
 ] as const
 
 type UserEditForm = {
@@ -619,7 +623,7 @@ function AbaUsuarios() {
   const isAdmin = isAdminProfile(myProfile)
 
   const [users, setUsers]           = useState<Profile[]>([])
-  const [perfilFiltro, setPerfilFiltro] = useState<'todos' | 'admin' | 'funcionario' | 'agente_registro' | 'supervisor_chat'>('todos')
+  const [perfilFiltro, setPerfilFiltro] = useState<'todos' | 'admin' | 'supervisor' | 'supervisor_chat' | 'supervisor_renovacoes' | 'agente_registro' | 'vendedor' | 'revendedor' | 'usuario'>('todos')
   const [parceiros, setParceiros]   = useState<Parceiro[]>([])
   const [tabelas, setTabelas]       = useState<TabelaPreco[]>([])
   const [lojas, setLojas]           = useState<LojaMarketplace[]>([])
@@ -679,7 +683,7 @@ function AbaUsuarios() {
 
   const usersFiltrados = users.filter(user => {
     if (perfilFiltro === 'todos') return true
-    if (perfilFiltro === 'funcionario') return user.perfil === 'usuario' || user.perfil === 'vendedor'
+    if (perfilFiltro === 'usuario') return user.perfil === 'usuario' || user.perfil === 'vendedor'
     return user.perfil === perfilFiltro
   })
 
@@ -959,15 +963,29 @@ function AbaUsuarios() {
     })
   }
 
-  function applyQuickPreset(preset: 'supervisor_renovacoes' | 'acesso_total' | 'padrao_perfil') {
+  function applyQuickPreset(preset: 'supervisor' | 'supervisor_renovacoes' | 'supervisor_chat' | 'acesso_total' | 'padrao_perfil') {
     setEditErro(null)
     setEditForm(prev => {
       if (!prev) return prev
+      if (preset === 'supervisor') {
+        return {
+          ...prev,
+          perfil: 'supervisor',
+          permissoes: DEFAULT_PERMISSIONS['supervisor' as PerfilAcesso] ?? DEFAULT_PERMISSIONS.usuario,
+        }
+      }
       if (preset === 'supervisor_renovacoes') {
         return {
           ...prev,
           perfil: 'supervisor_renovacoes',
           permissoes: DEFAULT_PERMISSIONS['supervisor_renovacoes' as PerfilAcesso] ?? DEFAULT_PERMISSIONS.usuario,
+        }
+      }
+      if (preset === 'supervisor_chat') {
+        return {
+          ...prev,
+          perfil: 'supervisor_chat',
+          permissoes: DEFAULT_PERMISSIONS['supervisor_chat' as PerfilAcesso] ?? DEFAULT_PERMISSIONS.usuario,
         }
       }
       if (preset === 'acesso_total') {
@@ -1349,9 +1367,13 @@ function AbaUsuarios() {
                   title="Perfil de acesso" aria-label="Perfil de acesso"
                   className="w-full border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="admin">Administrador</option>
-                  <option value="usuario">Funcionário</option>
-                  <option value="agente_registro">Agente de Registro</option>
+                  <option value="supervisor">Supervisor Geral</option>
+                  <option value="supervisor_renovacoes">Supervisor de Renovações</option>
                   <option value="supervisor_chat">Supervisor do Chat</option>
+                  <option value="agente_registro">Agente de Registro</option>
+                  <option value="vendedor">Parceiro Vendedor</option>
+                  <option value="revendedor">Parceiro Revendedor</option>
+                  <option value="usuario">Funcionário</option>
                 </select>
               </div>
               {/* ── Guia do perfil selecionado ── */}
@@ -1381,6 +1403,30 @@ function AbaUsuarios() {
                   <p className="text-xs font-semibold text-purple-700 dark:text-purple-300 mb-1">Administrador — acesso total</p>
                   <p className="text-[11px] text-purple-600 dark:text-purple-400 leading-relaxed">
                     Acesso completo ao sistema: vendas, cadastros, configurações, exclusões e relatórios. Não há configurações adicionais necessárias.
+                  </p>
+                </div>
+              )}
+              {novoPerfil === 'supervisor' && (
+                <div className="rounded-xl border border-indigo-200 dark:border-indigo-800/40 bg-indigo-50/60 dark:bg-indigo-950/20 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">Supervisor Geral — gestão ampla</p>
+                  <p className="text-[11px] text-indigo-600 dark:text-indigo-400 leading-relaxed">
+                    Acesso a comercial, chat, renovações, clientes, relatórios, financeiro e parceiros. Ideal para gerentes operacionais.
+                  </p>
+                </div>
+              )}
+              {novoPerfil === 'supervisor_renovacoes' && (
+                <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/60 dark:bg-emerald-950/20 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Supervisor de Renovações</p>
+                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 leading-relaxed">
+                    Gestão da base de renovações, follow-up, vendas de renovação e relatórios. Acesso a comercial, clientes e relatórios.
+                  </p>
+                </div>
+              )}
+              {novoPerfil === 'supervisor_chat' && (
+                <div className="rounded-xl border border-cyan-200 dark:border-cyan-800/40 bg-cyan-50/60 dark:bg-cyan-950/20 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-cyan-700 dark:text-cyan-300">Supervisor do Chat</p>
+                  <p className="text-[11px] text-cyan-600 dark:text-cyan-400 leading-relaxed">
+                    Acompanhamento e gestão de conversas ao vivo, atendentes, clientes e relatórios de atendimento.
                   </p>
                 </div>
               )}
@@ -1560,9 +1606,13 @@ function AbaUsuarios() {
             {([
               ['todos', 'Todos'],
               ['admin', 'Administrador'],
-              ['funcionario', 'Funcionário'],
-              ['agente_registro', 'Agente de Registro'],
+              ['supervisor', 'Supervisor Geral'],
+              ['supervisor_renovacoes', 'Supervisor de Renovações'],
               ['supervisor_chat', 'Supervisor do Chat'],
+              ['agente_registro', 'Agente de Registro'],
+              ['vendedor', 'Funcionário'],
+              ['revendedor', 'Revendedor'],
+              ['usuario', 'Funcionário'],
             ] as const).map(([value, label]) => (
               <button
                 key={value}
@@ -1722,14 +1772,13 @@ function AbaUsuarios() {
                       <select value={editForm.perfil} onChange={e => updateEdit('perfil', e.target.value as PerfilAcesso)}
                         className="border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="admin">Administrador</option>
-                        <option value="usuario">Funcionário</option>
-                        <option value="agente_registro">Agente de Registro</option>
-                        <option value="revendedor">Revendedor</option>
-                        <option value="supervisor_chat">Supervisor do Chat</option>
+                        <option value="supervisor">Supervisor Geral</option>
                         <option value="supervisor_renovacoes">Supervisor de Renovações</option>
-                        {editForm.perfil === 'vendedor' && (
-                          <option value="vendedor">Funcionário (perfil legado)</option>
-                        )}
+                        <option value="supervisor_chat">Supervisor do Chat</option>
+                        <option value="agente_registro">Agente de Registro</option>
+                        <option value="vendedor">Funcionário</option>
+                        <option value="revendedor">Revendedor</option>
+                        <option value="usuario">Funcionário</option>
                       </select>
                     </label>
                     <label className="flex flex-col gap-1">
@@ -1804,10 +1853,24 @@ function AbaUsuarios() {
                     <div className="flex flex-wrap gap-2 mb-3">
                       <button
                         type="button"
+                        onClick={() => applyQuickPreset('supervisor')}
+                        className="px-3 py-1.5 text-xs rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-900/40 dark:bg-indigo-950/20 dark:text-indigo-300 transition-colors"
+                      >
+                        Supervisor Geral
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => applyQuickPreset('supervisor_renovacoes')}
                         className="px-3 py-1.5 text-xs rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300 transition-colors"
                       >
                         Supervisor de Renovações
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyQuickPreset('supervisor_chat')}
+                        className="px-3 py-1.5 text-xs rounded-lg border border-cyan-200 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 dark:border-cyan-900/40 dark:bg-cyan-950/20 dark:text-cyan-300 transition-colors"
+                      >
+                        Supervisor do Chat
                       </button>
                       <button
                         type="button"
@@ -1847,7 +1910,11 @@ function AbaUsuarios() {
                       ))}
                     </div>
                     <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
+                      O perfil <strong>Supervisor Geral</strong> tem acesso amplo a comercial, chat, renovações, clientes, relatórios, financeiro e parceiros.
+                      <br />
                       O perfil <strong>Supervisor de Renovações</strong> pode ver dashboard, comercial, clientes, renovações e relatórios.
+                      <br />
+                      O perfil <strong>Supervisor do Chat</strong> pode ver dashboard, chat, engage, clientes e relatórios.
                     </p>
                   </div>
                   <div>

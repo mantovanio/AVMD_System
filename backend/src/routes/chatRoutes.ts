@@ -248,7 +248,7 @@ function buildConversationVisibilitySql(conversationAlias: string, viewerAlias =
   )`
 
   return `(
-    ${viewerAlias}.perfil IN ('admin', 'superadmin', 'supervisor_chat')
+    ${viewerAlias}.perfil IN ('admin', 'superadmin', 'supervisor', 'supervisor_chat', 'supervisor_renovacoes')
     OR ${assignedToViewer}
     OR (
       ${viewerAlias}.perfil = 'vendedor'
@@ -1050,7 +1050,7 @@ export async function handleChatRoutes(
       `SELECT id, nome, perfil, email
        FROM profiles
        WHERE status = 'ativo'
-         AND perfil IN ('admin', 'superadmin', 'supervisor_chat', 'usuario', 'vendedor', 'agente_registro', 'atendente')
+         AND perfil IN ('admin', 'superadmin', 'supervisor', 'supervisor_chat', 'supervisor_renovacoes', 'usuario', 'vendedor', 'agente_registro', 'atendente')
        ORDER BY nome ASC`,
     )
     writeJson(res, 200, result.rows, corsOrigin)
