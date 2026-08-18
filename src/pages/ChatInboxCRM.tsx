@@ -2324,7 +2324,7 @@ export default function ChatInboxCRM() {
     if (!(err instanceof Error)) return 'Nao foi possivel acessar o microfone.'
     const code = (err as Error & { name?: string }).name ?? ''
     if (code === 'NotAllowedError' || code === 'PermissionDeniedError') {
-      return 'O navegador bloqueou o microfone. Abra as permissoes do site e permita o acesso ao microfone.'
+      return 'O navegador bloqueou o microfone para este site. Para liberar: 1) clique no cadeado ao lado do endereço (URL), 2) abra "Configurações do site", 3) em Microfone escolha "Permitir" e 4) recarregue a página. Se ainda falhar, verifique em Windows: Configurações > Privacidade e segurança > Microfone (acesso ativado).'
     }
     if (code === 'NotFoundError' || code === 'DevicesNotFoundError') {
       return 'Nenhum microfone foi encontrado neste computador. Conecte um microfone ou verifique o dispositivo padrao.'
@@ -2351,6 +2351,15 @@ export default function ChatInboxCRM() {
     try {
       const perm = await navigator.permissions.query({ name: 'microphone' as PermissionName })
       logs.push(`Permission state: ${perm.state}`)
+      if (perm.state === 'denied') {
+        logs.push('')
+        logs.push('>>> ACAO NECESSARIA: o microfone esta BLOQUEADO para este site.')
+        logs.push('>>> 1) Clique no cadeado ao lado do endereco (URL).')
+        logs.push('>>> 2) Abra "Configuracoes do site".')
+        logs.push('>>> 3) Em Microfone, selecione "Permitir".')
+        logs.push('>>> 4) Recarregue a pagina (F5).')
+        logs.push('>>> Se ainda falhar: Windows > Configuracoes > Privacidade e seguranca > Microfone > ative o acesso.')
+      }
     } catch (e) {
       logs.push(`Permissions API: ${e instanceof Error ? e.message : String(e)}`)
     }
