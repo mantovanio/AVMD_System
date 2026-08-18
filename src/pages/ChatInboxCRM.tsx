@@ -28,7 +28,6 @@ import {
   UserPlus,
   UserRound,
   X,
-  Stethoscope,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getApiUrl, resolveChatMediaUrl } from '@/lib/api'
@@ -3299,12 +3298,12 @@ export default function ChatInboxCRM() {
                         <button
                           type="button"
                           disabled={actionLoading}
-                          onClick={() => void toggleHumanMode(false)}
-                          title="Voltar conversa para IA"
-                          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-[11px] font-black text-emerald-700 shadow-sm transition hover:bg-emerald-100 disabled:opacity-60"
-                          aria-label="Voltar conversa para IA"
+                          onClick={() => void toggleHumanMode(true)}
+                          title="Ligar IA para conduzir a conversa"
+                          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 shadow-sm transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-60"
+                          aria-label="Ligar IA"
                         >
-                          H
+                          <Bot size={18} />
                         </button>
                         <button type="button" onClick={() => setShowEmoji(current => !current)} className={`inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 ${showEmoji ? 'bg-amber-100 text-amber-700' : 'bg-white text-slate-500'}`}>
                           <Smile size={18} />
@@ -3340,21 +3339,10 @@ export default function ChatInboxCRM() {
                             {sendingHumanMessage ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                             Enviar
                           </button>
-                        ) : (
-                          <>
-                            <button type="button" onClick={recState === 'idle' ? () => void startRecording() : stopRecording} disabled={sendingHumanMessage || recState === 'preview'} className={`inline-flex h-11 w-11 items-center justify-center rounded-xl ${recState === 'recording' ? 'bg-red-500 text-white' : 'border border-slate-200 bg-white text-slate-500'} disabled:opacity-50`}>
-                              {recState === 'recording' ? <StopCircle size={18} /> : <Mic size={18} />}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void runMicDiagnostic()}
-                              disabled={sendingHumanMessage}
-                              title="Diagnosticar microfone"
-                              className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 disabled:opacity-50"
-                            >
-                              <Stethoscope size={18} />
-                            </button>
-                          </>
+) : (
+                          <button type="button" onClick={recState === 'idle' ? () => void startRecording() : stopRecording} disabled={sendingHumanMessage || recState === 'preview'} className={`inline-flex h-11 w-11 items-center justify-center rounded-xl ${recState === 'recording' ? 'bg-red-500 text-white' : 'border border-slate-200 bg-white text-slate-500'} disabled:opacity-50`}>
+                            {recState === 'recording' ? <StopCircle size={18} /> : <Mic size={18} />}
+                          </button>
                         )}
                       </div>
                       )}
@@ -3364,19 +3352,19 @@ export default function ChatInboxCRM() {
                       )}
                       </div>
                     ) : (
-                      <div className="shrink-0 border-t border-amber-200 bg-amber-50 px-4 py-3">
-                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-white/70 px-3 py-2 text-sm text-amber-800">
-                          <span>A resposta manual está oculta enquanto a IA conduz a conversa.</span>
+<div className="shrink-0 border-t border-amber-200 bg-amber-50 px-4 py-3">
+                        <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-white/70 px-3 py-2 text-sm text-amber-800">
                           <button
                             type="button"
                             disabled={actionLoading}
-                            onClick={() => void toggleHumanMode(true)}
-                            title="Assumir conversa como humano"
-                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-200 bg-amber-100 text-[11px] font-black text-amber-700 shadow-sm transition hover:bg-amber-200 disabled:opacity-60"
-                            aria-label="Assumir conversa como humano"
+                            onClick={() => void toggleHumanMode(false)}
+                            title="Desligar IA e assumir como humano"
+                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-200 bg-amber-100 text-amber-700 shadow-sm transition hover:bg-amber-200 disabled:opacity-60"
+                            aria-label="Desligar IA"
                           >
-                            IA
+                            <Bot size={18} />
                           </button>
+                          <span>A resposta manual está oculta enquanto a IA conduz a conversa.</span>
                         </div>
                       </div>
                     )}
