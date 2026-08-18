@@ -86,6 +86,16 @@ export async function handleProfileRoutes(
           metadata: { auto_provisioned: true },
         })
       } catch {
+        // Se falhou (provavelmente email duplicado), tenta encontrar o perfil existente e vincular
+        profile = await profileRepository.findByEmail(body.email)
+        if (profile && body.userId) {
+          await profileRepository.update(profile.id, { clerk_user_id: body.userId })
+          profile = { ...profile, clerk_user_id: body.userId }
+          if (profile.status === 'removido') {
+            await profileRepository.update(profile.id, { status: 'ativo' })
+            profile = { ...profile, status: 'ativo' }
+          }
+        }
       }
     }
 

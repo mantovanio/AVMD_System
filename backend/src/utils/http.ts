@@ -11,16 +11,6 @@ export async function readJson<T>(req: IncomingMessage): Promise<T> {
   return raw ? JSON.parse(raw) as T : {} as T
 }
 
-export async function readRawBody(req: IncomingMessage): Promise<string> {
-  const chunks: Buffer[] = []
-
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-  }
-
-  return Buffer.concat(chunks).toString('utf8')
-}
-
 export function writeJson(res: ServerResponse, status: number, payload: unknown, corsOrigin?: string) {
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json; charset=utf-8')

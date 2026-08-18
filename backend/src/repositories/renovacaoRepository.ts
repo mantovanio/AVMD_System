@@ -58,10 +58,6 @@ export type UpdateRenovacaoInput = Partial<Omit<RenovacaoRow, 'id' | 'created_at
 export class RenovacaoRepository {
   constructor(private readonly db: AivenSqlClient) {}
 
-  private canViewAll(viewerPerfil?: string | null) {
-    return !!viewerPerfil && ['admin', 'superadmin', 'supervisor_renovacoes'].includes(viewerPerfil)
-  }
-
   private normalizeRow(row: RenovacaoRow): RenovacaoRow {
     return {
       ...row,
@@ -204,7 +200,7 @@ export class RenovacaoRepository {
   async findAll(limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
     const params: unknown[] = []
     let viewerFilter = ''
-    if (viewerProfileId && viewerPerfil && !this.canViewAll(viewerPerfil)) {
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor_renovacoes'].includes(viewerPerfil)) {
       params.push(viewerProfileId)
       viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
     }
@@ -222,7 +218,7 @@ export class RenovacaoRepository {
   async findOperacionais(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
     const params: unknown[] = []
     let viewerFilter = ''
-    if (viewerProfileId && viewerPerfil && !this.canViewAll(viewerPerfil)) {
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor_renovacoes'].includes(viewerPerfil)) {
       params.push(viewerProfileId)
       viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
     }
@@ -245,7 +241,7 @@ export class RenovacaoRepository {
   async findVencidas(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
     const params: unknown[] = []
     let viewerFilter = ''
-    if (viewerProfileId && viewerPerfil && !this.canViewAll(viewerPerfil)) {
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor_renovacoes'].includes(viewerPerfil)) {
       params.push(viewerProfileId)
       viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
     }
@@ -268,7 +264,7 @@ export class RenovacaoRepository {
   async findFuturas(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
     const params: unknown[] = []
     let viewerFilter = ''
-    if (viewerProfileId && viewerPerfil && !this.canViewAll(viewerPerfil)) {
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor_renovacoes'].includes(viewerPerfil)) {
       params.push(viewerProfileId)
       viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
     }
@@ -290,7 +286,7 @@ export class RenovacaoRepository {
   async findHistorico(janelaDias = 30, limit = 500, offset = 0, viewerProfileId?: string | null, viewerPerfil?: string | null): Promise<RenovacaoRow[]> {
     const params: unknown[] = []
     let viewerFilter = ''
-    if (viewerProfileId && viewerPerfil && !this.canViewAll(viewerPerfil)) {
+    if (viewerProfileId && viewerPerfil && !['admin', 'superadmin', 'supervisor_renovacoes'].includes(viewerPerfil)) {
       params.push(viewerProfileId)
       viewerFilter = `AND (r.vendedor_fk_id::text = $${params.length} OR r.agente_registro_fk_id::text = $${params.length})`
     }
@@ -603,4 +599,3 @@ export class RenovacaoRepository {
     return { converted, newRenewalId: result.rows[0]?.id ?? null }
   }
 }
-

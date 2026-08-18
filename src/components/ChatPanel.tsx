@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Send, Loader2, Smile, Paperclip, Mic, StopCircle, Trash2, MessageCircle, Phone, CalendarClock, Clock3, Copy, RefreshCw, Pencil, Save, CornerUpLeft, MoreVertical, Check, Ban, User, Activity, Folder } from 'lucide-react'
+import { X, Send, Loader2, Smile, Paperclip, Mic, StopCircle, Trash2, MessageCircle, Phone, CalendarClock, Clock3, Copy, RefreshCw, Pencil, Save, CornerUpLeft } from 'lucide-react'
 import { supabase, getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
@@ -7,7 +7,7 @@ import { DEFAULT_CONTACT_DOCUMENT_STORAGE, loadContactDocumentStorageConfig, typ
 import type { ChatContact, Lead } from '@/types'
 import { useAuth } from '@/contexts/AuthContext'
 import MediaPreview from '@/components/MediaPreview'
-import { getMediaProxyUrl, deleteWhatsAppMessage, editWhatsAppMessage } from '@/lib/api'
+import { getMediaProxyUrl } from '@/lib/api'
 
 // ── Public types ───────────────────────────────────────────────
 
@@ -216,25 +216,6 @@ async function resolveLeadAttachmentUrl(doc: LeadAttachment) {
   return data.signedUrl
 }
 
-function extractMessageId(payload: Record<string, unknown> | undefined): string | null {
-  if (!payload) return null
-  // Campo direto
-  if (typeof payload.messageId === 'string' && payload.messageId) return payload.messageId
-  if (typeof payload.id === 'string' && payload.id) return payload.id
-  // Dentro de key
-  const key = payload.key as Record<string, unknown> | undefined
-  if (key && typeof key.id === 'string' && key.id) return key.id
-  // Dentro de response.key
-  const response = payload.response as Record<string, unknown> | undefined
-  const responseKey = response?.key as Record<string, unknown> | undefined
-  if (responseKey && typeof responseKey.id === 'string' && responseKey.id) return responseKey.id
-  // Dentro de provider_payload.key
-  const providerPayload = payload.provider_payload as Record<string, unknown> | undefined
-  const providerKey = providerPayload?.key as Record<string, unknown> | undefined
-  if (providerKey && typeof providerKey.id === 'string' && providerKey.id) return providerKey.id
-  return null
-}
-
 function parseEvolutionEvents(events: Record<string, unknown>[]): Message[] {
   return events
     .map(row => {
@@ -243,7 +224,6 @@ function parseEvolutionEvents(events: Record<string, unknown>[]): Message[] {
       const messageType = (pld.messageType as string | null) ?? 'conversation'
       const mimeType = pld.mimeType as string | null
       const fileName = pld.fileName as string | null
-      const extractedMessageId = extractMessageId(pld)
       return {
         id:          (row.id as string),
         content:     buildMessageFallback(messageType, pld.content as string | null, mimeType, fileName),
@@ -251,7 +231,7 @@ function parseEvolutionEvents(events: Record<string, unknown>[]): Message[] {
         created_at:  (row.created_at as string) ?? new Date().toISOString(),
         source:      (row.source as string | null) ?? null,
         eventType:   (row.event_type as string | null) ?? null,
-        messageId:   extractedMessageId,
+        messageId:   (pld.messageId as string | null) ?? null,
         pushName:    (pld.pushName as string | null) ?? null,
         messageType,
         mediaUrl:    (pld.mediaUrl as string | null) ?? null,
@@ -288,53 +268,6 @@ async function fetchMediaObjectUrl(evolution: EvolutionCfg, messageId: string, c
   const byteArray = new Uint8Array(byteNumbers)
   const blob = new Blob([byteArray], { type: normalizeMimeType(data.mimetype) })
   return URL.createObjectURL(blob)
-}
-
-// ── Accordion Component ────────────────────────────────────────
-
-interface AccordionItemProps {
-  title: string
-  icon?: React.ReactNode
-  defaultOpen?: boolean
-  badge?: string
-  children: React.ReactNode
-}
-
-function AccordionItem({ title, icon, defaultOpen = true, badge, children }: AccordionItemProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen)
-
-  return (
-    <div className="rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between gap-2 px-3 py-3 bg-gray-50/80 dark:bg-gray-900/60 hover:bg-gray-100 dark:hover:bg-gray-800/60 transition-colors"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          {icon && <span className="text-gray-500 shrink-0">{icon}</span>}
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400 truncate">{title}</p>
-          {badge && (
-            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 rounded-full">
-              {badge}
-            </span>
-          )}
-        </div>
-        <svg
-          className={cn('w-4 h-4 text-gray-400 transition-transform shrink-0', isOpen && 'rotate-180')}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      {isOpen && (
-        <div className="p-3 space-y-3 border-t border-gray-100 dark:border-gray-800">
-          {children}
-        </div>
-      )}
-    </div>
-  )
 }
 
 // ── Component ──────────────────────────────────────────────────
@@ -413,7 +346,6 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
           const row = change.new as Record<string, unknown>
           const pld = row.payload as Record<string, unknown> | undefined
           if (!pld) return
-          const extractedMessageId = extractMessageId(pld)
           const msg: Message = {
             id:          row.id as string,
             content:     buildMessageFallback(
@@ -426,7 +358,7 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
             created_at:  row.created_at as string,
             source:      (row.source as string | null) ?? null,
             eventType:   (row.event_type as string | null) ?? null,
-            messageId:   extractedMessageId,
+            messageId:   (pld.messageId as string | null) ?? null,
             pushName:    (pld.pushName as string | null) ?? null,
             messageType: (pld.messageType as string | null) ?? 'conversation',
             mediaUrl:    (pld.mediaUrl as string | null) ?? null,
@@ -744,7 +676,6 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
         setMessages(prev => prev.map(m => m.id === tempId ? {
           ...m,
           id: data.messageId ?? tempId,
-          messageId: data.messageId ?? m.messageId,
           quoted: replyTo ? {
             messageId: replyTo.messageId ?? replyTo.id,
             content: replyTo.content ?? (replyTo.messageType === 'audioMessage' ? 'Audio' : 'Mensagem respondida'),
@@ -804,46 +735,6 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
     setReplyTo(null)
     setSending(false)
     inputRef.current?.focus()
-  }
-
-  // ── Delete / Edit message ───────────────────────────────────
-
-  async function handleDeleteMessage(message: Message) {
-    if (!message.messageId) {
-      alert('Nao e possivel apagar esta mensagem (sem ID externo).')
-      return
-    }
-    if (!confirm('Apagar esta mensagem? Ela sera removida para voce e o contato.')) return
-
-    try {
-      await deleteWhatsAppMessage(message.messageId, evolution?.instance_name)
-      setMessages(prev => prev.filter(m => m.id !== message.id && m.messageId !== message.messageId))
-      setCopyFeedback('Mensagem apagada')
-    } catch (err) {
-      logger.error('ChatPanel', 'falha ao apagar mensagem', String(err))
-      alert('Nao foi possivel apagar a mensagem.')
-    }
-  }
-
-  async function handleEditMessage(message: Message, newText: string) {
-    if (!message.messageId) {
-      alert('Nao e possivel editar esta mensagem (sem ID externo).')
-      return
-    }
-
-    try {
-      await editWhatsAppMessage(message.messageId, newText, evolution?.instance_name)
-      setMessages(prev => prev.map(m =>
-        m.id === message.id || m.messageId === message.messageId
-          ? { ...m, content: newText }
-          : m
-      ))
-      setCopyFeedback('Mensagem editada')
-    } catch (err) {
-      logger.error('ChatPanel', 'falha ao editar mensagem', String(err))
-      alert('Nao foi possivel editar a mensagem.')
-      throw err
-    }
   }
 
   // ── Send attachment ──────────────────────────────────────────
@@ -1440,8 +1331,6 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
                 message={msg}
                 evolution={evolution}
                 onReply={selected => setReplyTo(selected)}
-                onDelete={selected => void handleDeleteMessage(selected)}
-                onEdit={(selected, newText) => void handleEditMessage(selected, newText)}
               />
             ))}
             <div ref={bottomRef} />
@@ -1645,199 +1534,189 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
           className="hidden min-h-0 overflow-y-auto bg-white dark:bg-gray-950 border-t xl:block xl:border-t-0 border-gray-200 dark:border-gray-800 shrink-0"
           style={{ width: `${sidebarWidth}px` }}
         >
-          <div className="p-4 space-y-3">
-            {/* Feedback */}
+          <div className="p-4 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-[0.18em] text-gray-400">Contato em tempo real</p>
+                <h3 className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100 truncate">{sidebarName}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 break-all">{sidebarPhone ?? 'Sem telefone cadastrado'}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadLeadInfo()}
+                className="w-9 h-9 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600 flex items-center justify-center shrink-0"
+                title="Atualizar dados do contato"
+              >
+                <RefreshCw size={15} className={cn(leadLoading && 'animate-spin')} />
+              </button>
+            </div>
+
             {copyFeedback && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
                 {copyFeedback}
               </div>
             )}
 
-            {/* BLOCO 1: Perfil do Cliente */}
-            <AccordionItem
-              title="Perfil do Cliente"
-              icon={<User size={14} />}
-              defaultOpen={true}
-            >
-              <div className="space-y-3">
-                {/* Cabecalho do contato */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">{sidebarName}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 break-all">{sidebarPhone ?? 'Sem telefone cadastrado'}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void loadLeadInfo()}
-                    className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600 flex items-center justify-center shrink-0"
-                    title="Atualizar dados do contato"
-                  >
-                    <RefreshCw size={14} className={cn(leadLoading && 'animate-spin')} />
-                  </button>
+            <div className="grid grid-cols-1 gap-2">
+              {sidebarHighlights.map(item => (
+                <div key={item.label} className={cn('rounded-2xl border px-3 py-3', item.tone)}>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide opacity-75">{item.label}</p>
+                  <p className="mt-1 text-sm font-medium leading-snug">{item.value}</p>
                 </div>
+              ))}
+            </div>
 
-                {/* Highlights consolidados */}
-                <div className="grid grid-cols-1 gap-2">
-                  {sidebarHighlights.map(item => (
-                    <div key={item.label} className={cn('rounded-xl border px-3 py-2', item.tone)}>
-                      <p className="text-[10px] font-semibold uppercase tracking-wide opacity-75">{item.label}</p>
-                      <p className="mt-0.5 text-sm font-medium leading-snug">{item.value}</p>
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/60 p-3 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Acoes rapidas</p>
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingLead(true)}
+                  className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:border-indigo-300 hover:text-indigo-700"
+                >
+                  <Pencil size={14} /> Editar informacoes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => leadDocInputRef.current?.click()}
+                  className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:border-amber-300 hover:text-amber-700"
+                >
+                  {uploadingLeadAttachment ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
+                  Salvar documento no contato
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copyText(sidebarPhone, 'Telefone')}
+                  disabled={!sidebarPhone}
+                  className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:border-green-300 hover:text-green-700 disabled:opacity-50"
+                >
+                  <Copy size={14} /> Copiar telefone
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copyText(remoteJid, 'JID')}
+                  disabled={!remoteJid}
+                  className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:border-blue-300 hover:text-blue-700 disabled:opacity-50"
+                >
+                  <MessageCircle size={14} /> Copiar identificador da conversa
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Dados do atendimento</p>
+              <InfoRow icon={<Phone size={14} />} label="Telefone" value={sidebarPhone} />
+              <InfoRow icon={<MessageCircle size={14} />} label="Responsavel atual" value={leadInfo?.responsavel_nome ?? 'Nao definido'} />
+              <InfoRow icon={<Clock3 size={14} />} label="Transferido em" value={formatDateTime(leadInfo?.transferido_em)} />
+              <InfoRow icon={<MessageCircle size={14} />} label="Transferido por" value={leadInfo?.transferido_por} />
+              <InfoRow icon={<Clock3 size={14} />} label="Criado em" value={formatDateTime(leadInfo?.created_at)} />
+              <InfoRow icon={<CalendarClock size={14} />} label="Agendamento" value={formatDateTime(leadInfo?.data_agendamento)} />
+              <InfoRow icon={<CalendarClock size={14} />} label="Retorno criado" value={formatDateTime(leadInfo?.agendamento_criado_em)} />
+              <InfoRow icon={<MessageCircle size={14} />} label="Instancia" value={leadInfo?.evolution_instance ?? contact.evolution_instance ?? evolution?.instance_name ?? 'Nao informada'} />
+              <InfoRow icon={<MessageCircle size={14} />} label="JID" value={remoteJid ?? leadInfo?.evolution_remote_jid ?? 'Ainda nao vinculado'} mono />
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Transferir conversa</p>
+                {!hasTransferFields && (
+                  <span className="text-[11px] text-amber-600">Migration pendente</span>
+                )}
+              </div>
+              <SidebarSelect
+                label="Atendente / agente responsavel"
+                value={selectedTransferId}
+                onChange={setSelectedTransferId}
+                options={[
+                  { value: '', label: loadingTargets ? 'Carregando...' : 'Selecione o destino' },
+                  ...transferTargets.map(target => ({
+                    value: target.id,
+                    label: `${target.nome} · ${target.perfil === 'agente_registro' ? 'Agente' : target.perfil === 'usuario' ? 'Operador' : 'Admin'}`,
+                  })),
+                ]}
+              />
+              <button
+                type="button"
+                onClick={() => void transferConversation()}
+                disabled={transferringLead || !selectedTransferId || loadingTargets}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-3 py-2.5 text-sm font-medium disabled:opacity-50"
+              >
+                {transferringLead ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                Transferir atendimento
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Documentos do contato</p>
+                {!hasDocumentTable && (
+                  <span className="text-[11px] text-amber-600">Migration pendente</span>
+                )}
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-[11px] text-gray-600">
+                Armazenamento atual: <span className="font-semibold">{documentStorageConfig.mode === 'server' ? 'Servidor próprio' : 'Supabase Storage'}</span>
+              </div>
+
+              {leadAttachments.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-200 px-3 py-4 text-sm text-gray-400">
+                  Nenhum documento salvo neste contato ainda.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {leadAttachments.map(doc => (
+                    <div key={doc.id} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{doc.nome_original}</p>
+                          <p className="text-xs text-gray-500">
+                            {doc.mime_type || 'arquivo'} · {doc.tamanho_bytes ? `${Math.round(doc.tamanho_bytes / 1024)} KB` : 'tamanho n/d'}
+                          </p>
+                          {doc.storage_provider && (
+                            <p className="text-[11px] text-gray-400 mt-1">
+                              {doc.storage_provider === 'server' ? 'Servidor próprio' : 'Supabase Storage'}
+                            </p>
+                          )}
+                          {doc.bucket && doc.storage_path && (
+                            <p className="text-[11px] text-gray-400 mt-1 truncate">
+                              {doc.bucket}/{doc.storage_path}
+                            </p>
+                          )}
+                          {doc.external_url && !doc.bucket && (
+                            <p className="text-[11px] text-gray-400 mt-1 truncate">
+                              {doc.external_url}
+                            </p>
+                          )}
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            {formatDateTime(doc.uploaded_at)} · {doc.uploaded_by || 'Operador'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => void openLeadAttachment(doc)}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Abrir
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void removeLeadAttachment(doc.id)}
+                            className="text-xs text-red-500 hover:underline"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
 
-                {/* Resumo comercial inline */}
-                <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/60 p-2.5 space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Resumo</p>
-                  <LongTextBlock label="" value={leadInfo?.resumo_conversa} />
-                  {leadInfo?.anotacoes && (
-                    <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Anotacoes</p>
-                      <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400 line-clamp-3">{leadInfo.anotacoes}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </AccordionItem>
-
-            {/* BLOCO 2: Status do Atendimento */}
-            <AccordionItem
-              title="Status do Atendimento"
-              icon={<Activity size={14} />}
-              defaultOpen={true}
-            >
-              <div className="space-y-3">
-                {/* Dados consolidados */}
-                <div className="space-y-2">
-                  <InfoRow icon={<User size={14} />} label="Responsavel" value={leadInfo?.responsavel_nome ?? 'Nao definido'} />
-                  <InfoRow icon={<Clock3 size={14} />} label="Criado em" value={formatDateTime(leadInfo?.created_at)} />
-                  <InfoRow icon={<CalendarClock size={14} />} label="Agendamento" value={formatDateTime(leadInfo?.data_agendamento)} />
-                  <InfoRow icon={<MessageCircle size={14} />} label="Instancia" value={leadInfo?.evolution_instance ?? contact.evolution_instance ?? evolution?.instance_name ?? 'Nao informada'} />
-                  <InfoRow icon={<MessageCircle size={14} />} label="JID" value={remoteJid ?? leadInfo?.evolution_remote_jid ?? 'Ainda nao vinculado'} mono />
-                </div>
-
-                {/* Acoes rapidas */}
-                <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Acoes rapidas</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditingLead(true)}
-                      className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-2 py-2 text-xs text-gray-700 dark:text-gray-200 hover:border-indigo-300 hover:text-indigo-700"
-                    >
-                      <Pencil size={12} /> Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void copyText(sidebarPhone, 'Telefone')}
-                      disabled={!sidebarPhone}
-                      className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-2 py-2 text-xs text-gray-700 dark:text-gray-200 hover:border-green-300 hover:text-green-700 disabled:opacity-50"
-                    >
-                      <Copy size={12} /> Telefone
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </AccordionItem>
-
-            {/* BLOCO 3: Transferir e Documentos */}
-            <AccordionItem
-              title="Transferir e Documentos"
-              icon={<Folder size={14} />}
-              defaultOpen={false}
-              badge={!hasTransferFields || !hasDocumentTable ? 'Pendente' : undefined}
-            >
-              <div className="space-y-4">
-                {/* Transferencia */}
-                <div className="space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Transferir conversa</p>
-                  <SidebarSelect
-                    label="Atendente / agente"
-                    value={selectedTransferId}
-                    onChange={setSelectedTransferId}
-                    options={[
-                      { value: '', label: loadingTargets ? 'Carregando...' : 'Selecione' },
-                      ...transferTargets.map(target => ({
-                        value: target.id,
-                        label: `${target.nome} · ${target.perfil === 'agente_registro' ? 'Agente' : target.perfil === 'usuario' ? 'Operador' : 'Admin'}`,
-                      })),
-                    ]}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void transferConversation()}
-                    disabled={transferringLead || !selectedTransferId || loadingTargets}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 text-sm font-medium disabled:opacity-50"
-                  >
-                    {transferringLead ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                    Transferir
-                  </button>
-                </div>
-
-                {/* Documentos */}
-                <div className="pt-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Documentos</p>
-                    <button
-                      type="button"
-                      onClick={() => leadDocInputRef.current?.click()}
-                      className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700"
-                    >
-                      {uploadingLeadAttachment ? <Loader2 size={12} className="animate-spin" /> : <Paperclip size={12} />}
-                      Adicionar
-                    </button>
-                  </div>
-
-                  {leadAttachments.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-gray-200 px-3 py-3 text-xs text-gray-400 text-center">
-                      Nenhum documento salvo
-                    </div>
-                  ) : (
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {leadAttachments.slice(0, 5).map(doc => (
-                        <div key={doc.id} className="rounded-xl border border-gray-200 bg-gray-50 px-2.5 py-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-medium text-gray-800 truncate">{doc.nome_original}</p>
-                              <p className="text-[10px] text-gray-400">
-                                {doc.tamanho_bytes ? `${Math.round(doc.tamanho_bytes / 1024)} KB` : ''}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => void openLeadAttachment(doc)}
-                                className="text-[10px] text-blue-600 hover:underline"
-                              >
-                                Abrir
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void removeLeadAttachment(doc.id)}
-                                className="text-[10px] text-red-500 hover:underline"
-                              >
-                                X
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      {leadAttachments.length > 5 && (
-                        <p className="text-[10px] text-gray-400 text-center">
-                          +{leadAttachments.length - 5} documentos
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </AccordionItem>
-
-            {/* Formulario de edicao (quando ativo) */}
-            {editingLead && (
+            {editingLead ? (
               <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-3 space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Editar contato</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Editar contato e agendamento</p>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -1900,14 +1779,41 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
                   label="Resumo da conversa"
                   value={leadForm.resumo_conversa}
                   onChange={value => setLeadForm(prev => ({ ...prev, resumo_conversa: value }))}
-                  rows={2}
+                  rows={3}
                 />
                 <SidebarTextArea
                   label="Anotacoes"
                   value={leadForm.anotacoes}
                   onChange={value => setLeadForm(prev => ({ ...prev, anotacoes: value }))}
+                  rows={3}
+                />
+                <SidebarTextArea
+                  label="Follow up 1"
+                  value={leadForm.follow_up_1}
+                  onChange={value => setLeadForm(prev => ({ ...prev, follow_up_1: value }))}
                   rows={2}
                 />
+                <SidebarTextArea
+                  label="Follow up 2"
+                  value={leadForm.follow_up_2}
+                  onChange={value => setLeadForm(prev => ({ ...prev, follow_up_2: value }))}
+                  rows={2}
+                />
+                <SidebarTextArea
+                  label="Follow up 3"
+                  value={leadForm.follow_up_3}
+                  onChange={value => setLeadForm(prev => ({ ...prev, follow_up_3: value }))}
+                  rows={2}
+                />
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Resumo comercial</p>
+                <LongTextBlock label="Resumo da conversa" value={leadInfo?.resumo_conversa} />
+                <LongTextBlock label="Anotacoes" value={leadInfo?.anotacoes} />
+                <LongTextBlock label="Follow up 1" value={leadInfo?.follow_up_1} />
+                <LongTextBlock label="Follow up 2" value={leadInfo?.follow_up_2} />
+                <LongTextBlock label="Follow up 3" value={leadInfo?.follow_up_3} />
               </div>
             )}
           </div>
@@ -2085,14 +1991,10 @@ function MessageBubble({
   message,
   evolution,
   onReply,
-  onDelete,
-  onEdit,
 }: {
   message: Message
   evolution: EvolutionCfg | null
   onReply?: (message: Message) => void
-  onDelete?: (message: Message) => void
-  onEdit?: (message: Message, newText: string) => void
 }) {
   const isOut     = message.fromMe
   const isInternalNote = message.messageType === 'internalNote' || message.eventType === 'internal_note' || message.source === 'crm'
@@ -2106,68 +2008,10 @@ function MessageBubble({
   const [mediaLoadError, setMediaLoadError] = useState(false)
   const audioLabel = message.fromMe ? 'Audio enviado' : 'Audio recebido'
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [showMenu, setShowMenu] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
-  const [editText, setEditText] = useState(message.content ?? '')
-  const [savingEdit, setSavingEdit] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const editInputRef = useRef<HTMLTextAreaElement>(null)
   const hasDirectUrl = Boolean(message.mediaUrl)
   const displayUrl = evolution && resolvedMediaUrl && !resolvedMediaUrl.startsWith('blob:')
     ? getMediaProxyUrl(resolvedMediaUrl, evolution.instance_name)
     : resolvedMediaUrl
-
-  // Fecha menu ao clicar fora
-  useEffect(() => {
-    if (!showMenu) return
-    function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowMenu(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showMenu])
-
-  // Foca no input ao entrar em modo de edição
-  useEffect(() => {
-    if (isEditing) {
-      editInputRef.current?.focus()
-      editInputRef.current?.select()
-    }
-  }, [isEditing])
-
-  async function handleSaveEdit() {
-    const trimmed = editText.trim()
-    if (!trimmed || trimmed === message.content || !onEdit) {
-      setIsEditing(false)
-      return
-    }
-    setSavingEdit(true)
-    try {
-      await onEdit(message, trimmed)
-      setIsEditing(false)
-    } catch {
-      // erro já tratado no pai
-    } finally {
-      setSavingEdit(false)
-    }
-  }
-
-  function handleCancelEdit() {
-    setEditText(message.content ?? '')
-    setIsEditing(false)
-  }
-
-  function handleKeyDownEdit(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      void handleSaveEdit()
-    }
-    if (e.key === 'Escape') {
-      handleCancelEdit()
-    }
-  }
 
   useEffect(() => {
     if (!needsResolvedMedia) {
@@ -2324,90 +2168,20 @@ function MessageBubble({
             )}
 
             {message.content && !isDoc && !isAudio && !isVideo && (
-              isEditing ? (
-                <div className="mt-1">
-                  <textarea
-                    ref={editInputRef}
-                    value={editText}
-                    onChange={e => setEditText(e.target.value)}
-                    onKeyDown={handleKeyDownEdit}
-                    rows={2}
-                    className="w-full rounded-lg border border-emerald-300 bg-white px-2 py-1.5 text-sm text-gray-900 outline-none focus:border-emerald-500 resize-none"
-                  />
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <button
-                      type="button"
-                      onClick={() => void handleSaveEdit()}
-                      disabled={savingEdit || !editText.trim()}
-                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs disabled:opacity-50"
-                    >
-                      {savingEdit ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
-                      Salvar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCancelEdit}
-                      disabled={savingEdit}
-                      className="flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 bg-white text-gray-600 text-xs hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      <Ban size={10} />
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
-              )
+              <p className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
             )}
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
-            {onReply && !isInternalNote && (
-              <button
-                type="button"
-                onClick={() => onReply(message)}
-                className="rounded-lg p-1.5 text-gray-400 hover:bg-black/5 hover:text-emerald-700"
-                title="Responder esta mensagem"
-              >
-                <CornerUpLeft size={14} />
-              </button>
-            )}
-
-            {isOut && !isInternalNote && !isEditing && (
-              <div className="relative" ref={menuRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowMenu(v => !v)}
-                  className="rounded-lg p-1.5 text-gray-400 hover:bg-black/5 hover:text-gray-600"
-                  title="Mais opcoes"
-                >
-                  <MoreVertical size={14} />
-                </button>
-                {showMenu && (
-                  <div className="absolute right-0 top-full mt-1 z-20 w-36 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 py-1 overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => { setIsEditing(true); setShowMenu(false) }}
-                      disabled={!message.messageId}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title={!message.messageId ? 'ID da mensagem nao disponivel' : ''}
-                    >
-                      <Pencil size={14} /> Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { onDelete?.(message); setShowMenu(false) }}
-                      disabled={!message.messageId}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title={!message.messageId ? 'ID da mensagem nao disponivel' : ''}
-                    >
-                      <Trash2 size={14} /> Apagar
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          {onReply && !isInternalNote && (
+            <button
+              type="button"
+              onClick={() => onReply(message)}
+              className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-black/5 hover:text-emerald-700"
+              title="Responder esta mensagem"
+            >
+              <CornerUpLeft size={14} />
+            </button>
+          )}
         </div>
         <p className={cn('text-[10px] mt-0.5 text-right leading-none', isOut ? 'text-green-700 dark:text-green-300' : 'text-gray-400')}>
           {time}

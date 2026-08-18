@@ -547,7 +547,7 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
 
 export default function Clientes() {
   const { profile } = useAuth()
-  const canAccessChat = hasPerfil(profile, 'admin', 'agente_registro', 'usuario', 'supervisor_chat', 'supervisor_renovacoes')
+  const canAccessChat = hasPerfil(profile, 'admin', 'agente_registro', 'usuario')
   const fileImportRef = useRef<HTMLInputElement>(null)
   const [clientes, setClientes] = useState<ClienteComVendas[]>([])
   const [loading, setLoading] = useState(true)

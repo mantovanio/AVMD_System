@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, MapPin, Pencil, X, Check, KeyRound, UserPlus, Eye, EyeOff, MessageCircle, Mail, Webhook, Save, Send, Trash2, Plus, ToggleLeft, ToggleRight, CreditCard, FileText, Upload, ShieldCheck, ChevronDown, ChevronRight, Users, Link, Network, Percent, Clock, Bot, RotateCcw, MoonStar, SunMedium } from 'lucide-react'
+import { Loader2, MapPin, Pencil, X, Check, KeyRound, UserPlus, Eye, EyeOff, MessageCircle, Mail, Webhook, Save, Send, Trash2, Plus, ToggleLeft, ToggleRight, CreditCard, FileText, Upload, ShieldCheck, ChevronDown, ChevronRight, Users, Link, Network, Percent, Clock, Bot, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase, getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { getEvolutionConnectionTestUrl, getEvolutionWebhookConfigureUrl, getEvolutionWebhookUrl } from '@/lib/evolutionApi'
@@ -230,11 +230,6 @@ function ModalOverlay({ titulo, onClose, children }: { titulo: string; onClose: 
       </div>
     </div>
   )
-}
-
-function setThemeMode(mode: 'light' | 'dark') {
-  localStorage.setItem('theme', mode)
-  window.dispatchEvent(new CustomEvent('app:theme-change', { detail: { dark: mode === 'dark' } }))
 }
 
 function CampoSenha({ label, value, onChange, autoFocus }: { label: string; value: string; onChange: (v: string) => void; autoFocus?: boolean }) {
@@ -830,11 +825,19 @@ function AbaUsuarios() {
 
   async function toggleStatus(u: Profile) {
     const novoStatus = u.status === 'ativo' ? 'inativo' : 'ativo'
-    await fetch(getApiUrl(`/profiles/${u.id}`), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: novoStatus }),
-    })
+    try {
+      const res = await fetch(getApiUrl(`/profiles/${u.id}`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: novoStatus }),
+      })
+      const data = await res.json().catch(() => null) as { ok?: boolean; error?: string } | null
+      if (!res.ok || !data?.ok) {
+        console.error('[toggleStatus] Falha ao alterar status:', data?.error ?? res.statusText)
+      }
+    } catch (error) {
+      console.error('[toggleStatus] Erro de rede:', error)
+    }
     void load()
   }
 
@@ -1552,46 +1555,6 @@ function AbaUsuarios() {
               className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors">
               <UserPlus size={14} /> Novo usuário
             </button>
-          </div>
-          <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Aparência do usuário</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  Troque o tema do painel sem sair desta tela.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setThemeMode('light')}
-                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                >
-                  <SunMedium size={14} />
-                  Tema claro
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setThemeMode('dark')}
-                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                >
-                  <MoonStar size={14} />
-                  Tema escuro
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    localStorage.removeItem('theme')
-                    window.dispatchEvent(new CustomEvent('app:theme-change', {
-                      detail: { dark: window.matchMedia('(prefers-color-scheme: dark)').matches },
-                    }))
-                  }}
-                  className="inline-flex items-center gap-2 rounded-lg border border-blue-200 dark:border-blue-900/50 px-3 py-2 text-xs font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                >
-                  Padrão do perfil
-                </button>
-              </div>
-            </div>
           </div>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar usuários por perfil de acesso">
             {([

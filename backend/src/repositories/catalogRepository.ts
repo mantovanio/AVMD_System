@@ -18,10 +18,6 @@ function calcularAliquotaEfetivaAnexoIII(rbt12: number): number {
 export class CatalogRepository {
   constructor(private readonly db: AivenSqlClient) {}
 
-  private canViewAll(viewerPerfil?: string | null) {
-    return !!viewerPerfil && ['admin', 'superadmin', 'supervisor_renovacoes'].includes(viewerPerfil)
-  }
-
   // ── NFS-e ────────────────────────────────────────────────────────────
   async listNfseConfiguracoes() {
     const result = await this.db.query(
@@ -140,7 +136,7 @@ export class CatalogRepository {
         or regexp_replace(coalesce(v.metadata->'safeweb_financeiro'->>'documento', ''), '\\D', '', 'g') = $1)`,
     ]
 
-    if (input.viewer_profile_id && input.viewer_perfil && !this.canViewAll(input.viewer_perfil)) {
+    if (input.viewer_profile_id && input.viewer_perfil && !['admin', 'superadmin'].includes(input.viewer_perfil)) {
       params.push(input.viewer_profile_id)
       where.push(`(v.vendedor_id::text = $${params.length} OR v.agente_registro_id::text = $${params.length})`)
     }
@@ -1605,6 +1601,3 @@ export class CatalogRepository {
     }
   }
 }
-
-
-

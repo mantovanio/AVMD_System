@@ -263,8 +263,12 @@ function AppContent() {
         <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl shadow-black/40 p-8 text-center">
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Perfil aguardando configuração</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Não encontramos um perfil de acesso liberado para sua conta. Contate o administrador.</p>
+          <button type="button" onClick={() => void refreshProfile()}
+            className="mt-6 w-full px-4 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white text-sm font-semibold transition-colors">
+            Tentar novamente
+          </button>
           <button type="button" onClick={() => void signOut()}
-            className="mt-6 w-full px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors">
+            className="mt-3 w-full px-4 py-3 rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-semibold transition-colors">
             Voltar ao login
           </button>
         </div>
@@ -278,8 +282,12 @@ function AppContent() {
         <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl shadow-black/40 p-8 text-center">
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Acesso aguardando liberação</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Sua conta foi criada, mas o primeiro acesso precisa ser liberado pelo administrador.</p>
+          <button type="button" onClick={() => void refreshProfile()}
+            className="mt-6 w-full px-4 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white text-sm font-semibold transition-colors">
+            Tentar novamente
+          </button>
           <button type="button" onClick={() => void signOut()}
-            className="mt-6 w-full px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors">
+            className="mt-3 w-full px-4 py-3 rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-semibold transition-colors">
             Voltar ao login
           </button>
         </div>

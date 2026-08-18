@@ -315,45 +315,4 @@ export function enrichRenovacao(r: RenovacaoV2): RenovacaoV2 {
   }
 }
 
-// ── Disparos (Outbox) ─────────────────────────────────────────
-
-export interface OutboxDispatch {
-  id: string
-  channel: string
-  provider: string
-  to_address: string
-  subject: string | null
-  body: string
-  status: string
-  payload: Record<string, unknown>
-  scheduled_for: string
-  sent_at: string | null
-  error: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface DispatchStats {
-  totalEnviados: number
-  enviadosEmail: number
-  enviadosWhatsapp: number
-  falhas: number
-  pendentes: number
-}
-
-export async function fetchRecentDispatches(limit = 50): Promise<OutboxDispatch[]> {
-  const data = await apiFetch<{ ok: boolean; dispatches: OutboxDispatch[] }>(`/communication/outbox/recent?limit=${limit}`)
-  return data.dispatches ?? []
-}
-
-export async function fetchDispatchStats(): Promise<DispatchStats> {
-  const data = await apiFetch<{ ok: boolean; stats: DispatchStats }>('/communication/outbox/stats')
-  return data.stats ?? { totalEnviados: 0, enviadosEmail: 0, enviadosWhatsapp: 0, falhas: 0, pendentes: 0 }
-}
-
-export async function fetchDispatchesByRenovacaoId(renovacaoId: string): Promise<OutboxDispatch[]> {
-  const data = await apiFetch<{ ok: boolean; dispatches: OutboxDispatch[] }>(`/communication/outbox/renovacao/${renovacaoId}`)
-  return data.dispatches ?? []
-}
-
 export type { StatusRenovacao }

@@ -62,6 +62,19 @@ Toda PR deve incluir:
 ## Seguranca e Configuracao
 Nao versione `.env` nem chaves do Supabase. Documente variaveis obrigatorias e mantenha segredos fora do repositorio. Quando houver dependencia externa, prefira exibir erro claro na interface em vez de falha silenciosa.
 
+## Regra de Integridade do CRM
+NUNCA mexer na interface interna do CRM para expor, embutir ou redirecionar para o portal do cliente.
+
+Regras obrigatorias:
+- o CRM administrativo deve permanecer isolado do fluxo do cliente
+- o portal do cliente deve existir apenas em host/rota separados do CRM
+- qualquer mudança em login, dashboard, sidebar, nav, rotas ou botões do CRM deve preservar a estabilidade do ambiente administrativo
+- qualquer tentativa de inserir link "Acesso do cliente", "Minhas compras", "Entrar no portal" ou similar dentro do CRM é proibida
+- se uma tarefa envolver portal do cliente e CRM em paralelo, a alteração deve ser feita em domínios/rotas separadas e validada separadamente
+- no caso de dúvida, priorizar a estabilidade do CRM e bloquear a mudança em vez de "ajustar" a interface interna
+
+Esta regra vale para qualquer alteracao em `src/pages/Login.tsx`, `src/App.tsx`, `src/components/Sidebar.tsx`, rotas publicas e qualquer ponto de entrada do sistema administrativo.
+
 ## Deploy Rapido
 Para qualquer tarefa de publicacao, consulte primeiro `DEPLOY-RAPIDO.md`.
 
