@@ -148,9 +148,6 @@ async function sendRecoveryCode(
   if (risk.blocked || !risk.clerkUserId) {
     throw new Error(risk.reason ?? 'Recuperação bloqueada para este cadastro.')
   }
-  if (profile.perfil !== 'admin') {
-    throw new Error('Recuperação de senha desativada para perfis de cliente.')
-  }
   const clerkUserId = risk.clerkUserId
 
   const recoveryCode = buildRecoveryCode()
@@ -255,18 +252,18 @@ export async function handlePasswordRecoveryRoutes(
       return true
     }
 
-    if (profile.perfil !== 'admin') {
+    if (profile.status !== 'ativo') {
       await passwordRecoveryAuditRepository.create({
         profileId: profile.id,
         email,
         action: 'request',
         status: 'blocked',
-        reason: 'Recuperação desativada para perfis de cliente.',
+        reason: 'Conta inativa ou bloqueada.',
         source: 'password_recovery_request',
         ipAddress: getRequestSource(req),
         userAgent: getUserAgent(req),
         clerkUserId: profile.clerk_user_id,
-        metadata: { profile_status: profile.status, blocked_for_customer: true },
+        metadata: { profile_status: profile.status },
       })
       writeJson(res, 403, { ok: false, error: 'Recuperação desativada para este tipo de conta.' }, corsOrigin)
       return true
