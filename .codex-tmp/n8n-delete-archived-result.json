@@ -1,0 +1,154 @@
+{
+  "apiBaseUrl": "https://auto.mantovan.com.br/api/v1",
+  "beforeTotal": 77,
+  "archivedFound": 36,
+  "deleted": [
+    {
+      "id": "V3xvJ0Ab71TVPIta",
+      "name": "AVMD - Email Send (SMTP)"
+    },
+    {
+      "id": "rKxBPfZVboXrlDfh",
+      "name": "1- Clara | CertiID v2"
+    },
+    {
+      "id": "SXjKKIvHlvqu1Beu",
+      "name": "avmd-clara-inbound"
+    },
+    {
+      "id": "XBIKbwm5JCb7ypaM",
+      "name": "My workflow 4"
+    },
+    {
+      "id": "kqSFedD9Pr-zaX9-BO1CH",
+      "name": "1 CRM- Template base"
+    },
+    {
+      "id": "th3BnZU7JlUsgSjT",
+      "name": "Fluxo Chatwoot APIMETA"
+    },
+    {
+      "id": "iW8JiRzgFvCbihuz",
+      "name": "3- CRM_CERTIID"
+    },
+    {
+      "id": "DMJokk5LPhzu9kg6",
+      "name": "Fluxo_atendimento_Chatwoot"
+    },
+    {
+      "id": "8LNHCy5fA2OSpGAm",
+      "name": "My workflow 2"
+    },
+    {
+      "id": "SZWWdV7WnFY0vov9",
+      "name": "Agente web chatwoot"
+    },
+    {
+      "id": "4BayTRwlCm34Epva",
+      "name": "2- Follow UP 24 horas | CertiID | CRM Direto"
+    },
+    {
+      "id": "UtYCWVNgI0QGb9ws",
+      "name": "1- Follow UP 20min | CertiID | CRM Direto"
+    },
+    {
+      "id": "TIiYniK6HoqlUa0K",
+      "name": "3- CRM | CertiID"
+    },
+    {
+      "id": "YPRiBA40Vbcsz14s",
+      "name": "2- sobreEmpresa | CertiID"
+    },
+    {
+      "id": "OZgageMeqVh5BNTz",
+      "name": "2- Follow UP 24 horas | CertiID"
+    },
+    {
+      "id": "4S831Rf1JuagVEQy",
+      "name": "1- Follow UP 20min | CertiID"
+    },
+    {
+      "id": "A7dgadKG7z4VG12V",
+      "name": "1- Clara | CertiID"
+    },
+    {
+      "id": "4rqpC7EG7keUE9Vr",
+      "name": "My workflow 5"
+    },
+    {
+      "id": "6UUdw7ve5GyZolzC",
+      "name": "MCP n8n Tool"
+    },
+    {
+      "id": "Rj1ZJuFgL6YCzI49",
+      "name": "recebimento de agendamento Certisign copy"
+    },
+    {
+      "id": "4WlMdMHG9g0YeNB9",
+      "name": "2- Follow UP 24 horas | Ápice Contábil"
+    },
+    {
+      "id": "D8WCBnUup5XVZIwc",
+      "name": "1- Follow UP 20min | Ápice Contábil"
+    },
+    {
+      "id": "bicftP0mF9gEsdvs",
+      "name": "5- Eventos Agenda | Ápice Contábil"
+    },
+    {
+      "id": "k9ETM34Klf1UfDry",
+      "name": "4- Agente IA (agendamento) | Ápice Contábil"
+    },
+    {
+      "id": "92XPllCS3lvtsPcg",
+      "name": "2- sobreEmpresa | Ápice Contábil"
+    },
+    {
+      "id": "8ymJIc35yT9pzLQD",
+      "name": "1- Laura | Ápice Contábil"
+    },
+    {
+      "id": "rh7lD8yHjE2iWffm",
+      "name": "5- Marcação de visita | Imobiliaria Morada One"
+    },
+    {
+      "id": "CSR2YQA1vigyC2ML",
+      "name": "4- Agente IA de Agendamento | Imobiliaria Morada One"
+    },
+    {
+      "id": "BVyAZuG6Cuvh5fl0",
+      "name": "3-crm_certiid_tool | Certi ID CRM"
+    },
+    {
+      "id": "1JPymTtOAqBK5XEa",
+      "name": "2- CRM | Imobiliaria Morada One"
+    },
+    {
+      "id": "004xBO8bC7RHQhIt",
+      "name": "5- Marcação de visita | Imobiliaria Morada One"
+    },
+    {
+      "id": "BPZ2BsaJ8CCnniHV",
+      "name": "4- Agente IA de Agendamento | Imobiliaria Morada One"
+    },
+    {
+      "id": "MYZhjFaaW6X3SjQP",
+      "name": "5- Marcação de visita | Imobiliaria Morada One"
+    },
+    {
+      "id": "vkIU17Dhpo0qJLB7",
+      "name": "1- Robit | Certi ID"
+    },
+    {
+      "id": "qdm74QXc7In3rYqj",
+      "name": "VALIDAÇÃO API META"
+    },
+    {
+      "id": "qHWqZoYIZ1wnwNCg",
+      "name": "Tabela de preço CERTIID"
+    }
+  ],
+  "failed": [],
+  "afterTotal": 41,
+  "remainingArchived": []
+}

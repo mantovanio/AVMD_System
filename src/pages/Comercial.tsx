@@ -1,7 +1,7 @@
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
-import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
 import { cn } from '@/lib/utils'
 import { generateAgendaSlotsPreview, resolveAgentesElegiveisPorTabela } from '@/lib/agenda'
 import { FlowModal } from '@/components/checkout'

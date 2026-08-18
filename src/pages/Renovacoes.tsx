@@ -38,7 +38,7 @@ import {
 } from '@/lib/renovacoesApi'
 import { useAuth } from '@/contexts/AuthContext'
 import { hasPerfil, isAdminProfile } from '@/lib/security'
-import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
 import type {
   AutomationRule, CommunicationTemplate, LinkProduto, Profile,
   PrioridadeRenovacao, RenovacaoV2, StatusRenovacao,

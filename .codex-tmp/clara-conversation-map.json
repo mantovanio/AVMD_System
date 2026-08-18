@@ -1,0 +1,561 @@
+{
+  "periodo": "ultimos 30 dias por ultima_interacao_em",
+  "conversas_analisadas": 180,
+  "mensagens_analisadas": 3078,
+  "categorias_por_mensagem": [
+    {
+      "categoria": "outros",
+      "total": 1519
+    },
+    {
+      "categoria": "saudacao_curta",
+      "total": 593
+    },
+    {
+      "categoria": "documentos_dados",
+      "total": 572
+    },
+    {
+      "categoria": "agendamento_video",
+      "total": 302
+    },
+    {
+      "categoria": "pagamento_link_boleto_pix",
+      "total": 269
+    },
+    {
+      "categoria": "preco_compra_renovacao",
+      "total": 210
+    },
+    {
+      "categoria": "suporte_a1_instalacao",
+      "total": 142
+    },
+    {
+      "categoria": "suporte_token_a3",
+      "total": 125
+    },
+    {
+      "categoria": "humano_reclamacao_urgencia",
+      "total": 114
+    },
+    {
+      "categoria": "ecac_gov_receita",
+      "total": 4
+    }
+  ],
+  "categorias_por_conversa": [
+    {
+      "categoria": "documentos_dados",
+      "total": 140
+    },
+    {
+      "categoria": "saudacao_curta",
+      "total": 133
+    },
+    {
+      "categoria": "agendamento_video",
+      "total": 126
+    },
+    {
+      "categoria": "outros",
+      "total": 120
+    },
+    {
+      "categoria": "pagamento_link_boleto_pix",
+      "total": 88
+    },
+    {
+      "categoria": "suporte_a1_instalacao",
+      "total": 87
+    },
+    {
+      "categoria": "humano_reclamacao_urgencia",
+      "total": 60
+    },
+    {
+      "categoria": "preco_compra_renovacao",
+      "total": 49
+    },
+    {
+      "categoria": "suporte_token_a3",
+      "total": 48
+    },
+    {
+      "categoria": "ecac_gov_receita",
+      "total": 4
+    }
+  ],
+  "exemplos": {
+    "outros": [
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "teste tecnico da clara"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "meu certificado nao esta funcionando"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "meu certificado nao esta funcionando"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Eu abri pelo aplicativo e nao tem nada nele"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Eu abri pelo aplicativo e nao tem nada nele"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Teate"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Teste final de hoje"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Alexandre"
+      }
+    ],
+    "humano_reclamacao_urgencia": [
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Urgente    \nO Token  que retiramos nao esta funcionando."
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Preciso de um certificado de pessoa física, qual o valor?"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Fiquei na dúvida se, por ser uma nova empresa, isso não funcionaria"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Pessoal, mil desculpas. Ela me enrolou"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Pra gente não ter problemas"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Vou pedir pra verificar, esse e-mail é do uma pessoa que trabalha comigo"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Tem problema?"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Segue documentos da certificação agendada para amanhã (30/07/2026) cliente irá pessoalmente no escritório fazer a renovação"
+      }
+    ],
+    "suporte_token_a3": [
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Parece que meu token nao funcina"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Parece que meu token nao funcina"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "meu token nao esta funcionando"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "meu token nao esta funcionando"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "meu token nao esta funcionando"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "meu token nao esta funcionando"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "meu token nao esta funcionando"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "meu token nao esta funcionando"
+      }
+    ],
+    "pagamento_link_boleto_pix": [
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Vc tem o link para eu iniciar emissão no meu token"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Oi Clara, pode reenviar o link da renovacao?"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Vai mandar o link por aqui"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Ok.. tem uma validação as 11h da dootax.. o representante estava no link e nao entraram na sala"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Boa tarde, acabei de fazer um pagamento de um Certificado E-CPF do meu esposo, tem algum link pra fazer o agendamento?"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Perfeito. Assim que pagarmos e a Danielle me passar uma data pra videoconferência, eu te aviso, tá?"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Ela me pediu o link"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Pode mandar o link kkkkk"
+      }
+    ],
+    "suporte_a1_instalacao": [
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "meu certificado A1 nao instala"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "meu certificado A1 nao instala"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "meu certificado A1 nao instala"
+      },
+      {
+        "fila": "email",
+        "instancia": "contato@certifast.com.br",
+        "dir": "incoming",
+        "text": "O cliente CNTF CONSULTORIA PROJETOS E SERVICOS LTDA agendou a visita do pedido c&oacute;digo 2669***67 para o dia 17/08/2026 &agrave;s 10:00h. Detalhes do Agendamento ----------------------- Cliente: CNTF CONSULTORIA PROJETOS E SERVICOS LTDA CPF/CNPJ: 2941***56 Telefone: (11)9964-53606 Telefone "
+      },
+      {
+        "fila": "email",
+        "instancia": "contato@certifast.com.br",
+        "dir": "incoming",
+        "text": "Agendamento cancelado. A visita agendada para o dia 21/07/2026 &agrave;s 09:00h no posto AR Certifast - videoconferencia localizado &agrave; Videoconferencia, Online - Sao Bernardo do Campo - SP foi cancelado com sucesso. Seguem os dados do pedido: Cliente WANDERLEY REIS Produto Certificado A1 PF - "
+      },
+      {
+        "fila": "email",
+        "instancia": "contato@certifast.com.br",
+        "dir": "incoming",
+        "text": "Agendamento cancelado. A visita agendada para o dia 30/07/2026 &agrave;s 10:30h no posto AR Certifast - Maua Centro localizado &agrave; Av. Assis Brasil, 22 - Maua - SP foi cancelado com sucesso. Seguem os dados do pedido: Cliente CVS MECANICA INDUSTRIAL LTDA Produto e-CNPJ A1 - 1 ano - AC Certisign"
+      },
+      {
+        "fila": "email",
+        "instancia": "contato@certifast.com.br",
+        "dir": "incoming",
+        "text": "Agendamento cancelado. A visita agendada para o dia 20/07/2026 &agrave;s 15:40h no posto AR Certifast localizado &agrave; Rua Jose Versolato, 111 - Sala 1106. - Sao Bernardo do Campo - SP foi cancelado com sucesso. Seguem os dados do pedido: Cliente 68 064 829 ISABELLY PAIVA REDI Produto e-CNPJ A1 -"
+      },
+      {
+        "fila": "email",
+        "instancia": "contato@certifast.com.br",
+        "dir": "incoming",
+        "text": "Agendamento cancelado. A visita agendada para o dia 24/07/2026 &agrave;s 10:00h no posto AR Certifast localizado &agrave; Rua Jose Versolato, 111 - Sala 1106. - Sao Bernardo do Campo - SP foi cancelado com sucesso. Seguem os dados do pedido: Cliente TALI QUALI MODAS LTDA Produto e-CNPJ A1 - 1 ano - "
+      }
+    ],
+    "ecac_gov_receita": [
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "nao consigo acessar o eCAC"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "nao consigo acessar o eCAC"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "https://portalservicos.senatran.serpro.gov.br/#/condutor/consultar/detalhes/4738***86/0903***01"
+      }
+    ],
+    "saudacao_curta": [
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "nao consigo acessar o eCAC"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "nao consigo acessar o eCAC"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Oi"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Ola"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Boa noite"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Oi"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Oi"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Bom dia"
+      }
+    ],
+    "agendamento_video": [
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "quero fazer a validacao por video"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "quero fazer a validacao por video"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Preciso estar na máquina ou pode ser pelo cel a vídeo conferência"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Sim tem um certificado  da filial  da Atna, para validar,  e conseguir que o representante  da empresa  faz as 12 horas de hoje."
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Posso confirmar  o horário?"
+      },
+      {
+        "fila": "email",
+        "instancia": "contato@certifast.com.br",
+        "dir": "incoming",
+        "text": "O cliente CNTF CONSULTORIA PROJETOS E SERVICOS LTDA agendou a visita do pedido c&oacute;digo 2669***67 para o dia 17/08/2026 &agrave;s 10:00h. Detalhes do Agendamento ----------------------- Cliente: CNTF CONSULTORIA PROJETOS E SERVICOS LTDA CPF/CNPJ: 2941***56 Telefone: (11)9964-53606 Telefone "
+      },
+      {
+        "fila": "email",
+        "instancia": "contato@certifast.com.br",
+        "dir": "incoming",
+        "text": "Agendamento cancelado. A visita agendada para o dia 21/07/2026 &agrave;s 09:00h no posto AR Certifast - videoconferencia localizado &agrave; Videoconferencia, Online - Sao Bernardo do Campo - SP foi cancelado com sucesso. Seguem os dados do pedido: Cliente WANDERLEY REIS Produto Certificado A1 PF - "
+      },
+      {
+        "fila": "email",
+        "instancia": "contato@certifast.com.br",
+        "dir": "incoming",
+        "text": "Agendamento cancelado. A visita agendada para o dia 21/07/2026 &agrave;s 10:00h no posto AR Certifast - videoconferencia localizado &agrave; Videoconferencia, Online - Sao Bernardo do Campo - SP foi cancelado com sucesso. Seguem os dados do pedido: Cliente PETERSON DOS SANTOS Produto e-CPF A3 soment"
+      }
+    ],
+    "preco_compra_renovacao": [
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Oi Clara, pode reenviar o link da renovacao?"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Preciso de um certificado de pessoa física, qual o valor?"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "conseguimos fazer a renovação agora?"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Oii. Tudo bem?\nPosso usar esse mesmo link pra comprar três certificados?\nVou fazer a renovação na segunda feira"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Por favor, e-CNPJ A3 com validade de 3 anos, por quanto conseguem fazer para mim (com a mídia do cartão inclusa na aquisição)?"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Segue documentos da certificação agendada para amanhã (30/07/2026) cliente irá pessoalmente no escritório fazer a renovação"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Minha certificação SaFe ID venceu \nComo faço para renovar ?"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Preciso renovar o certificado a1 que venceu."
+      }
+    ],
+    "documentos_dados": [
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Documento"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Documento"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Por favor  ,me passa o nome de quem  vai ligar e o telefone."
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "O certificado  eCNPJ o A3"
+      },
+      {
+        "fila": "atendimento",
+        "instancia": "atendimento",
+        "dir": "incoming",
+        "text": "Urgente    \nO Token  que retiramos nao esta funcionando."
+      },
+      {
+        "fila": "email",
+        "instancia": "contato@certifast.com.br",
+        "dir": "incoming",
+        "text": "O cliente CNTF CONSULTORIA PROJETOS E SERVICOS LTDA agendou a visita do pedido c&oacute;digo 2669***67 para o dia 17/08/2026 &agrave;s 10:00h. Detalhes do Agendamento ----------------------- Cliente: CNTF CONSULTORIA PROJETOS E SERVICOS LTDA CPF/CNPJ: 2941***56 Telefone: (11)9964-53606 Telefone "
+      },
+      {
+        "fila": "email",
+        "instancia": "contato@certifast.com.br",
+        "dir": "incoming",
+        "text": "Agendamento cancelado. A visita agendada para o dia 21/07/2026 &agrave;s 09:00h no posto AR Certifast - videoconferencia localizado &agrave; Videoconferencia, Online - Sao Bernardo do Campo - SP foi cancelado com sucesso. Seguem os dados do pedido: Cliente WANDERLEY REIS Produto Certificado A1 PF - "
+      },
+      {
+        "fila": "email",
+        "instancia": "contato@certifast.com.br",
+        "dir": "incoming",
+        "text": "Agendamento cancelado. A visita agendada para o dia 21/07/2026 &agrave;s 10:00h no posto AR Certifast - videoconferencia localizado &agrave; Videoconferencia, Online - Sao Bernardo do Campo - SP foi cancelado com sucesso. Seguem os dados do pedido: Cliente PETERSON DOS SANTOS Produto e-CPF A3 soment"
+      }
+    ]
+  }
+}

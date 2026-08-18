@@ -11,7 +11,7 @@ import { normalizePhoneBR } from '@/lib/phone'
 import { useAuth } from '@/contexts/AuthContext'
 import { buildSafeIlikePattern, hasPerfil } from '@/lib/security'
 import type { Agendamento, CommunicationOutbox, RenovacaoV2 } from '@/types'
-import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
 
 type TipoCliente = 'pessoa_fisica' | 'pessoa_juridica'
 

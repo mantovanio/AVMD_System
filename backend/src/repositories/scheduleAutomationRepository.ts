@@ -527,12 +527,15 @@ export class ScheduleAutomationRepository {
         }),
       ])
 
+    const normalizedCustomerEmailForConv = normalizeEmail(input.customerEmail) ?? normalizeEmail(normalizedFrom) ?? normalizeEmail(normalizedMailbox)
+
     const conversationResult = existingConversation.rows[0]?.id
       ? await this.db.query<{ id: string }>(`
           update crm_chat_conversations
           set crm_customer_id = coalesce($2::uuid, crm_customer_id),
               cliente_nome = coalesce($3, cliente_nome),
               telefone = coalesce($4, telefone),
+              email_principal = coalesce($6, email_principal),
               kanban_status = coalesce($5, kanban_status),
               updated_at = now()
           where id = $1::uuid
@@ -543,6 +546,7 @@ export class ScheduleAutomationRepository {
           normalizedCustomerName,
           normalizedCustomerPhone,
           input.eventType === 'cancelamento' ? 'cancelou_agendamento' : 'agendado',
+          normalizedCustomerEmailForConv,
         ])
       : await this.db.query<{ id: string }>(`
           with target as (
@@ -556,6 +560,7 @@ export class ScheduleAutomationRepository {
           set crm_customer_id = coalesce($2::uuid, c.crm_customer_id),
               cliente_nome = coalesce($3, c.cliente_nome),
               telefone = coalesce($4, c.telefone),
+              email_principal = coalesce($6, c.email_principal),
               kanban_status = coalesce($5, c.kanban_status),
               updated_at = now()
           from target
@@ -567,6 +572,7 @@ export class ScheduleAutomationRepository {
           normalizedCustomerName,
           normalizedCustomerPhone,
           input.eventType === 'cancelamento' ? 'cancelou_agendamento' : 'agendado',
+          normalizedCustomerEmailForConv,
         ])
 
     return {

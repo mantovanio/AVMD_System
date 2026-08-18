@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
 import { BookmarkPlus, Download, Loader2, RefreshCcw, Search } from 'lucide-react'
 import { getApiUrl } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'

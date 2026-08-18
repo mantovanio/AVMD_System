@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
 import { Edit3, PlusCircle, RefreshCw, Search, X, Trash2, PowerOff, Upload, Loader2, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getApiUrl } from '@/lib/api'
