@@ -3298,7 +3298,7 @@ export default function ChatInboxCRM() {
                         <button
                           type="button"
                           disabled={actionLoading}
-                          onClick={() => void toggleHumanMode(true)}
+                          onClick={() => void toggleHumanMode(false)}
                           title="Ligar IA para conduzir a conversa"
                           className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 shadow-sm transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-60"
                           aria-label="Ligar IA"
@@ -3357,7 +3357,7 @@ export default function ChatInboxCRM() {
                           <button
                             type="button"
                             disabled={actionLoading}
-                            onClick={() => void toggleHumanMode(false)}
+                            onClick={() => void toggleHumanMode(true)}
                             title="Desligar IA e assumir como humano"
                             className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-200 bg-amber-100 text-amber-700 shadow-sm transition hover:bg-amber-200 disabled:opacity-60"
                             aria-label="Desligar IA"
