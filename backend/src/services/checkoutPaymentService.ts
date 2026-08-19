@@ -231,21 +231,61 @@ export class CheckoutPaymentService {
         })
         return { ok: true, status: normalizedStatus, paid }
       }
-      const payment = await this.fetchMercadoPagoPayment(config, externalId)
-      const normalized = this.normalizeWebhookPayload(payment)
-      await this.repository.applyPaymentWebhook({
-        vendaId,
-        externalId,
-        gateway: 'mercado_pago',
-        status: normalized.status,
-        paid: normalized.paid,
-        payload: payment,
-      })
-      return { ok: true, status: normalized.status, paid: normalized.paid }
+      if (externalId.startsWith('PAY')) {
+        const paymentId = externalId.replace(/^PAY/, '')
+        const payment = await this.fetchMercadoPagoPayment(config, paymentId)
+        const normalized = this.normalizeWebhookPayload(payment)
+        await this.repository.applyPaymentWebhook({
+          vendaId,
+          externalId: paymentId,
+          gateway: 'mercado_pago',
+          status: normalized.status,
+          paid: normalized.paid,
+          payload: payment,
+        })
+        return { ok: true, status: normalized.status, paid: normalized.paid }
+      }
+      const searchPayment = await this.searchMercadoPagoPayments(config, vendaId)
+      if (searchPayment) {
+        const normalized = this.normalizeWebhookPayload(searchPayment)
+        const paymentId = this.pickString(searchPayment, ['id'])
+        await this.repository.applyPaymentWebhook({
+          vendaId,
+          externalId: paymentId ?? externalId,
+          gateway: 'mercado_pago',
+          status: normalized.status,
+          paid: normalized.paid,
+          payload: searchPayment,
+        })
+        return { ok: true, status: normalized.status, paid: normalized.paid }
+      }
+      return { ok: false, message: 'Pagamento nao encontrado no Mercado Pago para esta referencia.' }
     } catch (error) {
       console.error(`[PollPayment] Erro ao consultar pagamento:`, error)
       return { ok: false, message: error instanceof Error ? error.message : 'Falha ao consultar pagamento.' }
     }
+  }
+
+  private async searchMercadoPagoPayments(config: CheckoutPaymentMethodConfig, externalReference: string) {
+    const baseUrl = (config.provider_base_url?.trim() || 'https://api.mercadopago.com').replace(/\/$/, '')
+    const endpoint = `${baseUrl}/v1/payments/search?external_reference=${encodeURIComponent(externalReference)}&sort=date_created&range=date_created&begin_date=2026-08-01T00:00:00Z&end_date=2026-12-31T23:59:59Z`
+    const response = await this.fetchWithTimeout(endpoint, {
+      headers: { 'Authorization': `Bearer ${config.provider_api_token}` },
+    })
+    const payload = await response.json().catch(() => ({})) as Record<string, unknown>
+    if (!response.ok) {
+      console.error(`[PollPayment] MP search error: ${response.status}`, payload)
+      return null
+    }
+    const results = Array.isArray(payload.results) ? payload.results : []
+    if (results.length === 0) return null
+    const latest = results.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+      const da = String(a.date_created ?? '')
+      const db = String(b.date_created ?? '')
+      return db.localeCompare(da)
+    })[0]
+    console.log(`[PollPayment] Found payment via search: id=${latest.id} status=${latest.status}`)
+    return latest as Record<string, unknown>
   }
 
   private async createCharge(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): Promise<ChargeResult> {
