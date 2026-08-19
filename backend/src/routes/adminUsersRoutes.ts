@@ -129,6 +129,27 @@ export async function handleAdminUsersRoutes(
   corsOrigin: string,
 ): Promise<boolean> {
   if (req.url !== '/api/admin/users') return false
+
+  if (req.method === 'GET') {
+    try {
+      const profiles = await profileRepository.findAll()
+      const users = profiles.map(p => ({
+        id: p.id,
+        nome: p.nome,
+        email: p.email,
+        perfil: p.perfil,
+        status: p.status,
+        tipo_vinculo: p.tipo_vinculo,
+        created_at: p.created_at,
+      }))
+      writeJson(res, 200, { ok: true, users }, corsOrigin)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      writeJson(res, 500, { ok: false, error: msg }, corsOrigin)
+    }
+    return true
+  }
+
   if (req.method !== 'POST') return false
 
   if (!clerkSecretKey) {
