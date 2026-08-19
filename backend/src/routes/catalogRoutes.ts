@@ -10,6 +10,7 @@ import { readJson, writeJson } from '../utils/http.js'
 import { CatalogRepository } from '../repositories/catalogRepository.js'
 import { RenovacaoRepository } from '../repositories/renovacaoRepository.js'
 import type { AivenSqlClient } from '../db/aivenClient.js'
+import type { BackendConfig } from '../config/env.js'
 
 type SafewebImportJob = {
   id: string
@@ -347,7 +348,7 @@ async function processSafewebImportJob(
   }
 }
 
-export async function handleCatalogRoutes(req: IncomingMessage, res: ServerResponse, repo: CatalogRepository, renovacaoRepo: RenovacaoRepository | null, db: AivenSqlClient, corsOrigin: string): Promise<boolean> {
+export async function handleCatalogRoutes(req: IncomingMessage, res: ServerResponse, repo: CatalogRepository, renovacaoRepo: RenovacaoRepository | null, db: AivenSqlClient, corsOrigin: string, config: BackendConfig): Promise<boolean> {
   const method = req.method ?? ''
   const url = req.url ?? ''
 
@@ -775,9 +776,71 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
 
   // ── Titulares ─────────────────────────────────────────────────────────
   if (method === 'POST' && url === '/api/titulares') {
-    const body = await readJson<Record<string, unknown>>(req)
-    const titular = await repo.upsertTitular(body)
-    writeJson(res, 200, { ok: true, titular }, corsOrigin)
+    try {
+      const body = await readJson<Record<string, unknown>>(req)
+      const titular = await repo.upsertTitular(body)
+      writeJson(res, 200, { ok: true, titular }, corsOrigin)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error('[catalog] upsertTitular error:', msg)
+      writeJson(res, 500, { ok: false, error: 'Erro ao salvar titular: ' + msg }, corsOrigin)
+    }
+    return true
+  }
+
+  // ── Gerar Protocolo (Senha Digital Plus) ──────────────────────────────
+  if (method === 'POST' && url === '/api/protocolos/gerar') {
+    try {
+      const body = await readJson<{
+        cliente_id?: string
+        cpf_cnpj?: string
+        nome_titular?: string
+        tipo_documento?: string
+        tipo_certificado?: string
+        observacoes?: string
+      }>(req)
+
+      if (!config.senhaDigitalPlusApiKey || !config.senhaDigitalPlusSecretKey) {
+        writeJson(res, 500, { ok: false, error: 'Credenciais da Senha Digital Plus não configuradas no servidor (x-api-key, x-secret-key).' }, corsOrigin)
+        return true
+      }
+
+      const sdpPayload: Record<string, unknown> = {
+        cpf: body.cpf_cnpj,
+        nome: body.nome_titular,
+        tipo_documento: body.tipo_documento,
+        tipo_certificado: body.tipo_certificado,
+        observacoes: body.observacoes,
+      }
+
+      const sdpHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-api-key': config.senhaDigitalPlusApiKey,
+        'x-secret-key': config.senhaDigitalPlusSecretKey,
+        'x-environment': config.senhaDigitalPlusEnvironment || 'production',
+      }
+
+      const sdpRes = await fetch(`${config.senhaDigitalPlusApiUrl}/protocolo/capture-certificate`, {
+        method: 'POST',
+        headers: sdpHeaders,
+        body: JSON.stringify(sdpPayload),
+      })
+
+      const sdpData = await sdpRes.json().catch(() => null) as Record<string, unknown> | null
+
+      if (!sdpRes.ok) {
+        const msg = (sdpData as { message?: string; error?: string } | null)?.message || (sdpData as { message?: string; error?: string } | null)?.error || `Erro HTTP ${sdpRes.status}`
+        console.error('[catalog] Senha Digital Plus API error:', sdpRes.status, msg)
+        writeJson(res, 502, { ok: false, error: 'Erro na API Senha Digital Plus: ' + msg }, corsOrigin)
+        return true
+      }
+
+      writeJson(res, 200, { ok: true, ...sdpData }, corsOrigin)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error('[catalog] gerarProtocolo error:', msg)
+      writeJson(res, 500, { ok: false, error: 'Erro ao gerar protocolo: ' + msg }, corsOrigin)
+    }
     return true
   }
 

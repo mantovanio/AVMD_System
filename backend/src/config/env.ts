@@ -20,6 +20,10 @@ export type BackendConfig = {
   telegramWebhookUrl: string
   telegramWebhookSecret: string
   mercadoPagoWebhookSecret: string
+  senhaDigitalPlusApiUrl: string
+  senhaDigitalPlusApiKey: string
+  senhaDigitalPlusSecretKey: string
+  senhaDigitalPlusEnvironment: string
   // Canal de atendimento humano (dia a dia, sem IA)
   evolutionAtendimento: EvolutionInstanceConfig
   // Canal CertiID — renovações de certificados (com IA)
@@ -67,6 +71,10 @@ export function loadConfig(): BackendConfig {
     telegramWebhookUrl,
     telegramWebhookSecret: env('TELEGRAM_WEBHOOK_SECRET'),
     mercadoPagoWebhookSecret: env('MERCADO_PAGO_WEBHOOK_SECRET'),
+    senhaDigitalPlusApiUrl: env('SENHA_DIGITAL_PLUS_API_URL', 'https://api.senhadigitalplus.com.br/services-external/v1'),
+    senhaDigitalPlusApiKey: env('SENHA_DIGITAL_PLUS_API_KEY'),
+    senhaDigitalPlusSecretKey: env('SENHA_DIGITAL_PLUS_SECRET_KEY'),
+    senhaDigitalPlusEnvironment: env('SENHA_DIGITAL_PLUS_ENVIRONMENT', 'production'),
     evolutionAtendimento: {
       baseUrl,
       apiToken: env('EVOLUTION_ATENDIMENTO_API_TOKEN') || defaultToken,
