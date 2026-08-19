@@ -201,7 +201,7 @@ UPDATE crm_chat_conversations c
    AND c.subject IS NULL;
 
 -- 4b) Para conversas de fila='email' sem subject, gerar padrao a partir do pedido_numero
---     Padrão: "tratativa sobre seu agendamento Certificado Digital - Pedido XXXXX"
+--     Padrão: "Tratativa sobre seu agendamento Certificado Digital - Pedido XXXXX"
 WITH latest_pedido AS (
   SELECT DISTINCT ON (c.id)
          c.id AS conv_id,
@@ -218,7 +218,7 @@ WITH latest_pedido AS (
    ORDER BY c.id, see.created_at DESC
 )
 UPDATE crm_chat_conversations c
-   SET subject = 'tratativa sobre seu agendamento Certificado Digital - Pedido ' || lp.pedido_numero,
+   SET subject = 'Tratativa sobre seu agendamento Certificado Digital - Pedido ' || lp.pedido_numero,
        updated_at = NOW()
   FROM latest_pedido lp
  WHERE c.id = lp.conv_id
@@ -242,7 +242,7 @@ WITH pedido_extracted AS (
   ORDER BY c.id, m.created_at ASC
 )
 UPDATE crm_chat_conversations c
-SET subject = 'tratativa sobre seu agendamento Certificado Digital - Pedido ' || pe.pedido_numero,
+SET subject = 'Tratativa sobre seu agendamento Certificado Digital - Pedido ' || pe.pedido_numero,
     updated_at = NOW()
 FROM pedido_extracted pe
 WHERE c.id = pe.conv_id
