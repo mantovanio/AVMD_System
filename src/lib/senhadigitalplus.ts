@@ -86,6 +86,6 @@ function gerarProtocoloLocal(request: GerarProtocoloRequest, motivo: string): Ge
     protocolo_status: 'gerado',
     data_geracao: hoje,
     certificadora: 'Senha Digital Plus',
-    mensagem: `Modo local - ${motivo}. Configure SENHA_DIGITAL_PLUS_API_TOKEN no .env do backend.`,
+    mensagem: `Modo local - ${motivo}. Configure SENHA_DIGITAL_PLUS_API_KEY e SENHA_DIGITAL_PLUS_SECRET_KEY no .env do backend.`,
   }
 }

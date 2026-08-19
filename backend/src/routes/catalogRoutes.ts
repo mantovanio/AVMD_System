@@ -806,11 +806,20 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
       }
 
       const sdpPayload: Record<string, unknown> = {
-        cpf: body.cpf_cnpj,
-        nome: body.nome_titular,
-        tipo_documento: body.tipo_documento,
-        tipo_certificado: body.tipo_certificado,
-        observacoes: body.observacoes,
+        CPF: body.cpf_cnpj?.replace(/\D/g, '') || '',
+        DataNascimento: '01011990',
+        Nome: body.nome_titular || '',
+        tipoEmissao: 'videoconferencia',
+        idProduto: '72054',
+        categoriaProduto: 'c50cb1a6-693e-4c12-9a71-878cf583beef',
+        produto: 'CBRRFB05143',
+        ProdutoDescricao: 'A1 arquivo',
+        Contato: { DDD: '11', Telefone: '999999999', Email: 'contato@certiid.com.br' },
+        Endereco: {
+          CodigoIbgeMunicipio: '3550308', CodigoIbgeUF: '35', cep: '01310100',
+          cidade: 'Sao Paulo', bairro: 'Bela Vista', logradouro: 'Av Paulista',
+          numero: '1000', uf: 'SP',
+        },
       }
 
       const sdpHeaders: Record<string, string> = {
@@ -830,12 +839,17 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
 
       if (!sdpRes.ok) {
         const msg = (sdpData as { message?: string; error?: string } | null)?.message || (sdpData as { message?: string; error?: string } | null)?.error || `Erro HTTP ${sdpRes.status}`
-        console.error('[catalog] Senha Digital Plus API error:', sdpRes.status, msg)
+        console.error('[catalog] Senha Digital Plus API error:', sdpRes.status, msg, '| URL:', `${config.senhaDigitalPlusApiUrl}/protocolo/capture-certificate`, '| payload:', JSON.stringify(sdpPayload))
         writeJson(res, 502, { ok: false, error: 'Erro na API Senha Digital Plus: ' + msg }, corsOrigin)
         return true
       }
 
-      writeJson(res, 200, { ok: true, ...sdpData }, corsOrigin)
+      writeJson(res, 200, {
+        ok: true,
+        protocolo_numero: sdpData?.protocolo || '',
+        protocolo_url: sdpData?.url || '',
+        ...sdpData,
+      }, corsOrigin)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       console.error('[catalog] gerarProtocolo error:', msg)
