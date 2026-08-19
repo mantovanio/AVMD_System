@@ -3123,7 +3123,7 @@ export default function Comercial() {
       descricao_produto: c.descricao_produto, produto_vinculado_ac: c.produto_vinculado_ac,
       preco_venda: c.preco_venda, valor_custo_ac: c.valor_custo_ac, valor_custo: c.valor_custo,
       agrupador: c.agrupador, hash: c.hash, codigo_alternativo: c.codigo_alternativo ?? null, combo_produtos: c.combo_produtos ?? null,
-      estoque: c.estoque, ativo: c.ativo,
+      estoque: c.estoque, ativo: c.ativo, metadata: c.metadata ?? {},
     })
     setShowComboSection(false)
     setShowFormCert(true)

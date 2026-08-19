@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { CalendarDays, CreditCard, FileText, Loader2, Mail, MessageCircle, Package, ShieldCheck } from 'lucide-react'
 import { getApiUrl } from '@/lib/api'
+import { gerarProtocoloSenhaDigitalPlus } from '@/lib/senhadigitalplus'
 import { DEFAULT_AGENCY_CONFIG, fetchAgencyConfig, type AgencyConfig } from '@/lib/agencyConfig'
 import { SchedulingModal, formatCurrency, formatDateTime } from '@/components/checkout'
 import type { AgendaAgent, AgendaPoint, AgendaSlot } from '@/lib/checkout'
@@ -22,6 +23,10 @@ type PortalOrder = {
   documento_faturamento: string | null
   titular_nome: string | null
   titular_documento: string | null
+  cpf_cnpj: string | null
+  cliente_nome: string | null
+  tipo_cliente: string | null
+  tipo_certificado: string | null
   payment_charge_status: string | null
   payment_charge_url: string | null
   payment_charge_details: {
@@ -374,7 +379,7 @@ export default function PortalCliente() {
       setSuccess(`Protocolo ${result.protocolo_numero} gerado com sucesso! ${result.mensagem || ''}`.trim())
       
     } catch (err) {
-      setError('Falha ao gerar protocolo: ' + (err.message || 'Erro desconhecido'))
+      setError('Falha ao gerar protocolo: ' + ((err as Error).message || 'Erro desconhecido'))
       console.error('Erro no protocolo Senha Digital Plus:', err)
     } finally {
       setProtocolGeneratingId(null)
