@@ -34,7 +34,7 @@ export function useQuickReplyAutocomplete(options?: UseQuickReplyAutocompleteOpt
   useEffect(() => {
     if (!enabled || loadedRef.current) return
     loadedRef.current = true
-    void fetch(getApiUrl('/api/chat/quick-replies'))
+    void fetch(getApiUrl('/chat/quick-replies'))
       .then(r => r.json())
       .then((data: { ok: boolean; replies?: QuickReply[] }) => {
         if (data.ok && data.replies) setAllReplies(data.replies.filter(r => r.ativo))

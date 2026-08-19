@@ -49,7 +49,7 @@ export default function QuickRepliesManager() {
     try {
       setLoading(true)
       const params = search ? `?q=${encodeURIComponent(search)}` : ''
-      const res = await fetch(getApiUrl(`/api/chat/quick-replies${params}`))
+      const res = await fetch(getApiUrl(`/chat/quick-replies${params}`))
       const data = await res.json() as { ok: boolean; replies?: QuickReply[] }
       if (data.ok && data.replies) setReplies(data.replies)
     } catch {
@@ -93,7 +93,7 @@ export default function QuickRepliesManager() {
     try {
       const attachments: QuickReplyAttachment[] = editing?.attachments ?? []
       const body = editing
-        ? await fetch(getApiUrl(`/api/chat/quick-replies/${editing.id}`), {
+        ? await fetch(getApiUrl(`/chat/quick-replies/${editing.id}`), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -104,7 +104,7 @@ export default function QuickRepliesManager() {
               attachments,
             }),
           })
-        : await fetch(getApiUrl('/api/chat/quick-replies'), {
+        : await fetch(getApiUrl('/chat/quick-replies'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -129,7 +129,7 @@ export default function QuickRepliesManager() {
   async function handleDelete(id: string) {
     if (!confirm('Excluir esta resposta rapida?')) return
     try {
-      await fetch(getApiUrl(`/api/chat/quick-replies/${id}`), { method: 'DELETE' })
+      await fetch(getApiUrl(`/chat/quick-replies/${id}`), { method: 'DELETE' })
       void loadReplies()
     } catch {
       setError('Erro ao excluir.')
@@ -138,7 +138,7 @@ export default function QuickRepliesManager() {
 
   async function handleToggleAtivo(reply: QuickReply) {
     try {
-      await fetch(getApiUrl(`/api/chat/quick-replies/${reply.id}`), {
+      await fetch(getApiUrl(`/chat/quick-replies/${reply.id}`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ativo: !reply.ativo }),
