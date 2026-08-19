@@ -55,7 +55,9 @@ export async function handleCheckoutRoutes(req: IncomingMessage, res: ServerResp
     }
     try {
       const type = String(body.type ?? url.searchParams.get('topic') ?? '').toLowerCase()
-      const isOrder = url.pathname.endsWith('/orders') || type === 'order' || type === 'merchant_order'
+      const isOrder = type === 'order' || type === 'merchant_order'
+      const isPayment = type === 'payment' || type.startsWith('payment.')
+      console.log(`[MercadoPago Webhook] type=${type} isOrder=${isOrder} isPayment=${isPayment}`)
       const result = isOrder
         ? await paymentService.applyMercadoPagoOrderWebhook({
             payload: body,
@@ -69,6 +71,17 @@ export async function handleCheckoutRoutes(req: IncomingMessage, res: ServerResp
       const statusCode = error instanceof Error && 'statusCode' in error ? Number((error as Error & { statusCode?: number }).statusCode) : 502
       writeJson(res, statusCode, { ok: false, error: error instanceof Error ? error.message : 'Falha ao processar webhook.' }, corsOrigin)
     }
+    return
+  }
+
+  if (req.method === 'POST' && req.url === '/api/checkout/poll-payment-status') {
+    const body = await readJson<{ venda_id?: string }>(req)
+    if (!paymentService || !body.venda_id) {
+      writeJson(res, 400, { ok: false, error: 'venda_id obrigatorio.' }, corsOrigin)
+      return
+    }
+    const result = await paymentService.pollPaymentStatus(body.venda_id)
+    writeJson(res, 200, result, corsOrigin)
     return
   }
 

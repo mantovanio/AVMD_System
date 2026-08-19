@@ -201,6 +201,53 @@ export class CheckoutPaymentService {
     return normalized
   }
 
+  async pollPaymentStatus(vendaId: string): Promise<{ ok: boolean; status?: string; paid?: boolean; message?: string }> {
+    const charge = await this.repository.getPaymentChargeBySaleId?.(vendaId)
+    if (!charge) return { ok: false, message: 'Cobranca nao encontrada para esta venda.' }
+    if (charge.gateway !== 'mercado_pago') return { ok: false, message: 'Polling so disponivel para Mercado Pago.' }
+    const existingStatus = String(charge.status ?? '').toLowerCase()
+    if (existingStatus === 'paid') return { ok: true, status: 'paid', paid: true }
+
+    const config = await this.repository.getCheckoutPaymentMethodConfigByGateway?.('mercado_pago')
+    if (!config?.provider_api_token) return { ok: false, message: 'Credencial do Mercado Pago nao configurada.' }
+
+    const externalId = charge.externalId
+    if (!externalId) return { ok: false, message: 'ID externo da cobranca nao encontrado.' }
+
+    console.log(`[PollPayment] vendaId=${vendaId} externalId=${externalId}`)
+    try {
+      if (externalId.startsWith('ORD')) {
+        const order = await this.fetchMercadoPagoOrder(config, externalId)
+        const payment = this.firstPayment(order)
+        const normalizedStatus = this.normalizeOrderStatus(order, payment)
+        const paid = normalizedStatus === 'paid'
+        await this.repository.applyPaymentWebhook({
+          vendaId,
+          externalId,
+          gateway: 'mercado_pago',
+          status: normalizedStatus,
+          paid,
+          payload: order,
+        })
+        return { ok: true, status: normalizedStatus, paid }
+      }
+      const payment = await this.fetchMercadoPagoPayment(config, externalId)
+      const normalized = this.normalizeWebhookPayload(payment)
+      await this.repository.applyPaymentWebhook({
+        vendaId,
+        externalId,
+        gateway: 'mercado_pago',
+        status: normalized.status,
+        paid: normalized.paid,
+        payload: payment,
+      })
+      return { ok: true, status: normalized.status, paid: normalized.paid }
+    } catch (error) {
+      console.error(`[PollPayment] Erro ao consultar pagamento:`, error)
+      return { ok: false, message: error instanceof Error ? error.message : 'Falha ao consultar pagamento.' }
+    }
+  }
+
   private async createCharge(config: CheckoutPaymentMethodConfig, input: ChargeRequestInput): Promise<ChargeResult> {
     if (config.runtime.bloquear_integracoes_reais || !config.provider_api_token || !config.gateway) {
       return this.buildMockCharge(config, input)
@@ -410,6 +457,7 @@ export class CheckoutPaymentService {
   async applyMercadoPagoWebhook(payload: Record<string, unknown>) {
     const data = this.asObject(payload.data)
     const paymentId = this.pickString(data, ['id']) || this.pickString(payload, ['id'])
+    console.log(`[MercadoPago Webhook] payment topic: paymentId=${paymentId}`)
     if (!paymentId) return { externalId: null, vendaId: null, status: 'pending', paid: false }
 
     const config = await this.repository.getCheckoutPaymentMethodConfigByGateway?.('mercado_pago')
@@ -417,6 +465,7 @@ export class CheckoutPaymentService {
     const payment = await this.fetchMercadoPagoPayment(config, paymentId)
     let normalized = this.normalizeWebhookPayload(payment)
     let webhookPayload = payment
+    console.log(`[MercadoPago Webhook] payment fetched: vendaId=${normalized.vendaId} status=${normalized.status} paid=${normalized.paid} externalRef=${normalized.externalId}`)
 
     if (!normalized.vendaId) {
       const order = this.asObject(payment.order)
@@ -431,9 +480,11 @@ export class CheckoutPaymentService {
           paid: normalized.paid || orderNormalized.paid,
         }
         webhookPayload = { payment, merchant_order: merchantOrder }
+        console.log(`[MercadoPago Webhook] resolved via merchant order: vendaId=${normalized.vendaId}`)
       }
     }
 
+    console.log(`[MercadoPago Webhook] applying: vendaId=${normalized.vendaId} paid=${normalized.paid}`)
     await this.repository.applyPaymentWebhook({
       vendaId: normalized.vendaId,
       externalId: normalized.externalId || paymentId,
