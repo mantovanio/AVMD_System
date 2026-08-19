@@ -67,6 +67,7 @@ interface ConversationRow {
   crm_customer_id: string | null
   nome_crm: string | null
   email_principal: string | null
+  subject: string | null
   cpf: string | null
   cnpj: string | null
   observacoes: string | null
@@ -1190,6 +1191,7 @@ export default function ChatInboxCRM() {
       return next
     })
     setHumanMessage(localStorage.getItem(`crm-chat-draft:${selectedConversation.id}`) ?? '')
+    setEmailSubject(selectedConversation.subject ?? '')
     setShowEmoji(false)
     setShowHumanResponsePanel(false)
     setShowHumanResponseDetails(false)

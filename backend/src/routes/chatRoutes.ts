@@ -1331,8 +1331,8 @@ export async function handleChatRoutes(
     if (conversationId) {
       try {
         await db.query(
-          `UPDATE crm_chat_conversations SET fila = 'email', ultima_mensagem = $1, ultima_mensagem_direcao = 'outgoing', ultima_interacao_em = NOW() WHERE id::text = $2 OR document_key = $3`,
-          [`${subject} - ${textBody.slice(0, 120)}`, conversationId, to],
+          `UPDATE crm_chat_conversations SET fila = 'email', subject = COALESCE($4, subject), ultima_mensagem = $1, ultima_mensagem_direcao = 'outgoing', ultima_interacao_em = NOW() WHERE id::text = $2 OR document_key = $3`,
+          [`${subject} - ${textBody.slice(0, 120)}`, conversationId, to, subject],
         )
       } catch {}
     }
