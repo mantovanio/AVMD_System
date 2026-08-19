@@ -254,7 +254,7 @@ const server = createServer(async (req, res) => {
     const handledEngage = await handleEngageRoutes(req, res, engageRepository, corsOrigin)
     if (handledEngage) return
 
-    const handledCatalog = await handleCatalogRoutes(req, res, catalogRepository, renovacaoRepository, db, corsOrigin)
+    const handledCatalog = await handleCatalogRoutes(req, res, catalogRepository, renovacaoRepository, db, corsOrigin, config)
     if (handledCatalog) return
 
     const handledCommercial = await handleCommercialRoutes(req, res, commercialRepository, corsOrigin, checkoutPaymentService)
