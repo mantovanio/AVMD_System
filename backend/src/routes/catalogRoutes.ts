@@ -791,35 +791,11 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   // ── Gerar Protocolo (Senha Digital Plus) ──────────────────────────────
   if (method === 'POST' && url === '/api/protocolos/gerar') {
     try {
-      const body = await readJson<{
-        cliente_id?: string
-        cpf_cnpj?: string
-        nome_titular?: string
-        tipo_documento?: string
-        tipo_certificado?: string
-        observacoes?: string
-      }>(req)
+      const body = await readJson<Record<string, unknown>>(req)
 
       if (!config.senhaDigitalPlusApiKey || !config.senhaDigitalPlusSecretKey) {
-        writeJson(res, 500, { ok: false, error: 'Credenciais da Senha Digital Plus não configuradas no servidor (x-api-key, x-secret-key).' }, corsOrigin)
+        writeJson(res, 500, { ok: false, error: 'Credenciais da Senha Digital Plus não configuradas no servidor.' }, corsOrigin)
         return true
-      }
-
-      const sdpPayload: Record<string, unknown> = {
-        CPF: body.cpf_cnpj?.replace(/\D/g, '') || '',
-        DataNascimento: '01011990',
-        Nome: body.nome_titular || '',
-        tipoEmissao: 'videoconferencia',
-        idProduto: '72054',
-        categoriaProduto: 'c50cb1a6-693e-4c12-9a71-878cf583beef',
-        produto: 'CBRRFB05143',
-        ProdutoDescricao: 'A1 arquivo',
-        Contato: { DDD: '11', Telefone: '999999999', Email: 'contato@certiid.com.br' },
-        Endereco: {
-          CodigoIbgeMunicipio: '3550308', CodigoIbgeUF: '35', cep: '01310100',
-          cidade: 'Sao Paulo', bairro: 'Bela Vista', logradouro: 'Av Paulista',
-          numero: '1000', uf: 'SP',
-        },
       }
 
       const sdpHeaders: Record<string, string> = {
@@ -832,28 +808,86 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
       const sdpRes = await fetch(`${config.senhaDigitalPlusApiUrl}/protocolo/capture-certificate`, {
         method: 'POST',
         headers: sdpHeaders,
-        body: JSON.stringify(sdpPayload),
+        body: JSON.stringify(body),
       })
 
       const sdpData = await sdpRes.json().catch(() => null) as Record<string, unknown> | null
 
       if (!sdpRes.ok) {
-        const msg = (sdpData as { message?: string; error?: string } | null)?.message || (sdpData as { message?: string; error?: string } | null)?.error || `Erro HTTP ${sdpRes.status}`
-        console.error('[catalog] Senha Digital Plus API error:', sdpRes.status, msg, '| URL:', `${config.senhaDigitalPlusApiUrl}/protocolo/capture-certificate`, '| payload:', JSON.stringify(sdpPayload))
-        writeJson(res, 502, { ok: false, error: 'Erro na API Senha Digital Plus: ' + msg }, corsOrigin)
+        const msg = (sdpData as Record<string, unknown>)?.message || `Erro HTTP ${sdpRes.status}`
+        console.error('[catalog] Senha Digital Plus API error:', sdpRes.status, msg)
+        writeJson(res, 502, { ok: false, error: 'Erro na API Senha Digital Plus: ' + String(msg) }, corsOrigin)
         return true
       }
 
-      writeJson(res, 200, {
-        ok: true,
-        protocolo_numero: sdpData?.protocolo || '',
-        protocolo_url: sdpData?.url || '',
-        ...sdpData,
-      }, corsOrigin)
+      writeJson(res, 200, { ok: true, ...sdpData }, corsOrigin)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       console.error('[catalog] gerarProtocolo error:', msg)
       writeJson(res, 500, { ok: false, error: 'Erro ao gerar protocolo: ' + msg }, corsOrigin)
+    }
+    return true
+  }
+
+  // ── Listar Produtos/Categorias (Senha Digital Plus) ───────────────────
+  if (method === 'GET' && url === '/api/protocolos/produtos') {
+    try {
+      if (!config.senhaDigitalPlusApiKey || !config.senhaDigitalPlusSecretKey) {
+        writeJson(res, 500, { ok: false, error: 'Credenciais da Senha Digital Plus não configuradas.' }, corsOrigin)
+        return true
+      }
+
+      const sdpHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-api-key': config.senhaDigitalPlusApiKey,
+        'x-secret-key': config.senhaDigitalPlusSecretKey,
+        'x-environment': config.senhaDigitalPlusEnvironment || 'production',
+      }
+
+      const catRes = await fetch(`${config.senhaDigitalPlusApiUrl}/produtos/categoria`, {
+        method: 'GET',
+        headers: sdpHeaders,
+      })
+      const categorias = await catRes.json().catch(() => []) as unknown[]
+
+      writeJson(res, 200, { ok: true, categorias }, corsOrigin)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error('[catalog] listarProdutos error:', msg)
+      writeJson(res, 500, { ok: false, error: 'Erro ao listar produtos: ' + msg }, corsOrigin)
+    }
+    return true
+  }
+
+  // ── Validar Credenciais (Senha Digital Plus) ──────────────────────────
+  if (method === 'POST' && url === '/api/protocolos/validate') {
+    try {
+      if (!config.senhaDigitalPlusApiKey || !config.senhaDigitalPlusSecretKey) {
+        writeJson(res, 500, { ok: false, error: 'Credenciais da Senha Digital Plus não configuradas.' }, corsOrigin)
+        return true
+      }
+
+      const sdpHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-api-key': config.senhaDigitalPlusApiKey,
+        'x-secret-key': config.senhaDigitalPlusSecretKey,
+        'x-environment': config.senhaDigitalPlusEnvironment || 'production',
+      }
+
+      const sdpRes = await fetch(`${config.senhaDigitalPlusApiUrl}/protocolo/validate-credentials`, {
+        method: 'POST',
+        headers: sdpHeaders,
+      })
+      const sdpData = await sdpRes.json().catch(() => null) as Record<string, unknown> | null
+
+      writeJson(res, sdpRes.ok ? 200 : 401, {
+        ok: sdpRes.ok,
+        ...sdpData,
+      }, corsOrigin)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error('[catalog] validateCredentials error:', msg)
+      writeJson(res, 500, { ok: false, error: 'Erro ao validar credenciais: ' + msg }, corsOrigin)
     }
     return true
   }

@@ -654,10 +654,9 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
     const tempNow = new Date().toISOString()
     setMessages(prev => [...prev, { id: tempId, content: text, fromMe: true, created_at: tempNow }])
     try {
-      const accessToken = await getSupabaseAccessToken()
       const res = await fetch(EDGE_FN, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+        headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           _action:       'send_message',
           base_url:      evolution.base_url,
@@ -687,7 +686,6 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
     } finally {
       setReplyTo(null)
       setSending(false)
-      inputRef.current?.focus()
     }
   }
 

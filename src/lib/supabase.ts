@@ -1,59 +1,33 @@
 import { createClient } from '@supabase/supabase-js'
-import { getRuntimeConfig } from '@/lib/runtimeConfig'
+import { getRuntimeConfig } from '@/lib/api'
+import { useLegacySupabase } from '@/lib/api'
+
+// Verifica se estamos no modo legado ANTES de criar o cliente
+const legacyMode = useLegacySupabase()
 
 const runtime = getRuntimeConfig()
 const supabaseUrl = runtime.supabaseUrl
 const supabaseAnonKey = runtime.supabaseAnonKey
 
-function shouldStripHeader(key: string) {
-  const normalized = key.toLowerCase()
-  return normalized === 'x-client-info' || normalized.startsWith('x-supabase-')
-}
-
-function sanitizeHeaders(headers?: HeadersInit) {
-  const next = new Headers(headers ?? {})
-  for (const key of Array.from(next.keys())) {
-    if (shouldStripHeader(key)) next.delete(key)
-  }
-  return next
-}
-
-function stripSupabaseClientInfo(input: RequestInfo | URL, init?: RequestInit) {
-  const nextInit: RequestInit = { ...(init ?? {}) }
-  nextInit.headers = sanitizeHeaders(nextInit.headers)
-
-  if (input instanceof Request) {
-    const requestHeaders = sanitizeHeaders(input.headers)
-    const nextRequest = new Request(input, { ...nextInit, headers: requestHeaders })
-    return fetch(nextRequest)
-  }
-
-  return fetch(input, nextInit)
-}
-
-// Only instantiate if URL is present — in aiven_api mode the URL is not required
-export const supabase = (supabaseUrl && supabaseAnonKey)
-  ? createClient(supabaseUrl, supabaseAnonKey, { global: { fetch: stripSupabaseClientInfo } })
+// APENAS instancia o cliente se estiver no modo legado E tiver as chaves
+export const supabase = (legacyMode && supabaseUrl && supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, { global: { fetch: supabaseFetch } })
   : null as unknown as ReturnType<typeof createClient>
 
+// Função fetch conditional - usa fetch nativo se não houver Supabase
+function supabaseFetch(input: RequestInfo, init?: RequestInit) {
+  // Se não houver cliente Supabase instalado, use fetch nativo
+  if (!supabase) return fetch(input, init)
+  // Caso contrário, use o fetch do cliente Supabase
+  const supaClient = supabase as any
+  return supaClient.fetch(input, init)
+}
+
+// Tipos e constantes úteis (apenas leitura, não criam conexão)
 export const SUPABASE_URL = supabaseUrl
 export const SUPABASE_ANON_KEY = supabaseAnonKey
 
 export function getEdgeFunctionUrl(functionName: string) {
-  return `${supabaseUrl.replace(/\/$/, '')}/functions/v1/${functionName}`
-}
-
-type ClerkSessionWithToken = {
-  getToken: () => Promise<string | null>
-}
-
-type ClerkRuntime = {
-  session?: ClerkSessionWithToken | null
-}
-
-export async function getSupabaseAccessToken() {
-  const clerk = globalThis as typeof globalThis & { Clerk?: ClerkRuntime }
-  const token = await clerk.Clerk?.session?.getToken()
-  if (!token) throw new Error('Sessao expirada. Faca login novamente.')
-  return token
+  // Só retorna URL se supabase cliente existir
+  return supabase ? `${supabaseUrl.replace(/\/$/, '')}/functions/v1/${functionName}` : ''
 }

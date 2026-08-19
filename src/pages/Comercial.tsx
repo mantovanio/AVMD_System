@@ -741,6 +741,7 @@ const EMPTY_CERTIFICADO: NovoCertificado = {
   modelo: null, categoria: null, tipo_emissao_padrao: null, periodo_uso: null, descricao_produto: null,
   produto_vinculado_ac: null, preco_venda: 0, valor_custo_ac: 0, valor_custo: 0,
   agrupador: null, hash: null, codigo_alternativo: null, combo_produtos: null, estoque: 0, ativo: true,
+  metadata: {},
 }
 
 const EMPTY_TABELA: NovaTabelaPreco = {
@@ -1011,6 +1012,7 @@ export default function Comercial() {
   // certificados form
   const [showFormCert, setShowFormCert]         = useState(false)
   const [showComboSection, setShowComboSection] = useState(false)
+  const [showSdpSection, setShowSdpSection] = useState(false)
   const [editingCertId, setEditingCertId]       = useState<string | null>(null)
   const [formCert, setFormCert]                 = useState<NovoCertificado>(EMPTY_CERTIFICADO)
   const [importando, setImportando]             = useState(false)
@@ -5697,67 +5699,128 @@ export default function Comercial() {
     }
     setEmitindoProtocolo(true)
 
-    // Upsert do titular
-    const titularPayload = {
-      nome:            formProtocolo.nome.trim(),
-      cpf:             formProtocolo.cpf.trim(),
-      email:           formProtocolo.email || null,
-      telefone:        `${formProtocolo.ddd}${formProtocolo.telefone}`.trim() || null,
-      data_nascimento: formProtocolo.data_nascimento || null,
-      metadata:        {
-        cep: formProtocolo.cep, logradouro: formProtocolo.logradouro, numero: formProtocolo.numero,
-        complemento: formProtocolo.complemento, bairro: formProtocolo.bairro,
-        cidade: formProtocolo.cidade, uf: formProtocolo.uf, ibge: formProtocolo.ibge,
-        cei: formProtocolo.cei, caepf: formProtocolo.caepf, nis: formProtocolo.nis,
-        possui_cnh: formProtocolo.possui_cnh, codigo_voucher: formProtocolo.codigo_voucher,
-      },
-    }
-    const rTit = await fetch(getApiUrl('/titulares'), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(titularPayload),
-    })
-    const titularData = rTit.ok ? await rTit.json().then(d => d.titular) : null
-
-    if (!rTit.ok || !titularData) {
-      showMsg('Erro ao salvar titular')
-      setEmitindoProtocolo(false)
-      return
-    }
-
-    // Busca link_safeweb da tabela
     const item = protocoloVenda.tabela_preco_item_id
       ? tabelaItens.find(i => i.id === protocoloVenda.tabela_preco_item_id)
       : null
 
-    // Atualiza a venda com o titular e gera número de protocolo temporário
-    const proto = `PROT${Date.now().toString().slice(-8)}`
-    const rVenda = await fetch(getApiUrl(`/comercial/vendas/${protocoloVenda.id}/titular`), {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        titular_id: titularData.id,
-        protocolo_numero: proto,
-        protocolo_status: 'gerado',
-        pedido_status: 'gerado',
-        api_payload_protocolo: { link_safeweb: item?.link_safeweb ?? null, dados_titular: formProtocolo },
-      }),
-    })
+    const certificado = protocoloVenda.certificado_id
+      ? certificados.find(c => c.id === protocoloVenda.certificado_id)
+      : null
 
-    setEmitindoProtocolo(false)
-    if (!rVenda.ok) {
-      const data = await rVenda.json().catch(() => null) as { error?: string } | null
-      showMsg(data?.error ?? 'Erro ao atualizar a venda. Verifique se o protocolo já existe em outra venda.', 'err')
-      return
+    try {
+      const certMeta = (certificado?.metadata ?? {}) as Record<string, unknown>
+      const payloadProtocolo: Record<string, unknown> = {
+        CPF: formProtocolo.cpf.replace(/\D/g, ''),
+        DataNascimento: formProtocolo.data_nascimento || '',
+        Nome: formProtocolo.nome.trim(),
+        tipoEmissao: protocoloVenda.tipo_emissao === 'presencial' ? '1' : protocoloVenda.tipo_emissao === 'videoconferencia' ? '3' : '5',
+        idProduto: String(certMeta.sdp_produto_id ?? (item?.metadata as Record<string, unknown>)?.sdp_produto_id ?? ''),
+        categoriaProduto: String(certMeta.sdp_categoria_id ?? (item?.metadata as Record<string, unknown>)?.sdp_categoria_id ?? ''),
+        produto: String(certMeta.sdp_produto_nome ?? certificado?.tipo ?? ''),
+        ProdutoDescricao: String(certMeta.sdp_produto_descricao ?? certificado?.descricao_produto ?? certificado?.descricao ?? ''),
+        Contato: {
+          DDD: formProtocolo.ddd || '',
+          Telefone: formProtocolo.telefone || '',
+          Email: formProtocolo.email || '',
+        },
+        Endereco: {
+          CodigoIbgeMunicipio: formProtocolo.ibge || '',
+          CodigoIbgeUF: formProtocolo.ibge ? formProtocolo.ibge.slice(0, 2) : '',
+          cep: formProtocolo.cep || '',
+          cidade: formProtocolo.cidade || '',
+          bairro: formProtocolo.bairro || '',
+          logradouro: formProtocolo.logradouro || '',
+          complemento: formProtocolo.complemento || '',
+          numero: formProtocolo.numero || '',
+          uf: formProtocolo.uf || '',
+        },
+        CEI: formProtocolo.cei || '',
+        CAEPF: formProtocolo.caepf || '',
+        NIS: formProtocolo.nis || '',
+      }
+
+      const rProto = await fetch(getApiUrl('/protocolos/gerar'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadProtocolo),
+      })
+      const protoData = await rProto.json().catch(() => null) as {
+        ok?: boolean
+        error?: string
+        protocolo?: string
+        protocolo_numero?: string
+        url?: string
+        protocolo_url?: string
+        message?: string
+      } | null
+
+      if (!rProto.ok || !protoData?.ok) {
+        const errMsg = protoData?.error || protoData?.message || 'Erro ao gerar protocolo na certificadora.'
+        showMsg(errMsg, 'err')
+        return
+      }
+
+      const protoNumero = protoData.protocolo || protoData.protocolo_numero || `PROT${Date.now().toString().slice(-8)}`
+      const protoUrl = protoData.url || protoData.protocolo_url || ''
+
+      // Salvar titular
+      const rTit = await fetch(getApiUrl('/titulares'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: formProtocolo.nome.trim(),
+          cpf: formProtocolo.cpf.trim(),
+          email: formProtocolo.email || null,
+          telefone: `${formProtocolo.ddd}${formProtocolo.telefone}`.trim() || null,
+          data_nascimento: formProtocolo.data_nascimento || null,
+          metadata: {
+            cep: formProtocolo.cep, logradouro: formProtocolo.logradouro, numero: formProtocolo.numero,
+            complemento: formProtocolo.complemento, bairro: formProtocolo.bairro,
+            cidade: formProtocolo.cidade, uf: formProtocolo.uf, ibge: formProtocolo.ibge,
+            cei: formProtocolo.cei, caepf: formProtocolo.caepf, nis: formProtocolo.nis,
+            possui_cnh: formProtocolo.possui_cnh, codigo_voucher: formProtocolo.codigo_voucher,
+          },
+        }),
+      })
+      const titularData = rTit.ok ? await rTit.json().then(d => d.titular) : null
+
+      if (!rTit.ok || !titularData) {
+        showMsg('Protocolo gerado (' + protoNumero + '), mas erro ao salvar titular. Salve o titular manualmente.', 'err')
+        return
+      }
+
+      // Atualizar venda com titular + protocolo
+      const rVenda = await fetch(getApiUrl(`/comercial/vendas/${protocoloVenda.id}/titular`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titular_id: titularData.id,
+          protocolo_numero: protoNumero,
+          protocolo_url: protoUrl,
+          protocolo_status: 'gerado',
+          pedido_status: 'gerado',
+          api_payload_protocolo: { ...payloadProtocolo, link_safeweb: item?.link_safeweb ?? null, protocolo_url: protoUrl },
+        }),
+      })
+
+      if (!rVenda.ok) {
+        const data = await rVenda.json().catch(() => null) as { error?: string } | null
+        showMsg('Protocolo gerado (' + protoNumero + '), mas erro ao vincular à venda: ' + (data?.error || 'erro desconhecido'), 'err')
+        return
+      }
+
+      if (protoUrl) window.open(protoUrl, '_blank')
+
+      setShowProtocolo(false)
+      setVendasV2(prev => prev.map(r =>
+        r.id === protocoloVenda.id ? { ...r, protocolo_numero: protoNumero, protocolo_status: 'gerado' } : r
+      ))
+      showMsg(`Protocolo ${protoNumero} emitido com sucesso. Titular cadastrado.`, 'ok')
+    } catch (err) {
+      showMsg('Erro ao gerar protocolo: ' + ((err as Error).message || 'erro desconhecido'), 'err')
+    } finally {
+      setEmitindoProtocolo(false)
     }
-
-    if (item?.link_safeweb) {
-      // Abre o link da Safeweb em nova aba
-      window.open(item.link_safeweb, '_blank')
-    }
-
-    setShowProtocolo(false)
-    setVendasV2(prev => prev.map(r =>
-      r.id === protocoloVenda.id ? { ...r, protocolo_numero: proto, protocolo_status: 'gerado' } : r
-    ))
-    showMsg(`Protocolo ${proto} emitido. Titular cadastrado.`, 'ok')
   }
 
   async function liberarEmissao(v: VendaRow) {
@@ -9535,6 +9598,24 @@ export default function Comercial() {
                 <textarea rows={2} value={formCert.descricao_produto ?? ''} onChange={e => setFormCert(p => ({ ...p, descricao_produto: e.target.value || null }))}
                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </label>
+              <div className="mt-4 border-t border-gray-100 dark:border-gray-800 pt-4">
+                <button type="button" onClick={() => setShowSdpSection(v => !v)}
+                  className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                  <ChevronRight size={14} className={cn('transition-transform', showSdpSection && 'rotate-90')} />
+                  Senha Digital Plus (Protocolo)
+                </button>
+                {showSdpSection && (
+                  <>
+                    <p className="text-xs text-gray-400 mt-2 ml-5">IDs de integração com a API Senha Digital Plus para geração de protocolo.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2 ml-5">
+                      <TextInput label="ID Categoria SDP" value={String((formCert.metadata as Record<string, unknown>)?.sdp_categoria_id ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_categoria_id: v || null } }))} placeholder="UUID da categoria" />
+                      <TextInput label="ID Produto SDP" value={String((formCert.metadata as Record<string, unknown>)?.sdp_produto_id ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_produto_id: v || null } }))} placeholder="ID do produto" />
+                      <TextInput label="Nome Produto SDP" value={String((formCert.metadata as Record<string, unknown>)?.sdp_produto_nome ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_produto_nome: v || null } }))} placeholder="Ex: Nuvem Renovar 12 meses" />
+                      <TextInput label="Descrição Produto SDP" value={String((formCert.metadata as Record<string, unknown>)?.sdp_produto_descricao ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_produto_descricao: v || null } }))} placeholder="Ex: Renovar" />
+                    </div>
+                  </>
+                )}
+              </div>
               <div className="mt-4 border-t border-gray-100 dark:border-gray-800 pt-4">
                 <button type="button" onClick={() => setShowComboSection(v => !v)}
                   className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:text-blue-600 dark:hover:text-blue-400 transition-colors">

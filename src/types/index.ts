@@ -200,6 +200,7 @@ export interface Certificado {
   combo_produtos: string[] | null    // IDs de certificados associados para venda combo
   estoque: number
   ativo: boolean
+  metadata: Record<string, unknown>
   created_at: string
   updated_at: string
 }
