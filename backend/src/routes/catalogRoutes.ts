@@ -791,24 +791,64 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   // ── Gerar Protocolo (Senha Digital Plus) ──────────────────────────────
   if (method === 'POST' && url === '/api/protocolos/gerar') {
     try {
-      const body = await readJson<Record<string, unknown>>(req)
+      const body = await readJson<{
+        cliente_id?: string
+        cpf_cnpj?: string
+        nome_titular?: string
+        tipo_documento?: string
+        tipo_certificado?: string
+        observacoes?: string
+      }>(req)
 
       if (!config.senhaDigitalPlusApiKey || !config.senhaDigitalPlusSecretKey) {
         writeJson(res, 500, { ok: false, error: 'Credenciais da Senha Digital Plus não configuradas no servidor.' }, corsOrigin)
         return true
       }
 
+      const cpf = (body.cpf_cnpj ?? '').replace(/\D/g, '')
+      const isPJ = cpf.length === 14
+
+      const sdpPayload: Record<string, unknown> = {
+        tipoEmissao: '3',
+        idProduto: '72054',
+        categoriaProduto: 'c50cb1a6-693e-4c12-9a71-878cf583beef',
+        produto: 'A3 Sem Midia 2 Anos',
+        ProdutoDescricao: 'e-CNPJ A1 arquivo',
+        Contato: { DDD: '11', Telefone: '999999999', Email: 'contato@certiid.com.br' },
+        Endereco: {
+          CodigoIbgeMunicipio: '3550308', CodigoIbgeUF: '35', cep: '01310100',
+          cidade: 'Sao Paulo', bairro: 'Bela Vista', logradouro: 'Av Paulista',
+          complemento: '', numero: '1000', uf: 'SP',
+        },
+      }
+
+      if (isPJ) {
+        sdpPayload.CNPJ = cpf
+        sdpPayload.RazaoSocial = body.nome_titular || ''
+        sdpPayload.Titular = {
+          CPF: cpf,
+          DataNascimento: '01/01/1990',
+          Nome: body.nome_titular || '',
+          Contato: sdpPayload.Contato,
+          Endereco: sdpPayload.Endereco,
+        }
+      } else {
+        sdpPayload.CPF = cpf
+        sdpPayload.DataNascimento = '01/01/1990'
+        sdpPayload.Nome = body.nome_titular || ''
+      }
+
       const sdpHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
         'x-api-key': config.senhaDigitalPlusApiKey,
         'x-secret-key': config.senhaDigitalPlusSecretKey,
-        'x-environment': config.senhaDigitalPlusEnvironment || 'production',
+        'x-environment': config.senhaDigitalPlusEnvironment || 'sandbox',
       }
 
       const sdpRes = await fetch(`${config.senhaDigitalPlusApiUrl}/protocolo/capture-certificate`, {
         method: 'POST',
         headers: sdpHeaders,
-        body: JSON.stringify(body),
+        body: JSON.stringify(sdpPayload),
       })
 
       const sdpData = await sdpRes.json().catch(() => null) as Record<string, unknown> | null
