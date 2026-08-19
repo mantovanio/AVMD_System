@@ -37,6 +37,9 @@ import { applyOutgoingSignature, DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings 
 import { normalizeStructuredMessage } from '@/lib/messageFormatting'
 import { normalizePhoneBR } from '@/lib/phone'
 import MediaPreview from '@/components/MediaPreview'
+import QuickReplyPopup from '@/components/QuickReplyPopup'
+import { useQuickReplyAutocomplete } from '@/hooks/useQuickReplyAutocomplete'
+import type { QuickReplyAttachment } from '@/hooks/useQuickReplyAutocomplete'
 
 type QueueType = 'atendimento' | 'renovacao' | 'email' | 'agendamento'
 type DirectionType = 'incoming' | 'outgoing'
@@ -906,6 +909,7 @@ export default function ChatInboxCRM() {
   const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(new Set())
   const [humanMessage, setHumanMessage] = useState('')
   const [sendingHumanMessage, setSendingHumanMessage] = useState(false)
+  const quickReply = useQuickReplyAutocomplete({ enabled: true })
   const [emailSubject, setEmailSubject] = useState('')
   const [emailBody, setEmailBody] = useState('')
   const [sendingEmail, setSendingEmail] = useState(false)
@@ -937,6 +941,7 @@ export default function ChatInboxCRM() {
   const [showEmoji, setShowEmoji] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [pendingPreview, setPendingPreview] = useState<string | null>(null)
+  const [pendingFileAttachments, setPendingFileAttachments] = useState<QuickReplyAttachment[]>([])
   const [recState, setRecState] = useState<RecState>('idle')
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
@@ -2470,6 +2475,18 @@ export default function ChatInboxCRM() {
       }).catch(() => {})
       await loadConversations(false)
       await loadMessages(selectedConversation.id, { background: true })
+
+      if (pendingFileAttachments.length > 0) {
+        for (const att of pendingFileAttachments) {
+          try {
+            const fileResponse = await fetch(att.url)
+            const blob = await fileResponse.blob()
+            const file = new File([blob], att.filename, { type: att.mime_type })
+            await sendHumanAttachment(file, att.filename, att.mime_type)
+          } catch { /* skip failed attachment */ }
+        }
+        setPendingFileAttachments([])
+      }
     } catch (err) {
       setMessages(prev => prev.filter(item => item.id !== tempId))
       localStorage.setItem(`crm-chat-draft:${selectedConversation.id}`, text)
@@ -3197,6 +3214,21 @@ export default function ChatInboxCRM() {
                         </div>
                       )}
 
+                      {pendingFileAttachments.length > 0 && (
+                        <div className="mb-3 space-y-2">
+                          {pendingFileAttachments.map((att, idx) => (
+                            <div key={idx} className="flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5">
+                              <Paperclip size={14} className="text-sky-500 shrink-0" />
+                              <span className="text-xs text-sky-700 truncate flex-1">{att.filename}</span>
+                              <span className="text-[10px] text-sky-400">{att.mime_type.split('/')[1]?.toUpperCase()}</span>
+                              <button type="button" onClick={() => setPendingFileAttachments(prev => prev.filter((_, i) => i !== idx))} className="text-sky-400 hover:text-red-500">
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       {recState === 'preview' && audioUrl && (
                         <div className="mb-3 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
                           <audio src={audioUrl} controls className="min-w-0 flex-1" />
@@ -3319,15 +3351,38 @@ export default function ChatInboxCRM() {
                           onChange={event => {
                             const value = event.target.value
                             setHumanMessage(value)
+                            const cursorPos = event.target.selectionStart ?? value.length
+                            quickReply.analyzeInput(value, cursorPos)
                             if (selectedConversation) {
                               if (value) localStorage.setItem(`crm-chat-draft:${selectedConversation.id}`, value)
                               else localStorage.removeItem(`crm-chat-draft:${selectedConversation.id}`)
                             }
                           }}
-                          onKeyDown={handleHumanComposerKeyDown}
+                          onKeyDown={event => {
+                            const cursorPos = (event.target as HTMLTextAreaElement).selectionStart ?? humanMessage.length
+                            const keyResult = quickReply.handleKeyDown(event, humanMessage, cursorPos)
+                            if (keyResult) {
+                              const selected = quickReply.selectReply(keyResult.reply)
+                              if (selected) {
+                                const replaced = quickReply.replaceTriggerText(humanMessage, cursorPos, selected.text)
+                                setHumanMessage(replaced.text)
+                                if (composerRef.current) {
+                                  composerRef.current.focus()
+                                  requestAnimationFrame(() => {
+                                    composerRef.current?.setSelectionRange(replaced.newCursorPos, replaced.newCursorPos)
+                                  })
+                                }
+                                if (selectedConversation && selected.attachments.length > 0) {
+                                  setPendingFileAttachments(prev => [...prev, ...selected.attachments])
+                                }
+                              }
+                              return
+                            }
+                            handleHumanComposerKeyDown(event)
+                          }}
                           onPaste={handleComposerPaste}
                           rows={2}
-                          placeholder="Digite a resposta do atendimento humano. Enter envia e Shift+Enter quebra linha."
+                          placeholder="Digite a resposta. Use \ para respostas rapidas."
                           disabled={recState === 'recording'}
                           className="min-h-[52px] max-h-28 flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-sky-400 disabled:opacity-60"
                           onInput={event => {
@@ -3336,6 +3391,28 @@ export default function ChatInboxCRM() {
                             element.style.height = `${Math.min(element.scrollHeight, 112)}px`
                           }}
                         />
+                        {quickReply.isOpen && (
+                          <QuickReplyPopup
+                            replies={quickReply.filtered}
+                            selectedIndex={quickReply.selectedIndex}
+                            onSelect={reply => {
+                              const result = quickReply.selectReply(reply)
+                              if (result) {
+                                const cursorPos = composerRef.current?.selectionStart ?? humanMessage.length
+                                const replaced = quickReply.replaceTriggerText(humanMessage, cursorPos, result.text)
+                                setHumanMessage(replaced.text)
+                                if (selectedConversation && result.attachments.length > 0) {
+                                  setPendingFileAttachments(prev => [...prev, ...result.attachments])
+                                }
+                                requestAnimationFrame(() => {
+                                  composerRef.current?.focus()
+                                  composerRef.current?.setSelectionRange(replaced.newCursorPos, replaced.newCursorPos)
+                                })
+                              }
+                            }}
+                            onHover={idx => quickReply.setSelectedIndex(idx)}
+                          />
+                        )}
                         {humanMessage.trim() ? (
                           <button type="button" onClick={() => void sendHumanReply()} disabled={sendingHumanMessage || !humanMessage.trim()} className="inline-flex h-11 items-center gap-2 rounded-xl bg-sky-600 px-4 text-sm font-medium text-white disabled:opacity-50">
                             {sendingHumanMessage ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}

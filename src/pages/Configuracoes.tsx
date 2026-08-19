@@ -13,6 +13,7 @@ import { buildWhatsAppMetadata, getWhatsAppEngine, getWhatsAppEngineLabel, isWha
 import { DEFAULT_PERMISSIONS, PAGE_PERMISSIONS, hasPerfil, isAdminProfile } from '@/lib/security'
 import { buscarCep } from '@/lib/cep'
 import NfseDocumentPreview from '@/components/NfseDocumentPreview'
+import QuickRepliesManager from '@/components/QuickRepliesManager'
 import ModulePageShell from '@/components/ModulePageShell'
 import {
   DEFAULT_NFSE_AUTOMATION_SETTINGS,
@@ -45,7 +46,7 @@ import type {
   WhatsAppEngine,
 } from '@/types'
 
-type Tab = 'geral' | 'integracoes' | 'automacoes' | 'usuarios' | 'permissoes' | 'pontos' | 'pagamentos' | 'precificacao' | 'fiscal' | 'privacidade'
+type Tab = 'geral' | 'integracoes' | 'automacoes' | 'usuarios' | 'permissoes' | 'respostas' | 'pontos' | 'pagamentos' | 'precificacao' | 'fiscal' | 'privacidade'
 type NfseEmitenteCrm = Pick<CadastroBase, 'id' | 'cpf_cnpj' | 'nome' | 'nome_fantasia' | 'email' | 'telefone' | 'cidade' | 'uf' | 'inscricao_municipal' | 'inscricao_estadual' | 'status'>
 
 const TABS: { id: Tab; label: string }[] = [
@@ -54,6 +55,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'automacoes',   label: 'Automações'             },
   { id: 'usuarios',     label: 'Usuários'               },
   { id: 'permissoes',   label: 'Permissões'             },
+  { id: 'respostas',    label: 'Respostas Rápidas'       },
   { id: 'pontos',       label: 'Pontos de Atendimento'  },
   { id: 'pagamentos',   label: 'Pagamentos'             },
   { id: 'precificacao', label: 'Precificação'           },
@@ -7889,6 +7891,9 @@ export default function Configuracoes() {
 
         {/* PERMISSÕES */}
         {tab === 'permissoes' && <AbaPermissoes />}
+
+        {/* RESPOSTAS RÁPIDAS */}
+        {tab === 'respostas' && <QuickRepliesManager />}
 
         {/* PONTOS DE ATENDIMENTO */}
         {tab === 'pontos' && <AbaPontos />}

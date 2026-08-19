@@ -52,6 +52,7 @@ import { handleCommunicationOutboxRoutes } from './routes/communicationOutboxRou
 import { handleScheduleAutomationRoutes } from './routes/scheduleAutomationRoutes.js'
 import { handleClaraAutomationRoutes } from './routes/claraAutomationRoutes.js'
 import { handleChatRoutes } from './routes/chatRoutes.js'
+import { handleQuickRepliesRoutes } from './routes/chatQuickReplyRoutes.js'
 import { PermissoesRepository } from './repositories/permissoesRepository.js'
 import { handlePermissoesRoutes } from './routes/permissoesRoutes.js'
 import { CancelamentoRepository } from './repositories/cancelamentoRepository.js'
@@ -232,6 +233,9 @@ const server = createServer(async (req, res) => {
 
     const handledPermissoes = await handlePermissoesRoutes(req, res, permissoesRepository, corsOrigin)
     if (handledPermissoes) return
+
+    const handledQuickReplies = await handleQuickRepliesRoutes(req, res, corsOrigin, db)
+    if (handledQuickReplies) return
 
     const handledChat = await handleChatRoutes(
       req,
