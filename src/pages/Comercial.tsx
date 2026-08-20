@@ -314,6 +314,8 @@ type ProtocoloForm = {
   caepf: string
   nis: string
   codigo_voucher: string
+  cnpj: string
+  razao_social: string
 }
 
 type ParceiroSimples = {
@@ -766,6 +768,7 @@ const EMPTY_PROTOCOLO: ProtocoloForm = {
   cep: '', logradouro: '', numero: '', complemento: '',
   bairro: '', cidade: '', uf: '', ibge: '',
   cei: '', caepf: '', nis: '', codigo_voucher: '',
+  cnpj: '', razao_social: '',
 }
 
 const EMPTY_COMISSAO: NovaFaixaComissao = {
@@ -2276,7 +2279,14 @@ export default function Comercial() {
   // pre-fill protocolo CPF when client changes
   useEffect(() => {
     if (clienteSelecionadoObj) {
-      setFormProtocolo(p => ({ ...p, cpf: clienteSelecionadoObj.cpf_cnpj }))
+      const isPJ = clienteSelecionadoObj.tipo_cliente === 'pessoa_juridica'
+      setFormProtocolo(p => ({
+        ...p,
+        cpf: isPJ ? '' : clienteSelecionadoObj.cpf_cnpj,
+        cnpj: isPJ ? clienteSelecionadoObj.cpf_cnpj : '',
+        razao_social: isPJ ? clienteSelecionadoObj.nome : '',
+        nome: isPJ ? '' : clienteSelecionadoObj.nome,
+      }))
     }
   }, [clienteSelecionadoObj])
 
@@ -5678,8 +5688,15 @@ export default function Comercial() {
     const cadastro = (v.cadastros_base as { cpf_cnpj?: string; nome?: string } | null) ?? null
     const cpfComprador = cadastro?.cpf_cnpj ?? ''
     const nomeComprador = cadastro?.nome ?? ''
+    const isPJ = (v.tipo_produto ?? '').toLowerCase().includes('cnpj')
     setProtocoloVenda(v)
-    setFormProtocolo({ ...EMPTY_PROTOCOLO, cpf: cpfComprador, nome: nomeComprador })
+    setFormProtocolo({
+      ...EMPTY_PROTOCOLO,
+      cpf: isPJ ? '' : cpfComprador,
+      nome: isPJ ? '' : nomeComprador,
+      cnpj: isPJ ? cpfComprador : '',
+      razao_social: isPJ ? nomeComprador : '',
+    })
     setProtocoloStep('validate')
     setShowProtocolo(true)
   }
@@ -5817,8 +5834,14 @@ export default function Comercial() {
 
   async function confirmarProtocolo() {
     if (!protocoloVenda) return
+    const cnpjDigits = formProtocolo.cnpj.replace(/\D/g, '')
+    const isPJ = cnpjDigits.length === 14
     if (!formProtocolo.nome.trim() || !formProtocolo.cpf.trim()) {
-      showMsg('Preencha nome e CPF do titular.')
+      showMsg(isPJ ? 'Preencha o nome e CPF do representante.' : 'Preencha nome e CPF do titular.')
+      return
+    }
+    if (isPJ && !formProtocolo.razao_social.trim()) {
+      showMsg('Preencha a Razão Social da empresa.')
       return
     }
     setEmitindoProtocolo(true)
@@ -5833,6 +5856,22 @@ export default function Comercial() {
 
     try {
       const certMeta = (certificado?.metadata ?? {}) as Record<string, unknown>
+      const contato = {
+        DDD: formProtocolo.ddd || '',
+        Telefone: formProtocolo.telefone || '',
+        Email: formProtocolo.email || '',
+      }
+      const endereco = {
+        CodigoIbgeMunicipio: formProtocolo.ibge || '',
+        CodigoIbgeUF: formProtocolo.ibge ? formProtocolo.ibge.slice(0, 2) : '',
+        cep: formProtocolo.cep || '',
+        cidade: formProtocolo.cidade || '',
+        bairro: formProtocolo.bairro || '',
+        logradouro: formProtocolo.logradouro || '',
+        complemento: formProtocolo.complemento || '',
+        numero: formProtocolo.numero || '',
+        uf: formProtocolo.uf || '',
+      }
       const payloadProtocolo: Record<string, unknown> = {
         CPF: formProtocolo.cpf.replace(/\D/g, ''),
         DataNascimento: formProtocolo.data_nascimento || '',
@@ -5842,25 +5881,22 @@ export default function Comercial() {
         categoriaProduto: String(certMeta.sdp_categoria_id ?? (item?.metadata as Record<string, unknown>)?.sdp_categoria_id ?? ''),
         produto: String(certMeta.sdp_produto_nome ?? certificado?.tipo ?? ''),
         ProdutoDescricao: String(certMeta.sdp_produto_descricao ?? certificado?.descricao_produto ?? certificado?.descricao ?? ''),
-        Contato: {
-          DDD: formProtocolo.ddd || '',
-          Telefone: formProtocolo.telefone || '',
-          Email: formProtocolo.email || '',
-        },
-        Endereco: {
-          CodigoIbgeMunicipio: formProtocolo.ibge || '',
-          CodigoIbgeUF: formProtocolo.ibge ? formProtocolo.ibge.slice(0, 2) : '',
-          cep: formProtocolo.cep || '',
-          cidade: formProtocolo.cidade || '',
-          bairro: formProtocolo.bairro || '',
-          logradouro: formProtocolo.logradouro || '',
-          complemento: formProtocolo.complemento || '',
-          numero: formProtocolo.numero || '',
-          uf: formProtocolo.uf || '',
-        },
+        Contato: contato,
+        Endereco: endereco,
         CEI: formProtocolo.cei || '',
         CAEPF: formProtocolo.caepf || '',
         NIS: formProtocolo.nis || '',
+      }
+      if (isPJ) {
+        payloadProtocolo.CNPJ = cnpjDigits
+        payloadProtocolo.RazaoSocial = formProtocolo.razao_social.trim()
+        payloadProtocolo.Titular = {
+          CPF: formProtocolo.cpf.replace(/\D/g, ''),
+          DataNascimento: formProtocolo.data_nascimento || '',
+          Nome: formProtocolo.nome.trim(),
+          Contato: contato,
+          Endereco: endereco,
+        }
       }
 
       const rProto = await fetch(getApiUrl('/protocolos/gerar'), {
@@ -5903,6 +5939,7 @@ export default function Comercial() {
             cidade: formProtocolo.cidade, uf: formProtocolo.uf, ibge: formProtocolo.ibge,
             cei: formProtocolo.cei, caepf: formProtocolo.caepf, nis: formProtocolo.nis,
             possui_cnh: formProtocolo.possui_cnh, codigo_voucher: formProtocolo.codigo_voucher,
+            ...(isPJ ? { cnpj: cnpjDigits, razao_social: formProtocolo.razao_social.trim() } : {}),
           },
         }),
       })
@@ -9495,17 +9532,32 @@ export default function Comercial() {
               </div>
 
               <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+                {(() => {
+                  const isPJCnpj = (formProtocolo.cnpj.replace(/\D/g, '').length === 14)
+                  const cpfLabel = isPJCnpj ? 'CPF do Representante:' : 'CPF do Titular:'
+                  const nascLabel = isPJCnpj ? 'Data Nascimento Representante:' : 'Data Nascimento:'
+                  return (<>
                 {/* step 1: CPF + nascimento */}
                 <div className="flex flex-wrap items-end gap-4">
+                  {isPJCnpj && (
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs text-gray-500">CNPJ:</span>
+                      <input value={formProtocolo.cnpj}
+                        onChange={e => setFormProtocolo(p => ({ ...p, cnpj: e.target.value }))}
+                        readOnly={protocoloStep === 'form'}
+                        placeholder="00.000.000/0000-00"
+                        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 w-48 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </label>
+                  )}
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs text-gray-500">CPF do Titular:</span>
+                    <span className="text-xs text-gray-500">{cpfLabel}</span>
                     <input value={formProtocolo.cpf} onChange={e => setFormProtocolo(p => ({ ...p, cpf: e.target.value }))}
                       readOnly={protocoloStep === 'form'}
                       placeholder="000.000.000-00"
                       className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 w-40 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </label>
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs text-gray-500">Data Nascimento:</span>
+                    <span className="text-xs text-gray-500">{nascLabel}</span>
                     <input type="date" value={formProtocolo.data_nascimento} onChange={e => setFormProtocolo(p => ({ ...p, data_nascimento: e.target.value }))}
                       readOnly={protocoloStep === 'form'}
                       className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 w-40 focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -9528,9 +9580,19 @@ export default function Comercial() {
                   <div className="mt-5 space-y-4">
                     <p className="text-blue-600 dark:text-blue-400 text-sm font-medium">Informe os dados para emissão do protocolo:</p>
 
+                    {isPJCnpj && (
+                      <div className="grid grid-cols-1 gap-3">
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs text-gray-500">Razão Social:</span>
+                          <input value={formProtocolo.razao_social} onChange={e => setFormProtocolo(p => ({ ...p, razao_social: e.target.value }))}
+                            className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        </label>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 gap-3">
                       <label className="flex flex-col gap-1">
-                        <span className="text-xs text-gray-500">Nome:</span>
+                        <span className="text-xs text-gray-500">Nome {isPJCnpj ? 'do Representante:' : ':'}</span>
                         <input value={formProtocolo.nome} onChange={e => setFormProtocolo(p => ({ ...p, nome: e.target.value }))}
                           className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                       </label>
@@ -9648,6 +9710,7 @@ export default function Comercial() {
                     </div>
                   </div>
                 )}
+                </>)})()}
               </div>
             </div>
           </div>
