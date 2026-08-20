@@ -142,6 +142,33 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
     return true
   }
 
+  if (req.method === 'POST' && req.url === '/api/comercial/vendas/buscar') {
+    const body = await readJson<{ term?: string }>(req)
+    const vendas = await repository.buscarVendaPorTermo(body.term ?? '')
+    writeJson(res, 200, { ok: true, vendas }, corsOrigin)
+    return true
+  }
+
+  if (req.method === 'POST' && req.url === '/api/comercial/vendas/trocar-protocolo') {
+    const body = await readJson<{ venda_destino_id: string; venda_origem_id: string; motivo?: string; cancelado_por: string }>(req)
+    if (!body.venda_destino_id || !body.venda_origem_id || !body.cancelado_por) {
+      writeJson(res, 400, { ok: false, error: 'venda_destino_id, venda_origem_id e cancelado_por sao obrigatorios.' }, corsOrigin)
+      return true
+    }
+    try {
+      const result = await repository.trocarProtocolo({
+        venda_destino_id: body.venda_destino_id,
+        venda_origem_id: body.venda_origem_id,
+        cancelado_por: body.cancelado_por,
+        motivo: body.motivo ?? 'Troca de protocolo',
+      })
+      writeJson(res, 200, { ok: true, ...result }, corsOrigin)
+    } catch (err) {
+      writeJson(res, 400, { ok: false, error: err instanceof Error ? err.message : 'Erro ao trocar protocolo.' }, corsOrigin)
+    }
+    return true
+  }
+
   if (req.method === 'POST' && req.url === '/api/comercial/vendas/pagamento') {
     const body = await readJson<SalePaymentStatusRequest>(req)
     const venda = await repository.updateSalePaymentStatus(body as { id: string; status: 'em_aberto' | 'pago' | 'recusado' | 'estornado' | 'cortesia' })

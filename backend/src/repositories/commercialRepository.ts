@@ -156,6 +156,145 @@ export class CommercialRepository {
     return result.rows[0] ?? null
   }
 
+  async buscarVendaPorTermo(term: string) {
+    const t = (term ?? '').trim()
+    if (!t) return []
+    const result = await this.db.query<{
+      id: string
+      pedido_numero: string | null
+      protocolo_numero: string | null
+      status_venda: string | null
+      pago: boolean | null
+      cliente_nome: string | null
+    }>(`
+      select v.id, v.pedido_numero, v.protocolo_numero, v.status_venda, v.pago,
+             cb.nome as cliente_nome
+      from vendas_certificados v
+      left join cadastros_base cb on cb.id = v.cadastro_base_id
+      where v.pedido_numero = $1
+         or v.protocolo_numero = $1
+         or v.pedido_numero::text ilike '%' || $1 || '%'
+         or v.protocolo_numero::text ilike '%' || $1 || '%'
+      order by v.created_at desc
+      limit 5
+    `, [t])
+    return result.rows
+  }
+
+  async trocarProtocolo(input: {
+    venda_destino_id: string
+    venda_origem_id: string
+    cancelado_por: string
+    motivo: string
+  }) {
+    const admin = await this.db.query<{ id: string }>(
+      `select id from profiles
+       where id = $1::uuid
+         and perfil in ('admin', 'supervisor', 'supervisor_renovacoes')
+         and status = 'ativo'
+       limit 1`,
+      [input.cancelado_por],
+    )
+    if (!admin.rows[0]) throw new Error('Apenas administradores podem trocar protocolo.')
+
+    return this.db.transaction(async trx => {
+      const destinoRes = await trx.query<{
+        id: string; protocolo_numero: string | null; status_venda: string | null
+        pago: boolean | null; pedido_numero: string | null; cliente_nome: string | null
+      }>(`
+        select v.id, v.protocolo_numero, v.status_venda, v.pago, v.pedido_numero,
+               cb.nome as cliente_nome
+        from vendas_certificados v
+        left join cadastros_base cb on cb.id = v.cadastro_base_id
+        where v.id = $1::uuid for update
+      `, [input.venda_destino_id])
+
+      const origemRes = await trx.query<{
+        id: string; protocolo_numero: string | null; status_venda: string | null
+        pago: boolean | null; pedido_numero: string | null; cliente_nome: string | null
+      }>(`
+        select v.id, v.protocolo_numero, v.status_venda, v.pago, v.pedido_numero,
+               cb.nome as cliente_nome
+        from vendas_certificados v
+        left join cadastros_base cb on cb.id = v.cadastro_base_id
+        where v.id = $1::uuid for update
+      `, [input.venda_origem_id])
+
+      const destino = destinoRes.rows[0]
+      const origem = origemRes.rows[0]
+      if (!destino) throw new Error('Venda destino não encontrada.')
+      if (!origem) throw new Error('Venda origem não encontrada.')
+      if (destino.id === origem.id) throw new Error('Origem e destino devem ser vendas diferentes.')
+      if (!origem.protocolo_numero) throw new Error('A venda origem não possui protocolo para mover.')
+      if (origem.status_venda === 'cancelado') throw new Error('A venda origem já está cancelada.')
+      if (origem.pago) throw new Error('A venda origem está paga. A troca só é permitida para pedidos sem pagamento.')
+
+      // 1. libera o protocolo na origem
+      await trx.query(`
+        update vendas_certificados
+        set protocolo_numero = null,
+            protocolo_status = 'nao_gerado',
+            metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+              'troca_protocolo', jsonb_build_object('acao', 'origem_liberada', 'movido_para', $2::text, 'em', now())
+            ),
+            updated_at = now()
+        where id = $1::uuid
+      `, [origem.id, destino.id])
+
+      // 2. atribui à destino
+      await trx.query(`
+        update vendas_certificados
+        set protocolo_numero = $2,
+            protocolo_status = 'gerado',
+            metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+              'troca_protocolo', jsonb_build_object('acao', 'destino_recebeu', 'recebido_de', $3::text, 'protocolo', $2, 'em', now())
+            ),
+            updated_at = now()
+        where id = $1::uuid
+      `, [destino.id, origem.protocolo_numero, origem.id])
+
+      // 3. cancela origem
+      await trx.query(`
+        update vendas_certificados
+        set status_venda = 'cancelado',
+            pedido_status = 'cancelado',
+            updated_at = now()
+        where id = $1::uuid
+      `, [origem.id])
+
+      // 4. auditoria operacional
+      const payloadOrigem = JSON.stringify({
+        operacao: 'troca_protocolo',
+        origem: origem.id,
+        destino: destino.id,
+        protocolo_movido: origem.protocolo_numero,
+      })
+      const payloadDestino = JSON.stringify({
+        operacao: 'troca_protocolo',
+        destino: destino.id,
+        recebido_de: origem.id,
+        protocolo_recebido: origem.protocolo_numero,
+      })
+      await trx.query(`
+        insert into vendas_auditoria_operacional
+          (acao, venda_id, pedido_numero, protocolo_numero, cliente_nome, documento, status_venda, motivo, cancelamento_id, actor_id, actor_nome, payload)
+        values
+          ('cancelamento', $1::uuid, $2, $3, $4, null, 'cancelado', $5, null, $6::uuid, null, $7::jsonb),
+          ('cancelamento', $8::uuid, $9, $10, $11, null, 'gerado', $5, null, $6::uuid, null, $12::jsonb)
+      `, [
+        origem.id, origem.pedido_numero, origem.protocolo_numero, origem.cliente_nome, input.motivo, input.cancelado_por,
+        payloadOrigem,
+        destino.id, destino.pedido_numero, origem.protocolo_numero, destino.cliente_nome,
+        payloadDestino,
+      ])
+
+      return {
+        destino: { id: destino.id, protocolo_numero: origem.protocolo_numero, status_venda: destino.status_venda },
+        origem: { id: origem.id, protocolo_numero: null, status_venda: 'cancelado' },
+      }
+    })
+  }
+
   async updateSaleStatus(input: UpdateCommercialSaleStatusInput) {
     const result = await this.db.query<{ id: string; status_venda: string }>(`
       update vendas_certificados

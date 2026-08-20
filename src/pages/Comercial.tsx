@@ -61,7 +61,7 @@ import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomer
 import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
 import { sendWhatsApp as sendWhatsAppDirect } from '@/lib/renovacoesApi'
 import { useAuth } from '@/contexts/AuthContext'
-import { canChangePayment, canDeleteSale, canReleaseEmission, hasPerfil, isAdminProfile } from '@/lib/security'
+import { canChangePayment, canChangeProtocol, canDeleteSale, canReleaseEmission, hasPerfil, isAdminProfile } from '@/lib/security'
 import { buscarCep } from '@/lib/cep'
 import type {
   Agendamento,
@@ -1096,6 +1096,17 @@ export default function Comercial() {
   const [formProtocolo, setFormProtocolo]         = useState<ProtocoloForm>(EMPTY_PROTOCOLO)
   const [validandoProtocolo, setValidandoProtocolo] = useState(false)
   const [emitindoProtocolo, setEmitindoProtocolo]   = useState(false)
+  // troca de protocolo
+  const [showTrocarProtocolo, setShowTrocarProtocolo] = useState(false)
+  const [trocaDestinoVenda, setTrocaDestinoVenda]     = useState<VendaRow | null>(null)
+  const [trocaOrigemTermo, setTrocaOrigemTermo]       = useState('')
+  const [trocaOrigemVenda, setTrocaOrigemVenda]       = useState<{
+    id: string; pedido_numero: string | null; protocolo_numero: string | null
+    status_venda: string | null; pago: boolean | null; cliente_nome: string | null
+  } | null>(null)
+  const [trocaOrigemErro, setTrocaOrigemErro]         = useState('')
+  const [trocaMotivo, setTrocaMotivo]                 = useState('')
+  const [trocandoProtocolo, setTrocandoProtocolo]     = useState(false)
 
   // ── wizard step state ─────────────────────────────────────────
   const [currentFormStep, setCurrentFormStep]     = useState(0)
@@ -5670,6 +5681,78 @@ export default function Comercial() {
     setShowProtocolo(true)
   }
 
+  function abrirTrocaProtocolo(v: VendaRow) {
+    setTrocaDestinoVenda(v)
+    setTrocaOrigemTermo('')
+    setTrocaOrigemVenda(null)
+    setTrocaOrigemErro('')
+    setTrocaMotivo('')
+    setShowTrocarProtocolo(true)
+  }
+
+  async function buscarOrigemTroca() {
+    const termo = trocaOrigemTermo.trim()
+    if (!termo) { setTrocaOrigemErro('Informe o pedido ou protocolo de origem.'); return }
+    try {
+      const r = await fetch(getApiUrl('/comercial/vendas/buscar'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ term: termo }),
+      })
+      const data = await r.json().catch(() => null) as { ok?: boolean; error?: string; vendas?: Array<{
+        id: string; pedido_numero: string | null; protocolo_numero: string | null
+        status_venda: string | null; pago: boolean | null; cliente_nome: string | null
+      }> } | null
+      if (!r.ok || !data?.ok) { setTrocaOrigemErro(data?.error || 'Erro ao buscar pedido.'); setTrocaOrigemVenda(null); return }
+      const lista = data.vendas ?? []
+      if (lista.length === 0) { setTrocaOrigemErro('Nenhum pedido encontrado para o termo informado.'); setTrocaOrigemVenda(null); return }
+      if (lista.length > 1) { setTrocaOrigemErro('Vários pedidos encontrados. Informe o número exato do pedido ou protocolo.'); setTrocaOrigemVenda(null); return }
+      const achado = lista[0]
+      if (achado.id === trocaDestinoVenda?.id) { setTrocaOrigemErro('O pedido de origem não pode ser igual ao de destino.'); setTrocaOrigemVenda(null); return }
+      if (!achado.protocolo_numero) { setTrocaOrigemErro('O pedido de origem não possui protocolo para mover.'); setTrocaOrigemVenda(null); return }
+      if (achado.status_venda === 'cancelado') { setTrocaOrigemErro('O pedido de origem já está cancelado.'); setTrocaOrigemVenda(null); return }
+      if (achado.pago) { setTrocaOrigemErro('O pedido de origem está pago. A troca só é permitida para pedidos sem pagamento.'); setTrocaOrigemVenda(null); return }
+      setTrocaOrigemVenda(achado)
+      setTrocaOrigemErro('')
+    } catch (err) {
+      setTrocaOrigemErro('Erro ao buscar pedido: ' + ((err as Error).message || 'desconhecido'))
+      setTrocaOrigemVenda(null)
+    }
+  }
+
+  async function confirmarTrocaProtocolo() {
+    if (!trocaDestinoVenda || !trocaOrigemVenda) return
+    if (!trocaMotivo.trim()) { showMsg('Informe o motivo da troca.', 'err'); return }
+    setTrocandoProtocolo(true)
+    try {
+      const r = await fetch(getApiUrl('/comercial/vendas/trocar-protocolo'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          venda_destino_id: trocaDestinoVenda.id,
+          venda_origem_id: trocaOrigemVenda.id,
+          motivo: trocaMotivo.trim(),
+          cancelado_por: profile?.id,
+        }),
+      })
+      const data = await r.json().catch(() => null) as { ok?: boolean; error?: string } | null
+      if (!r.ok || !data?.ok) { showMsg(data?.error || 'Erro ao trocar protocolo.', 'err'); return }
+      const origem = trocaOrigemVenda
+      const destino = trocaDestinoVenda
+      setShowTrocarProtocolo(false)
+      setVendasV2(prev => prev.map(row => {
+        if (row.id === destino.id) return { ...row, protocolo_numero: origem.protocolo_numero }
+        if (row.id === origem.id) return { ...row, status_venda: 'cancelado', protocolo_numero: null }
+        return row
+      }))
+      showMsg(`Protocolo ${origem.protocolo_numero} movido para o pedido ${destino.pedido_numero ?? ''} e o pedido de origem foi cancelado.`, 'ok')
+    } catch (err) {
+      showMsg('Erro ao trocar protocolo: ' + ((err as Error).message || 'desconhecido'), 'err')
+    } finally {
+      setTrocandoProtocolo(false)
+    }
+  }
+
   async function validarTitular() {
     if (!formProtocolo.cpf.trim() || !formProtocolo.data_nascimento) {
       showMsg('Preencha CPF e data de nascimento do titular.')
@@ -6813,6 +6896,14 @@ export default function Comercial() {
               const protocoloTooltip = 'Emitir ou visualizar o protocolo desta venda'
               const actions: ActionBarAction[] = [
                 { key: 'protocolo', icon: <ClipboardList size={13} />, label: protocoloLabel, tooltip: protocoloTooltip, onClick: () => abrirProtocolo(v), variant: 'purple' as const },
+                ...(canChangeProtocol(profile, v) ? [{
+                  key: 'trocar-protocolo',
+                  icon: <RefreshCcw size={13} />,
+                  label: 'Trocar protocolo',
+                  tooltip: 'Mover o protocolo de outro pedido para este e cancelar o pedido de origem (sem pagamento).',
+                  onClick: () => abrirTrocaProtocolo(v),
+                  variant: 'amber' as const,
+                }] : []),
                 { key: 'agendar', icon: <Calendar size={13} />, label: 'Agendar', tooltip: 'Agendar uma ação ou retorno para esta venda', onClick: () => void prepararAgendamento(v), variant: 'green' as const },
                 { key: 'fatura', icon: <Receipt size={13} />, label: 'Fatura', tooltip: 'Gerar e enviar a fatura desta venda por e-mail', onClick: () => void abrirFaturaVenda(v), variant: 'default' as const },
                 ...(isAdmin ? [
@@ -9518,6 +9609,74 @@ export default function Comercial() {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de troca de protocolo */}
+      {showTrocarProtocolo && trocaDestinoVenda && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 bg-amber-600 rounded-t-2xl">
+              <h2 className="text-white font-semibold">Trocar Protocolo</h2>
+              <button type="button" onClick={() => setShowTrocarProtocolo(false)} className="text-white/80 hover:text-white"><X size={18} /></button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {/* destino */}
+              <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 p-3">
+                <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mb-1">Pedido de destino (mantém o protocolo):</p>
+                <p className="text-gray-800 dark:text-gray-100 font-medium">
+                  {(trocaDestinoVenda.cadastros_base as { nome?: string } | null)?.nome ?? trocaDestinoVenda.nome_faturamento ?? '—'}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Pedido {trocaDestinoVenda.pedido_numero ?? '—'} · Protocolo atual: {trocaDestinoVenda.protocolo_numero ?? '—'} · Status: {trocaDestinoVenda.status_venda ?? '—'}
+                </p>
+              </div>
+
+              {/* busca de origem */}
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Pedido de origem (será cancelado, sem pagamento):</p>
+                <div className="flex gap-2">
+                  <input value={trocaOrigemTermo} onChange={e => { setTrocaOrigemTermo(e.target.value); setTrocaOrigemVenda(null); setTrocaOrigemErro('') }}
+                    placeholder="Nº do pedido ou protocolo de origem"
+                    className="flex-1 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                  <button type="button" onClick={() => void buscarOrigemTroca()}
+                    className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg">
+                    <Search size={14} /> Buscar
+                  </button>
+                </div>
+                {trocaOrigemErro && <p className="text-xs text-red-600 mt-1">{trocaOrigemErro}</p>}
+              </div>
+
+              {trocaOrigemVenda && (
+                <div className="rounded-xl border border-green-200 dark:border-green-900/40 bg-green-50 dark:bg-green-950/20 p-3">
+                  <p className="text-gray-800 dark:text-gray-100 font-medium">{trocaOrigemVenda.cliente_nome ?? '—'}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Pedido {trocaOrigemVenda.pedido_numero ?? '—'} · Protocolo: {trocaOrigemVenda.protocolo_numero ?? '—'} · Status: {trocaOrigemVenda.status_venda ?? '—'}
+                  </p>
+                </div>
+              )}
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-gray-500">Motivo da troca:</span>
+                <textarea value={trocaMotivo} onChange={e => setTrocaMotivo(e.target.value)} rows={3}
+                  placeholder="Descreva o motivo da troca de protocolo (auditado)."
+                  className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+              </label>
+
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-800">
+                <button type="button" onClick={() => setShowTrocarProtocolo(false)}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <XCircle size={14} /> Cancelar
+                </button>
+                <button type="button" onClick={() => void confirmarTrocaProtocolo()}
+                  disabled={!trocaOrigemVenda || !trocaMotivo.trim() || trocandoProtocolo}
+                  className="flex items-center gap-2 px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg disabled:opacity-50">
+                  <RefreshCcw size={14} /> {trocandoProtocolo ? 'Trocando...' : 'Confirmar troca'}
+                </button>
               </div>
             </div>
           </div>
