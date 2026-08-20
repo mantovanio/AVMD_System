@@ -234,7 +234,7 @@ export class CommercialRepository {
                cb.nome as cliente_nome
         from vendas_certificados v
         left join cadastros_base cb on cb.id = v.cadastro_base_id
-        where v.id = $1::uuid for update
+        where v.id = $1::uuid for update of v
       `, [input.venda_destino_id])
 
       const origemRes = await trx.query<{
@@ -245,7 +245,7 @@ export class CommercialRepository {
                cb.nome as cliente_nome
         from vendas_certificados v
         left join cadastros_base cb on cb.id = v.cadastro_base_id
-        where v.id = $1::uuid for update
+        where v.id = $1::uuid for update of v
       `, [input.venda_origem_id])
 
       const destino = destinoRes.rows[0]
