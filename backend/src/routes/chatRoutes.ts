@@ -1964,16 +1964,18 @@ export async function handleChatRoutes(
       cnpj: cleanCnpj,
     })
 
-    // Antes de criar, checa se o contato ja existe. A busca e bidirectional
-    // entre telefone e e-mail (um contato salvo pela porta do e-mail pode
-    // ter o e-mail no campo telefone e vice-versa) e tambem considera CPF/CNPJ.
+    // Antes de criar, checa se o contato ja existe. A chave de unificacao
+    // e o TELEFONE (normalizado) ÔÇö e so o telefone garante que a mesma
+    // pessoa atendida pela porta do e-mail e pela porta do Atendimento
+    // receba o mesmo cadastro. CPF/CNPJ tambem valem; o e-mail fica como
+    // fallback para nao quebrar contatos que so tem e-mail.
     const existing = await db.query<{ id: string }>(
       `SELECT id
          FROM crm_customers
-        WHERE ($1::text is not null and (fn_normalize_phone_br(telefone) = $1 OR lower(coalesce(email, '')) = lower($2)))
-           OR ($2::text is not null and (lower(coalesce(email, '')) = lower($2) OR fn_normalize_phone_br(telefone) = $1))
+        WHERE ($1::text is not null and fn_normalize_phone_br(telefone) = $1)
            OR ($3::text is not null and regexp_replace(coalesce(cpf, ''), '\D', '', 'g') = $3)
            OR ($4::text is not null and regexp_replace(coalesce(cnpj, ''), '\D', '', 'g') = $4)
+           OR ($2::text is not null and lower(coalesce(email, '')) = lower($2))
         ORDER BY updated_at DESC, created_at DESC
         LIMIT 1`,
       [phoneMatch, emailMatch, cleanCpf, cleanCnpj],
