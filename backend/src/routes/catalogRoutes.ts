@@ -791,51 +791,85 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   // ── Gerar Protocolo (Senha Digital Plus) ──────────────────────────────
   if (method === 'POST' && url === '/api/protocolos/gerar') {
     try {
-      const body = await readJson<{
-        cliente_id?: string
-        cpf_cnpj?: string
-        nome_titular?: string
-        tipo_documento?: string
-        tipo_certificado?: string
-        observacoes?: string
-      }>(req)
+      const body = await readJson<Record<string, unknown>>(req)
 
       if (!config.senhaDigitalPlusApiKey || !config.senhaDigitalPlusSecretKey) {
         writeJson(res, 500, { ok: false, error: 'Credenciais da Senha Digital Plus não configuradas no servidor.' }, corsOrigin)
         return true
       }
 
-      const cpf = (body.cpf_cnpj ?? '').replace(/\D/g, '')
-      const isPJ = cpf.length === 14
-
-      const sdpPayload: Record<string, unknown> = {
+      // O "Gerar protocolo" é uma ação independente: o ID/código do produto
+      // fica TRAVADO no backend, e os dados do representante legal (titular)
+      // são os informados no modal. Se o payload vier no formato completo da
+      // SDP (modal do Comercial), usamos os dados do titular do modal e
+      // mantemos o produto fixo. Caso contrário (PortalCliente), montamos a
+      // partir de cpf_cnpj/nome_titular.
+      const produtoFixo = {
         tipoEmissao: '3',
         idProduto: '72054',
         categoriaProduto: 'c50cb1a6-693e-4c12-9a71-878cf583beef',
         produto: 'A3 Sem Midia 2 Anos',
         ProdutoDescricao: 'e-CNPJ A1 arquivo',
-        Contato: { DDD: '11', Telefone: '999999999', Email: 'contato@certiid.com.br' },
-        Endereco: {
-          CodigoIbgeMunicipio: '3550308', CodigoIbgeUF: '35', cep: '01310100',
-          cidade: 'Sao Paulo', bairro: 'Bela Vista', logradouro: 'Av Paulista',
-          complemento: '', numero: '1000', uf: 'SP',
-        },
       }
+      const enderecoPadrao = {
+        CodigoIbgeMunicipio: '3550308', CodigoIbgeUF: '35', cep: '01310100',
+        cidade: 'Sao Paulo', bairro: 'Bela Vista', logradouro: 'Av Paulista',
+        complemento: '', numero: '1000', uf: 'SP',
+      }
+      const contatoPadrao = { DDD: '11', Telefone: '999999999', Email: 'contato@certiid.com.br' }
 
-      if (isPJ) {
-        sdpPayload.CNPJ = cpf
-        sdpPayload.RazaoSocial = body.nome_titular || ''
-        sdpPayload.Titular = {
+      const isPayloadCompleto =
+        body.CPF !== undefined || body.Nome !== undefined || body.idProduto !== undefined
+
+      let sdpPayload: Record<string, unknown>
+
+      if (isPayloadCompleto) {
+        const cpf = String(body.CPF ?? '').replace(/\D/g, '')
+        const cnpj = String(body.CNPJ ?? '').replace(/\D/g, '')
+        const isPJ = cnpj.length === 14
+        const contato = (body.Contato && typeof body.Contato === 'object') ? body.Contato : contatoPadrao
+        const endereco = (body.Endereco && typeof body.Endereco === 'object') ? body.Endereco : enderecoPadrao
+        sdpPayload = {
+          ...produtoFixo,
           CPF: cpf,
-          DataNascimento: '01/01/1990',
-          Nome: body.nome_titular || '',
-          Contato: sdpPayload.Contato,
-          Endereco: sdpPayload.Endereco,
+          Nome: String(body.Nome ?? ''),
+          DataNascimento: String(body.DataNascimento ?? ''),
+          Contato: contato,
+          Endereco: endereco,
+          CEI: body.CEI ?? '',
+          CAEPF: body.CAEPF ?? '',
+          NIS: body.NIS ?? '',
+        }
+        if (isPJ) {
+          sdpPayload.CNPJ = cnpj
+          sdpPayload.RazaoSocial = String(body.RazaoSocial ?? body.Nome ?? '')
+          sdpPayload.Titular = {
+            CPF: cpf,
+            DataNascimento: String(body.DataNascimento ?? ''),
+            Nome: String(body.Nome ?? ''),
+            Contato: contato,
+            Endereco: endereco,
+          }
         }
       } else {
-        sdpPayload.CPF = cpf
-        sdpPayload.DataNascimento = '01/01/1990'
-        sdpPayload.Nome = body.nome_titular || ''
+        const cpf = String(body.cpf_cnpj ?? '').replace(/\D/g, '')
+        const isPJ = cpf.length === 14
+        sdpPayload = { ...produtoFixo, Contato: contatoPadrao, Endereco: enderecoPadrao }
+        if (isPJ) {
+          sdpPayload.CNPJ = cpf
+          sdpPayload.RazaoSocial = String(body.nome_titular || '')
+          sdpPayload.Titular = {
+            CPF: cpf,
+            DataNascimento: '01/01/1990',
+            Nome: String(body.nome_titular || ''),
+            Contato: contatoPadrao,
+            Endereco: enderecoPadrao,
+          }
+        } else {
+          sdpPayload.CPF = cpf
+          sdpPayload.DataNascimento = '01/01/1990'
+          sdpPayload.Nome = String(body.nome_titular || '')
+        }
       }
 
       const sdpHeaders: Record<string, string> = {

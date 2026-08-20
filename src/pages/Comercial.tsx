@@ -5674,9 +5674,11 @@ export default function Comercial() {
 
   function abrirProtocolo(v: VendaRow) {
     if (v.protocolo_numero) { showMsg('Esta venda já possui protocolo: ' + v.protocolo_numero); return }
-    const cpfComprador = (v.cadastros_base as { cpf_cnpj?: string } | null)?.cpf_cnpj ?? ''
+    const cadastro = (v.cadastros_base as { cpf_cnpj?: string; nome?: string } | null) ?? null
+    const cpfComprador = cadastro?.cpf_cnpj ?? ''
+    const nomeComprador = cadastro?.nome ?? ''
     setProtocoloVenda(v)
-    setFormProtocolo({ ...EMPTY_PROTOCOLO, cpf: cpfComprador })
+    setFormProtocolo({ ...EMPTY_PROTOCOLO, cpf: cpfComprador, nome: nomeComprador })
     setProtocoloStep('validate')
     setShowProtocolo(true)
   }
