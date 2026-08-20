@@ -894,6 +894,30 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
         return true
       }
 
+      // A SDP (ambiente sandbox) devolve o link do protocolo com um host que
+      // não resolve publicamente (ex.: sandbox.safeweb.com.br). Reescrevemos o
+      // host para o portal configurado, preservando path e query.
+      if (sdpData && typeof sdpData === 'object') {
+        const rw = (u?: unknown): string | undefined => {
+          if (typeof u !== 'string' || !u) return u as undefined
+          try {
+            const parsed = new URL(u)
+            const base = new URL(config.senhaDigitalPlusPortalUrl)
+            parsed.protocol = base.protocol
+            parsed.host = base.host
+            parsed.port = base.port
+            return parsed.toString()
+          } catch {
+            return u
+          }
+        }
+        const obj = sdpData as Record<string, unknown>
+        if (obj.url !== undefined) obj.url = rw(obj.url)
+        if (obj.protocolo_url !== undefined) obj.protocolo_url = rw(obj.protocolo_url)
+        if (obj.protocoloUrl !== undefined) obj.protocoloUrl = rw(obj.protocoloUrl)
+        if (obj.link !== undefined) obj.link = rw(obj.link)
+      }
+
       writeJson(res, 200, { ok: true, ...sdpData }, corsOrigin)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)

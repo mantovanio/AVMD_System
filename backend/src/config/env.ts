@@ -24,6 +24,7 @@ export type BackendConfig = {
   senhaDigitalPlusApiKey: string
   senhaDigitalPlusSecretKey: string
   senhaDigitalPlusEnvironment: string
+  senhaDigitalPlusPortalUrl: string
   // Canal de atendimento humano (dia a dia, sem IA)
   evolutionAtendimento: EvolutionInstanceConfig
   // Canal CertiID — renovações de certificados (com IA)
@@ -75,6 +76,7 @@ export function loadConfig(): BackendConfig {
     senhaDigitalPlusApiKey: env('SENHA_DIGITAL_PLUS_API_KEY'),
     senhaDigitalPlusSecretKey: env('SENHA_DIGITAL_PLUS_SECRET_KEY'),
     senhaDigitalPlusEnvironment: env('SENHA_DIGITAL_PLUS_ENVIRONMENT', 'production'),
+    senhaDigitalPlusPortalUrl: env('SENHA_DIGITAL_PLUS_PORTAL_URL', 'https://portal.safeweb.com.br'),
     evolutionAtendimento: {
       baseUrl,
       apiToken: env('EVOLUTION_ATENDIMENTO_API_TOKEN') || defaultToken,
