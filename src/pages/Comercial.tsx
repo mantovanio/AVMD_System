@@ -1106,6 +1106,7 @@ export default function Comercial() {
   } | null>(null)
   const [trocaOrigemErro, setTrocaOrigemErro]         = useState('')
   const [trocaMotivo, setTrocaMotivo]                 = useState('')
+  const [trocaAcaoOrigem, setTrocaAcaoOrigem]         = useState<'cancelar' | 'excluir'>('excluir')
   const [trocandoProtocolo, setTrocandoProtocolo]     = useState(false)
 
   // ── wizard step state ─────────────────────────────────────────
@@ -5689,6 +5690,7 @@ export default function Comercial() {
     setTrocaOrigemVenda(null)
     setTrocaOrigemErro('')
     setTrocaMotivo('')
+    setTrocaAcaoOrigem('excluir')
     setShowTrocarProtocolo(true)
   }
 
@@ -5735,19 +5737,24 @@ export default function Comercial() {
           venda_origem_id: trocaOrigemVenda.id,
           motivo: trocaMotivo.trim(),
           cancelado_por: profile?.id,
+          acao_origem: trocaAcaoOrigem,
         }),
       })
-      const data = await r.json().catch(() => null) as { ok?: boolean; error?: string } | null
+      const data = await r.json().catch(() => null) as { ok?: boolean; error?: string; acao_origem?: string } | null
       if (!r.ok || !data?.ok) { showMsg(data?.error || 'Erro ao trocar protocolo.', 'err'); return }
       const origem = trocaOrigemVenda
       const destino = trocaDestinoVenda
+      const acao = data.acao_origem === 'excluir' ? 'excluido' : 'cancelado'
       setShowTrocarProtocolo(false)
-      setVendasV2(prev => prev.map(row => {
-        if (row.id === destino.id) return { ...row, protocolo_numero: origem.protocolo_numero }
-        if (row.id === origem.id) return { ...row, status_venda: 'cancelado', protocolo_numero: null }
-        return row
-      }))
-      showMsg(`Protocolo ${origem.protocolo_numero} movido para o pedido ${destino.pedido_numero ?? ''} e o pedido de origem foi cancelado.`, 'ok')
+      setVendasV2(prev => prev
+        .filter(row => !(acao === 'excluido' && row.id === origem.id))
+        .map(row => {
+          if (row.id === origem.id && acao !== 'excluido') return { ...row, status_venda: 'cancelado' as const, protocolo_numero: null }
+          if (row.id === destino.id) return { ...row, protocolo_numero: origem.protocolo_numero }
+          return row
+        })
+      )
+      showMsg(`Protocolo ${origem.protocolo_numero} movido para o pedido ${destino.pedido_numero ?? ''} e o pedido de origem (não pago) foi ${acao}.`, 'ok')
     } catch (err) {
       showMsg('Erro ao trocar protocolo: ' + ((err as Error).message || 'desconhecido'), 'err')
     } finally {
@@ -9689,6 +9696,24 @@ export default function Comercial() {
                   <p className="text-xs text-gray-500 mt-1">
                     Pedido {trocaOrigemVenda.pedido_numero ?? '—'} · Protocolo: {trocaOrigemVenda.protocolo_numero ?? '—'} · Status: {trocaOrigemVenda.status_venda ?? '—'}
                   </p>
+                </div>
+              )}
+
+              {trocaOrigemVenda && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">O que fazer com o pedido de origem (não pago)?</p>
+                  <div className="flex flex-col gap-2">
+                    <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                      <input type="radio" name="trocaAcaoOrigem" checked={trocaAcaoOrigem === 'excluir'}
+                        onChange={() => setTrocaAcaoOrigem('excluir')} />
+                      Excluir definitivamente do sistema (não será mais utilizado)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                      <input type="radio" name="trocaAcaoOrigem" checked={trocaAcaoOrigem === 'cancelar'}
+                        onChange={() => setTrocaAcaoOrigem('cancelar')} />
+                      Apenas cancelar (manter no histórico)
+                    </label>
+                  </div>
                 </div>
               )}
 

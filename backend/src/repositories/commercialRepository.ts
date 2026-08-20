@@ -213,6 +213,7 @@ export class CommercialRepository {
     venda_origem_id: string
     cancelado_por: string
     motivo: string
+    acao_origem?: 'cancelar' | 'excluir'
   }) {
     const admin = await this.db.query<{ id: string }>(
       `select id from profiles
@@ -280,44 +281,51 @@ export class CommercialRepository {
         where id = $1::uuid
       `, [destino.id, origem.protocolo_numero, origem.id])
 
-      // 3. cancela origem
-      await trx.query(`
-        update vendas_certificados
-        set status_venda = 'cancelado',
-            pedido_status = 'cancelado',
-            updated_at = now()
-        where id = $1::uuid
-      `, [origem.id])
+      // 3. cancela ou exclui a origem
+      const acaoOrigem = input.acao_origem === 'excluir' ? 'excluir' : 'cancelar'
+      if (acaoOrigem === 'excluir') {
+        await trx.query(`
+          insert into vendas_auditoria_operacional
+            (acao, venda_id, pedido_numero, protocolo_numero, cliente_nome, documento, status_venda, motivo, cancelamento_id, actor_id, actor_nome, payload)
+          values
+            ('exclusao', $1::uuid, $2, $3, $4, null, 'excluido', $5, null, $6::uuid, null, $7::jsonb)
+        `, [
+          origem.id, origem.pedido_numero, origem.protocolo_numero, origem.cliente_nome, input.motivo, input.cancelado_por,
+          JSON.stringify({ operacao: 'troca_protocolo_exclusao_origem', origem: origem.id, destino: destino.id, protocolo_movido: origem.protocolo_numero }),
+        ])
+        await trx.query(`delete from vendas_certificados where id = $1::uuid`, [origem.id])
+      } else {
+        await trx.query(`
+          update vendas_certificados
+          set status_venda = 'cancelado',
+              pedido_status = 'cancelado',
+              updated_at = now()
+          where id = $1::uuid
+        `, [origem.id])
+      }
 
-      // 4. auditoria operacional
-      const payloadOrigem = JSON.stringify({
-        operacao: 'troca_protocolo',
-        origem: origem.id,
-        destino: destino.id,
-        protocolo_movido: origem.protocolo_numero,
-      })
+      // 4. auditoria operacional (destino recebe o protocolo)
       const payloadDestino = JSON.stringify({
         operacao: 'troca_protocolo',
         destino: destino.id,
         recebido_de: origem.id,
         protocolo_recebido: origem.protocolo_numero,
+        acao_origem: acaoOrigem,
       })
       await trx.query(`
         insert into vendas_auditoria_operacional
           (acao, venda_id, pedido_numero, protocolo_numero, cliente_nome, documento, status_venda, motivo, cancelamento_id, actor_id, actor_nome, payload)
         values
-          ('cancelamento', $1::uuid, $2, $3, $4, null, 'cancelado', $5, null, $6::uuid, null, $7::jsonb),
-          ('cancelamento', $8::uuid, $9, $10, $11, null, 'gerado', $5, null, $6::uuid, null, $12::jsonb)
+          ('cancelamento', $1::uuid, $2, $3, $4, null, 'gerado', $5, null, $6::uuid, null, $7::jsonb)
       `, [
-        origem.id, origem.pedido_numero, origem.protocolo_numero, origem.cliente_nome, input.motivo, input.cancelado_por,
-        payloadOrigem,
-        destino.id, destino.pedido_numero, origem.protocolo_numero, destino.cliente_nome,
+        destino.id, destino.pedido_numero, origem.protocolo_numero, destino.cliente_nome, input.motivo, input.cancelado_por,
         payloadDestino,
       ])
 
       return {
         destino: { id: destino.id, protocolo_numero: origem.protocolo_numero, status_venda: destino.status_venda },
-        origem: { id: origem.id, protocolo_numero: null, status_venda: 'cancelado' },
+        origem: { id: origem.id, protocolo_numero: null, status_venda: acaoOrigem === 'excluir' ? 'excluido' : 'cancelado' },
+        acao_origem: acaoOrigem,
       }
     })
   }
