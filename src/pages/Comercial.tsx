@@ -5894,8 +5894,6 @@ export default function Comercial() {
         return
       }
 
-      if (protoUrl) window.open(protoUrl, '_blank')
-
       setShowProtocolo(false)
       setVendasV2(prev => prev.map(r =>
         r.id === protocoloVenda.id ? { ...r, protocolo_numero: protoNumero, protocolo_status: 'gerado' } : r
