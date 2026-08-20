@@ -61,7 +61,7 @@ import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomer
 import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
 import { sendWhatsApp as sendWhatsAppDirect } from '@/lib/renovacoesApi'
 import { useAuth } from '@/contexts/AuthContext'
-import { canChangePayment, canChangeProtocol, canDeleteSale, canReleaseEmission, hasPerfil, isAdminProfile } from '@/lib/security'
+import { canChangePayment, canDeleteSale, canReleaseEmission, hasPerfil, isAdminProfile } from '@/lib/security'
 import { buscarCep } from '@/lib/cep'
 import type {
   Agendamento,
@@ -6809,13 +6809,10 @@ export default function Comercial() {
               const statusLabel = STATUS_VENDA_LABEL[v.status_venda] ?? v.status_venda
               const vendaBloqueada = Boolean(v.pago || v.status_venda === 'vendido' || v.status_venda === 'emitido')
               const podeExcluir = canDeleteSale(profile, v)
-              const podeTrocarProtocolo = canChangeProtocol(profile, v)
-              const protocoloLabel = isAdmin && vendaBloqueada ? 'Trocar protocolo' : 'Protocolo'
-              const protocoloTooltip = isAdmin && vendaBloqueada
-                ? 'Trocar o protocolo desta venda paga/emitida com validação de unicidade.'
-                : 'Emitir ou visualizar o protocolo desta venda'
+              const protocoloLabel = 'Emitir Protocolo'
+              const protocoloTooltip = 'Emitir ou visualizar o protocolo desta venda'
               const actions: ActionBarAction[] = [
-                ...(podeTrocarProtocolo ? [{ key: 'protocolo', icon: <ClipboardList size={13} />, label: protocoloLabel, tooltip: protocoloTooltip, onClick: () => abrirProtocolo(v), variant: 'purple' as const }] : []),
+                { key: 'protocolo', icon: <ClipboardList size={13} />, label: protocoloLabel, tooltip: protocoloTooltip, onClick: () => abrirProtocolo(v), variant: 'purple' as const },
                 { key: 'agendar', icon: <Calendar size={13} />, label: 'Agendar', tooltip: 'Agendar uma ação ou retorno para esta venda', onClick: () => void prepararAgendamento(v), variant: 'green' as const },
                 { key: 'fatura', icon: <Receipt size={13} />, label: 'Fatura', tooltip: 'Gerar e enviar a fatura desta venda por e-mail', onClick: () => void abrirFaturaVenda(v), variant: 'default' as const },
                 ...(isAdmin ? [
