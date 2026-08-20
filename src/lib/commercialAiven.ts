@@ -144,6 +144,11 @@ export async function getAivenTitularByCpf(cpf: string) {
   return response.titular ?? null
 }
 
+export async function getCadastroByCpf(cpf: string) {
+  const response = await postJson<ApiResponse<'cadastro', Record<string, unknown> | null>>(getApiUrl('/cadastros/por-cpf'), { cpf })
+  return response.cadastro ?? null
+}
+
 export type CancelamentoVendaInput = {
   venda_id: string
   motivo: string

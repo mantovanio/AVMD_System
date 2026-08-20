@@ -57,7 +57,7 @@ import {
 import { getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { getApiUrl } from '@/lib/api'
 import { getProductProfile } from '@/lib/checkout'
-import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenCommercialVendasByDocumento, getAivenTitularByCpf, updateAivenCommercialSaleStatus, updateAivenCommercialSalePaymentStatus, updateVenda, updateVendaPaymentMethod, type CancelamentoVendaInput, type UpdateVendaInput } from '@/lib/commercialAiven'
+import { cancelarVenda, fetchAivenCommercialAgents, fetchAivenCommercialCustomers, fetchAivenCommercialPoints, fetchAivenCommercialSales, fetchAivenCommercialSaleProfiles, fetchAivenCommercialSchedule, searchAivenCommercialCustomers, saveAivenCommercialAgenda, saveAivenCommercialCustomer, saveAivenCommercialSale, getAivenCommercialSaleById, getAivenCommercialScheduleByVenda, saveAivenCommercialAgendaPendente, getAivenCommercialClientesByDocs, getAivenCommercialSafewebVendas, getAivenCommercialVendasByDocumento, getAivenTitularByCpf, getCadastroByCpf, updateAivenCommercialSaleStatus, updateAivenCommercialSalePaymentStatus, updateVenda, updateVendaPaymentMethod, type CancelamentoVendaInput, type UpdateVendaInput } from '@/lib/commercialAiven'
 import { queueEmailMessage, queueWhatsAppMessage, renderTemplate } from '@/lib/communication'
 import { sendWhatsApp as sendWhatsAppDirect } from '@/lib/renovacoesApi'
 import { useAuth } from '@/contexts/AuthContext'
@@ -5761,19 +5761,51 @@ export default function Comercial() {
       return
     }
     setValidandoProtocolo(true)
-    // Busca dados do titular já cadastrado pelo CPF
-    const titular = await getAivenTitularByCpf(formProtocolo.cpf.trim())
-    if (titular) {
-      const t = titular as { nome?: string; email?: string; telefone?: string }
-      setFormProtocolo(p => ({
-        ...p,
-        nome:     t.nome ?? '',
-        email:    t.email ?? '',
-        telefone: t.telefone ?? '',
-      }))
+    try {
+      // Busca dados do titular e do cadastro base (com endereço) pelo CPF
+      const [titular, cadastro] = await Promise.all([
+        getAivenTitularByCpf(formProtocolo.cpf.trim()),
+        getCadastroByCpf(formProtocolo.cpf.trim()).catch(() => null),
+      ])
+      const t = (titular ?? null) as { nome?: string; email?: string; telefone?: string; data_nascimento?: string } | null
+      const c = (cadastro ?? null) as {
+        email?: string; telefone?: string; cep?: string; logradouro?: string
+        numero?: string; complemento?: string; bairro?: string; cidade?: string; uf?: string
+      } | null
+
+      const rawTel = (t?.telefone || c?.telefone || '') as string
+      const tel = rawTel.replace(/\D/g, '')
+      setFormProtocolo(p => {
+        let ddd = p.ddd
+        let numero = tel
+        if (!ddd && tel.length >= 10) {
+          ddd = tel.slice(0, 2)
+          numero = tel.slice(2)
+        } else if (ddd && tel.startsWith(ddd) && tel.length > ddd.length) {
+          numero = tel.slice(ddd.length)
+        }
+        return {
+          ...p,
+          nome:            t?.nome ?? p.nome,
+          email:           t?.email || c?.email || p.email,
+          ddd:             ddd || p.ddd,
+          telefone:        numero || p.telefone,
+          data_nascimento: t?.data_nascimento ? String(t.data_nascimento).slice(0, 10) : p.data_nascimento,
+          cep:         c?.cep ?? p.cep,
+          logradouro:   c?.logradouro ?? p.logradouro,
+          numero:       c?.numero ?? p.numero,
+          complemento:  c?.complemento ?? p.complemento,
+          bairro:       c?.bairro ?? p.bairro,
+          cidade:       c?.cidade ?? p.cidade,
+          uf:           c?.uf ?? p.uf,
+        }
+      })
+    } catch (err) {
+      showMsg('Erro ao validar titular: ' + ((err as Error).message || 'desconhecido'), 'err')
+    } finally {
+      setValidandoProtocolo(false)
+      setProtocoloStep('form')
     }
-    setValidandoProtocolo(false)
-    setProtocoloStep('form')
   }
 
   async function confirmarProtocolo() {

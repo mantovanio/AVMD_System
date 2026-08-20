@@ -156,6 +156,33 @@ export class CommercialRepository {
     return result.rows[0] ?? null
   }
 
+  async buscarCadastroPorCpf(cpf: string) {
+    const doc = (cpf ?? '').replace(/\D/g, '')
+    if (!doc) return null
+    const result = await this.db.query<{
+      id: string
+      nome: string | null
+      cpf_cnpj: string | null
+      email: string | null
+      telefone: string | null
+      cep: string | null
+      logradouro: string | null
+      numero: string | null
+      complemento: string | null
+      bairro: string | null
+      cidade: string | null
+      uf: string | null
+    }>(
+      `select id, nome, cpf_cnpj, email, telefone, cep, logradouro, numero,
+              complemento, bairro, cidade, uf
+       from cadastros_base
+       where regexp_replace(cpf_cnpj, '\\D', '', 'g') = $1
+       limit 1`,
+      [doc],
+    )
+    return result.rows[0] ?? null
+  }
+
   async buscarVendaPorTermo(term: string) {
     const t = (term ?? '').trim()
     if (!t) return []

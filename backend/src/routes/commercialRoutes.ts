@@ -149,6 +149,13 @@ export async function handleCommercialRoutes(req: IncomingMessage, res: ServerRe
     return true
   }
 
+  if (req.method === 'POST' && req.url === '/api/cadastros/por-cpf') {
+    const body = await readJson<{ cpf?: string }>(req)
+    const cadastro = await repository.buscarCadastroPorCpf(body.cpf ?? '')
+    writeJson(res, 200, { ok: true, cadastro }, corsOrigin)
+    return true
+  }
+
   if (req.method === 'POST' && req.url === '/api/comercial/vendas/trocar-protocolo') {
     const body = await readJson<{ venda_destino_id: string; venda_origem_id: string; motivo?: string; cancelado_por: string }>(req)
     if (!body.venda_destino_id || !body.venda_origem_id || !body.cancelado_por) {
