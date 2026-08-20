@@ -1950,6 +1950,13 @@ export async function handleChatRoutes(
     const telefoneCanonico = normalizePhoneBR(telefone)
     const cleanCpf = cpf?.replace(/\D/g, '') || null
     const cleanCnpj = cnpj?.replace(/\D/g, '') || null
+    // Em conversas de e-mail o "telefone" costuma trazer o proprio e-mail
+    // (document_key). Trata esse caso para nao poluir o campo telefone e
+    // para conseguir casar com clientes ja cadastrados pela porta do
+    // Atendimento (que usam o telefone de verdade).
+    const telefonePareceEmail = typeof telefone === 'string' && telefone.includes('@')
+    const phoneMatch = telefonePareceEmail ? null : (telefoneCanonico || null)
+    const emailMatch = telefonePareceEmail ? (telefone || null) : (email || null)
     const resolvedCadastro = await resolveCadastroBaseByIdentity(db, {
       phone: telefoneDigits,
       email: email || null,
@@ -1957,23 +1964,19 @@ export async function handleChatRoutes(
       cnpj: cleanCnpj,
     })
 
-    // Usa a mesma normalizacao canonica do indice unico
-    // (idx_crm_customers_telefone_normalizado) para achar um cliente
-    // existente. Antes comparava com normalizePhoneDigits (que ADICIONA
-    // o DDI), incompativel com o indice (que REMOVE o DDI) — isso fazia
-    // essa busca nao encontrar clientes que o banco ja considerava
-    // duplicados, e a tentativa de INSERT quebrava com erro de
-    // constraint cru.
+    // Antes de criar, checa se o contato ja existe. A busca e bidirectional
+    // entre telefone e e-mail (um contato salvo pela porta do e-mail pode
+    // ter o e-mail no campo telefone e vice-versa) e tambem considera CPF/CNPJ.
     const existing = await db.query<{ id: string }>(
       `SELECT id
          FROM crm_customers
-        WHERE ($1::text is not null and fn_normalize_phone_br(telefone) = $1)
-           OR ($2::text is not null and lower(coalesce(email, '')) = lower($2))
+        WHERE ($1::text is not null and (fn_normalize_phone_br(telefone) = $1 OR lower(coalesce(email, '')) = lower($2)))
+           OR ($2::text is not null and (lower(coalesce(email, '')) = lower($2) OR fn_normalize_phone_br(telefone) = $1))
            OR ($3::text is not null and regexp_replace(coalesce(cpf, ''), '\D', '', 'g') = $3)
            OR ($4::text is not null and regexp_replace(coalesce(cnpj, ''), '\D', '', 'g') = $4)
         ORDER BY updated_at DESC, created_at DESC
         LIMIT 1`,
-      [telefoneCanonico, email || null, cleanCpf, cleanCnpj],
+      [phoneMatch, emailMatch, cleanCpf, cleanCnpj],
     )
 
     let customerId = existing.rows[0]?.id ?? null
@@ -2014,8 +2017,11 @@ export async function handleChatRoutes(
         if (!isDuplicatePhone) throw error
 
         const retry = await db.query<{ id: string }>(
-          `SELECT id FROM crm_customers WHERE fn_normalize_phone_br(telefone) = $1 LIMIT 1`,
-          [telefoneCanonico],
+          `SELECT id FROM crm_customers
+            WHERE ($1::text is not null and fn_normalize_phone_br(telefone) = $1)
+               OR ($2::text is not null and lower(coalesce(email, '')) = lower($2))
+            LIMIT 1`,
+          [phoneMatch, emailMatch],
         )
         customerId = retry.rows[0]?.id ?? null
         if (!customerId) throw error

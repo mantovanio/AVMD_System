@@ -1946,13 +1946,18 @@ export default function ChatInboxCRM() {
     const conv = activeConversations.find(c => c.id === conversationId) || selectedConversation
     if (!conv) return
     try {
+      const isEmailFila = conv.fila === 'email'
+      const resolvedTelefone = conv.telefone || null
+      const resolvedEmail = conv.email_principal || (isEmailFila ? conv.document_key : null) || null
       const response = await fetch(getApiUrl('/chat/crm/customers'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nome: conv.cliente_nome || conv.nome_crm || 'Contato sem nome',
-          telefone: conv.telefone || conv.document_key || null,
-          email: null,
+          telefone: resolvedTelefone,
+          email: resolvedEmail,
+          cpf: conv.cpf || null,
+          cnpj: conv.cnpj || null,
           observacoes: null,
           conversation_id: conversationId,
         }),
