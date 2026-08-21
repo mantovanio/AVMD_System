@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { createSecureContext } from 'node:tls'
 import { execFile } from 'node:child_process'
-import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { extname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -370,9 +370,10 @@ async function persistBackendEnvironment(updates: Record<string, string>) {
     return `${match[1]}=${JSON.stringify(value)}`
   })
   for (const [key, value] of remaining) lines.push(`${key}=${JSON.stringify(value)}`)
-  const tempPath = `${envPath}.${randomUUID()}.tmp`
-  await writeFile(tempPath, lines.join('\n').replace(/\n+$/, '') + '\n', { encoding: 'utf8', mode: 0o600 })
-  await rename(tempPath, envPath)
+  // O diretório do backend é protegido contra escrita para impedir que o
+  // usuário do serviço crie arquivos arbitrários. O arquivo já existente é
+  // gravável pelo próprio serviço e pode ser atualizado sem criar um .tmp.
+  await writeFile(envPath, lines.join('\n').replace(/\n+$/, '') + '\n', { encoding: 'utf8', mode: 0o600 })
   await chmod(envPath, 0o600).catch(() => undefined)
 }
 
