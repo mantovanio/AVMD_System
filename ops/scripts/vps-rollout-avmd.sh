@@ -19,6 +19,7 @@ PUBLIC_API_RETRY_DELAY_SEC="${PUBLIC_API_RETRY_DELAY_SEC:-5}"
 PUBLIC_CRM_RETRIES="${PUBLIC_CRM_RETRIES:-8}"
 PUBLIC_CRM_RETRY_DELAY_SEC="${PUBLIC_CRM_RETRY_DELAY_SEC:-5}"
 FRONT_VALIDATOR="${APP_DIR}/ops/scripts/validate-frontend-assets.sh"
+ENV_VALIDATOR="${APP_DIR}/ops/scripts/validate-production-env.sh"
 FRONT_NEXT_DIR="${FRONT_DIR}.next"
 FRONT_PREVIOUS_DIR="${FRONT_DIR}.previous"
 PORTAL_NEXT_DIR="${PORTAL_DIR}.next"
@@ -248,6 +249,10 @@ log "1) Atualizando codigo"
 cd "${APP_DIR}"
 git fetch --all --prune
 git pull origin main
+
+log "1.1) Validando configuracao de producao antes do build"
+require_file "${ENV_VALIDATOR}"
+bash "${ENV_VALIDATOR}" "${APP_DIR}"
 
 log "2) Instalando dependencias e gerando build"
 npm ci
