@@ -2240,6 +2240,12 @@ function AbaIntegracoes() {
     api_key_configurada: boolean; secret_key_configurada: boolean
   } | null>(null)
   const [testandoProtocolo, setTestandoProtocolo] = useState(false)
+  const [showProtocoloCredentials, setShowProtocoloCredentials] = useState(false)
+  const [protocoloApiKey, setProtocoloApiKey] = useState('')
+  const [protocoloSecretKey, setProtocoloSecretKey] = useState('')
+  const [protocoloEnvironment, setProtocoloEnvironment] = useState<'production' | 'sandbox'>('production')
+  const [savingProtocoloCredentials, setSavingProtocoloCredentials] = useState(false)
+  const [showProtocoloSecret, setShowProtocoloSecret] = useState(false)
 
     function showMsgI(msg: string, type: 'ok' | 'err' = 'err') {
       setToastI({ msg, type })
@@ -2381,6 +2387,7 @@ function AbaIntegracoes() {
     const lista = (integracoesRes.integrations ?? []) as ExternalIntegration[]
     setIntegracoes(lista)
     setProtocoloConfig(protocoloRes?.configuracao ?? null)
+    setProtocoloEnvironment(protocoloRes?.configuracao?.ambiente === 'sandbox' ? 'sandbox' : 'production')
     setOutbox((outboxRes.data ?? []) as CommunicationOutbox[])
     try {
       const cfg = await loadContactDocumentStorageConfig()
@@ -2396,13 +2403,55 @@ function AbaIntegracoes() {
   async function testarProtocoloCertificadora() {
     setTestandoProtocolo(true)
     try {
-      const response = await fetch(getApiUrl('/protocolos/validate'), { method: 'POST' })
+      const accessToken = await getSupabaseAccessToken()
+      const response = await fetch(getApiUrl('/protocolos/validate'), {
+        method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
+      })
       const data = await response.json().catch(() => null) as { ok?: boolean; message?: string; error?: string } | null
       showMsgI(data?.ok ? (data.message || 'Certificadora conectada com sucesso.') : (data?.error || data?.message || 'Falha ao validar a certificadora.'), data?.ok ? 'ok' : 'err')
     } catch (error) {
       showMsgI('Falha ao testar a certificadora: ' + String(error))
     } finally {
       setTestandoProtocolo(false)
+    }
+  }
+
+  async function salvarCredenciaisProtocolo() {
+    if (!protocoloApiKey.trim() && !protocoloConfig?.api_key_configurada) {
+      showMsgI('Informe a API Key da Senha Digital Plus.')
+      return
+    }
+    if (!protocoloSecretKey.trim() && !protocoloConfig?.secret_key_configurada) {
+      showMsgI('Informe a Secret Key da Senha Digital Plus.')
+      return
+    }
+    setSavingProtocoloCredentials(true)
+    try {
+      const accessToken = await getSupabaseAccessToken()
+      const response = await fetch(getApiUrl('/protocolos/config'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          api_key: protocoloApiKey.trim() || undefined,
+          secret_key: protocoloSecretKey.trim() || undefined,
+          ambiente: protocoloEnvironment,
+        }),
+      })
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; message?: string; configuracao?: Partial<NonNullable<typeof protocoloConfig>> } | null
+      if (!response.ok || !data?.ok) {
+        showMsgI(data?.error ?? 'Não foi possível validar e salvar as credenciais.')
+        return
+      }
+      setProtocoloConfig(current => current ? { ...current, ...data.configuracao } : null)
+      setProtocoloApiKey('')
+      setProtocoloSecretKey('')
+      setShowProtocoloSecret(false)
+      setShowProtocoloCredentials(false)
+      showMsgI(data.message ?? 'Credenciais salvas com segurança.', 'ok')
+    } catch (error) {
+      showMsgI('Falha ao salvar as credenciais: ' + String(error))
+    } finally {
+      setSavingProtocoloCredentials(false)
     }
   }
 
@@ -3220,12 +3269,47 @@ function AbaIntegracoes() {
             </p>
             {protocoloConfig?.api_url && <p className="mt-1 break-all text-[11px] text-slate-500 dark:text-slate-400">API: {protocoloConfig.api_url}</p>}
           </div>
-          <button type="button" onClick={() => void testarProtocoloCertificadora()} disabled={testandoProtocolo || !protocoloConfig?.api_key_configurada || !protocoloConfig?.secret_key_configurada}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-            {testandoProtocolo ? <Loader2 size={15} className="animate-spin" /> : <Link size={15} />}
-            Testar ligação com a API
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {isAdmin && <button type="button" onClick={() => setShowProtocoloCredentials(value => !value)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-300 bg-white px-4 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:bg-slate-900 dark:text-blue-300">
+              <KeyRound size={15} /> Configurar credenciais
+            </button>}
+            <button type="button" onClick={() => void testarProtocoloCertificadora()} disabled={testandoProtocolo || !protocoloConfig?.api_key_configurada || !protocoloConfig?.secret_key_configurada}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+              {testandoProtocolo ? <Loader2 size={15} className="animate-spin" /> : <Link size={15} />}
+              Testar ligação com a API
+            </button>
+          </div>
         </div>
+        {isAdmin && showProtocoloCredentials && (
+          <div className="mt-4 border-t border-blue-200 pt-4 dark:border-blue-900/50">
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+              As chaves são enviadas somente ao backend autenticado, validadas na SDP e salvas no arquivo protegido do servidor. Depois de salvas, nunca são devolvidas ao navegador.
+            </div>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+              <ConfigInput label="API Key" value={protocoloApiKey} onChange={setProtocoloApiKey} placeholder={protocoloConfig?.api_key_configurada ? 'Deixe vazio para manter a atual' : 'ak_...'} />
+              <div className="relative">
+                <ConfigInput type={showProtocoloSecret ? 'text' : 'password'} label="Secret Key" value={protocoloSecretKey} onChange={setProtocoloSecretKey} placeholder={protocoloConfig?.secret_key_configurada ? 'Deixe vazio para manter a atual' : 'Informe a chave secreta'} />
+                <button type="button" onClick={() => setShowProtocoloSecret(value => !value)} className="absolute right-3 top-8 text-gray-400 hover:text-gray-600" aria-label={showProtocoloSecret ? 'Ocultar chave' : 'Mostrar chave'}>
+                  {showProtocoloSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-gray-500">Ambiente</span>
+                <select value={protocoloEnvironment} onChange={event => setProtocoloEnvironment(event.target.value === 'sandbox' ? 'sandbox' : 'production')} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800">
+                  <option value="production">Produção</option>
+                  <option value="sandbox">Sandbox</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button type="button" onClick={() => { setShowProtocoloCredentials(false); setProtocoloApiKey(''); setProtocoloSecretKey('') }} className="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-gray-700">Cancelar</button>
+              <button type="button" onClick={() => void salvarCredenciaisProtocolo()} disabled={savingProtocoloCredentials} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                {savingProtocoloCredentials ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Validar e salvar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">

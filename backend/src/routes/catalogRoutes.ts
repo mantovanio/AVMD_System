@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { createSecureContext } from 'node:tls'
 import { execFile } from 'node:child_process'
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { extname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -11,6 +11,8 @@ import { CatalogRepository } from '../repositories/catalogRepository.js'
 import { RenovacaoRepository } from '../repositories/renovacaoRepository.js'
 import type { AivenSqlClient } from '../db/aivenClient.js'
 import type { BackendConfig } from '../config/env.js'
+import type { ProfileRepository } from '../repositories/profileRepository.js'
+import { requireAdmin } from '../utils/authMiddleware.js'
 
 type SafewebImportJob = {
   id: string
@@ -348,7 +350,33 @@ async function processSafewebImportJob(
   }
 }
 
-export async function handleCatalogRoutes(req: IncomingMessage, res: ServerResponse, repo: CatalogRepository, renovacaoRepo: RenovacaoRepository | null, db: AivenSqlClient, corsOrigin: string, config: BackendConfig): Promise<boolean> {
+async function persistBackendEnvironment(updates: Record<string, string>) {
+  const candidates = [resolve('backend/.env.local'), resolve('.env.local')]
+  let envPath = candidates[0]
+  for (const candidate of candidates) {
+    try {
+      await access(candidate)
+      envPath = candidate
+      break
+    } catch { /* tenta o próximo caminho */ }
+  }
+  const current = await readFile(envPath, 'utf8').catch(() => '')
+  const remaining = new Map(Object.entries(updates))
+  const lines = current.split(/\r?\n/).map(line => {
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=/)
+    if (!match || !remaining.has(match[1])) return line
+    const value = remaining.get(match[1]) ?? ''
+    remaining.delete(match[1])
+    return `${match[1]}=${JSON.stringify(value)}`
+  })
+  for (const [key, value] of remaining) lines.push(`${key}=${JSON.stringify(value)}`)
+  const tempPath = `${envPath}.${randomUUID()}.tmp`
+  await writeFile(tempPath, lines.join('\n').replace(/\n+$/, '') + '\n', { encoding: 'utf8', mode: 0o600 })
+  await rename(tempPath, envPath)
+  await chmod(envPath, 0o600).catch(() => undefined)
+}
+
+export async function handleCatalogRoutes(req: IncomingMessage, res: ServerResponse, repo: CatalogRepository, renovacaoRepo: RenovacaoRepository | null, db: AivenSqlClient, corsOrigin: string, config: BackendConfig, profileRepository: ProfileRepository): Promise<boolean> {
   const method = req.method ?? ''
   const url = req.url ?? ''
   const requestUrl = new URL(url, 'http://localhost')
@@ -1070,6 +1098,63 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   }
 
   // ── Listar Produtos/Categorias (Senha Digital Plus) ───────────────────
+  if (method === 'PUT' && url === '/api/protocolos/config') {
+    const authReq = await requireAdmin(req, res, config.clerkSecretKey, corsOrigin, profileRepository)
+    if (!authReq) return true
+    try {
+      const body = await readJson<{ api_key?: string; secret_key?: string; ambiente?: string }>(req)
+      const apiKey = String(body.api_key ?? '').trim() || config.senhaDigitalPlusApiKey
+      const secretKey = String(body.secret_key ?? '').trim() || config.senhaDigitalPlusSecretKey
+      const environment = body.ambiente === 'sandbox' ? 'sandbox' : 'production'
+      if (!apiKey || !secretKey) {
+        writeJson(res, 400, { ok: false, error: 'API Key e Secret Key são obrigatórias.' }, corsOrigin)
+        return true
+      }
+
+      const validation = await fetch(`${config.senhaDigitalPlusApiUrl}/validate`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'x-api-key': apiKey,
+          'x-secret-key': secretKey,
+          'x-environment': environment,
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      const validationData = await validation.json().catch(() => null) as Record<string, unknown> | null
+      if (!validation.ok || validationData?.authorized !== true) {
+        writeJson(res, 400, {
+          ok: false,
+          error: String(validationData?.message ?? 'As credenciais foram recusadas pela Senha Digital Plus.'),
+        }, corsOrigin)
+        return true
+      }
+
+      await persistBackendEnvironment({
+        SENHA_DIGITAL_PLUS_API_KEY: apiKey,
+        SENHA_DIGITAL_PLUS_SECRET_KEY: secretKey,
+        SENHA_DIGITAL_PLUS_ENVIRONMENT: environment,
+      })
+      config.senhaDigitalPlusApiKey = apiKey
+      config.senhaDigitalPlusSecretKey = secretKey
+      config.senhaDigitalPlusEnvironment = environment
+      console.info(`[catalog] Credenciais SDP atualizadas por administrador ${authReq.auth?.userId ?? 'desconhecido'}.`)
+      writeJson(res, 200, {
+        ok: true,
+        message: 'Credenciais validadas e armazenadas com segurança.',
+        configuracao: {
+          ambiente: environment,
+          api_key_configurada: true,
+          secret_key_configurada: true,
+        },
+      }, corsOrigin)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      writeJson(res, 500, { ok: false, error: `Não foi possível salvar as credenciais: ${message}` }, corsOrigin)
+    }
+    return true
+  }
+
   if (method === 'GET' && url === '/api/protocolos/config') {
     writeJson(res, 200, {
       ok: true,
@@ -1122,6 +1207,8 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
 
   // ── Validar Credenciais (Senha Digital Plus) ──────────────────────────
   if (method === 'POST' && url === '/api/protocolos/validate') {
+    const authReq = await requireAdmin(req, res, config.clerkSecretKey, corsOrigin, profileRepository)
+    if (!authReq) return true
     try {
       if (!config.senhaDigitalPlusApiKey || !config.senhaDigitalPlusSecretKey) {
         writeJson(res, 500, { ok: false, error: 'Credenciais da Senha Digital Plus não configuradas.' }, corsOrigin)
