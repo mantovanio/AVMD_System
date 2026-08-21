@@ -264,7 +264,7 @@ export class CommercialRepository {
         set protocolo_numero = null,
             protocolo_status = 'nao_gerado',
             metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
-              'troca_protocolo', jsonb_build_object('acao', 'origem_liberada', 'movido_para', $2::text, 'em', now())
+              'troca_protocolo', jsonb_build_object('acao', 'origem_liberada', 'movido_para', $2::uuid, 'em', now())
             ),
             updated_at = now()
         where id = $1::uuid
@@ -273,10 +273,10 @@ export class CommercialRepository {
       // 2. atribui à destino
       await trx.query(`
         update vendas_certificados
-        set protocolo_numero = $2,
+        set protocolo_numero = $2::text,
             protocolo_status = 'gerado',
             metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
-              'troca_protocolo', jsonb_build_object('acao', 'destino_recebeu', 'recebido_de', $3::text, 'protocolo', $2, 'em', now())
+              'troca_protocolo', jsonb_build_object('acao', 'destino_recebeu', 'recebido_de', $3::uuid, 'protocolo', $2::text, 'em', now())
             ),
             updated_at = now()
         where id = $1::uuid
@@ -289,7 +289,7 @@ export class CommercialRepository {
           insert into vendas_auditoria_operacional
             (acao, venda_id, pedido_numero, protocolo_numero, cliente_nome, documento, status_venda, motivo, cancelamento_id, actor_id, actor_nome, payload)
           values
-            ('exclusao', $1::uuid, $2, $3, $4, null, 'excluido', $5, null, $6::uuid, null, $7::jsonb)
+            ('exclusao', $1::uuid, $2::text, $3::text, $4::text, null, 'excluido', $5::text, null, $6::uuid, null, $7::jsonb)
         `, [
           origem.id, origem.pedido_numero, origem.protocolo_numero, origem.cliente_nome, input.motivo, input.cancelado_por,
           JSON.stringify({ operacao: 'troca_protocolo_exclusao_origem', origem: origem.id, destino: destino.id, protocolo_movido: origem.protocolo_numero }),
@@ -317,7 +317,7 @@ export class CommercialRepository {
         insert into vendas_auditoria_operacional
           (acao, venda_id, pedido_numero, protocolo_numero, cliente_nome, documento, status_venda, motivo, cancelamento_id, actor_id, actor_nome, payload)
         values
-          ('cancelamento', $1::uuid, $2, $3, $4, null, 'gerado', $5, null, $6::uuid, null, $7::jsonb)
+            ('cancelamento', $1::uuid, $2::text, $3::text, $4::text, null, 'gerado', $5::text, null, $6::uuid, null, $7::jsonb)
       `, [
         destino.id, destino.pedido_numero, origem.protocolo_numero, destino.cliente_nome, input.motivo, input.cancelado_por,
         payloadDestino,
