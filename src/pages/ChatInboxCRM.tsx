@@ -15,7 +15,9 @@ import {
   Mail,
   MessageCircle,
   Mic,
+  MoreVertical,
   Paperclip,
+  Pencil,
   Phone,
   RefreshCw,
   Reply,
@@ -24,6 +26,8 @@ import {
   Smile,
   StopCircle,
   Save,
+  Trash2,
+  Ban,
   User,
   UserCheck,
   UserPlus,
@@ -31,7 +35,7 @@ import {
   X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { getApiUrl, resolveChatMediaUrl } from '@/lib/api'
+import { deleteWhatsAppMessage, editWhatsAppMessage, getApiUrl, resolveChatMediaUrl } from '@/lib/api'
 import { logger } from '@/lib/logger'
 import { useAuth } from '@/contexts/AuthContext'
 import { applyOutgoingSignature, DEFAULT_CRM_CHAT_SETTINGS, loadCrmChatSettings } from '@/lib/crmChatSettings'
@@ -2509,7 +2513,7 @@ export default function ChatInboxCRM() {
       if (selectedIdRef.current === selectedConversation.id) {
         setHumanMessage(current => current.trim() === text ? '' : current)
       }
-      setMessages(prev => prev.map(item => item.id === tempId ? { ...item, id: payload.messageId ?? tempId } : item))
+      setMessages(prev => prev.map(item => item.id === tempId ? { ...item, id: payload.messageId ?? tempId, external_message_id: payload.messageId ?? item.external_message_id } : item))
       markConversationAsHuman(selectedConversation.id)
       fetch(getApiUrl(`/chat/crm/conversations/${selectedConversation.id}`), {
         method: 'PATCH',
@@ -3224,6 +3228,8 @@ export default function ChatInboxCRM() {
                               fallbackHumanName={currentHumanAgentName}
                               conversation={selectedConversation}
                               onClaraFeedback={openClaraFeedback}
+                              onMessageUpdated={(messageId, content) => setMessages(prev => prev.map(item => item.id === messageId ? { ...item, mensagem: content } : item))}
+                              onMessageDeleted={messageId => setMessages(prev => prev.map(item => item.id === messageId ? { ...item, mensagem: 'Mensagem apagada', media_url: null, mime_type: null } : item))}
                             />
                           ))}
                           <div ref={messagesEndRef} />
@@ -4429,11 +4435,15 @@ function MessageRow({
   fallbackHumanName,
   conversation,
   onClaraFeedback,
+  onMessageUpdated,
+  onMessageDeleted,
 }: {
   message: CrmMessage
   fallbackHumanName?: string | null
   conversation?: ConversationRow | null
   onClaraFeedback?: (message: CrmMessage, rating?: ClaraFeedbackRating) => void
+  onMessageUpdated?: (messageId: string, content: string) => void
+  onMessageDeleted?: (messageId: string) => void
 }) {
   const isOutgoing = message.direction === 'outgoing'
   const normalizedSenderName = normalizeDisplaySenderName(message.sender_name)
@@ -4477,6 +4487,86 @@ function MessageRow({
           ? 'text-rose-600'
           : 'text-slate-400'
   const receiptTime = message.read_at || message.delivered_at || message.status_updated_at || message.created_at
+  const [showMenu, setShowMenu] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editText, setEditText] = useState(message.mensagem ?? '')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const editInputRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (!showMenu) return
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setShowMenu(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showMenu])
+
+  useEffect(() => {
+    if (isEditing) {
+      editInputRef.current?.focus()
+      editInputRef.current?.select()
+    }
+  }, [isEditing])
+
+  async function handleDelete() {
+    const externalId = message.external_message_id
+    if (!externalId) {
+      alert('Esta mensagem ainda nao possui identificador para apagar.')
+      setShowMenu(false)
+      return
+    }
+    if (!confirm('Apagar esta mensagem para todos?')) return
+    setDeleting(true)
+    try {
+      await deleteWhatsAppMessage(externalId, conversation?.whatsapp_instance ?? undefined)
+      setShowMenu(false)
+      onMessageDeleted?.(message.id)
+    } catch (error) {
+      alert(`Nao foi possivel apagar a mensagem: ${error instanceof Error ? error.message : 'erro desconhecido'}`)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  async function handleSaveEdit() {
+    const externalId = message.external_message_id
+    const trimmed = editText.trim()
+    if (!externalId) {
+      alert('Esta mensagem ainda nao possui identificador para editar.')
+      setIsEditing(false)
+      return
+    }
+    if (!trimmed || trimmed === message.mensagem) {
+      setIsEditing(false)
+      return
+    }
+    setSavingEdit(true)
+    try {
+      await editWhatsAppMessage(externalId, trimmed, conversation?.whatsapp_instance ?? undefined)
+      onMessageUpdated?.(message.id, trimmed)
+      setIsEditing(false)
+    } catch (error) {
+      alert(`Nao foi possivel editar a mensagem: ${error instanceof Error ? error.message : 'erro desconhecido'}`)
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  function handleCancelEdit() {
+    setEditText(message.mensagem ?? '')
+    setIsEditing(false)
+  }
+
+  function handleKeyDownEdit(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      void handleSaveEdit()
+    }
+    if (event.key === 'Escape') handleCancelEdit()
+  }
 
   useEffect(() => {
     let active = true
@@ -4535,6 +4625,23 @@ function MessageRow({
             <span>{senderLabel}</span>
             <span>•</span>
             <span>{detailLabel}</span>
+            {isOutgoing && message.external_message_id && !isEditing && (
+              <div className="relative ml-auto" ref={menuRef}>
+                <button type="button" onClick={() => setShowMenu(value => !value)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 transition hover:bg-emerald-200 hover:text-emerald-900" title="Mais opcoes">
+                  <MoreVertical size={14} />
+                </button>
+                {showMenu && (
+                  <div className="absolute right-0 top-full z-20 mt-1 w-36 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 text-left normal-case shadow-lg">
+                    <button type="button" onClick={() => { setIsEditing(true); setShowMenu(false) }} className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                      <Pencil size={13} /> Editar
+                    </button>
+                    <button type="button" onClick={() => void handleDelete()} disabled={deleting} className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">
+                      {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Apagar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           {isImage && resolvedMediaUrl ? (
             <div className="space-y-2">
@@ -4561,6 +4668,18 @@ function MessageRow({
             <a href={resolvedMediaUrl} target="_blank" rel="noreferrer" download={downloadFileName} className="block rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-sky-700 hover:underline">
               Arquivo: {mediaLabel}
             </a>
+          ) : isEditing ? (
+            <div className="space-y-2">
+              <textarea ref={editInputRef} value={editText} onChange={event => setEditText(event.target.value)} onKeyDown={handleKeyDownEdit} rows={3} className="w-full resize-none rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none ring-emerald-200 focus:ring-2" />
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => void handleSaveEdit()} disabled={savingEdit || !editText.trim()} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+                  {savingEdit ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Salvar
+                </button>
+                <button type="button" onClick={handleCancelEdit} disabled={savingEdit} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 disabled:opacity-50">
+                  <Ban size={12} /> Cancelar
+                </button>
+              </div>
+            </div>
           ) : (
             <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{normalizeStructuredMessage(isOutgoing ? stripOutgoingSignature(message.mensagem, message.sender_name) : message.mensagem) || mediaLabel || 'Mensagem sem texto'}</p>
           )}

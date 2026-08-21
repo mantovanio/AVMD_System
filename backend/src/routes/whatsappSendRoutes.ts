@@ -65,6 +65,9 @@ type LeadRow = {
   evolution_instance: string | null
 }
 
+interface DeleteMessageInput { message_id: string; instance_name?: string; canal?: 'atendimento' | 'renovacao' }
+interface EditMessageInput { message_id: string; new_text: string; instance_name?: string; canal?: 'atendimento' | 'renovacao' }
+
 const config = loadConfig()
 const db = createAivenSqlClient()
 const communicationEventRepository = new CommunicationEventRepository(db)
@@ -134,6 +137,14 @@ function normalizePhoneDigits(value: string | null | undefined) {
 
 function buildRemoteJid(phoneDigits: string | null) {
   return phoneDigits ? `${phoneDigits}@s.whatsapp.net` : null
+}
+
+async function deleteEvolutionMessage(baseUrl: string, instanceName: string, apiToken: string, messageId: string) {
+  return fetch(`${baseUrl}/message/deleteMessage/${instanceName}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', apikey: apiToken }, body: JSON.stringify({ messageId }) })
+}
+
+async function editEvolutionMessage(baseUrl: string, instanceName: string, apiToken: string, messageId: string, newText: string) {
+  return fetch(`${baseUrl}/message/updateMessage/${instanceName}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', apikey: apiToken }, body: JSON.stringify({ messageId, text: newText }) })
 }
 
 function inferMediaFileName(mimeType: string): string {
@@ -797,6 +808,40 @@ export async function handleWhatsappSendRoutes(
       forwarded_to_n8n: forwarded.forwarded,
       n8n_error: forwarded.error,
     }, corsOrigin)
+    return true
+  }
+
+  if (method === 'DELETE' && url === '/api/whatsapp/delete-message') {
+    const body = await readJson<DeleteMessageInput>(req)
+    if (!body.message_id) { writeJson(res, 400, { ok: false, error: 'message_id e obrigatorio' }, corsOrigin); return true }
+    const integrations = await integrationRepo.findActiveWhatsApp()
+    let integration = chooseIntegrationByCanal(integrations, body.canal)
+    if (body.instance_name) integration = integrations.find(item => item.instance_name === body.instance_name) ?? integration
+    if (!integration?.base_url || !integration.api_token || !integration.instance_name) { writeJson(res, 422, { ok: false, error: 'Nenhuma integracao WhatsApp ativa configurada.' }, corsOrigin); return true }
+    try {
+      const response = await deleteEvolutionMessage(integration.base_url.replace(/\/$/, ''), integration.instance_name, integration.api_token, body.message_id)
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) { writeJson(res, 502, { ok: false, error: `Evolution retornou HTTP ${response.status}`, detail: payload }, corsOrigin); return true }
+      await communicationEventRepository.create({ source: 'evolution', event_type: 'message_deleted', external_id: body.message_id, conversation_id: null, lead_id: null, contact: null, payload: { messageId: body.message_id, deletedBy: 'operator', deletedAt: new Date().toISOString() } })
+      writeJson(res, 200, { ok: true, payload }, corsOrigin)
+    } catch (error) { writeJson(res, 502, { ok: false, error: String(error) }, corsOrigin) }
+    return true
+  }
+
+  if (method === 'PUT' && url === '/api/whatsapp/edit-message') {
+    const body = await readJson<EditMessageInput>(req)
+    if (!body.message_id || !body.new_text) { writeJson(res, 400, { ok: false, error: 'message_id e new_text sao obrigatorios' }, corsOrigin); return true }
+    const integrations = await integrationRepo.findActiveWhatsApp()
+    let integration = chooseIntegrationByCanal(integrations, body.canal)
+    if (body.instance_name) integration = integrations.find(item => item.instance_name === body.instance_name) ?? integration
+    if (!integration?.base_url || !integration.api_token || !integration.instance_name) { writeJson(res, 422, { ok: false, error: 'Nenhuma integracao WhatsApp ativa configurada.' }, corsOrigin); return true }
+    try {
+      const response = await editEvolutionMessage(integration.base_url.replace(/\/$/, ''), integration.instance_name, integration.api_token, body.message_id, body.new_text)
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) { writeJson(res, 502, { ok: false, error: `Evolution retornou HTTP ${response.status}`, detail: payload }, corsOrigin); return true }
+      await communicationEventRepository.create({ source: 'evolution', event_type: 'message_edited', external_id: body.message_id, conversation_id: null, lead_id: null, contact: null, payload: { messageId: body.message_id, newText: body.new_text, editedBy: 'operator', editedAt: new Date().toISOString() } })
+      writeJson(res, 200, { ok: true, payload }, corsOrigin)
+    } catch (error) { writeJson(res, 502, { ok: false, error: String(error) }, corsOrigin) }
     return true
   }
 
