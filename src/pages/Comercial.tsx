@@ -5959,6 +5959,25 @@ export default function Comercial() {
       : null
 
     try {
+      let protocoloIbge = formProtocolo.ibge.trim()
+      if (!protocoloIbge && formProtocolo.cep.trim()) {
+        const cepResult = await buscarCep(formProtocolo.cep)
+        protocoloIbge = cepResult?.ibge?.trim() ?? ''
+        if (cepResult && protocoloIbge) {
+          setFormProtocolo(p => ({
+            ...p,
+            logradouro: cepResult.logradouro || p.logradouro,
+            bairro: cepResult.bairro || p.bairro,
+            cidade: cepResult.localidade || p.cidade,
+            uf: cepResult.uf || p.uf,
+            ibge: protocoloIbge,
+          }))
+        }
+      }
+      if (!protocoloIbge) {
+        showMsg('Não foi possível obter o código IBGE pelo CEP. Consulte o CEP e tente novamente.', 'err')
+        return
+      }
       const certMeta = (certificado?.metadata ?? {}) as Record<string, unknown>
       const contato = {
         DDD: formProtocolo.ddd || '',
@@ -5966,8 +5985,8 @@ export default function Comercial() {
         Email: formProtocolo.email || '',
       }
       const endereco = {
-        CodigoIbgeMunicipio: formProtocolo.ibge || '',
-        CodigoIbgeUF: formProtocolo.ibge ? formProtocolo.ibge.slice(0, 2) : '',
+        CodigoIbgeMunicipio: protocoloIbge,
+        CodigoIbgeUF: protocoloIbge.slice(0, 2),
         cep: formProtocolo.cep || '',
         cidade: formProtocolo.cidade || '',
         bairro: formProtocolo.bairro || '',
