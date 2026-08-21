@@ -830,6 +830,14 @@ type CertFilters = {
   hash: string
 }
 
+type SdpCategoryOption = { id: string; nome: string }
+type SdpProductOption = {
+  sku: string
+  nome: string
+  categoria: string
+  identificadores: Array<{ tipoEmissao: string; codigo: string }>
+}
+
 const EMPTY_CERT_FILTERS: CertFilters = {
   busca: '',
   status: '',
@@ -1016,6 +1024,9 @@ export default function Comercial() {
   const [showFormCert, setShowFormCert]         = useState(false)
   const [showComboSection, setShowComboSection] = useState(false)
   const [showSdpSection, setShowSdpSection] = useState(false)
+  const [sdpCategories, setSdpCategories] = useState<SdpCategoryOption[]>([])
+  const [sdpProducts, setSdpProducts] = useState<SdpProductOption[]>([])
+  const [loadingSdpCatalog, setLoadingSdpCatalog] = useState(false)
   const [editingCertId, setEditingCertId]       = useState<string | null>(null)
   const [formCert, setFormCert]                 = useState<NovoCertificado>(EMPTY_CERTIFICADO)
   const [importando, setImportando]             = useState(false)
@@ -3139,6 +3150,39 @@ export default function Comercial() {
   }
 
   // ── catalog mutations ────────────────────────────────────────
+  async function carregarCategoriasSdp() {
+    if (sdpCategories.length) return
+    setLoadingSdpCatalog(true)
+    const response = await fetch(getApiUrl('/protocolos/produtos'))
+    const data = await response.json().catch(() => null) as { categorias?: SdpCategoryOption[]; error?: string } | null
+    setLoadingSdpCatalog(false)
+    if (!response.ok) {
+      showMsg(data?.error ?? 'Não foi possível carregar as categorias da Senha Digital Plus.', 'err')
+      return
+    }
+    setSdpCategories(Array.isArray(data?.categorias) ? data.categorias : [])
+  }
+
+  async function carregarProdutosSdp(categoriaId: string) {
+    setSdpProducts([])
+    if (!categoriaId) return
+    setLoadingSdpCatalog(true)
+    const response = await fetch(getApiUrl(`/protocolos/produtos?categoria=${encodeURIComponent(categoriaId)}`))
+    const data = await response.json().catch(() => null) as { produtos?: SdpProductOption[]; error?: string } | null
+    setLoadingSdpCatalog(false)
+    if (!response.ok) {
+      showMsg(data?.error ?? 'Não foi possível carregar os produtos da Senha Digital Plus.', 'err')
+      return
+    }
+    setSdpProducts(Array.isArray(data?.produtos) ? data.produtos : [])
+  }
+
+  function sdpIdentifiersFromProduct(product: SdpProductOption) {
+    return Object.fromEntries((product.identificadores ?? [])
+      .map(item => [String(item.tipoEmissao ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(), String(item.codigo ?? '').trim()])
+      .filter(([type, code]) => type && code))
+  }
+
   function abrirNovoCertificado() { setEditingCertId(null); setFormCert({ ...EMPTY_CERTIFICADO }); setShowComboSection(false); setShowFormCert(true) }
 
   function editarCertificado(c: Certificado) {
@@ -3659,6 +3703,8 @@ export default function Comercial() {
       valor: certificado?.preco_venda ?? 0,
       valor_custo: certificado?.valor_custo ?? 0,
     })
+    void carregarCategoriasSdp()
+    setSdpProducts([])
     setShowFormItem(true)
   }
   function preencherItemPorCenario(cenario: 'SEM_MIDIA' | 'SO_CARTAO' | 'SO_TOKEN' | 'CARTAO_LEITORA' | 'GRATUITO') {
@@ -3688,6 +3734,9 @@ export default function Comercial() {
       valor: certificado?.preco_venda ?? item.valor, valor_custo: item.valor_custo, valor_repasse: item.valor_repasse,
       link_safeweb: item.link_safeweb, ativo: item.ativo, metadata: item.metadata ?? {},
     })
+    void carregarCategoriasSdp()
+    const categoryId = String(item.metadata?.sdp_categoria_id ?? certificado?.metadata?.sdp_categoria_id ?? '')
+    void carregarProdutosSdp(categoryId)
     setShowFormItem(true)
   }
   async function salvarItem() {
@@ -8354,6 +8403,15 @@ export default function Comercial() {
                             <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">Senha Digital Plus (Protocolo)</p>
                             <p className="mt-1 text-xs text-gray-400">Obrigatório no certificado ou neste item. Quando preenchido aqui, substitui a configuração padrão do certificado para esta tabela de preço.</p>
                             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <SelectInput label="Categoria oficial SDP" value={String(formItem.metadata?.sdp_categoria_id ?? '')} onChange={value => {
+                                setFormItem(p => ({ ...p, metadata: { ...(p.metadata ?? {}), sdp_categoria_id: value || null, sdp_sku: null, sdp_identificadores: {} } }))
+                                void carregarProdutosSdp(value)
+                              }} options={[{ value: '', label: loadingSdpCatalog ? 'Carregando...' : 'Selecione a categoria...' }, ...sdpCategories.map(category => ({ value: category.id, label: category.nome }))]} />
+                              <SelectInput label="Produto oficial SDP" value={String(formItem.metadata?.sdp_sku ?? '')} onChange={sku => {
+                                const product = sdpProducts.find(option => option.sku === sku)
+                                if (!product) return
+                                setFormItem(p => ({ ...p, metadata: { ...(p.metadata ?? {}), sdp_sku: product.sku, sdp_categoria_id: product.categoria, sdp_produto_nome: product.nome, sdp_produto_descricao: product.nome, sdp_produto_id: null, sdp_identificadores: sdpIdentifiersFromProduct(product) } }))
+                              }} options={[{ value: '', label: loadingSdpCatalog ? 'Carregando...' : 'Selecione o produto...' }, ...sdpProducts.map(product => ({ value: product.sku, label: `${product.nome} · ${product.sku}` }))]} />
                               <TextInput label="ID Categoria SDP" value={String(formItem.metadata?.sdp_categoria_id ?? '')} onChange={v => setFormItem(p => ({ ...p, metadata: { ...(p.metadata ?? {}), sdp_categoria_id: v || null } }))} placeholder="UUID da categoria" />
                               <TextInput label="ID Produto padrão SDP" value={String(formItem.metadata?.sdp_produto_id ?? '')} onChange={v => setFormItem(p => ({ ...p, metadata: { ...(p.metadata ?? {}), sdp_produto_id: v || null } }))} placeholder="Código usado como fallback" />
                               <TextInput label="Código SDP presencial" value={String(((formItem.metadata?.sdp_identificadores ?? {}) as Record<string, unknown>).presencial ?? '')} onChange={v => setFormItem(p => ({ ...p, metadata: { ...(p.metadata ?? {}), sdp_identificadores: { ...((p.metadata?.sdp_identificadores ?? {}) as Record<string, unknown>), presencial: v || null } } }))} placeholder="Ex: 7233" />
@@ -9971,7 +10029,14 @@ export default function Comercial() {
                   className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </label>
               <div className="mt-4 border-t border-gray-100 dark:border-gray-800 pt-4">
-                <button type="button" onClick={() => setShowSdpSection(v => !v)}
+                <button type="button" onClick={() => {
+                  const opening = !showSdpSection
+                  setShowSdpSection(opening)
+                  if (opening) {
+                    void carregarCategoriasSdp()
+                    void carregarProdutosSdp(String((formCert.metadata as Record<string, unknown>)?.sdp_categoria_id ?? ''))
+                  }
+                }}
                   className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                   <ChevronRight size={14} className={cn('transition-transform', showSdpSection && 'rotate-90')} />
                   Senha Digital Plus (Protocolo)
@@ -9980,6 +10045,15 @@ export default function Comercial() {
                   <>
                     <p className="text-xs text-gray-400 mt-2 ml-5">IDs de integração com a API Senha Digital Plus para geração de protocolo.</p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2 ml-5">
+                      <SelectInput label="Categoria oficial SDP" value={String((formCert.metadata as Record<string, unknown>)?.sdp_categoria_id ?? '')} onChange={value => {
+                        setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_categoria_id: value || null, sdp_sku: null, sdp_identificadores: {} } }))
+                        void carregarProdutosSdp(value)
+                      }} options={[{ value: '', label: loadingSdpCatalog ? 'Carregando...' : 'Selecione a categoria...' }, ...sdpCategories.map(category => ({ value: category.id, label: category.nome }))]} />
+                      <SelectInput label="Produto oficial SDP" value={String((formCert.metadata as Record<string, unknown>)?.sdp_sku ?? '')} onChange={sku => {
+                        const product = sdpProducts.find(option => option.sku === sku)
+                        if (!product) return
+                        setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_sku: product.sku, sdp_categoria_id: product.categoria, sdp_produto_nome: product.nome, sdp_produto_descricao: product.nome, sdp_produto_id: null, sdp_identificadores: sdpIdentifiersFromProduct(product) } }))
+                      }} options={[{ value: '', label: loadingSdpCatalog ? 'Carregando...' : 'Selecione o produto...' }, ...sdpProducts.map(product => ({ value: product.sku, label: `${product.nome} · ${product.sku}` }))]} />
                       <TextInput label="ID Categoria SDP" value={String((formCert.metadata as Record<string, unknown>)?.sdp_categoria_id ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_categoria_id: v || null } }))} placeholder="UUID da categoria" />
                       <TextInput label="ID Produto padrão SDP" value={String((formCert.metadata as Record<string, unknown>)?.sdp_produto_id ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_produto_id: v || null } }))} placeholder="Código usado como fallback" />
                       <TextInput label="Nome Produto SDP" value={String((formCert.metadata as Record<string, unknown>)?.sdp_produto_nome ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_produto_nome: v || null } }))} placeholder="Ex: Nuvem Renovar 12 meses" />
