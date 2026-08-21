@@ -9579,7 +9579,8 @@ export default function Comercial() {
 
               <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
                 {(() => {
-                  const isPJCnpj = (formProtocolo.cnpj.replace(/\D/g, '').length === 14)
+                  const isPjProduct = /cnpj|e-pj|\bpj\b|nfe|nf-e|ct-e|\bmei\b/.test(descricaoProdutoVenda(protocoloVenda).toLowerCase())
+                  const isPJCnpj = isPjProduct || (formProtocolo.cnpj.replace(/\D/g, '').length === 14)
                   const cpfLabel = isPJCnpj ? 'CPF do Representante:' : 'CPF do Titular:'
                   const nascLabel = isPJCnpj ? 'Data Nascimento Representante:' : 'Data Nascimento:'
                   return (<>
