@@ -254,9 +254,9 @@ export class CommercialRepository {
       if (!destino) throw new Error('Venda destino não encontrada.')
       if (!origem) throw new Error('Venda origem não encontrada.')
       if (destino.id === origem.id) throw new Error('Origem e destino devem ser vendas diferentes.')
+      if (destino.protocolo_numero) throw new Error('O pedido de destino já possui protocolo. Abra um pedido sem protocolo para receber a transferência.')
       if (!origem.protocolo_numero) throw new Error('A venda origem não possui protocolo para mover.')
       if (origem.status_venda === 'cancelado') throw new Error('A venda origem já está cancelada.')
-      if (origem.pago) throw new Error('A venda origem está paga. A troca só é permitida para pedidos sem pagamento.')
 
       // 1. libera o protocolo na origem
       await trx.query(`

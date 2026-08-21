@@ -5812,7 +5812,6 @@ export default function Comercial() {
       if (achado.id === trocaDestinoVenda?.id) { setTrocaOrigemErro('O pedido de origem não pode ser igual ao de destino.'); setTrocaOrigemVenda(null); return }
       if (!achado.protocolo_numero) { setTrocaOrigemErro('O pedido de origem não possui protocolo para mover.'); setTrocaOrigemVenda(null); return }
       if (achado.status_venda === 'cancelado') { setTrocaOrigemErro('O pedido de origem já está cancelado.'); setTrocaOrigemVenda(null); return }
-      if (achado.pago) { setTrocaOrigemErro('O pedido de origem está pago. A troca só é permitida para pedidos sem pagamento.'); setTrocaOrigemVenda(null); return }
       setTrocaOrigemVenda(achado)
       setTrocaOrigemErro('')
     } catch (err) {
@@ -9905,18 +9904,18 @@ export default function Comercial() {
             <div className="px-6 py-5 space-y-4">
               {/* destino */}
               <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 p-3">
-                <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mb-1">Pedido de destino (mantém o protocolo):</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mb-1">Pedido que será mantido (receberá o protocolo):</p>
                 <p className="text-gray-800 dark:text-gray-100 font-medium">
                   {(trocaDestinoVenda.cadastros_base as { nome?: string } | null)?.nome ?? trocaDestinoVenda.nome_faturamento ?? '—'}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Pedido {trocaDestinoVenda.pedido_numero ?? '—'} · Protocolo atual: {trocaDestinoVenda.protocolo_numero ?? '—'} · Status: {trocaDestinoVenda.status_venda ?? '—'}
+                  Pedido {trocaDestinoVenda.pedido_numero ?? '—'} · Protocolo atual: {trocaDestinoVenda.protocolo_numero ?? 'nenhum'} · Status: {trocaDestinoVenda.status_venda ?? '—'}
                 </p>
               </div>
 
               {/* busca de origem */}
               <div>
-                <p className="text-xs text-gray-500 mb-1">Pedido de origem (será cancelado, sem pagamento):</p>
+                <p className="text-xs text-gray-500 mb-1">Pedido a excluir/cancelar (será transferido para o pedido acima):</p>
                 <div className="flex gap-2">
                   <input value={trocaOrigemTermo} onChange={e => { setTrocaOrigemTermo(e.target.value); setTrocaOrigemVenda(null); setTrocaOrigemErro('') }}
                     placeholder="Nº do pedido ou protocolo de origem"
@@ -9940,7 +9939,7 @@ export default function Comercial() {
 
               {trocaOrigemVenda && (
                 <div>
-                  <p className="text-xs text-gray-500 mb-2">O que fazer com o pedido de origem (não pago)?</p>
+                  <p className="text-xs text-gray-500 mb-2">O que fazer com o pedido encontrado após transferir o protocolo?</p>
                   <div className="flex flex-col gap-2">
                     <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
                       <input type="radio" name="trocaAcaoOrigem" checked={trocaAcaoOrigem === 'excluir'}
