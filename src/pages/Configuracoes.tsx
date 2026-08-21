@@ -3277,7 +3277,7 @@ function AbaIntegracoes() {
             <button type="button" onClick={() => void testarProtocoloCertificadora()} disabled={testandoProtocolo || !protocoloConfig?.api_key_configurada || !protocoloConfig?.secret_key_configurada}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
               {testandoProtocolo ? <Loader2 size={15} className="animate-spin" /> : <Link size={15} />}
-              Testar ligação com a API
+              Testar credencial instalada
             </button>
           </div>
         </div>
@@ -3286,6 +3286,11 @@ function AbaIntegracoes() {
             <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
               As chaves são enviadas somente ao backend autenticado, validadas na SDP e salvas no arquivo protegido do servidor. Depois de salvas, nunca são devolvidas ao navegador.
             </div>
+            {protocoloConfig?.ambiente !== protocoloEnvironment && (
+              <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+                A credencial instalada pertence ao ambiente <strong>{protocoloConfig?.ambiente === 'sandbox' ? 'Sandbox' : 'Produção'}</strong>, mas a nova configuração será validada em <strong>{protocoloEnvironment === 'sandbox' ? 'Sandbox' : 'Produção'}</strong>. Use o ambiente ao qual a nova chave foi liberada pela SDP.
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
               <ConfigInput label="API Key" value={protocoloApiKey} onChange={setProtocoloApiKey} placeholder={protocoloConfig?.api_key_configurada ? 'Deixe vazio para manter a atual' : 'ak_...'} />
               <div className="relative">

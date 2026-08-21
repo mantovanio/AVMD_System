@@ -1125,7 +1125,7 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
       if (!validation.ok || validationData?.authorized !== true) {
         writeJson(res, 400, {
           ok: false,
-          error: String(validationData?.message ?? 'As credenciais foram recusadas pela Senha Digital Plus.'),
+          error: `A Senha Digital Plus recusou as credenciais no ambiente ${environment === 'production' ? 'Produção' : 'Sandbox'}: ${String(validationData?.message ?? 'não autorizado')}.`,
         }, corsOrigin)
         return true
       }
