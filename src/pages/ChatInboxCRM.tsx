@@ -1305,6 +1305,8 @@ export default function ChatInboxCRM() {
   }, [selectedConversation?.id, displayMessages.length, loadingMessages])
 
   useEffect(() => {
+    // No modo Aiven o cliente Supabase legado pode não existir; o CRM usa a API.
+    if (!supabase) return
     const channel = supabase
       .channel('crm-chat-admin-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'crm_chat_conversations' }, () => {

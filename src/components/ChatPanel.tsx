@@ -337,6 +337,7 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
 
   useEffect(() => {
     if (!remoteJid) return
+    if (!supabase) return
     const channel = supabase
       .channel(`evolution-chat-${remoteJid}`)
       .on(
@@ -386,6 +387,7 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
   useEffect(() => {
     if (contact._table !== 'leads_contabilidade') return
     void loadLeadInfo()
+    if (!supabase) return
 
     const channel = supabase
       .channel(`chat-panel-lead-${contact.id}`)
@@ -410,6 +412,7 @@ export default function ChatPanel({ contact, evolution, onClose }: Props) {
 
   useEffect(() => {
     if (contact._table !== 'leads_contabilidade') return
+    if (!supabase) return
 
     const channel = supabase
       .channel(`chat-panel-docs-${contact.id}`)

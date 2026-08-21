@@ -49,6 +49,8 @@ export default function CRM() {
     void fetchLeads()
     void loadEvolution()
 
+    if (!supabase) return
+
     const channel = supabase
       .channel('leads-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leads_contabilidade' }, payload => {
