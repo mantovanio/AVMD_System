@@ -188,6 +188,7 @@ create table if not exists cadastros_base (
   cidade text,
   uf text,
   cep text,
+  ibge text,
   inscricao_municipal text,
   inscricao_estadual text,
   iss_retido boolean not null default false,

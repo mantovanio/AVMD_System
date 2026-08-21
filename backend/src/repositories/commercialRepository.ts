@@ -166,6 +166,7 @@ export class CommercialRepository {
       email: string | null
       telefone: string | null
       cep: string | null
+      ibge: string | null
       logradouro: string | null
       numero: string | null
       complemento: string | null
@@ -174,7 +175,7 @@ export class CommercialRepository {
       uf: string | null
     }>(
       `select id, nome, cpf_cnpj, email, telefone, cep, logradouro, numero,
-              complemento, bairro, cidade, uf
+              complemento, bairro, cidade, uf, ibge
        from cadastros_base
        where regexp_replace(cpf_cnpj, '\\D', '', 'g') = $1
        limit 1`,
@@ -690,6 +691,7 @@ export class CommercialRepository {
     bairro?: string | null
     uf?: string | null
     cep?: string | null
+    ibge?: string | null
     inscricao_municipal?: string | null
     inscricao_estadual?: string | null
     pedido?: string | null
@@ -867,6 +869,7 @@ export class CommercialRepository {
       bairro: string | null
       uf: string | null
       cep: string | null
+      ibge: string | null
       inscricao_municipal: string | null
       inscricao_estadual: string | null
       iss_retido: boolean
@@ -969,6 +972,7 @@ export class CommercialRepository {
         existente.bairro = pick(existente.bairro, String(item.bairro ?? '').trim() || null)
         existente.uf = pick(existente.uf, String(item.uf ?? '').trim().toUpperCase() || null)
         existente.cep = pick(existente.cep, String(item.cep ?? '').trim() || null)
+        existente.ibge = pick(existente.ibge, String(item.ibge ?? '').trim() || null)
         existente.inscricao_municipal = pick(existente.inscricao_municipal, String(item.inscricao_municipal ?? '').trim() || null)
         existente.inscricao_estadual = pick(existente.inscricao_estadual, String(item.inscricao_estadual ?? '').trim() || null)
         existente.status = pick(existente.status, String(item.status ?? '').trim() || null) ?? existente.status
@@ -1016,6 +1020,7 @@ export class CommercialRepository {
         bairro: String(item.bairro ?? '').trim() || null,
         uf: String(item.uf ?? '').trim().toUpperCase() || null,
         cep: String(item.cep ?? '').trim() || null,
+        ibge: String(item.ibge ?? '').trim() || null,
         inscricao_municipal: String(item.inscricao_municipal ?? '').trim() || null,
         inscricao_estadual: String(item.inscricao_estadual ?? '').trim() || null,
         iss_retido: Boolean(item.iss_retido),
@@ -1130,17 +1135,18 @@ export class CommercialRepository {
              bairro = $12,
              uf = $13,
              cep = $14,
-             inscricao_municipal = $15,
-             inscricao_estadual = $16,
-             iss_retido = $17,
-             status = $18,
+             ibge = $15,
+             inscricao_municipal = $16,
+             inscricao_estadual = $17,
+             iss_retido = $18,
+             status = $19,
              metadata =
                (coalesce(metadata, '{}'::jsonb) - 'compras_historico')
-               || ($19::jsonb - 'compras_historico')
+               || ($20::jsonb - 'compras_historico')
                || jsonb_build_object(
                  'compras_historico',
                  coalesce(metadata -> 'compras_historico', '[]'::jsonb)
-                 || coalesce($19::jsonb -> 'compras_historico', '[]'::jsonb)
+                 || coalesce($20::jsonb -> 'compras_historico', '[]'::jsonb)
                ),
              updated_at = now()
          where cpf_cnpj = $3`,
@@ -1159,6 +1165,7 @@ export class CommercialRepository {
           item.bairro,
           item.uf,
           item.cep,
+          item.ibge,
           item.inscricao_municipal,
           item.inscricao_estadual,
           item.iss_retido,
@@ -1192,13 +1199,14 @@ export class CommercialRepository {
           item.bairro,
           item.uf,
           item.cep,
+          item.ibge,
           item.inscricao_municipal,
           item.inscricao_estadual,
           item.iss_retido,
           item.status,
           item.metadata,
         )
-        const placeholders = Array.from({ length: 20 }, (_, i) => `$${base + i + 1}`).join(', ')
+        const placeholders = Array.from({ length: 21 }, (_, i) => `$${base + i + 1}`).join(', ')
         valuesSql.push(`(${placeholders})`)
       }
 
@@ -1206,7 +1214,7 @@ export class CommercialRepository {
         `insert into cadastros_base (
           id, tipo_cliente, tipo_cadastro, cpf_cnpj, nome, nome_fantasia, email, telefone,
           cidade, logradouro, numero, complemento, bairro, uf, cep,
-          inscricao_municipal, inscricao_estadual, iss_retido, status, metadata
+          ibge, inscricao_municipal, inscricao_estadual, iss_retido, status, metadata
         ) values ${valuesSql.join(', ')}`,
         params,
       )
@@ -1429,6 +1437,7 @@ export class CommercialRepository {
     bairro?: string | null
     uf?: string | null
     cep?: string | null
+    ibge?: string | null
     inscricao_municipal?: string | null
     inscricao_estadual?: string | null
     iss_retido?: boolean | null
@@ -1452,6 +1461,7 @@ export class CommercialRepository {
       input.bairro ?? null,
       input.uf ?? null,
       input.cep ?? null,
+      input.ibge ?? null,
       input.inscricao_municipal ?? null,
       input.inscricao_estadual ?? null,
       input.iss_retido ?? false,
@@ -1480,11 +1490,12 @@ export class CommercialRepository {
             bairro = $13,
             uf = $14,
             cep = $15,
-            inscricao_municipal = $16,
-            inscricao_estadual = $17,
-            iss_retido = $18,
-            status = $19,
-            metadata = coalesce(metadata, '{}'::jsonb) || $20::jsonb,
+            ibge = $16,
+            inscricao_municipal = $17,
+            inscricao_estadual = $18,
+            iss_retido = $19,
+            status = $20,
+            metadata = coalesce(metadata, '{}'::jsonb) || $21::jsonb,
             updated_at = now()
         where id = $1
         returning id
@@ -1502,12 +1513,12 @@ export class CommercialRepository {
     const result = await this.db.query<{ id: string }>(`
       insert into cadastros_base (
         id, tipo_cliente, tipo_cadastro, cpf_cnpj, nome, nome_fantasia, email, telefone,
-        cidade, logradouro, numero, complemento, bairro, uf, cep,
+        cidade, logradouro, numero, complemento, bairro, uf, cep, ibge,
         inscricao_municipal, inscricao_estadual, iss_retido, status, metadata, created_at, updated_at
       ) values (
         $1, $2, $3, $4, $5, $6, $7, $8,
-        $9, $10, $11, $12, $13, $14, $15,
-        $16, $17, $18, $19, $20::jsonb, now(), now()
+        $9, $10, $11, $12, $13, $14, $15, $16,
+        $17, $18, $19, $20, $21::jsonb, now(), now()
       )
       returning id
     `, params)

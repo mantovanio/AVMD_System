@@ -569,6 +569,7 @@ export interface CadastroBase {
   bairro: string | null
   uf: string | null
   cep: string | null
+  ibge: string | null
   inscricao_municipal: string | null
   inscricao_estadual: string | null
   iss_retido: boolean

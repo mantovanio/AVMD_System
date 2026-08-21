@@ -726,6 +726,7 @@ const EMPTY_CLIENTE_BASE: NovoCadastroBase = {
   bairro: null,
   uf: null,
   cep: null,
+  ibge: null,
   inscricao_municipal: null,
   inscricao_estadual: null,
   iss_retido: false,
@@ -2770,6 +2771,7 @@ export default function Comercial() {
       bairro: cliente.bairro,
       uf: cliente.uf,
       cep: cliente.cep,
+      ibge: cliente.ibge,
       inscricao_municipal: cliente.inscricao_municipal,
       inscricao_estadual: cliente.inscricao_estadual,
       iss_retido: cliente.iss_retido,
@@ -5877,7 +5879,7 @@ export default function Comercial() {
       const t = (titular ?? null) as { nome?: string; email?: string; telefone?: string; data_nascimento?: string } | null
       const c = (cadastro ?? null) as {
         email?: string; telefone?: string; cep?: string; logradouro?: string
-        numero?: string; complemento?: string; bairro?: string; cidade?: string; uf?: string
+        numero?: string; complemento?: string; bairro?: string; cidade?: string; uf?: string; ibge?: string
       } | null
       let receitaValidation: typeof validacaoRepresentante = null
       if (isPJ) {
@@ -5922,6 +5924,7 @@ export default function Comercial() {
           bairro:       c?.bairro ?? p.bairro,
           cidade:       c?.cidade ?? p.cidade,
           uf:           c?.uf ?? p.uf,
+          ibge:         c?.ibge ?? p.ibge,
         }
       })
       setProtocoloStep('form')
@@ -6420,7 +6423,7 @@ export default function Comercial() {
                               onBlur={async () => {
                                 const r = await buscarCep(formCliente.cep ?? '')
                                 if (!r) return
-                                setFormCliente(p => ({ ...p, logradouro: r.logradouro || p.logradouro, bairro: r.bairro || p.bairro, cidade: r.localidade || p.cidade, uf: r.uf || p.uf }))
+                                setFormCliente(p => ({ ...p, logradouro: r.logradouro || p.logradouro, bairro: r.bairro || p.bairro, cidade: r.localidade || p.cidade, uf: r.uf || p.uf, ibge: r.ibge || p.ibge }))
                               }} />
                             <TextInput label="Cidade" value={formCliente.cidade ?? ''} onChange={v => setFormCliente(p => ({ ...p, cidade: v || null }))} />
                             <TextInput label="UF" value={formCliente.uf ?? ''} onChange={v => setFormCliente(p => ({ ...p, uf: v || null }))} />
