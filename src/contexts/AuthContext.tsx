@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useClerk, useSession, useSignIn, useUser } from '@clerk/clerk-react'
-import { supabase } from '@/lib/supabase'
-import { getApiUrl, useLegacySupabase } from '@/lib/api'
+import { getApiUrl } from '@/lib/api'
 import { translatePasswordPolicyError } from '@/lib/passwordPolicy'
 import type { Profile } from '@/types'
 
@@ -189,27 +188,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function loadProfile(userId: string, email?: string) {
     setProfileLoading(true)
     try {
-      if (useLegacySupabase()) {
-        let result = await supabase.from('profiles').select('*').eq('id', userId).single()
-        if (!result.data && email) {
-          result = await supabase.from('profiles').select('*').eq('email', email).single()
-        }
-        setProfile(result.data ?? null)
-      } else {
-        const controller = new AbortController()
-        const timeout = window.setTimeout(() => controller.abort(), 8000)
-        try {
-          const response = await fetch(getApiUrl('/auth/profile'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: controller.signal,
-            body: JSON.stringify({ userId, email, firstName: user?.firstName, lastName: user?.lastName }),
-          })
-          const data = await response.json().catch(() => null) as { ok: boolean; profile: Profile | null } | null
-          setProfile(data?.profile ?? null)
-        } finally {
-          window.clearTimeout(timeout)
-        }
+      // O perfil administrativo deve ser carregado pela API autenticada.
+      // Consultar diretamente o Supabase legado pode retornar nulo por RLS,
+      // mesmo quando o usuário possui perfil admin válido.
+      const controller = new AbortController()
+      const timeout = window.setTimeout(() => controller.abort(), 8000)
+      try {
+        const response = await fetch(getApiUrl('/auth/profile'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({ userId, email, firstName: user?.firstName, lastName: user?.lastName }),
+        })
+        const data = await response.json().catch(() => null) as { ok: boolean; profile: Profile | null } | null
+        setProfile(data?.profile ?? null)
+      } finally {
+        window.clearTimeout(timeout)
       }
     } catch {
       setProfile(null)
