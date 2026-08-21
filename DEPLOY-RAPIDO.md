@@ -2,6 +2,22 @@
 
 Use este arquivo como ponto de entrada rapido para deploy, commit e diagnostico do ambiente.
 
+## Para qualquer IA ou nova sessao
+
+O acesso nao depende do historico da conversa. Ele depende das credenciais ja instaladas nesta maquina:
+
+- GitHub: o remote `origin` abaixo deve responder a `git ls-remote` e ao `git push`.
+- VPS: a chave SSH local deve permitir acesso nao interativo ao host abaixo.
+- Nunca pedir, copiar ou versionar senha, token ou chave privada.
+
+Antes de trabalhar, execute na raiz do repositorio:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\ops\scripts\windows-access-check.ps1
+```
+
+O comando compara os commits local, GitHub e VPS, confirma o backend e mostra mudancas locais. Uma falha deve ser diagnosticada; nao se deve concluir genericamente que a IA "nao tem acesso" sem executar essa checagem.
+
 ## Repositorio
 
 - Repo Git: `https://github.com/mantovanio/AVMD_System.git`
@@ -68,6 +84,8 @@ Push:
 ```powershell
 git -C C:\projetos\AVMD_System push origin main
 ```
+
+Se `origin/main` estiver atras da branch local, o push deve ser concluido antes do deploy. A VPS nao deve ser usada como substituta do GitHub: o GitHub e a fonte compartilhada para retomada por outras ferramentas.
 
 Deploy:
 
