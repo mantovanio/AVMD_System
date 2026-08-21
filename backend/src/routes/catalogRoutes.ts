@@ -1122,10 +1122,9 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
         signal: AbortSignal.timeout(15000),
       })
       const validationData = await validation.json().catch(() => null) as Record<string, unknown> | null
-      // A resposta real da SDP nem sempre inclui `authorized`, embora o
-      // OpenAPI o declare. O status 2xx do endpoint /validate é a confirmação
-      // canônica; 401/403 continuam sendo recusados.
-      if (!validation.ok) {
+      // A resposta real da SDP pode omitir `authorized`, mas quando o campo
+      // existe e vem como false a credencial foi recusada, mesmo com HTTP 200.
+      if (!validation.ok || validationData?.authorized === false) {
         writeJson(res, 400, {
           ok: false,
           error: `A Senha Digital Plus recusou as credenciais no ambiente ${environment === 'production' ? 'Produção' : 'Sandbox'}: ${String(validationData?.message ?? 'não autorizado')}.`,
