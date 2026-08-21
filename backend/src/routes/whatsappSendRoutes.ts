@@ -144,7 +144,8 @@ async function deleteEvolutionMessage(baseUrl: string, instanceName: string, api
 }
 
 async function editEvolutionMessage(baseUrl: string, instanceName: string, apiToken: string, messageId: string, newText: string, remoteJid: string) {
-  return fetch(`${baseUrl}/chat/updateMessage/${instanceName}`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: apiToken }, body: JSON.stringify({ number: remoteJid, key: { id: messageId, fromMe: true, remoteJid }, text: newText }) })
+  const number = remoteJid.replace(/@.*$/, '')
+  return fetch(`${baseUrl}/chat/updateMessage/${instanceName}`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: apiToken }, body: JSON.stringify({ number, key: { id: messageId, fromMe: true, remoteJid }, text: newText }) })
 }
 
 function inferMediaFileName(mimeType: string): string {
