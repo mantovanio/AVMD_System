@@ -5931,9 +5931,12 @@ export default function Comercial() {
       // A tabela de preço pode sobrescrever a configuração padrão do
       // certificado (por exemplo, quando a mesma oferta usa outro código SDP).
       const identificadores = (itemMeta.sdp_identificadores ?? certMeta.sdp_identificadores ?? {}) as Record<string, unknown>
-      const tipoEmissaoSdp = protocoloVenda.tipo_emissao === 'presencial' ? 'presencial' : protocoloVenda.tipo_emissao === 'videoconferencia' ? 'videoconferencia' : 'online'
+      const tipoEmissaoNormalizado = String(protocoloVenda.tipo_emissao ?? '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+      const tipoEmissaoSdp = tipoEmissaoNormalizado.includes('presencial') ? 'presencial'
+        : tipoEmissaoNormalizado.includes('video') ? 'videoconferencia' : 'online'
       const productFields = {
-        tipoEmissao: protocoloVenda.tipo_emissao === 'presencial' ? '1' : protocoloVenda.tipo_emissao === 'videoconferencia' ? '3' : '5',
+        tipoEmissao: tipoEmissaoSdp === 'presencial' ? '1' : tipoEmissaoSdp === 'videoconferencia' ? '3' : '5',
         idProduto: String(identificadores[tipoEmissaoSdp] ?? itemMeta.sdp_produto_id ?? certMeta.sdp_produto_id ?? ''),
         categoriaProduto: String(itemMeta.sdp_categoria_id ?? certMeta.sdp_categoria_id ?? ''),
         produto: String(itemMeta.sdp_produto_nome ?? certMeta.sdp_produto_nome ?? certificado?.tipo ?? ''),
