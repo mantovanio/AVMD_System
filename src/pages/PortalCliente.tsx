@@ -835,13 +835,13 @@ function ProtocolCard({
   generating: boolean
   onGenerate: () => void
 }) {
-  const canGenerate = order.pago && !order.protocolo_numero
+  const canGenerate = false
 
   return (
     <div className="rounded-[20px] border border-slate-200 bg-slate-50/80 px-4 py-3">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Protocolo</p>
       <p className="mt-2 text-sm leading-relaxed text-slate-700">
-        {order.protocolo_numero ?? (order.pago ? 'Pedido pago. Gere o protocolo para iniciar a validação.' : 'Disponível após a confirmação do pagamento.')}
+        {order.protocolo_numero ?? (order.pago ? 'Pedido pago. O protocolo será gerado manualmente pela equipe após a conferência dos dados.' : 'Disponível após a confirmação do pagamento.')}
       </p>
       {canGenerate && (
         <button

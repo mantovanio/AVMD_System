@@ -1097,6 +1097,10 @@ export default function Comercial() {
   const [protocoloVenda, setProtocoloVenda]       = useState<VendaRow | null>(null)
   const [protocoloStep, setProtocoloStep]         = useState<'validate' | 'form'>('validate')
   const [formProtocolo, setFormProtocolo]         = useState<ProtocoloForm>(EMPTY_PROTOCOLO)
+  const [validacaoRepresentante, setValidacaoRepresentante] = useState<{
+    vinculo_confirmado: boolean; razao_social?: string | null; representante_nome?: string | null
+    qualificacao?: string | null; fonte?: string; validado_em?: string
+  } | null>(null)
   const [validandoProtocolo, setValidandoProtocolo] = useState(false)
   const [emitindoProtocolo, setEmitindoProtocolo]   = useState(false)
   // troca de protocolo
@@ -5692,6 +5696,7 @@ export default function Comercial() {
     const isPJ = documentoComprador.replace(/\D/g, '').length === 14
       || /cnpj|e-pj|\bpj\b|nfe|nf-e|ct-e|\bmei\b/.test(produto)
     setProtocoloVenda(v)
+    setValidacaoRepresentante(null)
     setFormProtocolo({
       ...EMPTY_PROTOCOLO,
       cpf: isPJ ? '' : documentoComprador,
@@ -5803,6 +5808,23 @@ export default function Comercial() {
         email?: string; telefone?: string; cep?: string; logradouro?: string
         numero?: string; complemento?: string; bairro?: string; cidade?: string; uf?: string
       } | null
+      let receitaValidation: typeof validacaoRepresentante = null
+      if (isPJ) {
+        const nomeRepresentante = String(t?.nome || formProtocolo.nome).trim()
+        const response = await fetch(getApiUrl('/protocolos/validar-representante'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cnpj: formProtocolo.cnpj, cpf: formProtocolo.cpf, nome: nomeRepresentante }),
+        })
+        const data = await response.json().catch(() => null) as (NonNullable<typeof validacaoRepresentante> & { ok?: boolean; error?: string }) | null
+        if (!response.ok || !data?.vinculo_confirmado) {
+          setValidacaoRepresentante(null)
+          showMsg(data?.error || 'Não foi possível confirmar o representante legal na Receita Federal.', 'err')
+          return
+        }
+        receitaValidation = data
+        setValidacaoRepresentante(data)
+      }
 
       const rawTel = (t?.telefone || c?.telefone || '') as string
       const tel = rawTel.replace(/\D/g, '')
@@ -5817,7 +5839,7 @@ export default function Comercial() {
         }
         return {
           ...p,
-          nome:            t?.nome ?? p.nome,
+          nome:            t?.nome ?? receitaValidation?.representante_nome ?? p.nome,
           email:           t?.email || c?.email || p.email,
           ddd:             ddd || p.ddd,
           telefone:        numero || p.telefone,
@@ -5831,11 +5853,11 @@ export default function Comercial() {
           uf:           c?.uf ?? p.uf,
         }
       })
+      setProtocoloStep('form')
     } catch (err) {
       showMsg('Erro ao validar titular: ' + ((err as Error).message || 'desconhecido'), 'err')
     } finally {
       setValidandoProtocolo(false)
-      setProtocoloStep('form')
     }
   }
 
@@ -5849,6 +5871,10 @@ export default function Comercial() {
     }
     if (isPJ && !formProtocolo.razao_social.trim()) {
       showMsg('Preencha a Razão Social da empresa.')
+      return
+    }
+    if (isPJ && !validacaoRepresentante?.vinculo_confirmado) {
+      showMsg('Valide o vínculo do representante legal com o CNPJ na Receita Federal antes de emitir.', 'err')
       return
     }
     setEmitindoProtocolo(true)
@@ -5975,7 +6001,12 @@ export default function Comercial() {
           protocolo_url: protoUrl,
           protocolo_status: 'gerado',
           pedido_status: 'gerado',
-          api_payload_protocolo: { ...payloadProtocolo, link_safeweb: item?.link_safeweb ?? null, protocolo_url: protoUrl },
+          api_payload_protocolo: {
+            ...payloadProtocolo,
+            link_safeweb: item?.link_safeweb ?? null,
+            protocolo_url: protoUrl,
+            validacao_representante_receita: validacaoRepresentante,
+          },
         }),
       })
 
@@ -9589,6 +9620,16 @@ export default function Comercial() {
                     </button>
                   )}
                 </div>
+                {isPJCnpj && protocoloStep === 'validate' && (
+                  <p className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300">
+                    Ao validar, o sistema consulta o QSA público da Receita Federal e confirma se o CPF possui qualificação de representante legal ou administrador do CNPJ.
+                  </p>
+                )}
+                {isPJCnpj && validacaoRepresentante?.vinculo_confirmado && (
+                  <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">
+                    Vínculo confirmado · {validacaoRepresentante.representante_nome || 'Representante localizado'}{validacaoRepresentante.qualificacao ? ` · ${validacaoRepresentante.qualificacao}` : ''}
+                  </div>
+                )}
 
                 {/* step 2: dados do titular */}
                 {protocoloStep === 'form' && (

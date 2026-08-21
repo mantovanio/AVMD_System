@@ -789,6 +789,71 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   }
 
   // ── Gerar Protocolo (Senha Digital Plus) ──────────────────────────────
+  if (method === 'POST' && url === '/api/protocolos/validar-representante') {
+    const body = await readJson<{ cnpj?: string; cpf?: string; nome?: string }>(req)
+    const cnpj = String(body.cnpj ?? '').replace(/\D/g, '')
+    const cpf = String(body.cpf ?? '').replace(/\D/g, '')
+    const nome = String(body.nome ?? '').trim()
+    if (cnpj.length !== 14 || cpf.length !== 11 || !nome) {
+      writeJson(res, 400, { ok: false, error: 'Informe CNPJ, CPF e nome completo do representante.' }, corsOrigin)
+      return true
+    }
+
+    try {
+      const receitaRes = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
+        headers: { Accept: 'application/json', 'User-Agent': 'AVMD-System/1.0' },
+      })
+      const receita = await receitaRes.json().catch(() => null) as Record<string, unknown> | null
+      if (!receitaRes.ok || !receita) {
+        writeJson(res, 502, { ok: false, error: 'Não foi possível consultar o QSA na Receita Federal.' }, corsOrigin)
+        return true
+      }
+
+      const matchesMaskedDocument = (masked: unknown) => {
+        const value = String(masked ?? '').replace(/[^\d*]/g, '')
+        if (value.length !== cpf.length) return false
+        return [...value].every((char, index) => char === '*' || char === cpf[index])
+      }
+      const normalize = (value: unknown) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+      const authorizedRole = (value: unknown) => /administrador|diretor|presidente|titular|empresari|representante|responsavel/.test(normalize(value))
+      const qsa = Array.isArray(receita.qsa) ? receita.qsa as Record<string, unknown>[] : []
+      const match = qsa.find(member => {
+        const socioMatch = matchesMaskedDocument(member.cnpj_cpf_do_socio)
+        const representanteMatch = matchesMaskedDocument(member.cpf_representante_legal)
+        const registeredName = normalize(member.nome_representante_legal || member.nome_socio)
+        const nameMatch = registeredName === normalize(nome)
+        return nameMatch && (representanteMatch || (socioMatch && authorizedRole(member.qualificacao_socio)))
+      })
+      const validatedAt = new Date().toISOString()
+      if (!match) {
+        writeJson(res, 422, {
+          ok: false,
+          vinculo_confirmado: false,
+          error: 'O CPF informado não consta no QSA público como representante legal ou administrador deste CNPJ.',
+          razao_social: receita.razao_social ?? null,
+          situacao_cadastral: receita.descricao_situacao_cadastral ?? null,
+          fonte: 'BrasilAPI / dados públicos da Receita Federal',
+          validado_em: validatedAt,
+        }, corsOrigin)
+        return true
+      }
+
+      writeJson(res, 200, {
+        ok: true,
+        vinculo_confirmado: true,
+        razao_social: receita.razao_social ?? null,
+        situacao_cadastral: receita.descricao_situacao_cadastral ?? null,
+        representante_nome: match.nome_representante_legal || match.nome_socio || null,
+        qualificacao: match.qualificacao_representante_legal || match.qualificacao_socio || null,
+        fonte: 'BrasilAPI / dados públicos da Receita Federal',
+        validado_em: validatedAt,
+      }, corsOrigin)
+    } catch (error) {
+      writeJson(res, 502, { ok: false, error: 'Falha ao consultar a Receita Federal: ' + (error instanceof Error ? error.message : String(error)) }, corsOrigin)
+    }
+    return true
+  }
+
   if (method === 'POST' && url === '/api/protocolos/gerar') {
     try {
       const body = await readJson<Record<string, unknown>>(req)
@@ -811,6 +876,33 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
       const endereco = object(body.Endereco)
       const titularContato = object(titular.Contato)
       const titularEndereco = object(titular.Endereco)
+
+      if (isPJ) {
+        const receitaRes = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
+          headers: { Accept: 'application/json', 'User-Agent': 'AVMD-System/1.0' },
+        })
+        const receita = await receitaRes.json().catch(() => null) as Record<string, unknown> | null
+        const qsa = Array.isArray(receita?.qsa) ? receita.qsa as Record<string, unknown>[] : []
+        const matchesCpf = (masked: unknown) => {
+          const value = String(masked ?? '').replace(/[^\d*]/g, '')
+          return value.length === cpf.length && [...value].every((char, index) => char === '*' || char === cpf[index])
+        }
+        const normalize = (value: unknown) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+        const authorized = (value: unknown) => /administrador|diretor|presidente|titular|empresari|representante|responsavel/.test(normalize(value))
+        const titularName = normalize(titular.Nome)
+        const linked = qsa.some(member => {
+          const registeredName = normalize(member.nome_representante_legal || member.nome_socio)
+          return registeredName === titularName && (matchesCpf(member.cpf_representante_legal)
+            || (matchesCpf(member.cnpj_cpf_do_socio) && authorized(member.qualificacao_socio)))
+        })
+        if (!receitaRes.ok || !linked) {
+          writeJson(res, 422, {
+            ok: false,
+            error: 'Emissão bloqueada: o vínculo entre CNPJ e CPF não foi confirmado no QSA público da Receita Federal.',
+          }, corsOrigin)
+          return true
+        }
+      }
 
       const required: Array<[string, unknown]> = [
         ['tipoEmissao', body.tipoEmissao], ['idProduto', body.idProduto],
