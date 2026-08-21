@@ -798,79 +798,62 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
         return true
       }
 
-      // O "Gerar protocolo" é uma ação independente: o ID/código do produto
-      // fica TRAVADO no backend, e os dados do representante legal (titular)
-      // são os informados no modal. Se o payload vier no formato completo da
-      // SDP (modal do Comercial), usamos os dados do titular do modal e
-      // mantemos o produto fixo. Caso contrário (PortalCliente), montamos a
-      // partir de cpf_cnpj/nome_titular.
-      const produtoFixo = {
-        tipoEmissao: '3',
-        idProduto: '72054',
-        categoriaProduto: 'c50cb1a6-693e-4c12-9a71-878cf583beef',
-        produto: 'A3 Sem Midia 2 Anos',
-        ProdutoDescricao: 'e-CNPJ A1 arquivo',
-      }
-      const enderecoPadrao = {
-        CodigoIbgeMunicipio: '3550308', CodigoIbgeUF: '35', cep: '01310100',
-        cidade: 'Sao Paulo', bairro: 'Bela Vista', logradouro: 'Av Paulista',
-        complemento: '', numero: '1000', uf: 'SP',
-      }
-      const contatoPadrao = { DDD: '11', Telefone: '999999999', Email: 'contato@certiid.com.br' }
+      const digits = (value: unknown) => String(value ?? '').replace(/\D/g, '')
+      const text = (value: unknown) => String(value ?? '').trim()
+      const object = (value: unknown) => value && typeof value === 'object' && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : {}
+      const cnpj = digits(body.CNPJ)
+      const isPJ = cnpj.length === 14
+      const titular = object(body.Titular)
+      const cpf = digits(isPJ ? titular.CPF : body.CPF)
+      const contato = object(body.Contato)
+      const endereco = object(body.Endereco)
+      const titularContato = object(titular.Contato)
+      const titularEndereco = object(titular.Endereco)
 
-      const isPayloadCompleto =
-        body.CPF !== undefined || body.Nome !== undefined || body.idProduto !== undefined
-
-      let sdpPayload: Record<string, unknown>
-
-      if (isPayloadCompleto) {
-        const cpf = String(body.CPF ?? '').replace(/\D/g, '')
-        const cnpj = String(body.CNPJ ?? '').replace(/\D/g, '')
-        const isPJ = cnpj.length === 14
-        const contato = (body.Contato && typeof body.Contato === 'object') ? body.Contato : contatoPadrao
-        const endereco = (body.Endereco && typeof body.Endereco === 'object') ? body.Endereco : enderecoPadrao
-        sdpPayload = {
-          ...produtoFixo,
-          CPF: cpf,
-          Nome: String(body.Nome ?? ''),
-          DataNascimento: String(body.DataNascimento ?? ''),
-          Contato: contato,
-          Endereco: endereco,
-          CEI: body.CEI ?? '',
-          CAEPF: body.CAEPF ?? '',
-          NIS: body.NIS ?? '',
-        }
-        if (isPJ) {
-          sdpPayload.CNPJ = cnpj
-          sdpPayload.RazaoSocial = String(body.RazaoSocial ?? body.Nome ?? '')
-          sdpPayload.Titular = {
-            CPF: cpf,
-            DataNascimento: String(body.DataNascimento ?? ''),
-            Nome: String(body.Nome ?? ''),
-            Contato: contato,
-            Endereco: endereco,
-          }
-        }
+      const required: Array<[string, unknown]> = [
+        ['tipoEmissao', body.tipoEmissao], ['idProduto', body.idProduto],
+        ['categoriaProduto', body.categoriaProduto], ['produto', body.produto],
+        ['ProdutoDescricao', body.ProdutoDescricao], ['Contato.DDD', contato.DDD],
+        ['Contato.Telefone', contato.Telefone], ['Contato.Email', contato.Email],
+        ['Endereco.CodigoIbgeMunicipio', endereco.CodigoIbgeMunicipio],
+        ['Endereco.CodigoIbgeUF', endereco.CodigoIbgeUF], ['Endereco.cep', endereco.cep],
+        ['Endereco.cidade', endereco.cidade], ['Endereco.bairro', endereco.bairro],
+        ['Endereco.logradouro', endereco.logradouro], ['Endereco.numero', endereco.numero],
+        ['Endereco.uf', endereco.uf],
+      ]
+      if (isPJ) {
+        required.push(
+          ['CNPJ', cnpj], ['RazaoSocial', body.RazaoSocial], ['Titular.CPF', cpf],
+          ['Titular.DataNascimento', titular.DataNascimento], ['Titular.Nome', titular.Nome],
+          ['Titular.Contato.DDD', titularContato.DDD], ['Titular.Contato.Telefone', titularContato.Telefone],
+          ['Titular.Contato.Email', titularContato.Email], ['Titular.Endereco.CodigoIbgeMunicipio', titularEndereco.CodigoIbgeMunicipio],
+          ['Titular.Endereco.CodigoIbgeUF', titularEndereco.CodigoIbgeUF], ['Titular.Endereco.cep', titularEndereco.cep],
+          ['Titular.Endereco.cidade', titularEndereco.cidade], ['Titular.Endereco.bairro', titularEndereco.bairro],
+          ['Titular.Endereco.logradouro', titularEndereco.logradouro], ['Titular.Endereco.numero', titularEndereco.numero],
+          ['Titular.Endereco.uf', titularEndereco.uf],
+        )
       } else {
-        const cpf = String(body.cpf_cnpj ?? '').replace(/\D/g, '')
-        const isPJ = cpf.length === 14
-        sdpPayload = { ...produtoFixo, Contato: contatoPadrao, Endereco: enderecoPadrao }
-        if (isPJ) {
-          sdpPayload.CNPJ = cpf
-          sdpPayload.RazaoSocial = String(body.nome_titular || '')
-          sdpPayload.Titular = {
-            CPF: cpf,
-            DataNascimento: '01/01/1990',
-            Nome: String(body.nome_titular || ''),
-            Contato: contatoPadrao,
-            Endereco: enderecoPadrao,
-          }
-        } else {
-          sdpPayload.CPF = cpf
-          sdpPayload.DataNascimento = '01/01/1990'
-          sdpPayload.Nome = String(body.nome_titular || '')
-        }
+        required.push(['CPF', cpf], ['DataNascimento', body.DataNascimento], ['Nome', body.Nome])
       }
+      const missing = required.filter(([, value]) => !text(value)).map(([field]) => field)
+      if (cpf.length !== 11 || missing.length) {
+        writeJson(res, 400, {
+          ok: false,
+          error: `Dados obrigatórios inválidos para protocolo ${isPJ ? 'PJ' : 'PF'}: ${missing.join(', ') || 'CPF'}.`,
+        }, corsOrigin)
+        return true
+      }
+
+      const commonPayload = {
+        tipoEmissao: text(body.tipoEmissao), idProduto: text(body.idProduto),
+        categoriaProduto: text(body.categoriaProduto), produto: text(body.produto),
+        ProdutoDescricao: text(body.ProdutoDescricao), Contato: contato, Endereco: endereco,
+      }
+      const sdpPayload: Record<string, unknown> = isPJ
+        ? { ...commonPayload, CNPJ: cnpj, RazaoSocial: text(body.RazaoSocial), Titular: { ...titular, CPF: cpf } }
+        : { ...commonPayload, CPF: cpf, DataNascimento: text(body.DataNascimento), Nome: text(body.Nome), CEI: text(body.CEI), CAEPF: text(body.CAEPF), NIS: text(body.NIS) }
 
       const sdpHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -928,7 +911,21 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
   }
 
   // ── Listar Produtos/Categorias (Senha Digital Plus) ───────────────────
-  if (method === 'GET' && url === '/api/protocolos/produtos') {
+  if (method === 'GET' && url === '/api/protocolos/config') {
+    writeJson(res, 200, {
+      ok: true,
+      configuracao: {
+        api_url: config.senhaDigitalPlusApiUrl,
+        portal_url: config.senhaDigitalPlusPortalUrl,
+        ambiente: config.senhaDigitalPlusEnvironment,
+        api_key_configurada: Boolean(config.senhaDigitalPlusApiKey),
+        secret_key_configurada: Boolean(config.senhaDigitalPlusSecretKey),
+      },
+    }, corsOrigin)
+    return true
+  }
+
+  if (method === 'GET' && url.startsWith('/api/protocolos/produtos')) {
     try {
       if (!config.senhaDigitalPlusApiKey || !config.senhaDigitalPlusSecretKey) {
         writeJson(res, 500, { ok: false, error: 'Credenciais da Senha Digital Plus não configuradas.' }, corsOrigin)
@@ -942,13 +939,20 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
         'x-environment': config.senhaDigitalPlusEnvironment || 'production',
       }
 
-      const catRes = await fetch(`${config.senhaDigitalPlusApiUrl}/produtos/categoria`, {
+      const parsedUrl = new URL(req.url ?? url, 'http://localhost')
+      const categoria = parsedUrl.searchParams.get('categoria')?.trim()
+      const endpoint = categoria
+        ? `${config.senhaDigitalPlusApiUrl}/produtos/${encodeURIComponent(categoria)}`
+        : `${config.senhaDigitalPlusApiUrl}/produtos/categoria`
+      const catRes = await fetch(endpoint, {
         method: 'GET',
         headers: sdpHeaders,
       })
-      const categorias = await catRes.json().catch(() => []) as unknown[]
+      const resultado = await catRes.json().catch(() => []) as unknown[]
 
-      writeJson(res, 200, { ok: true, categorias }, corsOrigin)
+      writeJson(res, catRes.ok ? 200 : catRes.status, categoria
+        ? { ok: catRes.ok, produtos: resultado }
+        : { ok: catRes.ok, categorias: resultado }, corsOrigin)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       console.error('[catalog] listarProdutos error:', msg)
@@ -972,7 +976,7 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
         'x-environment': config.senhaDigitalPlusEnvironment || 'production',
       }
 
-      const sdpRes = await fetch(`${config.senhaDigitalPlusApiUrl}/protocolo/validate-credentials`, {
+      const sdpRes = await fetch(`${config.senhaDigitalPlusApiUrl}/validate`, {
         method: 'POST',
         headers: sdpHeaders,
       })

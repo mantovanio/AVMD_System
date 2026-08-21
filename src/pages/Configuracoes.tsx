@@ -2234,7 +2234,12 @@ function AbaIntegracoes() {
   const [showAdvancedWhatsAppEdit, setShowAdvancedWhatsAppEdit] = useState(false)
   const [showAdvancedWhatsAppNew, setShowAdvancedWhatsAppNew] = useState(false)
   const [documentStorage, setDocumentStorage] = useState<ContactDocumentStorageConfig>(DEFAULT_CONTACT_DOCUMENT_STORAGE)
-    const [savingDocumentStorage, setSavingDocumentStorage] = useState(false)
+  const [savingDocumentStorage, setSavingDocumentStorage] = useState(false)
+  const [protocoloConfig, setProtocoloConfig] = useState<{
+    api_url: string; portal_url: string; ambiente: string
+    api_key_configurada: boolean; secret_key_configurada: boolean
+  } | null>(null)
+  const [testandoProtocolo, setTestandoProtocolo] = useState(false)
 
     function showMsgI(msg: string, type: 'ok' | 'err' = 'err') {
       setToastI({ msg, type })
@@ -2361,9 +2366,10 @@ function AbaIntegracoes() {
     const load = useCallback(async () => {
       setLoading(true)
       setErro(null)
-    const [integracoesRes, outboxRes] = await Promise.all([
+    const [integracoesRes, outboxRes, protocoloRes] = await Promise.all([
       fetch(getApiUrl('/integrations')).then(r => r.json() as Promise<{ ok: boolean; integrations: ExternalIntegration[]; error?: string }>),
       supabase.from('communication_outbox').select('*').order('created_at', { ascending: false }).limit(8),
+      fetch(getApiUrl('/protocolos/config')).then(r => r.json() as Promise<{ ok: boolean; configuracao?: NonNullable<typeof protocoloConfig> }>).catch(() => null),
     ])
 
     if (!integracoesRes.ok) {
@@ -2374,6 +2380,7 @@ function AbaIntegracoes() {
 
     const lista = (integracoesRes.integrations ?? []) as ExternalIntegration[]
     setIntegracoes(lista)
+    setProtocoloConfig(protocoloRes?.configuracao ?? null)
     setOutbox((outboxRes.data ?? []) as CommunicationOutbox[])
     try {
       const cfg = await loadContactDocumentStorageConfig()
@@ -2385,6 +2392,19 @@ function AbaIntegracoes() {
 
     void validarIntegracoesAutomaticamente(lista)
   }, [])
+
+  async function testarProtocoloCertificadora() {
+    setTestandoProtocolo(true)
+    try {
+      const response = await fetch(getApiUrl('/protocolos/validate'), { method: 'POST' })
+      const data = await response.json().catch(() => null) as { ok?: boolean; message?: string; error?: string } | null
+      showMsgI(data?.ok ? (data.message || 'Certificadora conectada com sucesso.') : (data?.error || data?.message || 'Falha ao validar a certificadora.'), data?.ok ? 'ok' : 'err')
+    } catch (error) {
+      showMsgI('Falha ao testar a certificadora: ' + String(error))
+    } finally {
+      setTestandoProtocolo(false)
+    }
+  }
 
   useEffect(() => { void load() }, [load])
 
@@ -3180,6 +3200,31 @@ function AbaIntegracoes() {
             <SummaryChip label="Pendentes" value={integracoesVisiveis.filter(i => i.status === 'pendente').length} tone="yellow" />
             <SummaryChip label="Fila" value={outbox.length} tone="blue" />
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4 shadow-sm dark:border-blue-900/50 dark:bg-blue-950/20">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <ShieldCheck size={18} className="text-blue-600 dark:text-blue-400" />
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100">Certificadora · Senha Digital Plus</h3>
+              <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase',
+                protocoloConfig?.api_key_configurada && protocoloConfig?.secret_key_configurada
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300')}
+              >{protocoloConfig?.api_key_configurada && protocoloConfig?.secret_key_configurada ? 'Credenciais instaladas' : 'Configuração incompleta'}</span>
+            </div>
+            <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+              Ambiente: <strong>{protocoloConfig?.ambiente ?? 'indisponível'}</strong>. As chaves permanecem protegidas no servidor e nunca são exibidas no painel.
+            </p>
+            {protocoloConfig?.api_url && <p className="mt-1 break-all text-[11px] text-slate-500 dark:text-slate-400">API: {protocoloConfig.api_url}</p>}
+          </div>
+          <button type="button" onClick={() => void testarProtocoloCertificadora()} disabled={testandoProtocolo || !protocoloConfig?.api_key_configurada || !protocoloConfig?.secret_key_configurada}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            {testandoProtocolo ? <Loader2 size={15} className="animate-spin" /> : <Link size={15} />}
+            Testar ligação com a API
+          </button>
         </div>
       </div>
 

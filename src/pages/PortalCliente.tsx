@@ -373,9 +373,7 @@ export default function PortalCliente() {
         observacoes: 'Venda pelo portal - protocolo solicitado'
       })
       
-      // Sucesso - gerar protocolo (modo simulado - sem tentar salvar no backend para evitar erros de rota)
-      // O protocolo é gerado localmente e exibido para o usuário
-      // A atualização no backend pode ser feita posteriormente quando as rotas estiverem corrigidas
+      // Somente um retorno confirmado pela certificadora pode ser exibido como protocolo gerado.
       setSuccess(`Protocolo ${result.protocolo_numero} gerado com sucesso! ${result.mensagem || ''}`.trim())
       
     } catch (err) {

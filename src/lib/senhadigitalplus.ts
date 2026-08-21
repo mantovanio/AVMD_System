@@ -23,7 +23,7 @@ export type StatusPedidoProtocolo = 'nao_gerado' | 'pendente' | 'gerado' | 'erro
  * Gera um protocolo chamando o backend (que por sua vez chama a API Senha Digital Plus).
  * A chave da API fica segura no servidor, nunca no navegador.
  *
- * Se o backend não tiver o token configurado, gera protocolo local como fallback.
+ * Falhas nunca geram protocolo local: somente a certificadora pode confirmar a emissão.
  */
 export async function gerarProtocoloSenhaDigitalPlus(
   request: GerarProtocoloRequest
@@ -56,10 +56,6 @@ export async function gerarProtocoloSenhaDigitalPlus(
     if (!response.ok || !data?.ok) {
       const errorMsg = data?.error || data?.message || `Erro HTTP ${response.status}`
 
-      if (response.status === 500 && (errorMsg.includes('Token da Senha Digital Plus não configurado') || errorMsg.includes('Credenciais da Senha Digital Plus não configuradas'))) {
-        return gerarProtocoloLocal(request, 'Backend sem credenciais configuradas')
-      }
-
       throw new Error(errorMsg)
     }
 
@@ -70,22 +66,8 @@ export async function gerarProtocoloSenhaDigitalPlus(
       certificadora: 'Senha Digital Plus',
       mensagem: data.message,
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[senhaDigitalPlus] Erro ao gerar protocolo via backend:', error)
-    return gerarProtocoloLocal(request, error.message || 'Erro ao comunicar com o servidor')
-  }
-}
-
-function gerarProtocoloLocal(request: GerarProtocoloRequest, motivo: string): GerarProtocoloResultado {
-  const numeroAleatorio = Math.floor(1000000000 + Math.random() * 8999999999)
-  const protocoloNumero = `SD-${numeroAleatorio}`
-  const hoje = new Date().toISOString().split('T')[0]
-
-  return {
-    protocolo_numero: protocoloNumero,
-    protocolo_status: 'gerado',
-    data_geracao: hoje,
-    certificadora: 'Senha Digital Plus',
-    mensagem: `Modo local - ${motivo}. Configure SENHA_DIGITAL_PLUS_API_KEY e SENHA_DIGITAL_PLUS_SECRET_KEY no .env do backend.`,
+    throw error instanceof Error ? error : new Error('Erro ao comunicar com o servidor')
   }
 }

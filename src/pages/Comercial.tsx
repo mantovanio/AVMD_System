@@ -5686,15 +5686,17 @@ export default function Comercial() {
   function abrirProtocolo(v: VendaRow) {
     if (v.protocolo_numero) { showMsg('Esta venda já possui protocolo: ' + v.protocolo_numero); return }
     const cadastro = (v.cadastros_base as { cpf_cnpj?: string; nome?: string } | null) ?? null
-    const cpfComprador = cadastro?.cpf_cnpj ?? ''
+    const documentoComprador = cadastro?.cpf_cnpj ?? v.documento_faturamento ?? ''
     const nomeComprador = cadastro?.nome ?? ''
-    const isPJ = (v.tipo_produto ?? '').toLowerCase().includes('cnpj')
+    const produto = descricaoProdutoVenda(v).toLowerCase()
+    const isPJ = documentoComprador.replace(/\D/g, '').length === 14
+      || /cnpj|e-pj|\bpj\b|nfe|nf-e|ct-e|\bmei\b/.test(produto)
     setProtocoloVenda(v)
     setFormProtocolo({
       ...EMPTY_PROTOCOLO,
-      cpf: isPJ ? '' : cpfComprador,
+      cpf: isPJ ? '' : documentoComprador,
       nome: isPJ ? '' : nomeComprador,
-      cnpj: isPJ ? cpfComprador : '',
+      cnpj: isPJ ? documentoComprador : '',
       razao_social: isPJ ? nomeComprador : '',
     })
     setProtocoloStep('validate')
@@ -5780,8 +5782,13 @@ export default function Comercial() {
   }
 
   async function validarTitular() {
+    const isPJ = formProtocolo.cnpj.replace(/\D/g, '').length === 14
     if (!formProtocolo.cpf.trim() || !formProtocolo.data_nascimento) {
       showMsg('Preencha CPF e data de nascimento do titular.')
+      return
+    }
+    if (isPJ && !formProtocolo.razao_social.trim()) {
+      showMsg('Confira o CNPJ e preencha a Razão Social antes de validar o representante.', 'err')
       return
     }
     setValidandoProtocolo(true)
@@ -5872,32 +5879,40 @@ export default function Comercial() {
         numero: formProtocolo.numero || '',
         uf: formProtocolo.uf || '',
       }
-      const payloadProtocolo: Record<string, unknown> = {
-        CPF: formProtocolo.cpf.replace(/\D/g, ''),
-        DataNascimento: formProtocolo.data_nascimento || '',
-        Nome: formProtocolo.nome.trim(),
+      const itemMeta = (item?.metadata ?? {}) as Record<string, unknown>
+      const identificadores = (certMeta.sdp_identificadores ?? itemMeta.sdp_identificadores ?? {}) as Record<string, unknown>
+      const tipoEmissaoSdp = protocoloVenda.tipo_emissao === 'presencial' ? 'presencial' : protocoloVenda.tipo_emissao === 'videoconferencia' ? 'videoconferencia' : 'online'
+      const productFields = {
         tipoEmissao: protocoloVenda.tipo_emissao === 'presencial' ? '1' : protocoloVenda.tipo_emissao === 'videoconferencia' ? '3' : '5',
-        idProduto: String(certMeta.sdp_produto_id ?? (item?.metadata as Record<string, unknown>)?.sdp_produto_id ?? ''),
-        categoriaProduto: String(certMeta.sdp_categoria_id ?? (item?.metadata as Record<string, unknown>)?.sdp_categoria_id ?? ''),
+        idProduto: String(identificadores[tipoEmissaoSdp] ?? certMeta.sdp_produto_id ?? itemMeta.sdp_produto_id ?? ''),
+        categoriaProduto: String(certMeta.sdp_categoria_id ?? itemMeta.sdp_categoria_id ?? ''),
         produto: String(certMeta.sdp_produto_nome ?? certificado?.tipo ?? ''),
         ProdutoDescricao: String(certMeta.sdp_produto_descricao ?? certificado?.descricao_produto ?? certificado?.descricao ?? ''),
         Contato: contato,
         Endereco: endereco,
-        CEI: formProtocolo.cei || '',
-        CAEPF: formProtocolo.caepf || '',
-        NIS: formProtocolo.nis || '',
       }
-      if (isPJ) {
-        payloadProtocolo.CNPJ = cnpjDigits
-        payloadProtocolo.RazaoSocial = formProtocolo.razao_social.trim()
-        payloadProtocolo.Titular = {
+      const payloadProtocolo: Record<string, unknown> = isPJ
+        ? {
+          ...productFields,
+          CNPJ: cnpjDigits,
+          RazaoSocial: formProtocolo.razao_social.trim(),
+          Titular: {
+            CPF: formProtocolo.cpf.replace(/\D/g, ''),
+            DataNascimento: formProtocolo.data_nascimento || '',
+            Nome: formProtocolo.nome.trim(),
+            Contato: contato,
+            Endereco: endereco,
+          },
+        }
+        : {
+          ...productFields,
           CPF: formProtocolo.cpf.replace(/\D/g, ''),
           DataNascimento: formProtocolo.data_nascimento || '',
           Nome: formProtocolo.nome.trim(),
-          Contato: contato,
-          Endereco: endereco,
+          CEI: formProtocolo.cei || '',
+          CAEPF: formProtocolo.caepf || '',
+          NIS: formProtocolo.nis || '',
         }
-      }
 
       const rProto = await fetch(getApiUrl('/protocolos/gerar'), {
         method: 'POST',
