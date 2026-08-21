@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, MapPin, Pencil, X, Check, KeyRound, UserPlus, Eye, EyeOff, MessageCircle, Mail, Webhook, Save, Send, Trash2, Plus, ToggleLeft, ToggleRight, CreditCard, FileText, Upload, ShieldCheck, ChevronDown, ChevronRight, Users, Link, Network, Percent, Clock, Bot, RotateCcw } from 'lucide-react'
+import { Loader2, MapPin, Pencil, X, Check, KeyRound, UserPlus, Eye, EyeOff, MessageCircle, Mail, Webhook, Save, Send, Trash2, Plus, ToggleLeft, ToggleRight, CreditCard, FileText, Upload, ShieldCheck, ChevronDown, ChevronRight, Users, Link, Network, Percent, Clock, Bot, RotateCcw, Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase, getEdgeFunctionUrl, getSupabaseAccessToken } from '@/lib/supabase'
 import { getEvolutionConnectionTestUrl, getEvolutionWebhookConfigureUrl, getEvolutionWebhookUrl } from '@/lib/evolutionApi'
@@ -2246,6 +2246,9 @@ function AbaIntegracoes() {
   const [protocoloEnvironment, setProtocoloEnvironment] = useState<'production' | 'sandbox'>('production')
   const [savingProtocoloCredentials, setSavingProtocoloCredentials] = useState(false)
   const [showProtocoloSecret, setShowProtocoloSecret] = useState(false)
+  const [protocoloTestResult, setProtocoloTestResult] = useState<{
+    ok: boolean; status: number; message: string; timestamp: string; ambiente: string; apiUrl: string
+  } | null>(null)
 
     function showMsgI(msg: string, type: 'ok' | 'err' = 'err') {
       setToastI({ msg, type })
@@ -2408,12 +2411,53 @@ function AbaIntegracoes() {
         method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
       })
       const data = await response.json().catch(() => null) as { ok?: boolean; message?: string; error?: string } | null
-      showMsgI(data?.ok ? (data.message || 'Certificadora conectada com sucesso.') : (data?.error || data?.message || 'Falha ao validar a certificadora.'), data?.ok ? 'ok' : 'err')
+      const ok = response.ok && Boolean(data?.ok)
+      const message = data?.message || data?.error || (ok ? 'Credenciais aceitas pela API.' : 'A API recusou a validação.')
+      setProtocoloTestResult({
+        ok, status: response.status, message, timestamp: new Date().toISOString(),
+        ambiente: protocoloConfig?.ambiente ?? 'desconhecido', apiUrl: protocoloConfig?.api_url ?? '',
+      })
+      showMsgI(ok ? message : message, ok ? 'ok' : 'err')
     } catch (error) {
+      setProtocoloTestResult({
+        ok: false, status: 0, message: String(error), timestamp: new Date().toISOString(),
+        ambiente: protocoloConfig?.ambiente ?? 'desconhecido', apiUrl: protocoloConfig?.api_url ?? '',
+      })
       showMsgI('Falha ao testar a certificadora: ' + String(error))
     } finally {
       setTestandoProtocolo(false)
     }
+  }
+
+  function textoRelatorioProtocolo() {
+    if (!protocoloTestResult) return ''
+    const r = protocoloTestResult
+    return [
+      'RELATÓRIO DE TESTE — SENHA DIGITAL PLUS',
+      `Data/hora: ${new Date(r.timestamp).toLocaleString('pt-BR')}`,
+      `Endpoint: ${r.apiUrl || 'não informado'}/validate`,
+      `Ambiente: ${r.ambiente}`,
+      `HTTP: ${r.status || 'sem resposta'}`,
+      `Resultado: ${r.ok ? 'APROVADO' : 'RECUSADO'}`,
+      `Mensagem: ${r.message}`,
+      '',
+      'Observação: este relatório não contém API Key, Secret Key ou dados de clientes.',
+    ].join('\n')
+  }
+
+  async function copiarRelatorioProtocolo() {
+    await navigator.clipboard.writeText(textoRelatorioProtocolo())
+    showMsgI('Relatório copiado para a área de transferência.', 'ok')
+  }
+
+  function baixarRelatorioProtocolo() {
+    const blob = new Blob([textoRelatorioProtocolo()], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `relatorio-sdp-${new Date().toISOString().slice(0, 10)}.txt`
+    anchor.click()
+    URL.revokeObjectURL(url)
   }
 
   async function salvarCredenciaisProtocolo() {
@@ -3316,6 +3360,29 @@ function AbaIntegracoes() {
           </div>
         )}
       </div>
+
+      {protocoloTestResult && (
+        <div className={cn('rounded-2xl border p-4 shadow-sm', protocoloTestResult.ok
+          ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/20'
+          : 'border-red-200 bg-red-50/70 dark:border-red-900/50 dark:bg-red-950/20')}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className={cn('text-xs font-semibold uppercase tracking-[0.16em]', protocoloTestResult.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300')}>
+                Resultado compartilhável do teste
+              </p>
+              <h3 className="mt-1 text-base font-semibold text-slate-900 dark:text-slate-100">
+                {protocoloTestResult.ok ? 'Validação aprovada pela API' : 'Validação recusada pela API'}
+              </h3>
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Nenhuma credencial ou dado de cliente é exibido neste relatório.</p>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => void copiarRelatorioProtocolo()} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"><Copy size={13} /> Copiar resumo</button>
+              <button type="button" onClick={baixarRelatorioProtocolo} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"><FileText size={13} /> Baixar TXT</button>
+            </div>
+          </div>
+          <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-lg border border-black/10 bg-white/70 p-3 text-xs leading-5 text-slate-700 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200">{textoRelatorioProtocolo()}</pre>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
         {integracoesVisiveis.map(int => {
