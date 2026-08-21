@@ -4521,7 +4521,7 @@ function MessageRow({
     if (!confirm('Apagar esta mensagem para todos?')) return
     setDeleting(true)
     try {
-      await deleteWhatsAppMessage(externalId, conversation?.whatsapp_instance ?? undefined)
+      await deleteWhatsAppMessage(externalId, conversation?.whatsapp_instance ?? undefined, conversation ? contactPhone(conversation) : undefined)
       setShowMenu(false)
       onMessageDeleted?.(message.id)
     } catch (error) {
@@ -4545,7 +4545,7 @@ function MessageRow({
     }
     setSavingEdit(true)
     try {
-      await editWhatsAppMessage(externalId, trimmed, conversation?.whatsapp_instance ?? undefined)
+      await editWhatsAppMessage(externalId, trimmed, conversation?.whatsapp_instance ?? undefined, conversation ? contactPhone(conversation) : undefined)
       onMessageUpdated?.(message.id, trimmed)
       setIsEditing(false)
     } catch (error) {

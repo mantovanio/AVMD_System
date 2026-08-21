@@ -64,17 +64,17 @@ export async function postJson<T = unknown>(url: string, payload: unknown) {
   return data as T
 }
 
-export async function deleteWhatsAppMessage(messageId: string, instanceName?: string) {
+export async function deleteWhatsAppMessage(messageId: string, instanceName?: string, remoteJid?: string) {
   const token = await (globalThis as typeof globalThis & { Clerk?: { session?: { getToken: () => Promise<string | null> } } }).Clerk?.session?.getToken().catch(() => null)
-  const response = await fetch(getApiUrl('/whatsapp/delete-message'), { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ message_id: messageId, instance_name: instanceName }) })
+  const response = await fetch(getApiUrl('/whatsapp/delete-message'), { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ message_id: messageId, instance_name: instanceName, remote_jid: remoteJid }) })
   const data = await response.json().catch(() => null) as { error?: string } | null
   if (!response.ok) throw new Error(data?.error || response.statusText || 'Falha ao apagar mensagem')
   return data
 }
 
-export async function editWhatsAppMessage(messageId: string, newText: string, instanceName?: string) {
+export async function editWhatsAppMessage(messageId: string, newText: string, instanceName?: string, remoteJid?: string) {
   const token = await (globalThis as typeof globalThis & { Clerk?: { session?: { getToken: () => Promise<string | null> } } }).Clerk?.session?.getToken().catch(() => null)
-  const response = await fetch(getApiUrl('/whatsapp/edit-message'), { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ message_id: messageId, new_text: newText, instance_name: instanceName }) })
+  const response = await fetch(getApiUrl('/whatsapp/edit-message'), { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ message_id: messageId, new_text: newText, instance_name: instanceName, remote_jid: remoteJid }) })
   const data = await response.json().catch(() => null) as { error?: string } | null
   if (!response.ok) throw new Error(data?.error || response.statusText || 'Falha ao editar mensagem')
   return data

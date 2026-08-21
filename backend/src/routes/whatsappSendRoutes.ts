@@ -65,8 +65,8 @@ type LeadRow = {
   evolution_instance: string | null
 }
 
-interface DeleteMessageInput { message_id: string; instance_name?: string; canal?: 'atendimento' | 'renovacao' }
-interface EditMessageInput { message_id: string; new_text: string; instance_name?: string; canal?: 'atendimento' | 'renovacao' }
+interface DeleteMessageInput { message_id: string; instance_name?: string; remote_jid?: string; canal?: 'atendimento' | 'renovacao' }
+interface EditMessageInput { message_id: string; new_text: string; instance_name?: string; remote_jid?: string; canal?: 'atendimento' | 'renovacao' }
 
 const config = loadConfig()
 const db = createAivenSqlClient()
@@ -139,12 +139,12 @@ function buildRemoteJid(phoneDigits: string | null) {
   return phoneDigits ? `${phoneDigits}@s.whatsapp.net` : null
 }
 
-async function deleteEvolutionMessage(baseUrl: string, instanceName: string, apiToken: string, messageId: string) {
-  return fetch(`${baseUrl}/message/deleteMessage/${instanceName}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', apikey: apiToken }, body: JSON.stringify({ messageId }) })
+async function deleteEvolutionMessage(baseUrl: string, instanceName: string, apiToken: string, messageId: string, remoteJid: string) {
+  return fetch(`${baseUrl}/chat/deleteMessageForEveryone/${instanceName}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', apikey: apiToken }, body: JSON.stringify({ id: messageId, fromMe: true, remoteJid }) })
 }
 
-async function editEvolutionMessage(baseUrl: string, instanceName: string, apiToken: string, messageId: string, newText: string) {
-  return fetch(`${baseUrl}/message/updateMessage/${instanceName}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', apikey: apiToken }, body: JSON.stringify({ messageId, text: newText }) })
+async function editEvolutionMessage(baseUrl: string, instanceName: string, apiToken: string, messageId: string, newText: string, remoteJid: string) {
+  return fetch(`${baseUrl}/chat/updateMessage/${instanceName}`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: apiToken }, body: JSON.stringify({ number: remoteJid, key: { id: messageId, fromMe: true, remoteJid }, text: newText }) })
 }
 
 function inferMediaFileName(mimeType: string): string {
@@ -819,7 +819,9 @@ export async function handleWhatsappSendRoutes(
     if (body.instance_name) integration = integrations.find(item => item.instance_name === body.instance_name) ?? integration
     if (!integration?.base_url || !integration.api_token || !integration.instance_name) { writeJson(res, 422, { ok: false, error: 'Nenhuma integracao WhatsApp ativa configurada.' }, corsOrigin); return true }
     try {
-      const response = await deleteEvolutionMessage(integration.base_url.replace(/\/$/, ''), integration.instance_name, integration.api_token, body.message_id)
+      const remoteJid = body.remote_jid?.includes('@') ? body.remote_jid : buildRemoteJid(body.remote_jid?.replace(/\D/g, '') || null)
+      if (!remoteJid) { writeJson(res, 400, { ok: false, error: 'remote_jid e obrigatorio' }, corsOrigin); return true }
+      const response = await deleteEvolutionMessage(integration.base_url.replace(/\/$/, ''), integration.instance_name, integration.api_token, body.message_id, remoteJid)
       const payload = await response.json().catch(() => null)
       if (!response.ok) { writeJson(res, 502, { ok: false, error: `Evolution retornou HTTP ${response.status}`, detail: payload }, corsOrigin); return true }
       await communicationEventRepository.create({ source: 'evolution', event_type: 'message_deleted', external_id: body.message_id, conversation_id: null, lead_id: null, contact: null, payload: { messageId: body.message_id, deletedBy: 'operator', deletedAt: new Date().toISOString() } })
@@ -836,7 +838,9 @@ export async function handleWhatsappSendRoutes(
     if (body.instance_name) integration = integrations.find(item => item.instance_name === body.instance_name) ?? integration
     if (!integration?.base_url || !integration.api_token || !integration.instance_name) { writeJson(res, 422, { ok: false, error: 'Nenhuma integracao WhatsApp ativa configurada.' }, corsOrigin); return true }
     try {
-      const response = await editEvolutionMessage(integration.base_url.replace(/\/$/, ''), integration.instance_name, integration.api_token, body.message_id, body.new_text)
+      const remoteJid = body.remote_jid?.includes('@') ? body.remote_jid : buildRemoteJid(body.remote_jid?.replace(/\D/g, '') || null)
+      if (!remoteJid) { writeJson(res, 400, { ok: false, error: 'remote_jid e obrigatorio' }, corsOrigin); return true }
+      const response = await editEvolutionMessage(integration.base_url.replace(/\/$/, ''), integration.instance_name, integration.api_token, body.message_id, body.new_text, remoteJid)
       const payload = await response.json().catch(() => null)
       if (!response.ok) { writeJson(res, 502, { ok: false, error: `Evolution retornou HTTP ${response.status}`, detail: payload }, corsOrigin); return true }
       await communicationEventRepository.create({ source: 'evolution', event_type: 'message_edited', external_id: body.message_id, conversation_id: null, lead_id: null, contact: null, payload: { messageId: body.message_id, newText: body.new_text, editedBy: 'operator', editedAt: new Date().toISOString() } })
