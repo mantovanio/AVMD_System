@@ -1233,6 +1233,7 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
 
       writeJson(res, sdpRes.ok ? 200 : 401, {
         ok: sdpRes.ok,
+        ambiente: config.senhaDigitalPlusEnvironment,
         ...sdpData,
       }, corsOrigin)
     } catch (error) {

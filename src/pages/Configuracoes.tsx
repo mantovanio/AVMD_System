@@ -2410,12 +2410,12 @@ function AbaIntegracoes() {
       const response = await fetch(getApiUrl('/protocolos/validate'), {
         method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
       })
-      const data = await response.json().catch(() => null) as { ok?: boolean; message?: string; error?: string } | null
+      const data = await response.json().catch(() => null) as { ok?: boolean; message?: string; error?: string; ambiente?: string } | null
       const ok = response.ok && Boolean(data?.ok)
       const message = data?.message || data?.error || (ok ? 'Credenciais aceitas pela API.' : 'A API recusou a validação.')
       setProtocoloTestResult({
         ok, status: response.status, message, timestamp: new Date().toISOString(),
-        ambiente: protocoloConfig?.ambiente ?? 'desconhecido', apiUrl: protocoloConfig?.api_url ?? '',
+        ambiente: data?.ambiente ?? protocoloConfig?.ambiente ?? 'desconhecido', apiUrl: protocoloConfig?.api_url ?? '',
       })
       showMsgI(ok ? message : message, ok ? 'ok' : 'err')
     } catch (error) {
@@ -2487,6 +2487,7 @@ function AbaIntegracoes() {
         return
       }
       setProtocoloConfig(current => current ? { ...current, ...data.configuracao } : null)
+      setProtocoloTestResult(null)
       setProtocoloApiKey('')
       setProtocoloSecretKey('')
       setShowProtocoloSecret(false)
