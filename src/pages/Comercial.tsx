@@ -3156,6 +3156,16 @@ export default function Comercial() {
   }
   async function salvarCertificado() {
     if (!formCert.tipo.trim() || !formCert.validade.trim()) return
+    const sdpMetadata = (formCert.metadata ?? {}) as Record<string, unknown>
+    const sdpIdentifiers = (sdpMetadata.sdp_identificadores ?? {}) as Record<string, unknown>
+    const hasSdpCategory = Boolean(String(sdpMetadata.sdp_categoria_id ?? '').trim())
+    const hasSdpProductCode = Boolean(String(sdpMetadata.sdp_produto_id ?? '').trim())
+      || Object.values(sdpIdentifiers).some(value => Boolean(String(value ?? '').trim()))
+    if (!hasSdpCategory || !hasSdpProductCode) {
+      setShowSdpSection(true)
+      showMsg('Informe a categoria SDP e pelo menos um código de produto por modalidade. Esses dados são obrigatórios para incluir o produto.', 'err')
+      return
+    }
     setSalvandoCatalogo(true)
     const validadeNormalizada = formCert.validade.trim()
     const validadeMeses = formCert.validade_meses && formCert.validade_meses > 0
@@ -3682,6 +3692,18 @@ export default function Comercial() {
   }
   async function salvarItem() {
     if (!formItem.certificado_id) { showMsg('Selecione um certificado do catálogo.'); return }
+    const certificado = certificadoById.get(formItem.certificado_id)
+    const certMetadata = (certificado?.metadata ?? {}) as Record<string, unknown>
+    const itemMetadata = (formItem.metadata ?? {}) as Record<string, unknown>
+    const certIdentifiers = (certMetadata.sdp_identificadores ?? {}) as Record<string, unknown>
+    const itemIdentifiers = (itemMetadata.sdp_identificadores ?? {}) as Record<string, unknown>
+    const hasSdpCategory = Boolean(String(itemMetadata.sdp_categoria_id ?? certMetadata.sdp_categoria_id ?? '').trim())
+    const hasSdpProductCode = Boolean(String(itemMetadata.sdp_produto_id ?? certMetadata.sdp_produto_id ?? '').trim())
+      || Object.values({ ...certIdentifiers, ...itemIdentifiers }).some(value => Boolean(String(value ?? '').trim()))
+    if (!hasSdpCategory || !hasSdpProductCode) {
+      showMsg('Não é possível incluir o produto: configure a categoria SDP e pelo menos um código por modalidade no certificado ou nesta tabela de preço.', 'err')
+      return
+    }
     setSalvandoCatalogo(true)
     const rI = await fetch(getApiUrl('/catalog/itens'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -8327,7 +8349,7 @@ export default function Comercial() {
                           <TextInput label="Link Safeweb" value={formItem.link_safeweb ?? ''} onChange={v => setFormItem(p => ({ ...p, link_safeweb: v || null }))} className="md:col-span-2" />
                           <div className="md:col-span-2 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
                             <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">Senha Digital Plus (Protocolo)</p>
-                            <p className="mt-1 text-xs text-gray-400">Opcional. Quando preenchido, substitui a configuração padrão do certificado para esta tabela de preço.</p>
+                            <p className="mt-1 text-xs text-gray-400">Obrigatório no certificado ou neste item. Quando preenchido aqui, substitui a configuração padrão do certificado para esta tabela de preço.</p>
                             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                               <TextInput label="ID Categoria SDP" value={String(formItem.metadata?.sdp_categoria_id ?? '')} onChange={v => setFormItem(p => ({ ...p, metadata: { ...(p.metadata ?? {}), sdp_categoria_id: v || null } }))} placeholder="UUID da categoria" />
                               <TextInput label="ID Produto padrão SDP" value={String(formItem.metadata?.sdp_produto_id ?? '')} onChange={v => setFormItem(p => ({ ...p, metadata: { ...(p.metadata ?? {}), sdp_produto_id: v || null } }))} placeholder="Código usado como fallback" />
