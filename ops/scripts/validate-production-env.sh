@@ -18,9 +18,15 @@ value() {
 
 clerk_key="$(value VITE_CLERK_PUBLISHABLE_KEY)"
 api_url="$(value VITE_API_BASE_URL)"
+legacy_mode="$(value VITE_USE_LEGACY_SUPABASE)"
+supabase_url="$(value VITE_SUPABASE_URL)"
+supabase_key="$(value VITE_SUPABASE_ANON_KEY)$(value VITE_SUPABASE_PUBLISHABLE_KEY)"
 
 [[ "${clerk_key}" == pk_live_* ]] || fail "VITE_CLERK_PUBLISHABLE_KEY nao e uma chave live."
 [[ "${api_url}" == "https://api.certiid.com.br/api" ]] || fail "VITE_API_BASE_URL nao aponta para api.certiid.com.br."
+[[ "${legacy_mode}" == "true" ]] || fail "VITE_USE_LEGACY_SUPABASE precisa permanecer true enquanto os modulos legados estiverem ativos."
+[[ "${supabase_url}" == "https://cvfrhfiaprdtwxxplngk.supabase.co" ]] || fail "VITE_SUPABASE_URL ausente ou incorreta."
+[[ -n "${supabase_key}" ]] || fail "Chave publica Supabase ausente."
 
 # A parte depois do prefixo e base64url; a chave live atual identifica
 # certiid.com.br. Se a chave for rotacionada, ela precisa continuar vinculada

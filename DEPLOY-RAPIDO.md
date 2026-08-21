@@ -89,6 +89,8 @@ Esse validador le `/opt/avmd/AVMD_System/.env.production` e bloqueia a publicaca
 
 - `VITE_CLERK_PUBLISHABLE_KEY` estiver ausente, for `pk_test_` ou nao for uma chave live do dominio `certiid.com.br`;
 - `VITE_API_BASE_URL` nao for `https://api.certiid.com.br/api`;
+- `VITE_USE_LEGACY_SUPABASE` nao estiver como `true` enquanto os modulos legados de Configuracoes/CRM estiverem ativos;
+- `VITE_SUPABASE_URL` ou a chave publica do Supabase estiverem ausentes/incorretas;
 - `.env.production` nao existir.
 
 Quando a validacao passa, uma copia protegida da configuracao e criada em `.deploy-env-backups/` no servidor, mantendo as dez ultimas versoes. A chamada e feita por `ops/scripts/vps-rollout-avmd.sh`, logo uma configuracao Clerk de outro dominio interrompe o deploy antes de publicar o frontend.
