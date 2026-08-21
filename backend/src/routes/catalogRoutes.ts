@@ -351,6 +351,8 @@ async function processSafewebImportJob(
 export async function handleCatalogRoutes(req: IncomingMessage, res: ServerResponse, repo: CatalogRepository, renovacaoRepo: RenovacaoRepository | null, db: AivenSqlClient, corsOrigin: string, config: BackendConfig): Promise<boolean> {
   const method = req.method ?? ''
   const url = req.url ?? ''
+  const requestUrl = new URL(url, 'http://localhost')
+  const pathname = requestUrl.pathname
 
   // ── Bulk catalog load ─────────────────────────────────────────────────
   if (method === 'GET' && url === '/api/catalog') {
@@ -1099,11 +1101,10 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
     return true
   }
 
-  const vendaDeleteMatch = url.match(/^\/api\/comercial\/vendas\/([^/]+)$/)
+  const vendaDeleteMatch = pathname.match(/^\/api\/comercial\/vendas\/([0-9a-fA-F-]{36})$/)
   if (method === 'DELETE' && vendaDeleteMatch) {
     try {
-      const parsedUrl = new URL(req.url ?? url, 'http://localhost')
-      const adminProfileId = parsedUrl.searchParams.get('admin_profile_id')
+      const adminProfileId = requestUrl.searchParams.get('admin_profile_id')
       if (!adminProfileId) {
         writeJson(res, 403, { ok: false, error: 'admin_profile_id é obrigatório para excluir vendas.' }, corsOrigin)
         return true
