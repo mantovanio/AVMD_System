@@ -5906,14 +5906,16 @@ export default function Comercial() {
         uf: formProtocolo.uf || '',
       }
       const itemMeta = (item?.metadata ?? {}) as Record<string, unknown>
-      const identificadores = (certMeta.sdp_identificadores ?? itemMeta.sdp_identificadores ?? {}) as Record<string, unknown>
+      // A tabela de preço pode sobrescrever a configuração padrão do
+      // certificado (por exemplo, quando a mesma oferta usa outro código SDP).
+      const identificadores = (itemMeta.sdp_identificadores ?? certMeta.sdp_identificadores ?? {}) as Record<string, unknown>
       const tipoEmissaoSdp = protocoloVenda.tipo_emissao === 'presencial' ? 'presencial' : protocoloVenda.tipo_emissao === 'videoconferencia' ? 'videoconferencia' : 'online'
       const productFields = {
         tipoEmissao: protocoloVenda.tipo_emissao === 'presencial' ? '1' : protocoloVenda.tipo_emissao === 'videoconferencia' ? '3' : '5',
-        idProduto: String(identificadores[tipoEmissaoSdp] ?? certMeta.sdp_produto_id ?? itemMeta.sdp_produto_id ?? ''),
-        categoriaProduto: String(certMeta.sdp_categoria_id ?? itemMeta.sdp_categoria_id ?? ''),
-        produto: String(certMeta.sdp_produto_nome ?? certificado?.tipo ?? ''),
-        ProdutoDescricao: String(certMeta.sdp_produto_descricao ?? certificado?.descricao_produto ?? certificado?.descricao ?? ''),
+        idProduto: String(identificadores[tipoEmissaoSdp] ?? itemMeta.sdp_produto_id ?? certMeta.sdp_produto_id ?? ''),
+        categoriaProduto: String(itemMeta.sdp_categoria_id ?? certMeta.sdp_categoria_id ?? ''),
+        produto: String(itemMeta.sdp_produto_nome ?? certMeta.sdp_produto_nome ?? certificado?.tipo ?? ''),
+        ProdutoDescricao: String(itemMeta.sdp_produto_descricao ?? certMeta.sdp_produto_descricao ?? certificado?.descricao_produto ?? certificado?.descricao ?? ''),
         Contato: contato,
         Endereco: endereco,
       }
@@ -8323,6 +8325,18 @@ export default function Comercial() {
                           <NumberInput label="Valor Repasse (R$)" value={formItem.valor_repasse} onChange={v => setFormItem(p => ({ ...p, valor_repasse: v }))} />
                           <ActiveSelect value={formItem.ativo} onChange={v => setFormItem(p => ({ ...p, ativo: v }))} />
                           <TextInput label="Link Safeweb" value={formItem.link_safeweb ?? ''} onChange={v => setFormItem(p => ({ ...p, link_safeweb: v || null }))} className="md:col-span-2" />
+                          <div className="md:col-span-2 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                            <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">Senha Digital Plus (Protocolo)</p>
+                            <p className="mt-1 text-xs text-gray-400">Opcional. Quando preenchido, substitui a configuração padrão do certificado para esta tabela de preço.</p>
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <TextInput label="ID Categoria SDP" value={String(formItem.metadata?.sdp_categoria_id ?? '')} onChange={v => setFormItem(p => ({ ...p, metadata: { ...(p.metadata ?? {}), sdp_categoria_id: v || null } }))} placeholder="UUID da categoria" />
+                              <TextInput label="ID Produto padrão SDP" value={String(formItem.metadata?.sdp_produto_id ?? '')} onChange={v => setFormItem(p => ({ ...p, metadata: { ...(p.metadata ?? {}), sdp_produto_id: v || null } }))} placeholder="Código usado como fallback" />
+                              <TextInput label="Código SDP presencial" value={String(((formItem.metadata?.sdp_identificadores ?? {}) as Record<string, unknown>).presencial ?? '')} onChange={v => setFormItem(p => ({ ...p, metadata: { ...(p.metadata ?? {}), sdp_identificadores: { ...((p.metadata?.sdp_identificadores ?? {}) as Record<string, unknown>), presencial: v || null } } }))} placeholder="Ex: 7233" />
+                              <TextInput label="Código SDP videoconferência" value={String(((formItem.metadata?.sdp_identificadores ?? {}) as Record<string, unknown>).videoconferencia ?? '')} onChange={v => setFormItem(p => ({ ...p, metadata: { ...(p.metadata ?? {}), sdp_identificadores: { ...((p.metadata?.sdp_identificadores ?? {}) as Record<string, unknown>), videoconferencia: v || null } } }))} placeholder="Ex: 7240" />
+                              <TextInput label="Código SDP online" value={String(((formItem.metadata?.sdp_identificadores ?? {}) as Record<string, unknown>).online ?? '')} onChange={v => setFormItem(p => ({ ...p, metadata: { ...(p.metadata ?? {}), sdp_identificadores: { ...((p.metadata?.sdp_identificadores ?? {}) as Record<string, unknown>), online: v || null } } }))} placeholder="Quando disponibilizado pela SDP" />
+                              <TextInput label="Nome Produto SDP" value={String(formItem.metadata?.sdp_produto_nome ?? '')} onChange={v => setFormItem(p => ({ ...p, metadata: { ...(p.metadata ?? {}), sdp_produto_nome: v || null } }))} />
+                            </div>
+                          </div>
                         </div>
                         <FormActions onSave={salvarItem} onCancel={() => setShowFormItem(false)} saving={salvandoCatalogo} />
                       </FloatingPanel>
@@ -9942,9 +9956,12 @@ export default function Comercial() {
                     <p className="text-xs text-gray-400 mt-2 ml-5">IDs de integração com a API Senha Digital Plus para geração de protocolo.</p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2 ml-5">
                       <TextInput label="ID Categoria SDP" value={String((formCert.metadata as Record<string, unknown>)?.sdp_categoria_id ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_categoria_id: v || null } }))} placeholder="UUID da categoria" />
-                      <TextInput label="ID Produto SDP" value={String((formCert.metadata as Record<string, unknown>)?.sdp_produto_id ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_produto_id: v || null } }))} placeholder="ID do produto" />
+                      <TextInput label="ID Produto padrão SDP" value={String((formCert.metadata as Record<string, unknown>)?.sdp_produto_id ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_produto_id: v || null } }))} placeholder="Código usado como fallback" />
                       <TextInput label="Nome Produto SDP" value={String((formCert.metadata as Record<string, unknown>)?.sdp_produto_nome ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_produto_nome: v || null } }))} placeholder="Ex: Nuvem Renovar 12 meses" />
                       <TextInput label="Descrição Produto SDP" value={String((formCert.metadata as Record<string, unknown>)?.sdp_produto_descricao ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_produto_descricao: v || null } }))} placeholder="Ex: Renovar" />
+                      <TextInput label="Código SDP presencial" value={String((((formCert.metadata as Record<string, unknown>)?.sdp_identificadores ?? {}) as Record<string, unknown>).presencial ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_identificadores: { ...((((p.metadata as Record<string, unknown>)?.sdp_identificadores ?? {}) as Record<string, unknown>)), presencial: v || null } } }))} placeholder="Ex: 7233" />
+                      <TextInput label="Código SDP videoconferência" value={String((((formCert.metadata as Record<string, unknown>)?.sdp_identificadores ?? {}) as Record<string, unknown>).videoconferencia ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_identificadores: { ...((((p.metadata as Record<string, unknown>)?.sdp_identificadores ?? {}) as Record<string, unknown>)), videoconferencia: v || null } } }))} placeholder="Ex: 7240" />
+                      <TextInput label="Código SDP online" value={String((((formCert.metadata as Record<string, unknown>)?.sdp_identificadores ?? {}) as Record<string, unknown>).online ?? '')} onChange={v => setFormCert(p => ({ ...p, metadata: { ...(p.metadata as Record<string, unknown>), sdp_identificadores: { ...((((p.metadata as Record<string, unknown>)?.sdp_identificadores ?? {}) as Record<string, unknown>)), online: v || null } } }))} placeholder="Quando disponibilizado pela SDP" />
                     </div>
                   </>
                 )}

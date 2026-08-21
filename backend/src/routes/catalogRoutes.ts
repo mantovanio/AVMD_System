@@ -879,6 +879,78 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
       const titularContato = object(titular.Contato)
       const titularEndereco = object(titular.Endereco)
 
+      const sdpHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-api-key': config.senhaDigitalPlusApiKey,
+        'x-secret-key': config.senhaDigitalPlusSecretKey,
+        'x-environment': config.senhaDigitalPlusEnvironment || 'sandbox',
+      }
+      let idProduto = text(body.idProduto)
+      let categoriaProduto = text(body.categoriaProduto)
+      let nomeProduto = text(body.produto)
+      let descricaoProduto = text(body.ProdutoDescricao)
+
+      // Catálogos antigos não possuem os IDs SDP em metadata. Nessa situação,
+      // resolve os identificadores no catálogo oficial antes de validar/enviar o
+      // protocolo. Assim, vendas já existentes também podem ser emitidas.
+      if (!idProduto || !categoriaProduto) {
+        type SdpCategoria = { id?: unknown; nome?: unknown }
+        type SdpIdentificador = { tipoEmissao?: unknown; codigo?: unknown }
+        type SdpProduto = { nome?: unknown; categoria?: unknown; identificadores?: unknown }
+        const normalize = (value: unknown) => text(value)
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+        const productHint = normalize(`${nomeProduto} ${descricaoProduto}`)
+        const categoriesRes = await fetch(`${config.senhaDigitalPlusApiUrl}/produtos/categoria`, {
+          method: 'GET', headers: sdpHeaders,
+        })
+        const categories = await categoriesRes.json().catch(() => []) as SdpCategoria[]
+        const preferredCategoryNames = productHint.includes('cnpj') || productHint.includes('e-pj')
+          ? ['e-cnpj', 'e-pj']
+          : productHint.includes('cpf') || productHint.includes('e-pf')
+            ? ['e-cpf', 'e-pf']
+            : []
+
+        for (const categoryName of preferredCategoryNames) {
+          const category = Array.isArray(categories)
+            ? categories.find(item => normalize(item.nome) === categoryName)
+            : undefined
+          const categoryId = text(category?.id)
+          if (!categoryId) continue
+          const productsRes = await fetch(`${config.senhaDigitalPlusApiUrl}/produtos/${encodeURIComponent(categoryId)}`, {
+            method: 'GET', headers: sdpHeaders,
+          })
+          const products = await productsRes.json().catch(() => []) as SdpProduto[]
+          if (!productsRes.ok || !Array.isArray(products) || !products.length) continue
+
+          const wantsA1 = /\ba1\b/.test(productHint)
+          const wantsA3 = /\ba3\b/.test(productHint)
+          const wantsTwoYears = /2\s*anos|24\s*meses/.test(productHint)
+          const ranked = products.map(product => {
+            const candidate = normalize(product.nome)
+            let score = 0
+            if (wantsA1 === /\ba1\b/.test(candidate)) score += 100
+            if (wantsA3 === /\ba3\b/.test(candidate)) score += 100
+            if (wantsTwoYears === /2\s*anos|24\s*meses/.test(candidate)) score += 30
+            if (productHint.includes('sem midia') && candidate.includes('sem midia')) score += 10
+            return { product, score }
+          }).sort((a, b) => b.score - a.score)
+          const selected = ranked[0]?.product
+          const emissionName = text(body.tipoEmissao) === '1' ? 'presencial'
+            : text(body.tipoEmissao) === '3' ? 'videoconferencia' : 'online'
+          const identifiers = Array.isArray(selected?.identificadores)
+            ? selected.identificadores as SdpIdentificador[] : []
+          const identifier = identifiers.find(item => normalize(item.tipoEmissao) === emissionName)
+          const resolvedId = text(identifier?.codigo)
+          if (!resolvedId) continue
+
+          idProduto ||= resolvedId
+          categoriaProduto ||= text(selected?.categoria) || categoryId
+          nomeProduto ||= text(selected?.nome)
+          descricaoProduto ||= text(selected?.nome)
+          break
+        }
+      }
+
       if (isPJ) {
         const receitaRes = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
           headers: { Accept: 'application/json', 'User-Agent': 'AVMD-System/1.0' },
@@ -907,9 +979,9 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
       }
 
       const required: Array<[string, unknown]> = [
-        ['tipoEmissao', body.tipoEmissao], ['idProduto', body.idProduto],
-        ['categoriaProduto', body.categoriaProduto], ['produto', body.produto],
-        ['ProdutoDescricao', body.ProdutoDescricao], ['Contato.DDD', contato.DDD],
+        ['tipoEmissao', body.tipoEmissao], ['idProduto', idProduto],
+        ['categoriaProduto', categoriaProduto], ['produto', nomeProduto],
+        ['ProdutoDescricao', descricaoProduto], ['Contato.DDD', contato.DDD],
         ['Contato.Telefone', contato.Telefone], ['Contato.Email', contato.Email],
         ['Endereco.CodigoIbgeMunicipio', endereco.CodigoIbgeMunicipio],
         ['Endereco.CodigoIbgeUF', endereco.CodigoIbgeUF], ['Endereco.cep', endereco.cep],
@@ -941,20 +1013,13 @@ export async function handleCatalogRoutes(req: IncomingMessage, res: ServerRespo
       }
 
       const commonPayload = {
-        tipoEmissao: text(body.tipoEmissao), idProduto: text(body.idProduto),
-        categoriaProduto: text(body.categoriaProduto), produto: text(body.produto),
-        ProdutoDescricao: text(body.ProdutoDescricao), Contato: contato, Endereco: endereco,
+        tipoEmissao: text(body.tipoEmissao), idProduto,
+        categoriaProduto, produto: nomeProduto,
+        ProdutoDescricao: descricaoProduto, Contato: contato, Endereco: endereco,
       }
       const sdpPayload: Record<string, unknown> = isPJ
         ? { ...commonPayload, CNPJ: cnpj, RazaoSocial: text(body.RazaoSocial), Titular: { ...titular, CPF: cpf } }
         : { ...commonPayload, CPF: cpf, DataNascimento: text(body.DataNascimento), Nome: text(body.Nome), CEI: text(body.CEI), CAEPF: text(body.CAEPF), NIS: text(body.NIS) }
-
-      const sdpHeaders: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'x-api-key': config.senhaDigitalPlusApiKey,
-        'x-secret-key': config.senhaDigitalPlusSecretKey,
-        'x-environment': config.senhaDigitalPlusEnvironment || 'sandbox',
-      }
 
       const sdpRes = await fetch(`${config.senhaDigitalPlusApiUrl}/protocolo/capture-certificate`, {
         method: 'POST',
